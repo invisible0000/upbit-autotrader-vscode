@@ -1,5 +1,6 @@
 """
 전략 팩토리 테스트 모듈
+개발 순서: 5.1 전략 인터페이스 및 기본 클래스 구현
 """
 import unittest
 from unittest.mock import MagicMock, patch
@@ -95,6 +96,7 @@ class TestStrategyFactory(unittest.TestCase):
     
     def test_register_strategy(self):
         """전략 등록 테스트"""
+        print("\n=== 테스트 id 5_1_1: test_register_strategy ===")
         # 유효한 전략 클래스 등록
         result = self.factory.register_strategy("another_strategy", MockStrategy)
         self.assertTrue(result)
@@ -110,6 +112,7 @@ class TestStrategyFactory(unittest.TestCase):
     
     def test_create_strategy(self):
         """전략 생성 테스트"""
+        print("\n=== 테스트 id 5_1_2: test_create_strategy ===")
         # 매개변수 제공하여 생성
         params = {"window": 30}
         strategy = self.factory.create_strategy("mock_strategy", params)
@@ -140,6 +143,7 @@ class TestStrategyFactory(unittest.TestCase):
     
     def test_get_available_strategies(self):
         """사용 가능한 전략 목록 조회 테스트"""
+        print("\n=== 테스트 id 5_1_3: test_get_available_strategies ===")
         strategies = self.factory.get_available_strategies()
         
         self.assertEqual(len(strategies), 2)
@@ -159,6 +163,7 @@ class TestStrategyFactory(unittest.TestCase):
     @patch("importlib.import_module")
     def test_load_strategies_from_module(self, mock_import):
         """모듈에서 전략 로드 테스트"""
+        print("\n=== 테스트 id 5_1_4: test_load_strategies_from_module ===")
         # 모의 모듈 설정
         mock_module = MagicMock()
         mock_module.__name__ = "test_module"

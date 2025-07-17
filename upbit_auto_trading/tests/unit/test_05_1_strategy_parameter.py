@@ -1,5 +1,6 @@
 """
 전략 매개변수 관리 테스트 모듈
+개발 순서: 5.1 전략 인터페이스 및 기본 클래스 구현
 """
 import unittest
 import json
@@ -52,6 +53,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_validate_int_parameter(self):
         """정수형 매개변수 유효성 검사 테스트"""
+        print("\n=== 테스트 id 5_1_12: test_validate_int_parameter ===")
         # 유효한 값
         self.assertTrue(self.int_param.validate(20))
         self.assertTrue(self.int_param.validate(1))
@@ -67,6 +69,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_validate_float_parameter(self):
         """실수형 매개변수 유효성 검사 테스트"""
+        print("\n=== 테스트 id 5_1_13: test_validate_float_parameter ===")
         # 유효한 값
         self.assertTrue(self.float_param.validate(0.05))
         self.assertTrue(self.float_param.validate(0.0))
@@ -81,6 +84,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_validate_str_parameter(self):
         """문자열 매개변수 유효성 검사 테스트"""
+        print("\n=== 테스트 id 5_1_14: test_validate_str_parameter ===")
         # 유효한 값 (선택 목록 내)
         self.assertTrue(self.str_param.validate("sma"))
         self.assertTrue(self.str_param.validate("ema"))
@@ -94,6 +98,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_validate_bool_parameter(self):
         """불리언 매개변수 유효성 검사 테스트"""
+        print("\n=== 테스트 id 5_1_15: test_validate_bool_parameter ===")
         # 유효한 값
         self.assertTrue(self.bool_param.validate(True))
         self.assertTrue(self.bool_param.validate(False))
@@ -104,6 +109,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_to_dict(self):
         """딕셔너리 변환 테스트"""
+        print("\n=== 테스트 id 5_1_16: test_to_dict ===")
         # 정수형 매개변수
         int_dict = self.int_param.to_dict()
         self.assertEqual(int_dict["name"], "period")
@@ -121,6 +127,7 @@ class TestParameterDefinition(unittest.TestCase):
     
     def test_from_dict(self):
         """딕셔너리에서 생성 테스트"""
+        print("\n=== 테스트 id 5_1_17: test_from_dict ===")
         # 정수형 매개변수
         int_dict = {
             "name": "period",
@@ -199,6 +206,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_initialization(self):
         """초기화 테스트"""
+        print("\n=== 테스트 id 5_1_18: test_initialization ===")
         # 기본값으로 초기화되었는지 확인
         self.assertEqual(self.param_manager.get_parameter("short_window"), 20)
         self.assertEqual(self.param_manager.get_parameter("long_window"), 50)
@@ -207,6 +215,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_set_parameter(self):
         """단일 매개변수 설정 테스트"""
+        print("\n=== 테스트 id 5_1_19: test_set_parameter ===")
         # 유효한 값 설정
         self.assertTrue(self.param_manager.set_parameter("short_window", 15))
         self.assertEqual(self.param_manager.get_parameter("short_window"), 15)
@@ -224,6 +233,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_set_parameters(self):
         """여러 매개변수 설정 테스트"""
+        print("\n=== 테스트 id 5_1_20: test_set_parameters ===")
         # 유효한 값 설정
         new_params = {
             "short_window": 15,
@@ -251,6 +261,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_get_all_parameters(self):
         """모든 매개변수 조회 테스트"""
+        print("\n=== 테스트 id 5_1_21: test_get_all_parameters ===")
         params = self.param_manager.get_all_parameters()
         self.assertEqual(len(params), 4)
         self.assertEqual(params["short_window"], 20)
@@ -264,6 +275,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_reset_to_defaults(self):
         """기본값으로 재설정 테스트"""
+        print("\n=== 테스트 id 5_1_22: test_reset_to_defaults ===")
         # 값 변경
         self.param_manager.set_parameter("short_window", 15)
         self.param_manager.set_parameter("method", "ema")
@@ -277,6 +289,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_get_parameter_definitions(self):
         """매개변수 정의 조회 테스트"""
+        print("\n=== 테스트 id 5_1_23: test_get_parameter_definitions ===")
         defs = self.param_manager.get_parameter_definitions()
         self.assertEqual(len(defs), 4)
         
@@ -289,6 +302,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_json_serialization(self):
         """JSON 직렬화 테스트"""
+        print("\n=== 테스트 id 5_1_24: test_json_serialization ===")
         # 값 변경
         self.param_manager.set_parameter("short_window", 15)
         self.param_manager.set_parameter("method", "ema")
@@ -303,6 +317,7 @@ class TestStrategyParameterManager(unittest.TestCase):
     
     def test_json_deserialization(self):
         """JSON 역직렬화 테스트"""
+        print("\n=== 테스트 id 5_1_25: test_json_deserialization ===")
         # JSON 문자열
         json_str = '{"short_window": 15, "long_window": 60, "method": "ema"}'
         

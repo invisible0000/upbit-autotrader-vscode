@@ -107,11 +107,16 @@ class BaseScreener:
                     end_date = datetime.now()
                     start_date = end_date - timedelta(days=days)
                     
-                    df = self.data_collector.get_ohlcv_data(symbol, timeframe, start_date, end_date)
-                    
-                    # 데이터가 없으면 API에서 직접 조회
-                    if df.empty:
-                        df = self.data_collector.collect_historical_ohlcv(symbol, timeframe, start_date, end_date)
+                    try:
+                        # 먼저 로컬 데이터베이스에서 조회
+                        df = self.data_collector.get_ohlcv_data(symbol, timeframe, start_date, end_date)
+                        
+                        # 데이터가 없으면 API에서 직접 조회
+                        if df.empty:
+                            df = self.data_collector.collect_historical_ohlcv(symbol, timeframe, start_date, end_date)
+                    except Exception as e:
+                        logger.warning(f"{symbol} 데이터 수집 중 오류 발생: {e}")
+                        continue
                     
                     if df.empty or len(df) < 2:
                         continue
@@ -169,17 +174,23 @@ class BaseScreener:
                     end_date = datetime.now()
                     start_date = end_date - timedelta(days=days)
                     
-                    df = self.data_collector.get_ohlcv_data(symbol, timeframe, start_date, end_date)
-                    
-                    # 데이터가 없으면 API에서 직접 조회
-                    if df.empty:
-                        df = self.data_collector.collect_historical_ohlcv(symbol, timeframe, start_date, end_date)
+                    try:
+                        # 먼저 로컬 데이터베이스에서 조회
+                        df = self.data_collector.get_ohlcv_data(symbol, timeframe, start_date, end_date)
+                        
+                        # 데이터가 없으면 API에서 직접 조회
+                        if df.empty:
+                            df = self.data_collector.collect_historical_ohlcv(symbol, timeframe, start_date, end_date)
+                    except Exception as e:
+                        logger.warning(f"{symbol} 데이터 수집 중 오류 발생: {e}")
+                        continue
                     
                     if df.empty or len(df) < 5:  # 최소 5개 데이터 필요
                         continue
                     
                     # 이동평균 계산
-                    df = self.data_processor.calculate_sma(df, periods=[5, 20])
+                    df = self.data_processor.calculate_sma(df, window=5, column='close')
+                    df = self.data_processor.calculate_sma(df, window=20, column='close')
                     
                     # 최근 데이터만 사용
                     recent_df = df.tail(5)
@@ -190,18 +201,19 @@ class BaseScreener:
                     is_sideways = False
                     
                     # 상승 추세: 5일 이동평균이 20일 이동평균보다 위에 있고, 5일 이동평균이 상승 중
-                    if recent_df['sma_5'].iloc[-1] > recent_df['sma_20'].iloc[-1] and \
-                       recent_df['sma_5'].iloc[-1] > recent_df['sma_5'].iloc[-2]:
-                        is_bullish = True
-                    
-                    # 하락 추세: 5일 이동평균이 20일 이동평균보다 아래에 있고, 5일 이동평균이 하락 중
-                    elif recent_df['sma_5'].iloc[-1] < recent_df['sma_20'].iloc[-1] and \
-                         recent_df['sma_5'].iloc[-1] < recent_df['sma_5'].iloc[-2]:
-                        is_bearish = True
-                    
-                    # 횡보 추세: 그 외의 경우
-                    else:
-                        is_sideways = True
+                    if 'SMA_5' in recent_df.columns and 'SMA_20' in recent_df.columns:
+                        if recent_df['SMA_5'].iloc[-1] > recent_df['SMA_20'].iloc[-1] and \
+                           recent_df['SMA_5'].iloc[-1] > recent_df['SMA_5'].iloc[-2]:
+                            is_bullish = True
+                        
+                        # 하락 추세: 5일 이동평균이 20일 이동평균보다 아래에 있고, 5일 이동평균이 하락 중
+                        elif recent_df['SMA_5'].iloc[-1] < recent_df['SMA_20'].iloc[-1] and \
+                             recent_df['SMA_5'].iloc[-1] < recent_df['SMA_5'].iloc[-2]:
+                            is_bearish = True
+                        
+                        # 횡보 추세: 그 외의 경우
+                        else:
+                            is_sideways = True
                     
                     # 요청한 추세 유형에 맞는 코인 필터링
                     if (trend_type == 'bullish' and is_bullish) or \

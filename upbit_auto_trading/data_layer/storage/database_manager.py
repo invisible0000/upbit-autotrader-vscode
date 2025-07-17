@@ -63,9 +63,20 @@ class DatabaseManager:
             if db_type == 'sqlite':
                 db_path = db_config.get('path', 'data/upbit_auto_trading.db')
                 connection_string = f"sqlite:///{db_path}"
+                
+                # SQLite 연결 설정
                 self.engine = create_engine(
                     connection_string,
-                    connect_args={"check_same_thread": False}
+                    connect_args={
+                        "check_same_thread": False,
+                        "timeout": 30  # 연결 타임아웃 (초)
+                    },
+                    # SQLite는 풀링이 필요 없음
+                    poolclass=QueuePool,
+                    pool_size=5,
+                    max_overflow=10,
+                    pool_timeout=30,
+                    pool_recycle=3600
                 )
             elif db_type == 'mysql':
                 host = db_config.get('host', 'localhost')
@@ -73,12 +84,27 @@ class DatabaseManager:
                 username = db_config.get('username', 'root')
                 password = db_config.get('password', '')
                 database_name = db_config.get('database_name', 'upbit_auto_trading')
+                
+                # 연결 옵션 설정
+                connect_args = {
+                    'charset': 'utf8mb4',
+                    'connect_timeout': 30,  # 연결 타임아웃 (초)
+                    'read_timeout': 30,     # 읽기 타임아웃 (초)
+                    'write_timeout': 30     # 쓰기 타임아웃 (초)
+                }
+                
+                # MySQL 연결 문자열 생성
                 connection_string = f"mysql+pymysql://{username}:{password}@{host}:{port}/{database_name}"
+                
+                # MySQL 연결 설정
                 self.engine = create_engine(
                     connection_string,
-                    pool_size=10,
-                    max_overflow=20,
-                    pool_recycle=3600
+                    connect_args=connect_args,
+                    pool_size=10,           # 풀 크기
+                    max_overflow=20,        # 최대 초과 연결 수
+                    pool_timeout=30,        # 풀 타임아웃 (초)
+                    pool_recycle=3600,      # 연결 재활용 시간 (초)
+                    pool_pre_ping=True      # 연결 유효성 검사
                 )
             elif db_type == 'postgresql':
                 host = db_config.get('host', 'localhost')
@@ -86,12 +112,25 @@ class DatabaseManager:
                 username = db_config.get('username', 'postgres')
                 password = db_config.get('password', '')
                 database_name = db_config.get('database_name', 'upbit_auto_trading')
+                
+                # 연결 옵션 설정
+                connect_args = {
+                    'connect_timeout': 30,  # 연결 타임아웃 (초)
+                    'application_name': 'upbit_auto_trading'
+                }
+                
+                # PostgreSQL 연결 문자열 생성
                 connection_string = f"postgresql://{username}:{password}@{host}:{port}/{database_name}"
+                
+                # PostgreSQL 연결 설정
                 self.engine = create_engine(
                     connection_string,
-                    pool_size=10,
-                    max_overflow=20,
-                    pool_recycle=3600
+                    connect_args=connect_args,
+                    pool_size=10,           # 풀 크기
+                    max_overflow=20,        # 최대 초과 연결 수
+                    pool_timeout=30,        # 풀 타임아웃 (초)
+                    pool_recycle=3600,      # 연결 재활용 시간 (초)
+                    pool_pre_ping=True      # 연결 유효성 검사
                 )
             else:
                 raise ValueError(f"지원하지 않는 데이터베이스 유형입니다: {db_type}")

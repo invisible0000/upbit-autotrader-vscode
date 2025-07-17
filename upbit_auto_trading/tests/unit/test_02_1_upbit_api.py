@@ -3,6 +3,7 @@
 
 """
 업비트 API 클라이언트 단위 테스트
+개발 순서: 2.1 업비트 REST API 기본 클라이언트 구현
 """
 
 import unittest
@@ -30,9 +31,11 @@ class TestUpbitAPI(unittest.TestCase):
         """테스트 정리"""
         self.session_patcher.stop()
     
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_markets(self, mock_request):
+    def test_get_markets(self):
         """마켓 코드 조회 테스트"""
+        print("\n=== 테스트 id 2_1_1: test_get_markets ===")
+        print("===== 마켓 코드 조회 테스트 시작 =====")
+        
         # Mock 응답 설정
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -41,10 +44,18 @@ class TestUpbitAPI(unittest.TestCase):
             {"market": "BTC-XRP", "korean_name": "리플", "english_name": "Ripple"}
         ]
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        self.mock_session_instance.request.return_value = mock_response
+        
+        print("모의 응답 설정 완료: KRW-BTC, KRW-ETH, BTC-XRP")
         
         # 함수 호출
+        print("get_markets() 함수 호출 중...")
         result = self.api.get_markets()
+        
+        # 결과 출력
+        print(f"반환된 데이터프레임 크기: {len(result)}")
+        if not result.empty:
+            print(f"포함된 마켓: {', '.join(result['market'].tolist())}")
         
         # 검증
         self.assertIsInstance(result, pd.DataFrame)
@@ -54,17 +65,23 @@ class TestUpbitAPI(unittest.TestCase):
         self.assertFalse("BTC-XRP" in result["market"].values)
         
         # API 호출 검증
-        mock_request.assert_called_once_with(
+        self.mock_session_instance.request.assert_called_once_with(
             method='GET',
             url='https://api.upbit.com/v1/market/all',
             params=None,
             json=None,
-            headers={'Authorization': unittest.mock.ANY}
+            headers={'Authorization': unittest.mock.ANY},
+            timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 마켓 코드 조회 테스트 완료 =====\n")
     
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_candles_1m(self, mock_request):
+    def test_get_candles_1m(self):
         """1분봉 조회 테스트"""
+        print("\n=== 테스트 id 2_1_2: test_get_candles_1m ===")
+        print("===== 1분봉 조회 테스트 시작 =====")
+        
         # Mock 응답 설정
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -94,10 +111,19 @@ class TestUpbitAPI(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        self.mock_session_instance.request.return_value = mock_response
+        
+        print("모의 응답 설정 완료: 2개의 1분봉 데이터")
         
         # 함수 호출
+        print("get_candles() 함수 호출 중...")
         result = self.api.get_candles(symbol="KRW-BTC", timeframe="1m", count=2)
+        
+        # 결과 출력
+        print(f"반환된 데이터프레임 크기: {len(result)}")
+        if not result.empty:
+            print(f"첫 번째 캔들: 시가={result['open'].iloc[0]}, 고가={result['high'].iloc[0]}, 저가={result['low'].iloc[0]}, 종가={result['close'].iloc[0]}")
+            print(f"두 번째 캔들: 시가={result['open'].iloc[1]}, 고가={result['high'].iloc[1]}, 저가={result['low'].iloc[1]}, 종가={result['close'].iloc[1]}")
         
         # 검증
         self.assertIsInstance(result, pd.DataFrame)
@@ -111,17 +137,23 @@ class TestUpbitAPI(unittest.TestCase):
         self.assertEqual(result["volume"].iloc[0], 20.0)
         
         # API 호출 검증
-        mock_request.assert_called_once_with(
+        self.mock_session_instance.request.assert_called_once_with(
             method='GET',
             url='https://api.upbit.com/v1/candles/minutes/1',
             params={'market': 'KRW-BTC', 'count': 2},
             json=None,
-            headers={'Authorization': unittest.mock.ANY}
+            headers={'Authorization': unittest.mock.ANY},
+            timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 1분봉 조회 테스트 완료 =====\n")
     
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_orderbook(self, mock_request):
+    def test_get_orderbook(self):
         """호가 데이터 조회 테스트"""
+        print("\n=== 테스트 id 2_1_3: test_get_orderbook ===")
+        print("===== 호가 데이터 조회 테스트 시작 =====")
+        
         # Mock 응답 설정
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -147,10 +179,18 @@ class TestUpbitAPI(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        self.mock_session_instance.request.return_value = mock_response
+        
+        print("모의 응답 설정 완료: KRW-BTC 호가 데이터")
         
         # 함수 호출
+        print("get_orderbook() 함수 호출 중...")
         result = self.api.get_orderbook(symbol="KRW-BTC")
+        
+        # 결과 출력
+        print(f"반환된 호가 데이터: 마켓={result['market']}, 총 매도 수량={result['total_ask_size']}, 총 매수 수량={result['total_bid_size']}")
+        print(f"호가 유닛 수: {len(result['orderbook_units'])}")
+        print(f"첫 번째 호가: 매도가={result['orderbook_units'][0]['ask_price']}, 매수가={result['orderbook_units'][0]['bid_price']}")
         
         # 검증
         self.assertIsInstance(result, dict)
@@ -161,17 +201,23 @@ class TestUpbitAPI(unittest.TestCase):
         self.assertEqual(len(result["orderbook_units"]), 2)
         
         # API 호출 검증
-        mock_request.assert_called_once_with(
+        self.mock_session_instance.request.assert_called_once_with(
             method='GET',
             url='https://api.upbit.com/v1/orderbook',
             params={'markets': 'KRW-BTC'},
             json=None,
-            headers={'Authorization': unittest.mock.ANY}
+            headers={'Authorization': unittest.mock.ANY},
+            timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 호가 데이터 조회 테스트 완료 =====\n")
     
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_tickers(self, mock_request):
+    def test_get_tickers(self):
         """티커 데이터 조회 테스트"""
+        print("\n=== 테스트 id 2_1_4: test_get_tickers ===")
+        print("===== 티커 데이터 조회 테스트 시작 =====")
+        
         # Mock 응답 설정
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -221,10 +267,21 @@ class TestUpbitAPI(unittest.TestCase):
             }
         ]
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        self.mock_session_instance.request.return_value = mock_response
+        
+        print("모의 응답 설정 완료: KRW-BTC, KRW-ETH 티커 데이터")
         
         # 함수 호출
+        print("get_tickers() 함수 호출 중...")
         result = self.api.get_tickers(symbols=["KRW-BTC", "KRW-ETH"])
+        
+        # 결과 출력
+        print(f"반환된 데이터프레임 크기: {len(result)}")
+        if not result.empty:
+            print(f"BTC 현재가: {result[result['market'] == 'KRW-BTC']['trade_price'].iloc[0]}, "
+                  f"ETH 현재가: {result[result['market'] == 'KRW-ETH']['trade_price'].iloc[0]}")
+            print(f"BTC 변동률: {result[result['market'] == 'KRW-BTC']['change_rate'].iloc[0]:.2%}, "
+                  f"ETH 변동률: {result[result['market'] == 'KRW-ETH']['change_rate'].iloc[0]:.2%}")
         
         # 검증
         self.assertIsInstance(result, pd.DataFrame)
@@ -233,59 +290,88 @@ class TestUpbitAPI(unittest.TestCase):
         self.assertTrue("KRW-ETH" in result["market"].values)
         
         # API 호출 검증
-        mock_request.assert_called_once_with(
+        self.mock_session_instance.request.assert_called_once_with(
             method='GET',
             url='https://api.upbit.com/v1/ticker',
             params={'markets': 'KRW-BTC,KRW-ETH'},
             json=None,
-            headers={'Authorization': unittest.mock.ANY}
+            headers={'Authorization': unittest.mock.ANY},
+            timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 티커 데이터 조회 테스트 완료 =====\n")
 
     def test_check_rate_limit(self):
         """API 요청 제한 확인 테스트"""
+        print("\n=== 테스트 id 2_1_5: test_check_rate_limit ===")
+        print("===== API 요청 제한 확인 테스트 시작 =====")
+        
         # 시간 패치
         with patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.time') as mock_time, \
              patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.sleep') as mock_sleep:
             
             # 현재 시간 설정
             mock_time.return_value = 1000.0
+            print("현재 시간 설정: 1000.0")
             
             # 초기 상태 확인
             self.assertEqual(len(self.api.request_timestamps), 0)
+            print("초기 타임스탬프 개수: 0")
             
             # 요청 제한 확인 호출
+            print("첫 번째 _check_rate_limit() 호출...")
             self.api._check_rate_limit()
             
             # 타임스탬프 추가 확인
             self.assertEqual(len(self.api.request_timestamps), 1)
             self.assertEqual(self.api.request_timestamps[0], 1000.0)
+            print(f"타임스탬프 추가 확인: {len(self.api.request_timestamps)}개, 값: {self.api.request_timestamps[0]}")
             
-            # 초당 요청 제한 테스트
+            # 초당 요청 제한 테스트 - 별도 테스트
+            print("\n초당 요청 제한 테스트 시작...")
+            # 새로운 API 인스턴스 생성
+            api_sec_limit = UpbitAPI(access_key="test_access_key", secret_key="test_secret_key")
+            api_sec_limit.session = self.mock_session_instance
+            
             # 초당 요청 제한 수만큼 타임스탬프 추가
-            self.api.request_timestamps = [1000.0] * self.api.RATE_LIMIT_PER_SEC
+            api_sec_limit.request_timestamps = [1000.0] * api_sec_limit.RATE_LIMIT_PER_SEC
+            print(f"초당 요청 제한 타임스탬프 설정: {len(api_sec_limit.request_timestamps)}개")
             
             # 요청 제한 확인 호출
-            self.api._check_rate_limit()
+            mock_sleep.reset_mock()
+            api_sec_limit._check_rate_limit()
             
             # sleep 호출 확인
+            self.assertEqual(mock_sleep.call_count, 1)
             mock_sleep.assert_called_once_with(1.0)
+            print(f"초당 제한 sleep 호출 확인: {mock_sleep.call_count}회, 대기 시간: {mock_sleep.call_args[0][0]}초")
             
-            # 분당 요청 제한 테스트
-            mock_sleep.reset_mock()
+            # 분당 요청 제한 테스트 - 별도 테스트
+            print("\n분당 요청 제한 테스트 시작...")
+            # 새로운 API 인스턴스 생성
+            api_min_limit = UpbitAPI(access_key="test_access_key", secret_key="test_secret_key")
+            api_min_limit.session = self.mock_session_instance
             
             # 분당 요청 제한 수만큼 타임스탬프 추가 (60초 이내)
-            self.api.request_timestamps = [950.0 + i for i in range(self.api.RATE_LIMIT_PER_MIN)]
-            mock_time.return_value = 1000.0
+            api_min_limit.request_timestamps = [950.0 + i/100 for i in range(api_min_limit.RATE_LIMIT_PER_MIN)]
+            print(f"분당 요청 제한 타임스탬프 설정: {len(api_min_limit.request_timestamps)}개")
             
             # 요청 제한 확인 호출
-            self.api._check_rate_limit()
+            mock_sleep.reset_mock()
+            mock_time.return_value = 1000.0
+            api_min_limit._check_rate_limit()
             
             # sleep 호출 확인 (가장 오래된 요청이 1분 지날 때까지 대기)
-            mock_sleep.assert_called_once()
+            self.assertEqual(mock_sleep.call_count, 1)
             self.assertGreater(mock_sleep.call_args[0][0], 0)
+            print(f"분당 제한 sleep 호출 확인: {mock_sleep.call_count}회, 대기 시간: {mock_sleep.call_args[0][0]:.2f}초")
+            
+        print("===== API 요청 제한 확인 테스트 완료 =====\n")
     
     def test_create_session(self):
         """HTTP 세션 생성 테스트"""
+        print("\n=== 테스트 id 2_1_6: test_create_session ===")
         # 세션 패치 해제
         self.session_patcher.stop()
         
@@ -307,6 +393,7 @@ class TestUpbitAPI(unittest.TestCase):
     
     def test_request_with_retry(self):
         """API 요청 재시도 테스트"""
+        print("\n=== 테스트 id 2_1_7: test_request_with_retry ===")
         # 세션 요청 모킹
         mock_response = MagicMock()
         mock_response.json.return_value = {"result": "success"}
@@ -345,6 +432,7 @@ class TestUpbitAPI(unittest.TestCase):
     
     def test_get_order(self):
         """개별 주문 조회 테스트"""
+        print("\n=== 테스트 id 2_1_8: test_get_order ===")
         # 세션 요청 모킹
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -387,6 +475,9 @@ class TestUpbitAPI(unittest.TestCase):
     
     def test_get_market_day_candles(self):
         """일 캔들 조회 테스트"""
+        print("\n=== 테스트 id 2_1_9: test_get_market_day_candles ===")
+        print("===== 일 캔들 조회 테스트 시작 =====")
+        
         # 세션 요청 모킹
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -418,8 +509,17 @@ class TestUpbitAPI(unittest.TestCase):
         mock_response.raise_for_status.return_value = None
         self.mock_session_instance.request.return_value = mock_response
         
+        print("모의 응답 설정 완료: 2개의 일봉 데이터")
+        
         # 함수 호출
+        print("get_market_day_candles() 함수 호출 중...")
         result = self.api.get_market_day_candles(symbol="KRW-BTC", count=2)
+        
+        # 결과 출력
+        print(f"반환된 데이터프레임 크기: {len(result)}")
+        if not result.empty:
+            print(f"첫 번째 캔들: 시가={result['open'].iloc[0]}, 고가={result['high'].iloc[0]}, 저가={result['low'].iloc[0]}, 종가={result['close'].iloc[0]}")
+            print(f"두 번째 캔들: 시가={result['open'].iloc[1]}, 고가={result['high'].iloc[1]}, 저가={result['low'].iloc[1]}, 종가={result['close'].iloc[1]}")
         
         # 검증
         self.assertIsInstance(result, pd.DataFrame)
@@ -441,9 +541,15 @@ class TestUpbitAPI(unittest.TestCase):
             headers={'Authorization': unittest.mock.ANY},
             timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 일 캔들 조회 테스트 완료 =====\n")
     
     def test_get_trades_ticks(self):
         """최근 체결 내역 조회 테스트"""
+        print("\n=== 테스트 id 2_1_10: test_get_trades_ticks ===")
+        print("===== 최근 체결 내역 조회 테스트 시작 =====")
+        
         # 세션 요청 모킹
         mock_response = MagicMock()
         mock_response.json.return_value = [
@@ -475,8 +581,17 @@ class TestUpbitAPI(unittest.TestCase):
         mock_response.raise_for_status.return_value = None
         self.mock_session_instance.request.return_value = mock_response
         
+        print("모의 응답 설정 완료: 2개의 체결 내역 데이터")
+        
         # 함수 호출
+        print("get_trades_ticks() 함수 호출 중...")
         result = self.api.get_trades_ticks(symbol="KRW-BTC", count=2)
+        
+        # 결과 출력
+        print(f"반환된 데이터프레임 크기: {len(result)}")
+        if not result.empty:
+            print(f"첫 번째 체결: 가격={result['trade_price'].iloc[0]}, 수량={result['trade_volume'].iloc[0]}, 유형={result['ask_bid'].iloc[0]}")
+            print(f"두 번째 체결: 가격={result['trade_price'].iloc[1]}, 수량={result['trade_volume'].iloc[1]}, 유형={result['ask_bid'].iloc[1]}")
         
         # 검증
         self.assertIsInstance(result, pd.DataFrame)
@@ -494,332 +609,9 @@ class TestUpbitAPI(unittest.TestCase):
             headers={'Authorization': unittest.mock.ANY},
             timeout=(5, 30)
         )
+        
+        print("API 호출 검증 완료")
+        print("===== 최근 체결 내역 조회 테스트 완료 =====\n")
 
 if __name__ == '__main__':
-    unittest.main()    @p
-atch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_market_info(self, mock_request):
-        """마켓 정보 조회 테스트"""
-        # Mock 응답 설정
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {"market": "KRW-BTC", "korean_name": "비트코인", "english_name": "Bitcoin"},
-            {"market": "KRW-ETH", "korean_name": "이더리움", "english_name": "Ethereum"},
-            {"market": "BTC-XRP", "korean_name": "리플", "english_name": "Ripple"}
-        ]
-        mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
-        
-        # 함수 호출
-        result = self.api.get_market_info("KRW-BTC")
-        
-        # 검증
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result["market"], "KRW-BTC")
-        self.assertEqual(result["korean_name"], "비트코인")
-        self.assertEqual(result["english_name"], "Bitcoin")
-    
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_current_price(self, mock_request):
-        """현재 시세 정보 조회 테스트"""
-        # Mock 응답 설정
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {
-                "market": "KRW-BTC",
-                "trade_date": "20230101",
-                "trade_time": "090000",
-                "trade_timestamp": 1672531200000,
-                "trade_price": 50000000.0,
-                "change": "RISE",
-                "signed_change_rate": 0.0202,
-                "acc_trade_volume_24h": 100.0,
-                "timestamp": 1672531200000
-            },
-            {
-                "market": "KRW-ETH",
-                "trade_date": "20230101",
-                "trade_time": "090000",
-                "trade_timestamp": 1672531200000,
-                "trade_price": 2000000.0,
-                "change": "FALL",
-                "signed_change_rate": -0.0102,
-                "acc_trade_volume_24h": 500.0,
-                "timestamp": 1672531200000
-            }
-        ]
-        mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
-        
-        # 함수 호출
-        result = self.api.get_current_price(["KRW-BTC", "KRW-ETH"])
-        
-        # 검증
-        self.assertIsInstance(result, dict)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result["KRW-BTC"]["price"], 50000000.0)
-        self.assertEqual(result["KRW-BTC"]["change"], "RISE")
-        self.assertEqual(result["KRW-BTC"]["change_rate"], 0.0202)
-        self.assertEqual(result["KRW-ETH"]["price"], 2000000.0)
-        self.assertEqual(result["KRW-ETH"]["change"], "FALL")
-        self.assertEqual(result["KRW-ETH"]["change_rate"], -0.0102)
-    
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_historical_candles(self, mock_request):
-        """과거 캔들 데이터 수집 테스트"""
-        # Mock 응답 설정 - 첫 번째 요청
-        mock_response1 = MagicMock()
-        mock_response1.json.return_value = [
-            {
-                "market": "KRW-BTC",
-                "candle_date_time_utc": "2023-01-02T00:00:00",
-                "candle_date_time_kst": "2023-01-02T09:00:00",
-                "opening_price": 50500000.0,
-                "high_price": 52000000.0,
-                "low_price": 50000000.0,
-                "trade_price": 51500000.0,
-                "timestamp": 1672617600000,
-                "candle_acc_trade_volume": 24.0
-            },
-            {
-                "market": "KRW-BTC",
-                "candle_date_time_utc": "2023-01-01T00:00:00",
-                "candle_date_time_kst": "2023-01-01T09:00:00",
-                "opening_price": 50000000.0,
-                "high_price": 51000000.0,
-                "low_price": 49000000.0,
-                "trade_price": 50500000.0,
-                "timestamp": 1672531200000,
-                "candle_acc_trade_volume": 20.0
-            }
-        ]
-        
-        # Mock 응답 설정 - 두 번째 요청 (더 이상 데이터 없음)
-        mock_response2 = MagicMock()
-        mock_response2.json.return_value = []
-        
-        mock_request.side_effect = [mock_response1, mock_response2]
-        
-        # 함수 호출
-        start_date = datetime(2023, 1, 1)
-        end_date = datetime(2023, 1, 2)
-        result = self.api.get_historical_candles("KRW-BTC", "1d", start_date, end_date)
-        
-        # 검증
-        self.assertIsInstance(result, pd.DataFrame)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result["symbol"].iloc[0], "KRW-BTC")
-        self.assertEqual(result["timeframe"].iloc[0], "1d")
-        
-        # 시간 순서대로 정렬되었는지 확인
-        self.assertTrue(result["timestamp"].is_monotonic_increasing)
-        
-        # 첫 번째 행이 1월 1일 데이터인지 확인
-        self.assertEqual(pd.Timestamp(result["timestamp"].iloc[0]).date(), start_date.date())
-        
-        # 두 번째 행이 1월 2일 데이터인지 확인
-        self.assertEqual(pd.Timestamp(result["timestamp"].iloc[1]).date(), end_date.date())
-    
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_order_chance(self, mock_request):
-        """주문 가능 정보 조회 테스트"""
-        # Mock 응답 설정
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "bid_fee": "0.0005",
-            "ask_fee": "0.0005",
-            "market": {
-                "id": "KRW-BTC",
-                "name": "BTC/KRW",
-                "order_types": ["limit"],
-                "order_sides": ["ask", "bid"],
-                "bid": {"currency": "KRW", "price_unit": 1000.0},
-                "ask": {"currency": "BTC", "price_unit": 0.0001},
-                "max_total": "1000000000.0",
-                "state": "active"
-            },
-            "bid_account": {
-                "currency": "KRW",
-                "balance": "1000000.0",
-                "locked": "0.0",
-                "avg_buy_price": "0",
-                "avg_buy_price_modified": False,
-                "unit_currency": "KRW"
-            },
-            "ask_account": {
-                "currency": "BTC",
-                "balance": "1.0",
-                "locked": "0.0",
-                "avg_buy_price": "50000000",
-                "avg_buy_price_modified": False,
-                "unit_currency": "KRW"
-            }
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
-        
-        # 함수 호출
-        result = self.api.get_order_chance("KRW-BTC")
-        
-        # 검증
-        self.assertIsInstance(result, dict)
-        self.assertEqual(result["bid_fee"], "0.0005")
-        self.assertEqual(result["ask_fee"], "0.0005")
-        self.assertEqual(result["market"]["id"], "KRW-BTC")
-        self.assertEqual(result["bid_account"]["currency"], "KRW")
-        self.assertEqual(result["ask_account"]["currency"], "BTC")
-        
-        # API 호출 검증
-        mock_request.assert_called_once_with(
-            method='GET',
-            url='https://api.upbit.com/v1/orders/chance',
-            params={'market': 'KRW-BTC'},
-            json=None,
-            headers={'Authorization': unittest.mock.ANY},
-            timeout=(5, 30)
-        )
-    
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_deposit_addresses(self, mock_request):
-        """입금 주소 목록 조회 테스트"""
-        # Mock 응답 설정
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {
-                "currency": "BTC",
-                "deposit_address": "3EusRYEEGHR1mT88rnvB3pEJcQ7CQjAr8X",
-                "secondary_address": None
-            },
-            {
-                "currency": "ETH",
-                "deposit_address": "0x123f681646d4a755815f9cb19e1acc8565a0c2ac",
-                "secondary_address": None
-            }
-        ]
-        mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
-        
-        # 함수 호출
-        result = self.api.get_deposit_addresses()
-        
-        # 검증
-        self.assertIsInstance(result, list)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["currency"], "BTC")
-        self.assertEqual(result[0]["deposit_address"], "3EusRYEEGHR1mT88rnvB3pEJcQ7CQjAr8X")
-        self.assertEqual(result[1]["currency"], "ETH")
-        self.assertEqual(result[1]["deposit_address"], "0x123f681646d4a755815f9cb19e1acc8565a0c2ac")
-        
-        # API 호출 검증
-        mock_request.assert_called_once_with(
-            method='GET',
-            url='https://api.upbit.com/v1/deposits/coin_addresses',
-            params=None,
-            json=None,
-            headers={'Authorization': unittest.mock.ANY},
-            timeout=(5, 30)
-        )
-    
-    @patch('upbit_auto_trading.data_layer.collectors.upbit_api.requests.request')
-    def test_get_deposit_history(self, mock_request):
-        """입금 내역 조회 테스트"""
-        # Mock 응답 설정
-        mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {
-                "type": "deposit",
-                "uuid": "test-uuid-1",
-                "currency": "BTC",
-                "txid": "test-txid-1",
-                "state": "done",
-                "created_at": "2023-01-01T00:00:00+00:00",
-                "done_at": "2023-01-01T00:10:00+00:00",
-                "amount": "1.0",
-                "fee": "0.0",
-                "transaction_type": "default"
-            },
-            {
-                "type": "deposit",
-                "uuid": "test-uuid-2",
-                "currency": "ETH",
-                "txid": "test-txid-2",
-                "state": "done",
-                "created_at": "2023-01-02T00:00:00+00:00",
-                "done_at": "2023-01-02T00:10:00+00:00",
-                "amount": "10.0",
-                "fee": "0.0",
-                "transaction_type": "default"
-            }
-        ]
-        mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
-        
-        # 함수 호출
-        result = self.api.get_deposit_history(currency="BTC", state="done", limit=10)
-        
-        # 검증
-        self.assertIsInstance(result, list)
-        self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["currency"], "BTC")
-        self.assertEqual(result[0]["state"], "done")
-        self.assertEqual(result[0]["amount"], "1.0")
-        self.assertEqual(result[1]["currency"], "ETH")
-        self.assertEqual(result[1]["state"], "done")
-        self.assertEqual(result[1]["amount"], "10.0")
-        
-        # API 호출 검증
-        mock_request.assert_called_once_with(
-            method='GET',
-            url='https://api.upbit.com/v1/deposits',
-            params={'currency': 'BTC', 'state': 'done', 'limit': 10},
-            json=None,
-            headers={'Authorization': unittest.mock.ANY},
-            timeout=(5, 30)
-        )
-    
-    def test_retry_on_exception_decorator(self):
-        """예외 발생 시 재시도 데코레이터 테스트"""
-        # 테스트용 함수 정의
-        mock_func = MagicMock()
-        mock_func.side_effect = [
-            requests.exceptions.RequestException("테스트 예외"),
-            requests.exceptions.RequestException("테스트 예외"),
-            "성공"
-        ]
-        
-        # 데코레이터 적용
-        from upbit_auto_trading.data_layer.collectors.upbit_api import retry_on_exception
-        decorated_func = retry_on_exception(
-            max_retries=3,
-            retry_delay=0.01,
-            exceptions=(requests.exceptions.RequestException,)
-        )(mock_func)
-        
-        # 함수 호출
-        with patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.sleep') as mock_sleep:
-            result = decorated_func()
-        
-        # 검증
-        self.assertEqual(result, "성공")
-        self.assertEqual(mock_func.call_count, 3)
-        self.assertEqual(mock_sleep.call_count, 2)  # 두 번의 재시도에 대한 대기
-        
-        # 최대 재시도 횟수 초과 테스트
-        mock_func.reset_mock()
-        mock_sleep.reset_mock()
-        
-        mock_func.side_effect = [
-            requests.exceptions.RequestException("테스트 예외"),
-            requests.exceptions.RequestException("테스트 예외"),
-            requests.exceptions.RequestException("테스트 예외"),
-            requests.exceptions.RequestException("테스트 예외")
-        ]
-        
-        # 함수 호출 (예외 발생 예상)
-        with patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.sleep') as mock_sleep:
-            with self.assertRaises(requests.exceptions.RequestException):
-                decorated_func()
-        
-        # 검증
-        self.assertEqual(mock_func.call_count, 4)  # 초기 호출 + 3번의 재시도
-        self.assertEqual(mock_sleep.call_count, 3)  # 3번의 재시도에 대한 대기
+    unittest.main()

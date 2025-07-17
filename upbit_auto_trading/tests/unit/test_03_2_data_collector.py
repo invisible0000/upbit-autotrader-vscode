@@ -3,6 +3,7 @@
 
 """
 데이터 수집기 단위 테스트
+개발 순서: 3.2 데이터 수집기 구현
 """
 
 import unittest
@@ -40,8 +41,9 @@ class TestDataCollector(unittest.TestCase):
         self.mock_api_class = self.api_patcher.start()
         self.mock_api = self.mock_api_class.return_value
         
-        # 데이터 수집기 생성
-        self.collector = DataCollector()
+        # 데이터 수집기 생성 (테이블 생성 메서드 패치)
+        with patch.object(DataCollector, '_ensure_tables'):
+            self.collector = DataCollector()
     
     def tearDown(self):
         """테스트 정리"""
@@ -54,6 +56,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_ensure_tables(self):
         """테이블 생성 테스트"""
+        print("\n=== 테스트 id 3_2_1: test_ensure_tables ===")
         # 메서드 호출
         self.collector._ensure_tables()
         
@@ -63,6 +66,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_collect_ohlcv(self):
         """OHLCV 데이터 수집 테스트"""
+        print("\n=== 테스트 id 3_2_2: test_collect_ohlcv ===")
         # Mock 데이터 설정
         mock_df = pd.DataFrame({
             'timestamp': [datetime(2023, 1, 1), datetime(2023, 1, 2)],
@@ -94,6 +98,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_collect_orderbook(self):
         """호가 데이터 수집 테스트"""
+        print("\n=== 테스트 id 3_2_3: test_collect_orderbook ===")
         # Mock 데이터 설정
         mock_orderbook = {
             'market': 'KRW-BTC',
@@ -129,6 +134,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_get_ohlcv_data(self):
         """OHLCV 데이터 조회 테스트"""
+        print("\n=== 테스트 id 3_2_4: test_get_ohlcv_data ===")
         # Mock 데이터 설정
         mock_rows = [
             ('KRW-BTC', datetime(2023, 1, 1), 50000000.0, 51000000.0, 49000000.0, 50500000.0, 20.0, '1d'),
@@ -156,10 +162,11 @@ class TestDataCollector(unittest.TestCase):
     
     def test_get_orderbook_data(self):
         """호가 데이터 조회 테스트"""
+        print("\n=== 테스트 id 3_2_5: test_get_orderbook_data ===")
         # Mock 데이터 설정
-        mock_orderbook = {
+        mock_orderbook_str = json.dumps({
             'market': 'KRW-BTC',
-            'timestamp': datetime(2023, 1, 1),
+            'timestamp': '2023-01-01T00:00:00',  # ISO 형식의 문자열로 변경
             'total_ask_size': 10.0,
             'total_bid_size': 12.0,
             'orderbook_units': [
@@ -170,11 +177,11 @@ class TestDataCollector(unittest.TestCase):
                     'bid_size': 1.2
                 }
             ]
-        }
+        })
         
         # 쿼리 결과 모킹
         mock_rows = [
-            ('KRW-BTC', datetime(2023, 1, 1), json.dumps(mock_orderbook))
+            ('KRW-BTC', datetime(2023, 1, 1), mock_orderbook_str)
         ]
         
         mock_result = MagicMock()
@@ -196,6 +203,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_collect_historical_ohlcv_new_data(self):
         """과거 OHLCV 데이터 수집 테스트 (새 데이터)"""
+        print("\n=== 테스트 id 3_2_6: test_collect_historical_ohlcv_new_data ===")
         # 기존 데이터 없음 모킹
         self.collector.get_ohlcv_data = MagicMock(return_value=pd.DataFrame())
         
@@ -228,6 +236,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_collect_historical_ohlcv_existing_data(self):
         """과거 OHLCV 데이터 수집 테스트 (기존 데이터 있음)"""
+        print("\n=== 테스트 id 3_2_7: test_collect_historical_ohlcv_existing_data ===")
         # 기존 데이터 모킹
         existing_df = pd.DataFrame({
             'timestamp': [datetime(2023, 1, 1)],
@@ -268,6 +277,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_cleanup_old_data(self):
         """오래된 데이터 정리 테스트"""
+        print("\n=== 테스트 id 3_2_8: test_cleanup_old_data ===")
         # 쿼리 결과 모킹
         mock_ohlcv_result = MagicMock()
         mock_ohlcv_result.rowcount = 10
@@ -292,6 +302,7 @@ class TestDataCollector(unittest.TestCase):
     @patch('upbit_auto_trading.data_layer.collectors.data_collector.threading.Thread')
     def test_start_ohlcv_collection(self, mock_thread):
         """OHLCV 데이터 수집 작업 시작 테스트"""
+        print("\n=== 테스트 id 3_2_9: test_start_ohlcv_collection ===")
         # 스레드 모킹
         mock_thread_instance = MagicMock()
         mock_thread.return_value = mock_thread_instance
@@ -317,6 +328,7 @@ class TestDataCollector(unittest.TestCase):
     @patch('upbit_auto_trading.data_layer.collectors.data_collector.threading.Thread')
     def test_start_orderbook_collection(self, mock_thread):
         """호가 데이터 수집 작업 시작 테스트"""
+        print("\n=== 테스트 id 3_2_10: test_start_orderbook_collection ===")
         # 스레드 모킹
         mock_thread_instance = MagicMock()
         mock_thread.return_value = mock_thread_instance
@@ -340,6 +352,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_stop_collection(self):
         """데이터 수집 작업 중지 테스트"""
+        print("\n=== 테스트 id 3_2_11: test_stop_collection ===")
         # 작업 정보 설정
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
@@ -368,6 +381,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_stop_all_collections(self):
         """모든 데이터 수집 작업 중지 테스트"""
+        print("\n=== 테스트 id 3_2_12: test_stop_all_collections ===")
         # 작업 정보 설정
         mock_thread1 = MagicMock()
         mock_thread1.is_alive.return_value = True
@@ -408,6 +422,7 @@ class TestDataCollector(unittest.TestCase):
     
     def test_get_collection_status(self):
         """데이터 수집 작업 상태 조회 테스트"""
+        print("\n=== 테스트 id 3_2_13: test_get_collection_status ===")
         # 작업 정보 설정
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True

@@ -1,5 +1,12 @@
-"""
-데이터 처리기 모듈
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-수집된 데이터를 정제, 가공하고 기술적 지표를 계산하는 기능을 제공합니다.
 """
+데이터 처리기 패키지
+
+시장 데이터 처리와 관련된 모듈을 포함합니다.
+"""
+
+from upbit_auto_trading.data_layer.processors.data_processor import DataProcessor
+
+__all__ = ['DataProcessor']

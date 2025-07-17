@@ -1,5 +1,6 @@
 """
 전략 인터페이스 테스트 모듈
+개발 순서: 5.1 전략 인터페이스 및 기본 클래스 구현
 """
 import unittest
 from unittest.mock import MagicMock, patch
@@ -119,6 +120,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_strategy_initialization(self):
         """전략 초기화 테스트"""
+        print("\n=== 테스트 id 5_1_5: test_strategy_initialization ===")
         # 유효한 매개변수로 초기화
         strategy = TestStrategy(self.valid_params)
         self.assertEqual(strategy.name, "TestStrategy")
@@ -133,6 +135,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_get_parameters(self):
         """매개변수 조회 테스트"""
+        print("\n=== 테스트 id 5_1_6: test_get_parameters ===")
         params = self.strategy.get_parameters()
         self.assertEqual(params["short_window"], 10)
         self.assertEqual(params["long_window"], 30)
@@ -143,6 +146,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_set_parameters(self):
         """매개변수 설정 테스트"""
+        print("\n=== 테스트 id 5_1_7: test_set_parameters ===")
         # 유효한 매개변수 설정
         new_params = {
             "short_window": 15,
@@ -162,6 +166,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_validate_parameters(self):
         """매개변수 유효성 검사 테스트"""
+        print("\n=== 테스트 id 5_1_8: test_validate_parameters ===")
         self.assertTrue(self.strategy.validate_parameters(self.valid_params))
         self.assertFalse(self.strategy.validate_parameters(self.invalid_params))
         
@@ -178,6 +183,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_get_strategy_info(self):
         """전략 정보 조회 테스트"""
+        print("\n=== 테스트 id 5_1_9: test_get_strategy_info ===")
         info = self.strategy.get_strategy_info()
         self.assertEqual(info["name"], "TestStrategy")
         self.assertEqual(info["description"], "테스트용 전략")
@@ -189,6 +195,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_get_required_indicators(self):
         """필요한 지표 조회 테스트"""
+        print("\n=== 테스트 id 5_1_10: test_get_required_indicators ===")
         indicators = self.strategy.get_required_indicators()
         self.assertEqual(len(indicators), 2)
         
@@ -204,6 +211,7 @@ class TestStrategyInterface(unittest.TestCase):
     
     def test_generate_signals(self):
         """매매 신호 생성 테스트"""
+        print("\n=== 테스트 id 5_1_11: test_generate_signals ===")
         # 신호 생성
         result = self.strategy.generate_signals(self.test_data)
         

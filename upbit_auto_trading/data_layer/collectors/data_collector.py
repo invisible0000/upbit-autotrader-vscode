@@ -12,6 +12,7 @@ import logging
 import pandas as pd
 import threading
 import time
+import json
 from typing import Dict, List, Optional, Union, Any, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy import text
@@ -19,6 +20,13 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
 from upbit_auto_trading.data_layer.storage.database_manager import get_database_manager
+
+# datetime 객체를 JSON으로 직렬화하기 위한 사용자 정의 인코더
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +249,7 @@ class DataCollector:
             for _, row in df.iterrows():
                 records.append({
                     'symbol': row['symbol'],
-                    'timestamp': row['timestamp'],
+                    'timestamp': row['timestamp'].strftime('%Y-%m-%d %H:%M:%S') if hasattr(row['timestamp'], 'strftime') else row['timestamp'],
                     'open': row['open'],
                     'high': row['high'],
                     'low': row['low'],
@@ -284,9 +292,8 @@ class DataCollector:
             """
             
             # 데이터 변환
-            import json
             timestamp = orderbook.get('timestamp', datetime.now())
-            data = json.dumps(orderbook)
+            data = json.dumps(orderbook, cls=DateTimeEncoder)
             
             # 데이터 삽입
             with engine.connect() as conn:
@@ -402,12 +409,19 @@ class DataCollector:
                 return []
             
             # 데이터 변환
-            import json
             orderbooks = []
             for row in rows:
-                orderbook = json.loads(row[2])
-                orderbook['timestamp'] = row[1]
-                orderbooks.append(orderbook)
+                try:
+                    orderbook = json.loads(row[2])
+                    # 타임스탬프가 문자열로 저장되어 있을 수 있으므로 datetime 객체로 변환하지 않고 그대로 사용
+                    if isinstance(row[1], datetime):
+                        orderbook['timestamp'] = row[1].isoformat()
+                    else:
+                        orderbook['timestamp'] = row[1]
+                    orderbooks.append(orderbook)
+                except json.JSONDecodeError as e:
+                    logger.error(f"호가 데이터 JSON 파싱 오류: {e}, 데이터: {row[2]}")
+                    continue
             
             return orderbooks
         except SQLAlchemyError as e:

@@ -107,7 +107,7 @@ class UpbitAPI:
             total=5,                      # 최대 재시도 횟수
             backoff_factor=0.5,           # 재시도 간격 계수
             status_forcelist=[429, 500, 502, 503, 504],  # 재시도할 HTTP 상태 코드
-            method_whitelist=["GET", "POST", "DELETE"]    # 재시도할 HTTP 메서드
+            allowed_methods=["GET", "POST", "DELETE"]    # 재시도할 HTTP 메서드 (최신 버전에서는 method_whitelist 대신 allowed_methods 사용)
         )
         
         adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -137,6 +137,9 @@ class UpbitAPI:
                     time.sleep(sleep_time)
                     # 대기 후 타임스탬프 갱신
                     self.request_timestamps = [ts for ts in self.request_timestamps if time.time() - ts < 60]
+                    # 분당 제한 처리 후 초당 제한은 확인하지 않음
+                    self.request_timestamps.append(time.time())
+                    return
             
             # 초당 요청 제한 확인
             recent_requests = [ts for ts in self.request_timestamps if now - ts < 1]
@@ -241,7 +244,17 @@ class UpbitAPI:
         """
         try:
             response = self._request('GET', '/market/all')
+            if not response:
+                logger.error("마켓 코드 응답이 비어있습니다.")
+                return pd.DataFrame()
+                
             df = pd.DataFrame(response)
+            
+            # 응답에 'market' 컬럼이 있는지 확인
+            if 'market' not in df.columns:
+                logger.error(f"마켓 코드 응답에 'market' 컬럼이 없습니다. 컬럼: {df.columns}")
+                return pd.DataFrame()
+                
             # KRW 마켓만 필터링
             df = df[df['market'].str.startswith('KRW-')]
             return df
@@ -781,8 +794,9 @@ class UpbitAPI:
             
         except Exception as e:
             logger.exception(f"월 캔들 조회 중 오류가 발생했습니다: {e}")
-            return pd.DataFrame()    def get_
-historical_candles(self, symbol: str, timeframe: str, start_date: datetime, end_date: datetime = None) -> pd.DataFrame:
+            return pd.DataFrame()
+            
+    def get_historical_candles(self, symbol: str, timeframe: str, start_date: datetime, end_date: datetime = None) -> pd.DataFrame:
         """특정 기간의 캔들 데이터를 수집합니다.
         
         업비트 API는 한 번에 최대 200개의 캔들만 조회할 수 있으므로,
@@ -851,42 +865,33 @@ historical_candles(self, symbol: str, timeframe: str, start_date: datetime, end_
                     else:
                         raise ValueError(f"지원하지 않는 시간대입니다: {timeframe}")
                 
-                # 데이터가 없으면 종료
-                if df.empty:
+                # 데이터가 있으면 리스트에 추가
+                if not df.empty:
+                    all_candles.append(df)
+                    
+                    # 가장 오래된 캔들의 시간으로 다음 조회 날짜 설정
+                    oldest_candle = df.iloc[-1]
+                    current_date = oldest_candle["timestamp"] - timedelta(minutes=1)
+                else:
+                    # 더 이상 데이터가 없으면 종료
                     break
-                
-                # 결과에 추가
-                all_candles.append(df)
-                
-                # 가장 오래된 캔들의 시간을 다음 조회 종료 시간으로 설정
-                oldest_candle_time = df['timestamp'].min()
-                
-                # 이미 시작 날짜보다 이전 데이터를 조회했으면 종료
-                if oldest_candle_time <= pd.Timestamp(start_date):
-                    break
-                
-                # 다음 조회 시간 설정 (가장 오래된 캔들보다 1초 이전)
-                current_date = oldest_candle_time - timedelta(seconds=1)
                 
                 # API 요청 제한을 고려하여 잠시 대기
                 time.sleep(0.1)
+                
+                # 시작 날짜에 도달하면 종료
+                if current_date < start_date:
+                    break
             
             # 모든 데이터 병합
             if all_candles:
                 result = pd.concat(all_candles)
                 
-                # 중복 제거
-                result = result.drop_duplicates(subset=['timestamp'])
+                # 시작 날짜 이후의 데이터만 필터링
+                result = result[result["timestamp"] >= start_date]
                 
-                # 시작 날짜와 종료 날짜 사이의 데이터만 필터링
-                result = result[(result['timestamp'] >= pd.Timestamp(start_date)) & 
-                               (result['timestamp'] <= pd.Timestamp(end_date))]
-                
-                # 시간 순서대로 정렬
-                result = result.sort_values('timestamp')
-                
-                # 인덱스 재설정
-                result = result.reset_index(drop=True)
+                # 중복 제거 및 시간순 정렬
+                result = result.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
                 
                 return result
             else:
@@ -895,237 +900,3 @@ historical_candles(self, symbol: str, timeframe: str, start_date: datetime, end_
         except Exception as e:
             logger.exception(f"과거 캔들 데이터 수집 중 오류가 발생했습니다: {e}")
             return pd.DataFrame()
-    
-    @retry_on_exception(max_retries=3, exceptions=(requests.exceptions.RequestException,))
-    def get_market_info(self, symbol: str) -> Dict:
-        """특정 마켓의 정보를 조회합니다.
-        
-        Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            
-        Returns:
-            Dict: 마켓 정보
-        """
-        try:
-            markets_df = self.get_markets()
-            if markets_df.empty:
-                return {}
-            
-            market_info = markets_df[markets_df['market'] == symbol]
-            if len(market_info) == 0:
-                logger.error(f"마켓 정보를 찾을 수 없습니다: {symbol}")
-                return {}
-            
-            return market_info.iloc[0].to_dict()
-        except Exception as e:
-            logger.exception(f"마켓 정보 조회 중 오류가 발생했습니다: {e}")
-            return {}
-    
-    def get_daily_ohlcv(self, symbol: str, count: int = 30) -> pd.DataFrame:
-        """일별 OHLCV 데이터를 조회합니다.
-        
-        Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            count: 조회할 일수 (최대 200)
-            
-        Returns:
-            pd.DataFrame: 일별 OHLCV 데이터
-        """
-        return self.get_market_day_candles(symbol, count=count)
-    
-    def get_current_price(self, symbols: List[str] = None) -> Dict:
-        """현재 시세 정보를 조회합니다.
-        
-        Args:
-            symbols: 코인 심볼 목록 (None인 경우 모든 KRW 마켓 코인)
-            
-        Returns:
-            Dict: 심볼별 현재 가격 정보
-        """
-        try:
-            tickers_df = self.get_tickers(symbols)
-            if tickers_df.empty:
-                return {}
-            
-            # 심볼별 현재 가격 정보 추출
-            price_dict = {}
-            for _, row in tickers_df.iterrows():
-                symbol = row['market']
-                price_dict[symbol] = {
-                    'price': row['trade_price'],
-                    'change': row['change'],
-                    'change_rate': row['signed_change_rate'],
-                    'volume_24h': row['acc_trade_volume_24h'],
-                    'timestamp': row['timestamp']
-                }
-            
-            return price_dict
-        except Exception as e:
-            logger.exception(f"현재 시세 정보 조회 중 오류가 발생했습니다: {e}")
-            return {}
-    
-    def get_market_depth(self, symbol: str) -> Dict:
-        """시장 깊이(호가창) 정보를 조회합니다.
-        
-        Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            
-        Returns:
-            Dict: 호가창 정보
-        """
-        return self.get_orderbook(symbol)
-    
-    def get_recent_trades(self, symbol: str, count: int = 100) -> pd.DataFrame:
-        """최근 체결 내역을 조회합니다.
-        
-        Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            count: 조회할 체결 개수 (최대 500)
-            
-        Returns:
-            pd.DataFrame: 체결 내역
-        """
-        return self.get_trades_ticks(symbol, count=count)
-    
-    def get_order_chance(self, symbol: str) -> Dict:
-        """주문 가능 정보를 조회합니다.
-        
-        Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            
-        Returns:
-            Dict: 주문 가능 정보
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            params = {'market': symbol}
-            response = self._request('GET', '/orders/chance', params=params)
-            return response
-        except Exception as e:
-            logger.exception(f"주문 가능 정보 조회 중 오류가 발생했습니다: {e}")
-            return {}
-    
-    def get_deposit_addresses(self) -> List[Dict]:
-        """입금 주소 목록을 조회합니다.
-        
-        Returns:
-            List[Dict]: 입금 주소 목록
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            response = self._request('GET', '/deposits/coin_addresses')
-            return response
-        except Exception as e:
-            logger.exception(f"입금 주소 목록 조회 중 오류가 발생했습니다: {e}")
-            return []
-    
-    def get_deposit_history(self, currency: str = None, state: str = None, limit: int = 100) -> List[Dict]:
-        """입금 내역을 조회합니다.
-        
-        Args:
-            currency: 화폐를 의미하는 영문 대문자 코드 (선택적)
-            state: 입금 상태 (선택적, 'submitting', 'submitted', 'almost_accepted', 'rejected', 'accepted', 'processing', 'done', 'canceled')
-            limit: 개수 제한 (최대 100)
-            
-        Returns:
-            List[Dict]: 입금 내역
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            params = {'limit': min(limit, 100)}
-            if currency:
-                params['currency'] = currency
-            if state:
-                params['state'] = state
-            
-            response = self._request('GET', '/deposits', params=params)
-            return response
-        except Exception as e:
-            logger.exception(f"입금 내역 조회 중 오류가 발생했습니다: {e}")
-            return []
-    
-    def get_withdrawal_history(self, currency: str = None, state: str = None, limit: int = 100) -> List[Dict]:
-        """출금 내역을 조회합니다.
-        
-        Args:
-            currency: 화폐를 의미하는 영문 대문자 코드 (선택적)
-            state: 출금 상태 (선택적, 'submitting', 'submitted', 'almost_accepted', 'rejected', 'accepted', 'processing', 'done', 'canceled')
-            limit: 개수 제한 (최대 100)
-            
-        Returns:
-            List[Dict]: 출금 내역
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            params = {'limit': min(limit, 100)}
-            if currency:
-                params['currency'] = currency
-            if state:
-                params['state'] = state
-            
-            response = self._request('GET', '/withdraws', params=params)
-            return response
-        except Exception as e:
-            logger.exception(f"출금 내역 조회 중 오류가 발생했습니다: {e}")
-            return []
-    
-    def withdraw_coin(self, currency: str, amount: str, address: str, secondary_address: str = None, transaction_type: str = 'default') -> Dict:
-        """코인 출금 요청을 합니다.
-        
-        Args:
-            currency: 화폐를 의미하는 영문 대문자 코드
-            amount: 출금 수량
-            address: 출금 주소
-            secondary_address: 2차 출금 주소 (필요한 경우)
-            transaction_type: 출금 유형 ('default', 'internal')
-            
-        Returns:
-            Dict: 출금 요청 결과
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            params = {
-                'currency': currency,
-                'amount': amount,
-                'address': address,
-                'transaction_type': transaction_type
-            }
-            
-            if secondary_address:
-                params['secondary_address'] = secondary_address
-            
-            response = self._request('POST', '/withdraws/coin', params=params)
-            return response
-        except Exception as e:
-            logger.exception(f"코인 출금 요청 중 오류가 발생했습니다: {e}")
-            raise
-    
-    def withdraw_krw(self, amount: str) -> Dict:
-        """원화 출금 요청을 합니다.
-        
-        Args:
-            amount: 출금 금액
-            
-        Returns:
-            Dict: 출금 요청 결과
-        """
-        try:
-            if not self.access_key or not self.secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다.")
-            
-            params = {'amount': amount}
-            response = self._request('POST', '/withdraws/krw', params=params)
-            return response
-        except Exception as e:
-            logger.exception(f"원화 출금 요청 중 오류가 발생했습니다: {e}")
-            raise
