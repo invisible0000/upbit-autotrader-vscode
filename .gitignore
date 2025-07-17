@@ -1,0 +1,67 @@
+# Python 관련
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 가상환경
+venv/
+env/
+ENV/
+
+# 로그 파일
+logs/
+*.log
+
+# 데이터베이스 파일
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# 환경 변수 파일
+.env
+.env.*
+
+# API 키 파일
+*_key.txt
+*_keys.txt
+*_api_key.txt
+*_api_keys.txt
+
+# IDE 관련
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 테스트 관련
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# 기타
+.DS_Store
+Thumbs.db
