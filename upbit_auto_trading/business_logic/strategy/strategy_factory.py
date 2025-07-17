@@ -65,12 +65,14 @@ class StrategyFactory:
         try:
             # 매개변수가 제공되지 않은 경우 기본값 사용
             if parameters is None:
-                # 클래스의 정적 메서드를 통해 기본 매개변수 가져오기 시도
-                if hasattr(strategy_class, 'get_default_parameters') and callable(getattr(strategy_class, 'get_default_parameters')):
-                    parameters = strategy_class.get_default_parameters()
+                # 정적 메서드를 통해 기본 매개변수 가져오기 시도
+                if hasattr(strategy_class, 'get_default_parameters_static') and callable(getattr(strategy_class, 'get_default_parameters_static')):
+                    parameters = strategy_class.get_default_parameters_static()
                 else:
                     # 임시 인스턴스를 생성하여 기본 매개변수 가져오기
-                    temp_instance = strategy_class({})
+                    # 임시 인스턴스 생성을 위한 빈 매개변수 딕셔너리
+                    empty_params = {}
+                    temp_instance = strategy_class(empty_params)
                     parameters = temp_instance.get_default_parameters()
             
             # 전략 인스턴스 생성
@@ -101,8 +103,18 @@ class StrategyFactory:
                 }
                 
                 # 기본 매개변수 가져오기 시도
-                if hasattr(strategy_class, 'get_default_parameters') and callable(getattr(strategy_class, 'get_default_parameters')):
-                    strategy_info["default_parameters"] = strategy_class.get_default_parameters()
+                if hasattr(strategy_class, 'get_default_parameters_static') and callable(getattr(strategy_class, 'get_default_parameters_static')):
+                    # 정적 메서드가 있으면 사용
+                    strategy_info["default_parameters"] = strategy_class.get_default_parameters_static()
+                else:
+                    try:
+                        # 임시 인스턴스를 생성하여 기본 매개변수 가져오기
+                        empty_params = {}
+                        temp_instance = strategy_class(empty_params)
+                        strategy_info["default_parameters"] = temp_instance.get_default_parameters()
+                    except Exception:
+                        # 기본 매개변수를 가져올 수 없는 경우 생략
+                        pass
                 
                 strategies.append(strategy_info)
             

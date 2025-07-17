@@ -16,9 +16,11 @@ class TestStrategy(BaseStrategy):
     """테스트용 전략 클래스"""
     
     def __init__(self, parameters: Dict[str, Any]):
+        # 부모 클래스 초기화
+        super().__init__(parameters)
+        # 부모 클래스 초기화 후에 이름과 설명 설정
         self.name = "TestStrategy"
         self.description = "테스트용 전략"
-        super().__init__(parameters)
     
     def get_required_indicators(self) -> List[Dict[str, Any]]:
         return [
