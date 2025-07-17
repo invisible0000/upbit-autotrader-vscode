@@ -155,6 +155,13 @@ class BacktestRunner:
         
         # 결과 반환
         results = {
+            "id": str(uuid.uuid4()),
+            "strategy_id": self.strategy.__class__.__name__,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "initial_capital": self.initial_capital,
             "trades": self.trades,
             "performance_metrics": performance_metrics,
             "equity_curve": equity_curve
@@ -490,3 +497,47 @@ class BacktestRunner:
         self.current_capital = self.initial_capital
         self.position = None
         self.trades = []
+        
+    def save_backtest_result(self, result: Dict[str, Any], session) -> str:
+        """
+        백테스트 결과 저장
+        
+        Args:
+            result: 백테스트 결과 딕셔너리
+            session: SQLAlchemy 세션
+            
+        Returns:
+            저장된 결과 ID
+        """
+        from upbit_auto_trading.business_logic.backtester.backtest_results_manager import BacktestResultsManager
+        
+        # 결과 관리자를 사용하여 저장
+        results_manager = BacktestResultsManager(session)
+        result_id = results_manager.save_backtest_result(result)
+        
+        self.logger.info(f"백테스트 결과 저장 완료. ID: {result_id}")
+        return result_id
+        
+    def load_backtest_result(self, result_id: str, session) -> Dict[str, Any]:
+        """
+        백테스트 결과 불러오기
+        
+        Args:
+            result_id: 결과 ID
+            session: SQLAlchemy 세션
+            
+        Returns:
+            백테스트 결과 딕셔너리
+        """
+        from upbit_auto_trading.business_logic.backtester.backtest_results_manager import BacktestResultsManager
+        
+        # 결과 관리자를 사용하여 로드
+        results_manager = BacktestResultsManager(session)
+        result = results_manager.load_backtest_result(result_id)
+        
+        if result:
+            self.logger.info(f"백테스트 결과 로드 완료. ID: {result_id}")
+        else:
+            self.logger.warning(f"백테스트 결과를 찾을 수 없습니다. ID: {result_id}")
+        
+        return result

@@ -585,11 +585,17 @@ class PortfolioBacktest:
         Returns:
             저장된 결과 ID
         """
-        # 결과 ID 생성
-        result_id = str(uuid.uuid4())
+        from upbit_auto_trading.business_logic.backtester.backtest_results_manager import BacktestResultsManager
         
-        # TODO: 결과 저장 로직 구현 (데이터베이스에 저장)
+        # 결과 ID 생성 (없는 경우)
+        if "id" not in result:
+            result["id"] = str(uuid.uuid4())
         
+        # 결과 관리자를 사용하여 저장
+        results_manager = BacktestResultsManager(self.session)
+        result_id = results_manager.save_portfolio_backtest_result(result)
+        
+        self.logger.info(f"포트폴리오 백테스트 결과 저장 완료. ID: {result_id}")
         return result_id
 
     def load_portfolio_backtest_result(self, result_id: str) -> Dict[str, Any]:
@@ -602,6 +608,15 @@ class PortfolioBacktest:
         Returns:
             백테스트 결과 딕셔너리
         """
-        # TODO: 결과 로드 로직 구현 (데이터베이스에서 로드)
+        from upbit_auto_trading.business_logic.backtester.backtest_results_manager import BacktestResultsManager
         
-        return {}
+        # 결과 관리자를 사용하여 로드
+        results_manager = BacktestResultsManager(self.session)
+        result = results_manager.load_portfolio_backtest_result(result_id)
+        
+        if result:
+            self.logger.info(f"포트폴리오 백테스트 결과 로드 완료. ID: {result_id}")
+        else:
+            self.logger.warning(f"포트폴리오 백테스트 결과를 찾을 수 없습니다. ID: {result_id}")
+        
+        return result
