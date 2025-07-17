@@ -116,8 +116,8 @@ python run.py
 - [ ] 비즈니스 로직 구현
   - [x] 매매 전략 관리 시스템 구현
     - [x] 전략 인터페이스 및 기본 클래스 구현
-    - [ ] 기본 매매 전략 구현
-    - [ ] 전략 저장 및 관리 기능 구현
+    - [x] 기본 매매 전략 구현
+    - [x] 전략 저장 및 관리 기능 구현
   - [ ] 포트폴리오 관리 시스템 구현
 
 ### 예정된 작업
@@ -128,6 +128,19 @@ python run.py
 ## 작업 로그
 
 ### 2025-07-17
+- 매매 전략 관리 시스템 - 전략 저장 및 관리 기능 구현 완료
+  - 전략 관리자 클래스 구현 (StrategyManager)
+  - 전략 저장, 불러오기, 목록 관리 기능 구현
+  - 데이터베이스 연동 및 전략 정보 저장
+  - 한국 시간대(KST) 적용
+  - 단위 테스트 작성 및 검증
+
+- 매매 전략 관리 시스템 - 기본 매매 전략 구현 완료
+  - 이동 평균 교차 전략 구현 (MovingAverageCrossStrategy)
+  - 볼린저 밴드 전략 구현 (BollingerBandsStrategy)
+  - RSI 기반 전략 구현 (RSIStrategy)
+  - 전략 팩토리 통합 및 단위 테스트 작성
+
 - 매매 전략 관리 시스템 - 전략 인터페이스 및 기본 클래스 구현 완료
   - 전략 인터페이스 정의 (StrategyInterface)
   - 기본 전략 추상 클래스 구현 (BaseStrategy)
@@ -167,6 +180,15 @@ python run.py
   - 프로젝트 구조 설계
   - 기본 설정 파일 생성
   - Git 저장소 초기화
+
+## 문서
+
+프로젝트에 관한 자세한 문서는 다음 링크에서 확인할 수 있습니다:
+
+- [문서 목록](upbit_auto_trading/docs/README.md)
+- [개발 가이드](upbit_auto_trading/docs/development_guide.md)
+- [API 문서](upbit_auto_trading/docs/api_docs.md)
+- [테스트 결과 요약](upbit_auto_trading/docs/test_results_summary.md)
 
 ## 라이선스
 이 프로젝트는 MIT 라이선스 하에 배포됩니다.
