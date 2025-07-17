@@ -213,7 +213,10 @@ def run_tests_in_order():
     
     # 테스트 결과를 마크다운 파일로 저장
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    result_file = f"test_results_summary.md"
+    # docs 폴더에 결과 저장
+    docs_dir = os.path.join("upbit_auto_trading", "docs")
+    os.makedirs(docs_dir, exist_ok=True)
+    result_file = os.path.join(docs_dir, "test_results_summary.md")
     
     with open(result_file, "w", encoding="utf-8") as f:
         f.write("# 테스트 결과 요약\n\n")

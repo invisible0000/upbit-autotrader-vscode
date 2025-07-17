@@ -78,22 +78,88 @@ upbit_auto_trading/
 - 상수: `UPPER_CASE_WITH_UNDERSCORES`
 - 비공개 메서드/속성: `_leading_underscore`
 
+## 개발 워크플로우
+
+프로젝트는 다음과 같은 개발 워크플로우를 따릅니다:
+
+1. **요구사항 분석**: `requirements.md` 문서 검토
+2. **설계 검토**: `design.md` 문서 참조
+3. **태스크 확인**: `tasks.md` 문서에서 구현할 태스크 확인
+4. **테스트 작성**: 테스트 주도 개발(TDD) 방식으로 테스트 먼저 작성
+5. **기능 구현**: 테스트를 통과하도록 기능 구현
+6. **테스트 실행 및 디버깅**: 모든 테스트가 통과할 때까지 반복
+7. **코드 리뷰 및 리팩토링**: 코드 품질 개선
+8. **태스크 완료 표시**: `tasks.md` 문서에서 태스크를 완료로 표시
+9. **문서 업데이트**: README.md, 설계 문서, API 문서 등 업데이트
+10. **GitHub 커밋 및 푸시**: 구현 코드와 문서를 함께 커밋하고 푸시
+
+각 태스크를 완료할 때마다 다음 문서들을 검토하고 필요한 경우 업데이트해야 합니다:
+- `README.md`: 개발 현황 및 작업 로그 섹션
+- `.kiro/specs/upbit-auto-trading/design.md`: 설계 문서
+- `upbit_auto_trading/docs/`: API 문서 및 사용 가이드
+
+자세한 개발 워크플로우 지침은 `.kiro/steering/development_workflow.md` 문서를 참조하세요.
+
 ## 테스트
 
-### 단위 테스트
+### 테스트 파일 명명 규칙
+테스트 파일은 다음 형식을 따릅니다:
+```
+test_[태스크번호]_[기능명].py
+```
+
+예시:
+- `test_02_1_upbit_api.py`: 태스크 2.1 업비트 REST API 기본 클라이언트 구현에 대한 테스트
+- `test_03_2_data_collector.py`: 태스크 3.2 데이터 수집기 구현에 대한 테스트
+
+### 테스트 ID
+모든 테스트 메서드는 고유한 테스트 ID를 가져야 합니다. 테스트 ID는 다음 형식으로 출력합니다:
+```python
+print("\n=== 테스트 id [태스크번호]_[일련번호]: [테스트메서드명] ===")
+```
+
+예시:
+```python
+def test_save_screening_result(self):
+    """스크리닝 결과 저장 테스트"""
+    print("\n=== 테스트 id 4_2_1: test_save_screening_result ===")
+    # 테스트 코드...
+```
+
+### 테스트 실행
+
+#### 개별 테스트 파일 실행
+```bash
+python -m unittest upbit_auto_trading/tests/unit/test_05_2_basic_trading_strategies.py
+```
+
+#### 모든 단위 테스트 실행
 ```bash
 pytest upbit_auto_trading/tests/unit
 ```
 
-### 통합 테스트
+#### 통합 테스트 실행
 ```bash
 pytest upbit_auto_trading/tests/integration
 ```
 
-### 테스트 커버리지 확인
+#### 테스트 커버리지 확인
 ```bash
 pytest --cov=upbit_auto_trading
 ```
+
+### 테스트 결과 요약
+테스트 결과를 요약하여 마크다운 파일로 저장하려면 다음 명령을 실행합니다:
+```bash
+python run_tests_in_order.py
+```
+
+이 명령은 `test_results_summary.md` 파일을 생성하며, 다음 정보가 포함됩니다:
+- 테스트 파일별 요약 (실행, 오류, 실패, 건너뜀, 상태)
+- 테스트 ID별 상세 결과 (테스트 이름, 파일, 개발 단계, 테스트 내용, 상태)
+- 개발 단계별 테스트 현황 (총 테스트 수, 성공, 실패, 성공률)
+
+테스트 결과 요약을 통해 프로젝트의 테스트 상태를 쉽게 파악하고, 개발 단계별 진행 상황을 모니터링할 수 있습니다.
 
 ## Git 워크플로우
 

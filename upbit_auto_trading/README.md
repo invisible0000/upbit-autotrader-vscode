@@ -49,8 +49,10 @@ python -m upbit_auto_trading
 
 ## 개발 가이드
 
+- [문서 목록](docs/README.md)
 - [개발 가이드](docs/development_guide.md)
 - [API 문서](docs/api_docs.md)
+- [테스트 결과 요약](docs/test_results_summary.md)
 
 ## 라이선스
 
