@@ -1,6 +1,6 @@
 # 테스트 결과 요약
 
-실행 일시: 2025-07-17 23:41:05
+실행 일시: 2025-07-18 00:58:36
 
 ## 테스트 파일별 요약
 
@@ -18,8 +18,12 @@
 | test_05_1_strategy_parameter.py | 14 | 0 | 0 | 0 | ✅ 성공 |
 | test_05_2_basic_trading_strategies.py | 10 | 0 | 0 | 0 | ✅ 성공 |
 | test_05_3_strategy_management.py | 6 | 0 | 0 | 0 | ✅ 성공 |
+| test_06_1_portfolio_model.py | 8 | 0 | 0 | 0 | ✅ 성공 |
+| test_06_2_portfolio_performance.py | 8 | 0 | 0 | 0 | ✅ 성공 |
+| test_07_1_backtest_runner.py | 12 | 0 | 0 | 0 | ✅ 성공 |
+| test_07_2_backtest_analyzer.py | 0 | 1 | 0 | 0 | ❌ 실패 |
 
-**총계:** 97개 테스트 실행, 0개 오류, 0개 실패, 0개 건너뜀
+**총계:** 125개 테스트 실행, 1개 오류, 0개 실패, 0개 건너뜀
 
 ## 테스트 ID별 상세 결과
 
@@ -105,11 +109,41 @@
 | 5_2_8 | test_rsi_strategy_required_indicators | test_05_2_basic_trading_strategies.py | 5.2 기본 매매 전략 구현 | RSI 전략 필요 지표 테스트 | ✅ 성공 |
 | 5_2_9 | test_rsi_strategy_generate_signals | test_05_2_basic_trading_strategies.py | 5.2 기본 매매 전략 구현 | RSI 전략 신호 생성 테스트 | ✅ 성공 |
 | 5_2_10 | test_strategy_factory_integration | test_05_2_basic_trading_strategies.py | 5.2 기본 매매 전략 구현 | 전략 팩토리 통합 테스트 | ✅ 성공 |
+| 06_1_1 | test_create_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_2 | test_add_coin_to_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_3 | test_remove_coin_from_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_4 | test_update_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_5 | test_get_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_6 | test_get_all_portfolios | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_7 | test_delete_portfolio | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_1_8 | test_validate_portfolio_weights | test_06_1_portfolio_model.py |  |  | ✅ 성공 |
+| 06_2_1 | test_calculate_portfolio_weights | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_2 | test_calculate_expected_return | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_3 | test_calculate_portfolio_volatility | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_4 | test_calculate_portfolio_sharpe_ratio | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_5 | test_calculate_portfolio_max_drawdown | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_6 | test_calculate_portfolio_performance | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_7 | test_calculate_correlation_matrix | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 06_2_8 | test_optimize_portfolio_weights | test_06_2_portfolio_performance.py |  |  | ✅ 성공 |
+| 07_1_1 | test_init_backtest_runner | test_07_1_backtest_runner.py |  |  | ✅ 성공 |
+| 07_1_2 | test_load_market_data | test_07_1_backtest_runner.py |  | 시장 데이터 로드 테스트 | ✅ 성공 |
+| 07_1_3 | test_prepare_data | test_07_1_backtest_runner.py |  | 데이터 준비 테스트 | ✅ 성공 |
+| 07_1_4 | test_generate_signals | test_07_1_backtest_runner.py |  | 매매 신호 생성 테스트 | ✅ 성공 |
+| 07_1_5 | test_execute_backtest | test_07_1_backtest_runner.py |  | 백테스트 실행 테스트 | ✅ 성공 |
+| 07_1_6 | test_process_signals | test_07_1_backtest_runner.py |  | 신호 처리 테스트 | ✅ 성공 |
+| 07_1_7 | test_calculate_performance_metrics | test_07_1_backtest_runner.py |  | 성과 지표 계산 테스트 | ✅ 성공 |
+| 07_1_8 | test_generate_equity_curve | test_07_1_backtest_runner.py |  | 자본 곡선 생성 테스트 | ✅ 성공 |
+| 07_1_9 | test_execute_buy_order | test_07_1_backtest_runner.py |  | 매수 주문 실행 테스트 | ✅ 성공 |
+| 07_1_10 | test_execute_sell_order | test_07_1_backtest_runner.py |  | 매도 주문 실행 테스트 | ✅ 성공 |
+| 07_1_11 | test_calculate_trade_metrics | test_07_1_backtest_runner.py |  | 거래 지표 계산 테스트 | ✅ 성공 |
+| 07_1_12 | test_reset | test_07_1_backtest_runner.py |  | 백테스트 초기화 테스트 | ✅ 성공 |
 
 ## 개발 단계별 테스트 현황
 
 | 개발 단계 | 총 테스트 수 | 성공 | 실패 | 성공률 |
 |-----------|-------------|------|------|--------|
+| 06 | 16 | 16 | 0 | 100.00% |
+| 07 | 12 | 12 | 0 | 100.00% |
 | 2 | 21 | 21 | 0 | 100.00% |
 | 3 | 13 | 13 | 0 | 100.00% |
 | 4 | 11 | 11 | 0 | 100.00% |

@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "소스 코드 문서 동기화",
+  "description": "소스 코드 파일이 변경될 때 README.md 또는 docs 폴더의 문서를 업데이트하도록 알림",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.py",
+      "*.md",
+      "upbit_auto_trading/**/*.py",
+      "upbit_auto_trading/docs/**/*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "소스 코드가 변경되었습니다. 변경된 내용을 기반으로 다음 문서를 검토하고 필요한 업데이트를 제안해주세요:\n\n1. 프로젝트 루트의 README.md\n2. upbit_auto_trading/README.md\n3. upbit_auto_trading/docs/ 폴더 내 관련 문서\n\n변경된 코드의 기능, API, 사용법 등이 문서에 정확히 반영되도록 해주세요. 코드 변경이 사용자 경험이나 설정 방법에 영향을 미치는 경우 특히 주의해서 문서를 업데이트해주세요."
+  }
+}

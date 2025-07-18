@@ -289,59 +289,167 @@ strategy_manager.delete_strategy(strategy_id)
 
 ### 백테스터 (Backtester)
 
-#### Backtester 클래스
+#### BacktestRunner 클래스
 
-과거 데이터를 사용하여 전략 성능을 테스트하는 클래스입니다.
+전략을 과거 데이터에 적용하여 백테스팅을 실행하고 결과를 생성하는 클래스입니다.
 
 ```python
-from upbit_auto_trading.business_logic.backtester.backtester import Backtester
+from upbit_auto_trading.business_logic.backtester import BacktestRunner
+from upbit_auto_trading.business_logic.strategy.strategy_factory import StrategyFactory
 
-# 인스턴스 생성
-backtester = Backtester(market_data_repository, strategy_manager)
+# 전략 가져오기
+strategy_factory = StrategyFactory(session)
+strategy = strategy_factory.get_strategy("strategy-123", session)
+
+# 백테스트 설정
+config = {
+    "symbol": "KRW-BTC",
+    "timeframe": "1h",
+    "start_date": datetime(2023, 1, 1),
+    "end_date": datetime(2023, 3, 31),
+    "initial_capital": 10000000,
+    "fee_rate": 0.0005,
+    "slippage": 0.0002
+}
+
+# 백테스트 실행기 생성
+backtest_runner = BacktestRunner(strategy, config)
 
 # 백테스트 실행
-backtest_result = backtester.run_backtest(
-    strategy_id="strategy-123",
-    symbol="KRW-BTC",
-    timeframe="1h",
-    start_date="2023-01-01",
-    end_date="2023-01-31",
-    initial_capital=10000000
-)
-
-# 성과 지표 계산
-metrics = backtester.calculate_performance_metrics(backtest_result)
+result = backtest_runner.execute_backtest()
 
 # 백테스트 결과 저장
-backtester.save_backtest_results(backtest_id="backtest-123", results=backtest_result)
+result_id = backtest_runner.save_backtest_result(result, session)
 
-# 백테스트 결과 비교
-comparison = backtester.compare_backtest_results(["backtest-123", "backtest-456"])
+# 백테스트 결과 불러오기
+loaded_result = backtest_runner.load_backtest_result(result_id, session)
 ```
 
 **주요 메서드:**
 
-- `run_backtest(strategy_id: str, symbol: str, timeframe: str, start_date: str, end_date: str, initial_capital: float) -> Dict`: 백테스트 실행
-  - `strategy_id`: 전략 ID
-  - `symbol`: 코인 심볼
-  - `timeframe`: 시간대
-  - `start_date`: 시작 날짜 (YYYY-MM-DD 형식)
-  - `end_date`: 종료 날짜 (YYYY-MM-DD 형식)
-  - `initial_capital`: 초기 자본
-  - 반환값: 백테스트 결과
+- `execute_backtest() -> Dict[str, Any]`: 백테스트 실행
+  - 반환값: 백테스트 결과 딕셔너리 (거래 내역, 성과 지표, 자본 곡선 등)
 
-- `calculate_performance_metrics(backtest_results: Dict) -> Dict`: 성과 지표 계산
-  - `backtest_results`: 백테스트 결과
-  - 반환값: 계산된 성과 지표
+- `save_backtest_result(result: Dict[str, Any], session) -> str`: 백테스트 결과 저장
+  - `result`: 백테스트 결과 딕셔너리
+  - `session`: SQLAlchemy 세션
+  - 반환값: 저장된 결과 ID
 
-- `save_backtest_results(backtest_id: str, results: Dict) -> bool`: 백테스트 결과 저장
-  - `backtest_id`: 백테스트 ID
-  - `results`: 백테스트 결과
-  - 반환값: 저장 성공 여부
+- `load_backtest_result(result_id: str, session) -> Dict[str, Any]`: 백테스트 결과 불러오기
+  - `result_id`: 결과 ID
+  - `session`: SQLAlchemy 세션
+  - 반환값: 백테스트 결과 딕셔너리
 
-- `compare_backtest_results(backtest_ids: List[str]) -> Dict`: 백테스트 결과 비교
-  - `backtest_ids`: 비교할 백테스트 ID 목록
-  - 반환값: 비교 결과
+#### BacktestAnalyzer 클래스
+
+백테스트 결과를 분석하고 시각화하는 클래스입니다.
+
+```python
+from upbit_auto_trading.business_logic.backtester import BacktestAnalyzer
+
+# 백테스트 결과 분석기 생성
+analyzer = BacktestAnalyzer(backtest_result)
+
+# 고급 성과 지표 계산
+advanced_metrics = analyzer.calculate_advanced_metrics()
+
+# 거래 내역 분석
+trade_analysis = analyzer.analyze_trades()
+
+# 손실폭(Drawdown) 분석
+drawdowns = analyzer.analyze_drawdowns()
+
+# 월별 수익률 분석
+monthly_returns = analyzer.analyze_monthly_returns()
+
+# 자본 곡선 시각화
+equity_curve_fig = analyzer.plot_equity_curve()
+
+# 보고서 생성
+report = analyzer.generate_report()
+```
+
+**주요 메서드:**
+
+- `calculate_advanced_metrics() -> Dict[str, Any]`: 고급 성과 지표 계산
+  - 반환값: 고급 성과 지표 딕셔너리
+
+- `analyze_trades() -> Dict[str, Any]`: 거래 내역 분석
+  - 반환값: 거래 분석 결과 딕셔너리
+
+- `analyze_drawdowns() -> pd.DataFrame`: 손실폭(Drawdown) 분석
+  - 반환값: 손실폭 분석 결과 DataFrame
+
+- `analyze_monthly_returns() -> pd.DataFrame`: 월별 수익률 분석
+  - 반환값: 월별 수익률 분석 결과 DataFrame
+
+- `plot_equity_curve() -> Figure`: 자본 곡선 시각화
+  - 반환값: matplotlib Figure 객체
+
+- `generate_report() -> Dict[str, Any]`: 백테스트 결과 보고서 생성
+  - 반환값: 보고서 딕셔너리
+
+#### BacktestResultsManager 클래스
+
+백테스트 결과를 저장, 불러오기, 비교하는 기능을 제공하는 클래스입니다.
+
+```python
+from upbit_auto_trading.business_logic.backtester import BacktestResultsManager
+
+# 백테스트 결과 관리자 생성
+results_manager = BacktestResultsManager(session)
+
+# 백테스트 결과 저장
+result_id = results_manager.save_backtest_result(backtest_result)
+
+# 백테스트 결과 불러오기
+loaded_result = results_manager.load_backtest_result(result_id)
+
+# 포트폴리오 백테스트 결과 저장
+portfolio_result_id = results_manager.save_portfolio_backtest_result(portfolio_backtest_result)
+
+# 포트폴리오 백테스트 결과 불러오기
+loaded_portfolio_result = results_manager.load_portfolio_backtest_result(portfolio_result_id)
+
+# 백테스트 결과 목록 조회
+results_list = results_manager.list_backtest_results()
+
+# 백테스트 결과 비교
+comparison = results_manager.compare_backtest_results(["backtest-1", "backtest-2"])
+
+# 백테스트 결과 삭제
+success = results_manager.delete_backtest_result(result_id)
+```
+
+**주요 메서드:**
+
+- `save_backtest_result(result: Dict[str, Any]) -> str`: 백테스트 결과 저장
+  - `result`: 백테스트 결과 딕셔너리
+  - 반환값: 저장된 결과 ID
+
+- `load_backtest_result(result_id: str) -> Dict[str, Any]`: 백테스트 결과 불러오기
+  - `result_id`: 결과 ID
+  - 반환값: 백테스트 결과 딕셔너리
+
+- `save_portfolio_backtest_result(result: Dict[str, Any]) -> str`: 포트폴리오 백테스트 결과 저장
+  - `result`: 포트폴리오 백테스트 결과 딕셔너리
+  - 반환값: 저장된 결과 ID
+
+- `load_portfolio_backtest_result(result_id: str) -> Dict[str, Any]`: 포트폴리오 백테스트 결과 불러오기
+  - `result_id`: 결과 ID
+  - 반환값: 포트폴리오 백테스트 결과 딕셔너리
+
+- `list_backtest_results(filter_params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]`: 백테스트 결과 목록 조회
+  - `filter_params`: 필터링 매개변수 (예: {"symbol": "KRW-BTC", "timeframe": "1h"})
+  - 반환값: 백테스트 결과 요약 목록
+
+- `compare_backtest_results(result_ids: List[str]) -> Dict[str, Any]`: 백테스트 결과 비교
+  - `result_ids`: 비교할 백테스트 결과 ID 목록
+  - 반환값: 비교 결과 딕셔너리
+
+- `delete_backtest_result(result_id: str) -> bool`: 백테스트 결과 삭제
+  - `result_id`: 결과 ID
+  - 반환값: 삭제 성공 여부
 
 ### 거래 엔진 (Trader)
 
@@ -478,4 +586,118 @@ portfolio_manager.remove_coin_from_portfolio(
 - `remove_coin_from_portfolio(portfolio_id: str, symbol: str) -> bool`: 포트폴리오에서 코인 제거
   - `portfolio_id`: 포트폴리오 ID
   - `symbol`: 코인 심볼
-  - 반환값: 제거 성공 여부
+  - 반환값: 제거 성공 여부## 사
+용자 인터페이스 계층 API
+
+### 메인 애플리케이션 프레임워크
+
+#### MainWindow 클래스
+
+애플리케이션의 메인 윈도우를 관리하는 클래스입니다.
+
+```python
+from upbit_auto_trading.ui.desktop.main_window import MainWindow
+from PyQt6.QtWidgets import QApplication
+
+# 애플리케이션 생성
+app = QApplication([])
+
+# 메인 윈도우 생성
+main_window = MainWindow()
+
+# 메인 윈도우 표시
+main_window.show()
+
+# 애플리케이션 실행
+app.exec()
+```
+
+**주요 메서드:**
+
+- `_setup_ui() -> None`: UI 설정
+- `_change_screen(screen_name: str) -> None`: 화면 전환
+  - `screen_name`: 화면 이름 (예: "dashboard", "chart_view", "settings" 등)
+- `_toggle_theme() -> None`: 테마 전환
+- `_show_about_dialog() -> None`: 정보 대화상자 표시
+- `_load_settings() -> None`: 설정 로드
+- `_save_settings() -> None`: 설정 저장
+
+#### NavigationBar 클래스
+
+애플리케이션의 주요 화면 간 이동을 위한 네비게이션 바입니다.
+
+```python
+from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
+
+# 네비게이션 바 생성
+nav_bar = NavigationBar()
+
+# 화면 전환 시그널 연결
+nav_bar.screen_changed.connect(lambda screen_name: print(f"화면 전환: {screen_name}"))
+
+# 활성 화면 설정
+nav_bar.set_active_screen("dashboard")
+```
+
+**주요 메서드:**
+
+- `set_active_screen(screen_name: str) -> None`: 활성 화면 설정
+  - `screen_name`: 화면 이름 (예: "dashboard", "chart_view", "settings" 등)
+
+**시그널:**
+
+- `screen_changed(str)`: 화면 전환 시그널
+  - 매개변수: 화면 이름
+
+#### StatusBar 클래스
+
+애플리케이션의 상태 정보를 표시하는 상태 바입니다.
+
+```python
+from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
+
+# 상태 바 생성
+status_bar = StatusBar()
+
+# API 연결 상태 설정
+status_bar.set_api_status(connected=True)
+
+# 데이터베이스 연결 상태 설정
+status_bar.set_db_status(connected=True)
+
+# 메시지 표시
+status_bar.show_message("작업이 완료되었습니다.", timeout=3000)
+```
+
+**주요 메서드:**
+
+- `set_api_status(connected: bool) -> None`: API 연결 상태 설정
+  - `connected`: 연결 상태
+- `set_db_status(connected: bool) -> None`: 데이터베이스 연결 상태 설정
+  - `connected`: 연결 상태
+- `show_message(message: str, timeout: int = 0) -> None`: 메시지 표시
+  - `message`: 표시할 메시지
+  - `timeout`: 메시지 표시 시간(ms). 0이면 계속 표시.
+
+#### StyleManager 클래스
+
+애플리케이션의 테마 및 스타일을 관리하는 클래스입니다.
+
+```python
+from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
+
+# 스타일 관리자 생성
+style_manager = StyleManager()
+
+# 테마 적용
+style_manager.apply_theme(Theme.DARK)
+
+# 테마 전환
+style_manager.toggle_theme()
+```
+
+**주요 메서드:**
+
+- `apply_theme(theme: Theme = None) -> None`: 테마 적용
+  - `theme`: 적용할 테마. None인 경우 현재 테마 적용.
+- `toggle_theme() -> None`: 테마 전환 (라이트 ↔ 다크)

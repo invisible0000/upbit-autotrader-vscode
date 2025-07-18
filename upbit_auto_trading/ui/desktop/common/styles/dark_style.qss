@@ -1,0 +1,265 @@
+/* 다크 모드 스타일 시트 */
+
+/* 전체 애플리케이션 스타일 */
+QWidget {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 10pt;
+    color: #e0e0e0;
+    background-color: #2c2c2c;
+}
+
+/* 메인 윈도우 스타일 */
+QMainWindow {
+    background-color: #2c2c2c;
+}
+
+/* 메뉴바 스타일 */
+QMenuBar {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    padding: 2px;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 4px 8px;
+}
+
+QMenuBar::item:selected {
+    background-color: #3a3a3a;
+}
+
+/* 메뉴 스타일 */
+QMenu {
+    background-color: #2c2c2c;
+    border: 1px solid #3a3a3a;
+}
+
+QMenu::item {
+    padding: 6px 24px 6px 8px;
+}
+
+QMenu::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+/* 버튼 스타일 */
+QPushButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 3px;
+}
+
+QPushButton:hover {
+    background-color: #2980b9;
+}
+
+QPushButton:pressed {
+    background-color: #1a5276;
+}
+
+QPushButton:disabled {
+    background-color: #555555;
+    color: #888888;
+}
+
+/* 탭 위젯 스타일 */
+QTabWidget::pane {
+    border: 1px solid #3a3a3a;
+    background-color: #2c2c2c;
+}
+
+QTabBar::tab {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    padding: 8px 16px;
+    border: 1px solid #3a3a3a;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+QTabBar::tab:selected {
+    background-color: #2c2c2c;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #3a3a3a;
+}
+
+/* 테이블 위젯 스타일 */
+QTableWidget {
+    background-color: #2c2c2c;
+    alternate-background-color: #3a3a3a;
+    border: 1px solid #3a3a3a;
+    color: #e0e0e0;
+}
+
+QTableWidget::item {
+    padding: 4px;
+}
+
+QTableWidget::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #1a1a1a;
+    padding: 4px;
+    border: 1px solid #3a3a3a;
+    font-weight: bold;
+    color: #e0e0e0;
+}
+
+/* 스크롤바 스타일 */
+QScrollBar:vertical {
+    border: none;
+    background-color: #1a1a1a;
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #555555;
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #777777;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* 상태바 스타일 */
+QStatusBar {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+}
+
+/* 그룹박스 스타일 */
+QGroupBox {
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 5px;
+}
+
+/* 라인 에디트 스타일 */
+QLineEdit {
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+}
+
+QLineEdit:focus {
+    border: 1px solid #3498db;
+}
+
+/* 콤보박스 스타일 */
+QComboBox {
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left: 1px solid #3a3a3a;
+}
+
+QComboBox QAbstractItemView {
+    border: 1px solid #3a3a3a;
+    background-color: #2c2c2c;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+/* 체크박스 스타일 */
+QCheckBox {
+    spacing: 5px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QCheckBox::indicator:unchecked {
+    border: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+}
+
+QCheckBox::indicator:checked {
+    border: 1px solid #3498db;
+    background-color: #3498db;
+}
+
+/* 라디오버튼 스타일 */
+QRadioButton {
+    spacing: 5px;
+}
+
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+}
+
+QRadioButton::indicator:unchecked {
+    border: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+}
+
+QRadioButton::indicator:checked {
+    border: 1px solid #3498db;
+    background-color: #3498db;
+}
+
+/* 프로그레스바 스타일 */
+QProgressBar {
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    background-color: #1a1a1a;
+    text-align: center;
+    color: #e0e0e0;
+}
+
+QProgressBar::chunk {
+    background-color: #3498db;
+}
+
+/* 슬라이더 스타일 */
+QSlider::groove:horizontal {
+    border: 1px solid #3a3a3a;
+    height: 8px;
+    background: #1a1a1a;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #3498db;
+    border: 1px solid #2980b9;
+    width: 18px;
+    margin: -2px 0;
+    border-radius: 9px;
+}
