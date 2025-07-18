@@ -8,6 +8,7 @@
 
 시스템의 주요 데이터 모델 간의 관계는 다음과 같습니다.
 
+```mermaid
 erDiagram  
     Portfolio ||--o{ PortfolioCoin : "has"  
     Strategy ||--o{ PortfolioCoin : "is used in"  
@@ -104,7 +105,7 @@ erDiagram
         datetime timestamp  
         bool read  
     }
-
+```
 ## **3\. 테이블 명세**
 
 ### **3.1. strategy**
