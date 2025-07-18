@@ -15,8 +15,8 @@ from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import Navigati
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
 from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
 
-# 화면 임포트 (나중에 구현 예정)
-# from upbit_auto_trading.ui.desktop.screens.dashboard.dashboard_screen import DashboardScreen
+# 화면 임포트
+from upbit_auto_trading.ui.desktop.screens.dashboard.dashboard_screen import DashboardScreen
 # from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
 
 
@@ -68,11 +68,8 @@ class MainWindow(QMainWindow):
         # 스택 위젯 설정 (화면 전환용)
         self.stack_widget = QStackedWidget()
         
-        # 화면 추가 (나중에 구현 예정)
-        # self._add_screens()
-        
-        # 임시 화면 추가
-        self._add_placeholder_screens()
+        # 화면 추가
+        self._add_screens()
         
         # 레이아웃에 위젯 추가
         content_layout.addWidget(self.stack_widget)
@@ -119,12 +116,12 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
     
     def _add_screens(self):
-        """화면 추가 (나중에 구현 예정)"""
+        """화면 추가"""
         # 대시보드 화면
-        # dashboard_screen = DashboardScreen()
-        # self.stack_widget.addWidget(dashboard_screen)
+        dashboard_screen = DashboardScreen()
+        self.stack_widget.addWidget(dashboard_screen)
         
-        # 차트 뷰 화면
+        # 차트 뷰 화면 (나중에 구현 예정)
         # chart_view_screen = ChartViewScreen()
         # self.stack_widget.addWidget(chart_view_screen)
         

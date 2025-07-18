@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, 
     QSpacerItem, QSizePolicy
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QIcon, QFont
 
 
@@ -34,7 +34,7 @@ class NavigationButton(QPushButton):
         self.setCheckable(True)
         self.setAutoExclusive(True)
         self.setMinimumHeight(50)
-        self.setIconSize(Qt.QSize(24, 24))
+        self.setIconSize(QSize(24, 24))
         
         # 스타일 설정
         self.setStyleSheet("""
