@@ -9,103 +9,104 @@
 시스템의 주요 데이터 모델 간의 관계는 다음과 같습니다.
 
 ```mermaid
-erDiagram  
-    Portfolio ||--o{ PortfolioCoin : "has"  
-    Strategy ||--o{ PortfolioCoin : "is used in"  
-    Portfolio ||--o{ Backtest : "is tested for"  
-    Strategy ||--o{ Backtest : "is tested with"  
-    Backtest ||--o{ Trade : "generates"  
+erDiagram
+    Portfolio ||--o{ PortfolioCoin : "has"
+    Strategy ||--o{ PortfolioCoin : "is used in"
+    Portfolio ||--o{ Backtest : "is tested for"
+    Strategy ||--o{ Backtest : "is tested with"
+    Backtest ||--o{ Trade : "generates"
     Strategy ||--o{ TradingSession : "runs on"
 
-    Portfolio {  
-        string id PK "고유 ID"  
-        string name "포트폴리오 이름"  
-        text description "설명"  
-        datetime created\_at "생성 시간"  
-        datetime updated\_at "수정 시간"  
+    Portfolio {
+        string id PK "고유 ID"
+        string name "포트폴리오 이름"
+        text description "설명"
+        datetime created_at "생성 시간"
+        datetime updated_at "수정 시간"
     }
 
-    PortfolioCoin {  
-        int id PK "고유 ID"  
-        string portfolio\_id FK "포트폴리오 ID"  
-        string symbol "코인 심볼"  
-        string strategy\_id FK "전략 ID"  
-        float weight "가중치"  
+    PortfolioCoin {
+        int id PK "고유 ID"
+        string portfolio_id FK "포트폴리오 ID"
+        string symbol "코인 심볼"
+        string strategy_id FK "전략 ID"
+        float weight "가중치"
     }
 
-    Strategy {  
-        string id PK "고유 ID"  
-        string name "전략 이름"  
-        text description "설명"  
-        json parameters "매개변수"  
-        datetime created\_at "생성 시간"  
-        datetime updated\_at "수정 시간"  
+    Strategy {
+        string id PK "고유 ID"
+        string name "전략 이름"
+        text description "설명"
+        json parameters "매개변수"
+        datetime created_at "생성 시간"
+        datetime updated_at "수정 시간"
     }
 
-    Backtest {  
-        string id PK "고유 ID"  
-        string strategy\_id FK "전략 ID"  
-        string portfolio\_id FK "포트폴리오 ID (Nullable)"  
-        string symbol "코인 심볼"  
-        string timeframe "시간 단위"  
-        datetime start\_date "시작일"  
-        datetime end\_date "종료일"  
-        float initial\_capital "초기 자본"  
-        json performance\_metrics "성과 지표"  
-        datetime created\_at "생성 시간"  
+    Backtest {
+        string id PK "고유 ID"
+        string strategy_id FK "전략 ID"
+        string portfolio_id FK "포트폴리오 ID (Nullable)"
+        string symbol "코인 심볼"
+        string timeframe "시간 단위"
+        datetime start_date "시작일"
+        datetime end_date "종료일"
+        float initial_capital "초기 자본"
+        json performance_metrics "성과 지표"
+        datetime created_at "생성 시간"
     }
 
-    Trade {  
-        int id PK "고유 ID"  
-        string backtest\_id FK "백테스트 ID (Nullable)"  
-        datetime timestamp "거래 시간"  
-        string symbol "코인 심볼"  
-        float price "거래 가격"  
-        float quantity "거래 수량"  
-        string side "매매 구분 (buy/sell)"  
-        string order\_id "주문 ID (Nullable)"  
-        float fee "수수료 (Nullable)"  
+    Trade {
+        int id PK "고유 ID"
+        string backtest_id FK "백테스트 ID (Nullable)"
+        datetime timestamp "거래 시간"
+        string symbol "코인 심볼"
+        float price "거래 가격"
+        float quantity "거래 수량"
+        string side "매매 구분 (buy/sell)"
+        string order_id "주문 ID (Nullable)"
+        float fee "수수료 (Nullable)"
     }
 
-    TradingSession {  
-        string id PK "고유 ID"  
-        string strategy\_id FK "전략 ID"  
-        string symbol "코인 심볼"  
-        string status "상태 (active, paused, stopped)"  
-        float amount "거래 금액"  
-        json risk\_params "위험 관리 설정"  
-        datetime start\_time "시작 시간"  
-        datetime end\_time "종료 시간 (Nullable)"  
+    TradingSession {
+        string id PK "고유 ID"
+        string strategy_id FK "전략 ID"
+        string symbol "코인 심볼"
+        string status "상태 (active, paused, stopped)"
+        float amount "거래 금액"
+        json risk_params "위험 관리 설정"
+        datetime start_time "시작 시간"
+        datetime end_time "종료 시간 (Nullable)"
     }
 
-    OHLCV {  
-        int id PK  
-        datetime timestamp  
-        string symbol  
-        float open  
-        float high  
-        float low  
-        float close  
-        float volume  
-        string timeframe  
+    OHLCV {
+        int id PK
+        datetime timestamp
+        string symbol
+        float open
+        float high
+        float low
+        float close
+        float volume
+        string timeframe
     }
 
-    OrderBook {  
-        int id PK  
-        datetime timestamp  
-        string symbol  
-        json asks  
-        json bids  
+    OrderBook {
+        int id PK
+        datetime timestamp
+        string symbol
+        json asks
+        json bids
     }
 
-    Notification {  
-        int id PK  
-        string type  
-        text message  
-        datetime timestamp  
-        bool read  
+    Notification {
+        int id PK
+        string type
+        text message
+        datetime timestamp
+        bool read
     }
 ```
+
 ## **3\. 테이블 명세**
 
 ### **3.1. strategy**

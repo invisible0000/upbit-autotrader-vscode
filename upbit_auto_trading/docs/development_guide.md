@@ -36,6 +36,62 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
+### 패키지 설치 환경 관리
+
+개발 과정에서 패키지 설치 환경 문제가 자주 발생할 수 있습니다. 이러한 문제를 방지하고 해결하기 위한 지침입니다.
+
+#### 일반적인 문제
+- **패키지 설치 경로 불일치**: 시스템에 여러 Python 환경이 있을 경우, 패키지가 현재 사용 중인 Python 환경이 아닌 다른 환경에 설치될 수 있습니다.
+- **패키지 버전 충돌**: 다른 프로젝트에서 사용하는 패키지 버전과 충돌이 발생할 수 있습니다.
+- **패키지 설치 실패**: 의존성 문제로 인해 패키지 설치가 실패할 수 있습니다.
+
+#### 해결 방법
+
+1. **현재 Python 환경 확인**
+   ```bash
+   # 현재 사용 중인 Python 실행 파일 경로 확인
+   python -c "import sys; print(sys.executable)"
+   
+   # 설치된 패키지 목록 확인
+   pip list
+   ```
+
+2. **특정 Python 환경에 패키지 설치**
+   ```bash
+   # 특정 Python 실행 파일을 사용하여 패키지 설치
+   /path/to/python -m pip install <package-name>
+   
+   # Windows 예시
+   C:\Users\username\AppData\Local\Programs\Python\Python38\python.exe -m pip install PyQt6
+   ```
+
+3. **가상환경 사용 확인**
+   - 가상환경이 활성화되어 있는지 확인하세요. 명령 프롬프트 또는 터미널 앞에 `(venv)` 표시가 있어야 합니다.
+   - 가상환경이 활성화되어 있지 않다면, 위의 가상환경 활성화 명령을 실행하세요.
+
+4. **패키지 설치 확인**
+   ```bash
+   # 특정 패키지가 설치되어 있는지 확인
+   python -c "import package_name; print(package_name.__version__)"
+   
+   # 예시: PyQt6 설치 확인
+   python -c "import PyQt6; print(PyQt6.__version__)"
+   ```
+
+5. **의존성 파일 업데이트**
+   - 새로운 패키지를 설치한 후에는 항상 `requirements.txt` 파일을 업데이트하세요.
+   ```bash
+   pip freeze > requirements.txt
+   ```
+
+#### UI 개발 시 특별 고려사항
+- PyQt6와 같은 GUI 라이브러리는 추가 의존성이 필요할 수 있습니다.
+- 데스크톱 UI를 실행하기 전에 다음 명령으로 필요한 패키지가 모두 설치되어 있는지 확인하세요:
+  ```bash
+  pip install PyQt6 pyqtgraph matplotlib
+  ```
+- UI 실행 시 오류가 발생하면 패키지가 올바른 Python 환경에 설치되어 있는지 확인하세요.
+
 ## 프로젝트 구조
 
 ```

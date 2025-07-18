@@ -7,6 +7,7 @@
 - [개발 가이드](development_guide.md): 개발 환경 설정, 프로젝트 구조, 코딩 스타일, 테스트 방법 등에 대한 가이드
 - [API 문서](api_docs.md): 시스템의 주요 API 및 사용 방법에 대한 문서
 - [UI 가이드](ui_guide.md): UI 컴포넌트 구조 및 사용 방법에 대한 가이드
+- [대시보드 가이드](dashboard_guide.md): 대시보드 화면 구조 및 위젯 사용 방법에 대한 가이드
 - [백테스팅 가이드](backtesting_guide.md): 백테스팅 기능 사용 방법 및 모범 사례에 대한 가이드
 - [테스트 결과 요약](test_results_summary.md): 최신 테스트 실행 결과 요약
 

@@ -17,6 +17,11 @@
   - 시스템 상태 모니터링을 위한 상태 바
   - 사용자 설정 저장 및 로드 기능
   - 윈도우 크기 및 위치 기억 기능
+  - 대시보드 화면 (구현 완료):
+    - 포트폴리오 요약 위젯: 보유 자산의 구성을 보여주는 도넛 차트와 목록
+    - 활성 거래 목록 위젯: 현재 진입해 있는 모든 포지션의 상세 내역
+    - 시장 개요 위젯: 주기적으로 수집된 대표 코인들의 시세 정보
+    - 5초 주기 자동 데이터 갱신 기능
 
 ## 설치 및 설정
 
@@ -58,6 +63,7 @@ python -m upbit_auto_trading
 - [문서 목록](docs/README.md)
 - [개발 가이드](docs/development_guide.md)
 - [API 문서](docs/api_docs.md)
+- [대시보드 가이드](docs/dashboard_guide.md)
 - [백테스팅 가이드](docs/backtesting_guide.md)
 - [테스트 결과 요약](docs/test_results_summary.md)
 
