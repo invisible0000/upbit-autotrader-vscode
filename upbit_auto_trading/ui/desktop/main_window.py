@@ -17,7 +17,7 @@ from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManag
 
 # 화면 임포트
 from upbit_auto_trading.ui.desktop.screens.dashboard.dashboard_screen import DashboardScreen
-# from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
+from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
 
 
 class MainWindow(QMainWindow):
@@ -121,9 +121,9 @@ class MainWindow(QMainWindow):
         dashboard_screen = DashboardScreen()
         self.stack_widget.addWidget(dashboard_screen)
         
-        # 차트 뷰 화면 (나중에 구현 예정)
-        # chart_view_screen = ChartViewScreen()
-        # self.stack_widget.addWidget(chart_view_screen)
+        # 차트 뷰 화면
+        chart_view_screen = ChartViewScreen()
+        self.stack_widget.addWidget(chart_view_screen)
         
         # 기타 화면들...
     
