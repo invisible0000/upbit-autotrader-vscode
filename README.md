@@ -163,7 +163,7 @@ python run_desktop_ui.py
     - [x] 백테스트 결과 저장 및 비교 기능 구현
 
 ### 진행 중인 작업
-- [ ] 사용자 인터페이스 개발
+- [x] 사용자 인터페이스 개발
   - [x] 메인 애플리케이션 프레임워크 구현 (완료)
     - [x] 애플리케이션 윈도우 및 레이아웃 구현
     - [x] 메뉴 및 네비게이션 구현
@@ -193,9 +193,21 @@ python run_desktop_ui.py
     - [x] 팩토리 패턴 도입 및 코드 모듈화
     - [x] 명령줄 인자 처리 기능 추가
     - [x] 추가 단위 테스트 작성
+- [x] 모니터링 및 알림 시스템 구현
+  - [x] 시장 모니터링 기능 구현
+    - [x] 가격 알림 조건 클래스 구현
+    - [x] 기술적 지표 알림 조건 클래스 구현
+    - [x] 패턴 인식 알림 조건 클래스 구현
+  - [x] 거래 알림 기능 구현
+    - [x] 주문 체결 알림 기능 구현
+    - [x] 수익/손실 알림 기능 구현
+    - [x] 포지션 변경 알림 기능 구현
+  - [x] 시스템 알림 기능 구현
+    - [x] 오류 알림 기능 구현
+    - [x] 시스템 상태 알림 기능 구현
+    - [x] 알림 설정 관리 기능 구현
 
 ### 예정된 작업
-- [ ] 모니터링 및 알림 시스템 구현
 - [ ] 실시간 거래 엔진 구현
 - [ ] CI/CD 및 배포 설정
 - [ ] 최종 테스트 및 문서화
@@ -203,6 +215,36 @@ python run_desktop_ui.py
 ## 작업 로그
 
 ### 2025-07-18
+- 모니터링 및 알림 시스템 구현 완료
+  - 시장 모니터링 기능 구현
+    - 가격 알림 조건 클래스 (`PriceAlertCondition`) 구현
+    - 기술적 지표 알림 조건 클래스 (`IndicatorAlertCondition`) 구현
+    - 패턴 인식 알림 조건 클래스 (`PatternAlertCondition`) 구현
+    - 시장 모니터링 클래스 (`MarketMonitor`) 구현
+    - 시장 데이터 제공자 인터페이스 및 업비트 구현체 개발
+  - 거래 알림 기능 구현
+    - 주문 체결 알림 기능 구현
+    - 수익/손실 알림 기능 구현
+    - 포지션 변경 알림 기능 구현
+    - 거래 모니터링 클래스 (`TradeMonitor`) 구현
+    - 거래 데이터 제공자 인터페이스 및 업비트 구현체 개발
+  - 시스템 알림 기능 구현
+    - 오류 알림 기능 구현
+    - 시스템 상태 알림 기능 구현
+    - 리소스 모니터링 기능 구현
+    - 로그 모니터링 기능 구현
+    - 시스템 모니터링 클래스 (`SystemMonitor`) 구현
+  - 개발 시 발견된 주요 문제점 및 해결책
+    - 외부 패키지 의존성 관리: psutil 패키지 없을 때도 동작하도록 예외 처리
+    - 테스트 환경 격리: 각 테스트 케이스마다 새로운 객체 생성
+    - 알림 중복 방지: 알림 이력 관리 메커니즘 구현
+    - 파일 경로 및 권한 관리: 디렉토리 경로 확인 및 생성 로직 추가
+    - 멀티스레딩 안전성: 공유 데이터 접근 시 락 사용, 데몬 스레드 활용
+  - 문서 업데이트
+    - `development_guide.md`: 개발 시 주의사항 및 향후 개발 가이드 섹션 추가
+    - `notification_guide.md`: 알림 시스템 개발 시 주의사항 및 모범 사례 섹션 추가
+    - `development_progress.md`: 모니터링 및 알림 시스템 구현 내용 기록
+
 - 사용자 인터페이스 - 알림 센터 구현 완료 및 개선
   - 알림 모델 구현
     - 알림 유형 열거형 구현 (NotificationType)
@@ -504,6 +546,7 @@ python run_desktop_ui.py
 - [대시보드 구현 가이드](upbit_auto_trading/docs/dashboard_guide.md)
 - [차트 뷰 구현 가이드](upbit_auto_trading/docs/chart_view_guide.md)
 - [알림 센터 가이드](upbit_auto_trading/docs/notification_guide.md)
+- [시스템 모니터링 가이드](upbit_auto_trading/docs/system_monitoring_guide.md)
 - [레퍼런스 문서 활용 가이드](upbit_auto_trading/docs/reference_guide.md)
 - [테스트 결과 요약](upbit_auto_trading/docs/test_results_summary.md)
 

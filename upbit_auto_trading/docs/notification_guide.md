@@ -217,6 +217,79 @@ system_alert = NotificationFactory.create_system_alert(
    - `NotificationSettings` 클래스에 새 전달 방법 옵션 추가
    - 해당 전달 방법에 대한 설정 UI 및 로직 구현
 
+### 알림 중복 방지
+
+알림 시스템에서 가장 중요한 문제 중 하나는 동일한 알림이 반복적으로 발생하는 것입니다. 이를 방지하기 위해 알림 이력을 관리하는 메커니즘을 구현해야 합니다:
+
+```python
+# 알림 이력 관리를 위한 집합 생성
+self.notified_errors = set()
+
+def notify_error(self, component, message, is_critical=False):
+    # 중복 알림 방지를 위한 키 생성
+    error_key = f"{component}:{message}"
+    if error_key in self.notified_errors:
+        return
+    
+    # 알림 생성 로직...
+    
+    # 알림 이력에 추가
+    self.notified_errors.add(error_key)
+```
+
+임계값 변경 시 관련 알림 이력을 초기화하는 것이 좋습니다:
+
+```python
+def set_cpu_threshold(self, threshold):
+    self.cpu_threshold = max(1, min(100, threshold))
+    # 임계값 변경 시 알림 이력 초기화
+    self.notified_resources = set(r for r in self.notified_resources if not r.startswith("cpu:"))
+```
+
+### 멀티스레딩 안전성
+
+알림 시스템은 여러 스레드에서 동시에 접근할 수 있으므로, 스레드 안전성을 보장해야 합니다:
+
+```python
+import threading
+
+# 락 객체 생성
+self.lock = threading.Lock()
+
+def get_notifications(self):
+    # 공유 데이터 접근 시 락 사용
+    with self.lock:
+        return self._notifications.copy()
+```
+
+모니터링 스레드는 데몬 스레드로 설정하여 메인 프로그램 종료 시 자동으로 종료되도록 합니다:
+
+```python
+def start_monitoring(self):
+    # 모니터링 스레드 시작
+    self.monitoring_thread = threading.Thread(target=monitoring_task, daemon=True)
+    self.monitoring_thread.start()
+```
+
+### 파일 경로 및 권한 관리
+
+알림 설정 저장 및 로드 시 파일 경로와 권한을 적절히 관리해야 합니다:
+
+```python
+def save_settings(self, file_path):
+    try:
+        # 디렉토리 경로 확인
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        
+        # 설정 저장 로직...
+        
+    except Exception as e:
+        print(f"알림 설정 저장 중 오류 발생: {e}")
+        return False
+```
+
 ### 테스트
 
 알림 센터는 TDD(테스트 주도 개발) 방식으로 개발되었으며, 다음과 같은 테스트가 구현되어 있습니다:
@@ -242,23 +315,161 @@ system_alert = NotificationFactory.create_system_alert(
 python -m unittest upbit_auto_trading/ui/desktop/tests/test_08_5_notification_center.py
 ```
 
+## 개발 시 주의사항 및 모범 사례
+
+모니터링 및 알림 시스템 구현 과정에서 발견한 주요 문제점과 해결 방법, 그리고 향후 개발 시 고려해야 할 사항들을 정리했습니다. 자세한 내용은 [개발 진행 현황](development_progress.md) 문서에서도 확인할 수 있습니다.
+
+### 1. 알림 중복 방지
+
+알림 시스템에서 가장 중요한 문제 중 하나는 동일한 알림이 반복적으로 발생하는 것입니다. 이는 사용자 경험을 저하시키고 중요한 알림을 놓치게 만들 수 있습니다.
+
+#### 구현 방법
+
+```python
+# 알림 이력 관리를 위한 집합 생성
+self.notified_errors = set()
+
+def notify_error(self, component, message, is_critical=False):
+    # 중복 알림 방지를 위한 키 생성
+    error_key = f"{component}:{message}"
+    if error_key in self.notified_errors:
+        return
+    
+    # 알림 생성 로직...
+    
+    # 알림 이력에 추가
+    self.notified_errors.add(error_key)
+```
+
+#### 모범 사례
+
+- 알림 유형별로 별도의 이력 관리 집합을 사용합니다.
+- 임계값 변경 시 관련 알림 이력을 초기화합니다.
+- 시간 기반 알림 재설정 메커니즘을 구현합니다(예: 24시간 후 동일 알림 재발생 허용).
+
+### 2. 멀티스레딩 안전성
+
+알림 시스템은 여러 스레드에서 동시에 접근할 수 있으므로, 스레드 안전성을 보장해야 합니다.
+
+#### 구현 방법
+
+```python
+import threading
+
+# 락 객체 생성
+self.lock = threading.Lock()
+
+def get_notifications(self):
+    # 공유 데이터 접근 시 락 사용
+    with self.lock:
+        return self._notifications.copy()
+```
+
+#### 모범 사례
+
+- 공유 데이터 접근 시 항상 락을 사용합니다.
+- 데이터 반환 시 원본이 아닌 복사본을 반환합니다.
+- 모니터링 스레드는 데몬 스레드로 설정하여 메인 프로그램 종료 시 자동으로 종료되도록 합니다.
+- 장시간 실행되는 작업은 별도의 스레드로 분리하여 UI 응답성을 유지합니다.
+
+### 3. 알림 설정 관리
+
+사용자가 알림 설정을 쉽게 관리할 수 있도록 직관적인 인터페이스와 영속적인 설정 저장 메커니즘을 제공해야 합니다.
+
+#### 구현 방법
+
+```python
+def save_settings(self, file_path):
+    try:
+        # 디렉토리 경로 확인
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+        
+        # 설정 데이터
+        settings = {
+            "enable_price_alerts": self.enable_price_alerts,
+            "enable_trade_alerts": self.enable_trade_alerts,
+            "enable_system_alerts": self.enable_system_alerts,
+            # 기타 설정...
+        }
+        
+        # JSON 파일로 저장
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"알림 설정 저장 중 오류 발생: {e}")
+        return False
+```
+
+#### 모범 사례
+
+- 설정 파일은 사용자 홈 디렉토리나 애플리케이션 데이터 디렉토리와 같은 표준 위치에 저장합니다.
+- 설정 변경 시 자동으로 저장하여 사용자 설정이 유지되도록 합니다.
+- 설정 로드 실패 시 기본값을 사용하여 애플리케이션이 정상적으로 동작하도록 합니다.
+- 설정 UI는 직관적이고 사용하기 쉽게 설계합니다.
+
+### 4. 외부 의존성 관리
+
+알림 시스템은 다양한 외부 패키지에 의존할 수 있습니다. 이러한 의존성을 적절히 관리하여 시스템의 안정성을 보장해야 합니다.
+
+#### 구현 방법
+
+```python
+# psutil 패키지 임포트 시도
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    print("Warning: psutil package not available. Resource monitoring will be limited.")
+
+def check_cpu_usage(self):
+    if not PSUTIL_AVAILABLE:
+        # 대체 로직 또는 기능 비활성화
+        return
+    # 정상 로직 실행
+```
+
+#### 모범 사례
+
+- 핵심 기능에 필수적인 패키지와 선택적 기능에 사용되는 패키지를 구분하여 관리합니다.
+- 선택적 패키지는 없어도 기본 기능이 동작하도록 예외 처리를 추가합니다.
+- 모든 외부 패키지 의존성은 `requirements.txt`에 명시적으로 기록합니다.
+- 애플리케이션 시작 시 필요한 패키지가 설치되어 있는지 확인하고, 없으면 사용자에게 알림을 제공합니다.
+
 ## 향후 개선 사항
 
 1. **데이터 영속성**
    - 알림 데이터를 데이터베이스에 저장하여 애플리케이션 재시작 후에도 유지
+   - SQLite 또는 PostgreSQL을 사용하여 알림 데이터 저장 및 관리
 
 2. **실시간 알림**
    - 시스템 트레이 알림 구현
    - 푸시 알림 구현
+   - 이메일 알림 지원
 
-3. **알림 우선순위**
+3. **알림 우선순위 및 그룹화**
    - 알림 우선순위 설정 및 필터링 기능 추가
+   - 유사한 알림을 그룹화하여 표시하는 기능 구현
+   - 알림 발생 빈도 제한 메커니즘 구현
 
-4. **알림 템플릿**
+4. **알림 템플릿 및 사용자 정의**
    - 사용자 정의 알림 템플릿 지원
+   - 알림 형식 및 내용 커스터마이징 기능
+   - 조건부 알림 설정 지원
 
-5. **알림 통계**
+5. **알림 통계 및 분석**
    - 알림 발생 빈도 및 패턴 분석 기능 추가
+   - 알림 대시보드 구현
+   - 알림 효과성 분석 도구 제공
+
+6. **분산 환경 지원**
+   - 여러 인스턴스 간 알림 동기화 메커니즘 구현
+   - 중앙 집중식 알림 관리 시스템 구축
+   - 클라우드 기반 알림 서비스 통합
 
 ## 결론
 
