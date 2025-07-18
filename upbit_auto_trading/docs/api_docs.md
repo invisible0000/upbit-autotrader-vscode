@@ -287,11 +287,11 @@ strategy_manager.delete_strategy(strategy_id)
   - `strategy_id`: 전략 ID
   - 반환값: 삭제 성공 여부
 
-### 백테스터 (Backtester)
+### 백테스터 (Backtester) - 구현 완료
 
 #### BacktestRunner 클래스
 
-전략을 과거 데이터에 적용하여 백테스팅을 실행하고 결과를 생성하는 클래스입니다.
+전략을 과거 데이터에 적용하여 백테스팅을 실행하고 결과를 생성하는 클래스입니다. 모든 기능이 구현되어 테스트 완료되었습니다.
 
 ```python
 from upbit_auto_trading.business_logic.backtester import BacktestRunner
@@ -342,7 +342,7 @@ loaded_result = backtest_runner.load_backtest_result(result_id, session)
 
 #### BacktestAnalyzer 클래스
 
-백테스트 결과를 분석하고 시각화하는 클래스입니다.
+백테스트 결과를 분석하고 시각화하는 클래스입니다. 모든 기능이 구현되어 테스트 완료되었습니다.
 
 ```python
 from upbit_auto_trading.business_logic.backtester import BacktestAnalyzer
@@ -391,7 +391,7 @@ report = analyzer.generate_report()
 
 #### BacktestResultsManager 클래스
 
-백테스트 결과를 저장, 불러오기, 비교하는 기능을 제공하는 클래스입니다.
+백테스트 결과를 저장, 불러오기, 비교하는 기능을 제공하는 클래스입니다. 모든 기능이 구현되어 테스트 완료되었습니다.
 
 ```python
 from upbit_auto_trading.business_logic.backtester import BacktestResultsManager

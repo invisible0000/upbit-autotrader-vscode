@@ -20,21 +20,25 @@
 시스템의 최상위 레벨 다이어그램으로, 자동매매 시스템과 외부 시스템 및 사용자 간의 관계를 보여줍니다.
 
 ```mermaid
-graph TD
-    A["사용자<br>(Web/CLI 이용)"] <--> B("업비트 자동매매 시스템<br>(Python 기반)")
-    B <--> C["업비트 거래소<br>(REST API & WSS)"]
-
-    subgraph External Systems
-        A
-        C
-    end
-    subgraph Your System
-        B
+graph LR
+    subgraph "사용자 그룹"
+        User["사용자<br>(Web/CLI 이용)"]
     end
 
-    style A fill:#ECEFF1,stroke:#333,stroke-width:2px,color:#333
-    style C fill:#ECEFF1,stroke:#333,stroke-width:2px,color:#333
-    style B fill:#FFFACD,stroke:#333,stroke-width:2px,color:#333
+    subgraph "업비트 거래소 시스템"
+        UpbitExchange["업비트 거래소<br>(REST API & WSS)"]
+    end
+
+    subgraph "내부 자동매매 시스템"
+        AutoTradingSystem("업비트 자동매매 시스템<br>(Python 기반)")
+    end
+
+    User <--> AutoTradingSystem
+    AutoTradingSystem <--> UpbitExchange
+
+    style User fill:#E6F2F8,stroke:#6CB6D8,stroke-width:2px,color:#000
+    style UpbitExchange fill:#FFE0B2,stroke:#FF8C00,stroke-width:2px,color:#000
+    style AutoTradingSystem fill:#DDEECC,stroke:#6B8E23,stroke-width:2px,color:#000
 ```
 
 * **사용자**: 웹 브라우저나 CLI를 통해 시스템과 상호작용하며, 전략을 설정하고 거래 현황을 모니터링합니다.  

@@ -18,6 +18,8 @@ from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManag
 # 화면 임포트
 from upbit_auto_trading.ui.desktop.screens.dashboard.dashboard_screen import DashboardScreen
 from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
+from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
+from upbit_auto_trading.ui.desktop.screens.notification_center.notification_center import NotificationCenter
 
 
 class MainWindow(QMainWindow):
@@ -125,15 +127,21 @@ class MainWindow(QMainWindow):
         chart_view_screen = ChartViewScreen()
         self.stack_widget.addWidget(chart_view_screen)
         
-        # 기타 화면들...
+        # 임시 화면들 추가 (아직 구현되지 않은 화면들)
+        self._add_placeholder_screens(["종목 스크리닝", "매매 전략 관리", "백테스팅", 
+                                      "실시간 거래", "포트폴리오 구성"])
+        
+        # 알림 센터 화면
+        notification_center = NotificationCenter()
+        self.stack_widget.addWidget(notification_center)
+        
+        # 설정 화면
+        settings_screen = SettingsScreen()
+        self.stack_widget.addWidget(settings_screen)
     
-    def _add_placeholder_screens(self):
+    def _add_placeholder_screens(self, screens):
         """임시 화면 추가"""
         # 각 화면에 대한 임시 위젯 생성
-        screens = [
-            "대시보드", "차트 뷰", "종목 스크리닝", "매매 전략 관리",
-            "백테스팅", "실시간 거래", "포트폴리오 구성", "모니터링 및 알림", "설정"
-        ]
         
         for screen_name in screens:
             placeholder = QWidget()
@@ -172,7 +180,7 @@ class MainWindow(QMainWindow):
         elif screen_name == "portfolio":
             self.stack_widget.setCurrentIndex(6)
         elif screen_name == "monitoring":
-            self.stack_widget.setCurrentIndex(7)
+            self.stack_widget.setCurrentIndex(7)  # 알림 센터 인덱스
         elif screen_name == "settings":
             self.stack_widget.setCurrentIndex(8)
     

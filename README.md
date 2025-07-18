@@ -183,7 +183,16 @@ python run_desktop_ui.py
     - [x] API 키 관리 화면 구현
     - [x] 데이터베이스 설정 화면 구현
     - [x] 알림 설정 화면 구현
-  - [ ] 알림 센터 구현
+  - [x] 알림 센터 구현 (완료)
+    - [x] 알림 목록 화면 구현
+    - [x] 알림 필터 기능 구현
+    - [x] 알림 설정 화면 구현
+    - [x] 알림 센터 통합 테스트 작성 및 검증
+    - [ ] 실시간 알림 연동
+    - [x] 알림 센터 스크립트 개선 (show_notification_center.py)
+    - [x] 팩토리 패턴 도입 및 코드 모듈화
+    - [x] 명령줄 인자 처리 기능 추가
+    - [x] 추가 단위 테스트 작성
 
 ### 예정된 작업
 - [ ] 모니터링 및 알림 시스템 구현
@@ -194,6 +203,49 @@ python run_desktop_ui.py
 ## 작업 로그
 
 ### 2025-07-18
+- 사용자 인터페이스 - 알림 센터 구현 완료 및 개선
+  - 알림 모델 구현
+    - 알림 유형 열거형 구현 (NotificationType)
+    - 알림 데이터 클래스 구현 (Notification)
+    - 알림 관리 클래스 구현 (NotificationManager)
+  - 알림 목록 화면 구현 (NotificationList)
+    - 알림 항목 위젯 구현 (NotificationItem)
+    - 알림 읽음 표시 및 삭제 기능 구현
+    - 알림 목록 로드 및 표시 기능 구현
+  - 알림 필터 기능 구현 (NotificationFilter)
+    - 알림 유형별 필터링 (가격, 거래, 시스템)
+    - 읽음 상태별 필터링 (읽음, 읽지 않음)
+    - 시간 범위별 필터링 (오늘, 지난 7일, 지난 30일)
+  - 알림 센터 메인 화면 구현 (NotificationCenter)
+    - 알림 목록과 필터 통합
+    - 툴바 및 상태바 구현
+    - 알림 관리 기능 구현
+  - 알림 설정 화면 구현 (NotificationSettings)
+    - 알림 유형별 활성화/비활성화 설정
+    - 알림 방법 설정 (소리, 데스크톱, 이메일)
+    - 알림 빈도 및 방해 금지 시간 설정
+  - 메인 윈도우 통합
+    - 메인 윈도우에 알림 센터 화면 추가
+    - 네비게이션 바와 연동하여 화면 전환 구현
+  - 통합 테스트 작성 및 검증 (test_08_5_notification_center.py)
+    - 알림 센터 초기화 테스트
+    - 알림 목록 표시 테스트
+    - 알림 필터 기능 테스트
+    - 알림 작업 테스트
+    - 알림 설정 통합 테스트
+  - 알림 센터 가이드 문서 작성
+    - 알림 센터 구조 및 기능 설명
+    - 알림 생성 및 관리 방법 가이드
+    - 알림 센터 확장 방법 설명
+    - 향후 개선 사항 제안
+  - 알림 센터 스크립트 개선 (show_notification_center.py)
+    - 팩토리 패턴 도입 (NotificationFactory)
+    - 코드 모듈화 및 구조화
+    - 명령줄 인자 처리 기능 추가
+    - 예외 처리 강화
+    - 단위 테스트 추가 (test_notification_factory.py, test_sample_notification_generator.py, test_notification_center_integration.py)
+    - 알림 센터 개선 사항 문서 작성
+
 - 백테스팅 엔진 구현 완료
   - 백테스트 결과 저장 및 비교 기능 구현 완료
     - 백테스트 결과 관리자 클래스 구현 (BacktestResultsManager)
@@ -450,8 +502,21 @@ python run_desktop_ui.py
 - [API 문서](upbit_auto_trading/docs/api_docs.md)
 - [UI 가이드](upbit_auto_trading/docs/ui_guide.md)
 - [대시보드 구현 가이드](upbit_auto_trading/docs/dashboard_guide.md)
+- [차트 뷰 구현 가이드](upbit_auto_trading/docs/chart_view_guide.md)
+- [알림 센터 가이드](upbit_auto_trading/docs/notification_guide.md)
 - [레퍼런스 문서 활용 가이드](upbit_auto_trading/docs/reference_guide.md)
 - [테스트 결과 요약](upbit_auto_trading/docs/test_results_summary.md)
+
+### 레퍼런스 문서
+
+시스템 설계 및 구현에 필요한 상세 레퍼런스 문서는 `reference` 폴더에서 확인할 수 있습니다:
+
+- [시스템 아키텍처 설계서](reference/01_system_architecture_design.md) - C4 모델 기반 시스템 구조 설명
+- [데이터베이스 스키마 명세서](reference/02_database_schema_specification_erd.md)
+- [API 명세서](reference/03_api_specification.md)
+- [배포 및 운영 가이드](reference/04_deployment_and_operations_guide.md)
+- [보안 설계 문서](reference/05_security_design_document.md)
+- [UI 명세서](reference/ui_spec_01_main_dashboard.md) 등
 
 ## 라이선스
 이 프로젝트는 MIT 라이선스 하에 배포됩니다.

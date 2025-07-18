@@ -8,7 +8,10 @@
 - [API 문서](api_docs.md): 시스템의 주요 API 및 사용 방법에 대한 문서
 - [UI 가이드](ui_guide.md): UI 컴포넌트 구조 및 사용 방법에 대한 가이드
 - [대시보드 가이드](dashboard_guide.md): 대시보드 화면 구조 및 위젯 사용 방법에 대한 가이드
+- [차트 뷰 가이드](chart_view_guide.md): 차트 뷰 화면 구조 및 기능 사용 방법에 대한 가이드
 - [백테스팅 가이드](backtesting_guide.md): 백테스팅 기능 사용 방법 및 모범 사례에 대한 가이드
+- [알림 센터 가이드](notification_guide.md): 알림 센터 구조 및 사용 방법에 대한 가이드
+- [알림 센터 개선 사항](notification_center_improvements.md): 알림 센터 스크립트 개선 사항에 대한 문서
 - [테스트 결과 요약](test_results_summary.md): 최신 테스트 실행 결과 요약
 
 ## 문서 업데이트 지침
