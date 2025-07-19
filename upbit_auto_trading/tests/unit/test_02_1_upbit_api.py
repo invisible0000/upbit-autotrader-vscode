@@ -10,8 +10,9 @@ import unittest
 import pandas as pd
 import time
 import requests
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock, call, ANY
 from datetime import datetime
+from requests.adapters import HTTPAdapter
 
 from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
 
@@ -70,7 +71,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/market/all',
             params=None,
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         
@@ -142,7 +143,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/candles/minutes/1',
             params={'market': 'KRW-BTC', 'count': 2},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         
@@ -206,7 +207,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/orderbook',
             params={'markets': 'KRW-BTC'},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         
@@ -295,7 +296,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/ticker',
             params={'markets': 'KRW-BTC,KRW-ETH'},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         
@@ -310,8 +311,7 @@ class TestUpbitAPI(unittest.TestCase):
         # 시간 패치
         with patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.time') as mock_time, \
              patch('upbit_auto_trading.data_layer.collectors.upbit_api.time.sleep') as mock_sleep:
-            
-            # 현재 시간 설정
+            # result 변수 관련 출력문은 이미 제거됨. 혼동 방지 주석 정리.
             mock_time.return_value = 1000.0
             print("현재 시간 설정: 1000.0")
             
@@ -382,7 +382,7 @@ class TestUpbitAPI(unittest.TestCase):
         self.assertIsInstance(session, requests.Session)
         
         # 어댑터 확인
-        self.assertTrue(any(isinstance(adapter, requests.adapters.HTTPAdapter) 
+        self.assertTrue(any(isinstance(adapter, HTTPAdapter) 
                           for adapter in session.adapters.values()))
         
         # 세션 패치 복구
@@ -469,7 +469,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/order',
             params={'uuid': 'test-uuid'},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
     
@@ -538,7 +538,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/candles/days',
             params={'market': 'KRW-BTC', 'count': 2},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         
@@ -606,7 +606,7 @@ class TestUpbitAPI(unittest.TestCase):
             url='https://api.upbit.com/v1/trades/ticks',
             params={'market': 'KRW-BTC', 'count': 2},
             json=None,
-            headers={'Authorization': unittest.mock.ANY},
+            headers={'Authorization': ANY},
             timeout=(5, 30)
         )
         

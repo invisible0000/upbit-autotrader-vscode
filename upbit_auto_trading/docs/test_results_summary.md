@@ -1,6 +1,6 @@
 # 테스트 결과 요약
 
-실행 일시: 2025-07-18 00:58:36
+실행 일시: 2025-07-19 00:40:57
 
 ## 테스트 파일별 요약
 
@@ -21,9 +21,13 @@
 | test_06_1_portfolio_model.py | 8 | 0 | 0 | 0 | ✅ 성공 |
 | test_06_2_portfolio_performance.py | 8 | 0 | 0 | 0 | ✅ 성공 |
 | test_07_1_backtest_runner.py | 12 | 0 | 0 | 0 | ✅ 성공 |
-| test_07_2_backtest_analyzer.py | 0 | 1 | 0 | 0 | ❌ 실패 |
+| test_07_2_backtest_analyzer.py | 10 | 1 | 0 | 4 | ❌ 실패 |
+| test_07_3_portfolio_backtest.py | 5 | 0 | 0 | 0 | ✅ 성공 |
+| test_07_4_backtest_results_management.py | 7 | 0 | 0 | 0 | ✅ 성공 |
+| test_08_1_main_application.py | 6 | 0 | 0 | 0 | ✅ 성공 |
+| test_10_1_upbit_websocket.py | 0 | 1 | 0 | 0 | ❌ 실패 |
 
-**총계:** 125개 테스트 실행, 1개 오류, 0개 실패, 0개 건너뜀
+**총계:** 153개 테스트 실행, 2개 오류, 0개 실패, 4개 건너뜀
 
 ## 테스트 ID별 상세 결과
 
@@ -137,13 +141,23 @@
 | 07_1_10 | test_execute_sell_order | test_07_1_backtest_runner.py |  | 매도 주문 실행 테스트 | ✅ 성공 |
 | 07_1_11 | test_calculate_trade_metrics | test_07_1_backtest_runner.py |  | 거래 지표 계산 테스트 | ✅ 성공 |
 | 07_1_12 | test_reset | test_07_1_backtest_runner.py |  | 백테스트 초기화 테스트 | ✅ 성공 |
+| 07_2_1 | test_init_backtest_analyzer | test_07_2_backtest_analyzer.py |  |  | ❌ 실패 |
+| 07_2_2 | test_calculate_advanced_metrics | test_07_2_backtest_analyzer.py |  | 고급 성과 지표 계산 테스트 | ❌ 실패 |
+| 07_2_3 | test_analyze_trades | test_07_2_backtest_analyzer.py |  | 거래 분석 테스트 | ❌ 실패 |
+| 07_2_4 | test_analyze_drawdowns | test_07_2_backtest_analyzer.py |  | 손실폭 분석 테스트 | ❌ 실패 |
+| 07_2_5 | test_analyze_monthly_returns | test_07_2_backtest_analyzer.py |  | 월별 수익률 분석 테스트 | ❌ 실패 |
+| 07_2_6 | test_plot_equity_curve | test_07_2_backtest_analyzer.py |  | 자본 곡선 시각화 테스트 | ❌ 실패 |
+| 07_2_7 | test_plot_drawdowns | test_07_2_backtest_analyzer.py |  | 손실폭 시각화 테스트 | ❌ 실패 |
+| 07_2_8 | test_plot_monthly_returns | test_07_2_backtest_analyzer.py |  | 월별 수익률 시각화 테스트 | ❌ 실패 |
+| 07_2_9 | test_plot_trade_analysis | test_07_2_backtest_analyzer.py |  | 거래 분석 시각화 테스트 | ❌ 실패 |
+| 07_2_10 | test_generate_report | test_07_2_backtest_analyzer.py |  | 보고서 생성 테스트 | ❌ 실패 |
 
 ## 개발 단계별 테스트 현황
 
 | 개발 단계 | 총 테스트 수 | 성공 | 실패 | 성공률 |
 |-----------|-------------|------|------|--------|
 | 06 | 16 | 16 | 0 | 100.00% |
-| 07 | 12 | 12 | 0 | 100.00% |
+| 07 | 22 | 12 | 10 | 54.55% |
 | 2 | 21 | 21 | 0 | 100.00% |
 | 3 | 13 | 13 | 0 | 100.00% |
 | 4 | 11 | 11 | 0 | 100.00% |
