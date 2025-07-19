@@ -36,26 +36,7 @@ class NavigationButton(QPushButton):
         self.setMinimumHeight(50)
         self.setIconSize(QSize(24, 24))
         
-        # 스타일 설정
-        self.setStyleSheet("""
-            NavigationButton {
-                text-align: left;
-                padding: 10px;
-                border: none;
-                border-radius: 0;
-                background-color: transparent;
-            }
-            
-            NavigationButton:checked {
-                background-color: #3498db;
-                color: white;
-                font-weight: bold;
-            }
-            
-            NavigationButton:hover:!checked {
-                background-color: rgba(52, 152, 219, 0.2);
-            }
-        """)
+        # 스타일은 QSS 파일에서 관리하므로 인라인 스타일 제거
 
 
 class NavigationBar(QWidget):

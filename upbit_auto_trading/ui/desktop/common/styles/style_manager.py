@@ -60,7 +60,9 @@ class StyleManager:
         if theme is not None:
             self._current_theme = theme
         
-        QApplication.instance().setStyleSheet(self._style_sheets[self._current_theme])
+        app = QApplication.instance()
+        if app and hasattr(app, 'setStyleSheet'):
+            app.setStyleSheet(self._style_sheets[self._current_theme])
     
     def toggle_theme(self):
         """테마 전환"""
@@ -69,6 +71,16 @@ class StyleManager:
         else:
             self._current_theme = Theme.LIGHT
         
+        self.apply_theme()
+    
+    def set_theme(self, theme):
+        """
+        테마 설정
+        
+        Args:
+            theme (Theme): 설정할 테마
+        """
+        self._current_theme = theme
         self.apply_theme()
     
     @property

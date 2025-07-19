@@ -7,8 +7,7 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, 
-    QTabWidget, QGroupBox, QMessageBox, QFileDialog,
-    QLabel, QPushButton, QComboBox, QCheckBox
+    QTabWidget, QGroupBox, QMessageBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSlot, QTimer
 from PyQt6.QtGui import QIcon
@@ -83,295 +82,40 @@ class ChartViewScreen(QWidget):
         layout.addWidget(main_splitter)
     
     def create_chart_area(self):
-        """차트 영역 생성 - 트레이딩뷰 스타일"""
+        """차트 영역 생성"""
         widget = QWidget()
-        # 상대 위치 지정을 위한 레이아웃 없음
-        widget.setStyleSheet("background-color: #1e1e1e;")  # 다크 테마
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
         
-        # 메인 차트 (전체 영역)
+        # 차트 컨트롤 패널
+        self.chart_control = ChartControlPanel()
+        layout.addWidget(self.chart_control)
+        
+        # 메인 차트
+        chart_group = QGroupBox("📊 차트")
+        chart_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        chart_layout = QVBoxLayout(chart_group)
+        
+        # 캔들스틱 차트
         self.candlestick_chart = CandlestickChart()
-        self.candlestick_chart.setParent(widget)
+        chart_layout.addWidget(self.candlestick_chart)
         
-        # 상단 컨트롤 패널 (오버레이)
-        self.create_top_control_overlay(widget)
-        
-        # 하단 액션 버튼 (오버레이)
-        self.create_bottom_action_overlay(widget)
+        layout.addWidget(chart_group)
         
         return widget
-    
-    def create_top_control_overlay(self, parent):
-        """상단 컨트롤 오버레이 생성"""
-        self.top_control_widget = QWidget(parent)
-        self.top_control_widget.setStyleSheet("""
-            QWidget {
-                background-color: rgba(33, 37, 41, 0.9);
-                border-radius: 8px;
-                margin: 5px;
-            }
-        """)
-        
-        layout = QHBoxLayout(self.top_control_widget)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(15)
-        
-        # 심볼 선택
-        symbol_group = QWidget()
-        symbol_layout = QHBoxLayout(symbol_group)
-        symbol_layout.setContentsMargins(0, 0, 0, 0)
-        symbol_layout.setSpacing(5)
-        
-        symbol_label = QLabel("종목:")
-        symbol_label.setStyleSheet("color: white; font-size: 12px;")
-        self.symbol_selector = QComboBox()
-        self.symbol_selector.addItems([
-            "BTC-KRW", "ETH-KRW", "XRP-KRW", "ADA-KRW", 
-            "DOT-KRW", "DOGE-KRW", "SOL-KRW", "MATIC-KRW"
-        ])
-        self.symbol_selector.setCurrentText("BTC-KRW")
-        self.symbol_selector.setStyleSheet("""
-            QComboBox {
-                background-color: #495057;
-                color: white;
-                border: 1px solid #6c757d;
-                border-radius: 4px;
-                padding: 4px 8px;
-                min-width: 80px;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 4px solid white;
-            }
-        """)
-        self.symbol_selector.currentTextChanged.connect(self.on_symbol_changed)
-        
-        symbol_layout.addWidget(symbol_label)
-        symbol_layout.addWidget(self.symbol_selector)
-        layout.addWidget(symbol_group)
-        
-        # 시간대 선택
-        timeframe_group = QWidget()
-        timeframe_layout = QHBoxLayout(timeframe_group)
-        timeframe_layout.setContentsMargins(0, 0, 0, 0)
-        timeframe_layout.setSpacing(2)
-        
-        timeframes = ["1분", "5분", "15분", "1시간", "4시간", "1일"]
-        self.timeframe_buttons = {}
-        
-        for tf in timeframes:
-            btn = QPushButton(tf)
-            btn.setCheckable(True)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    color: #adb5bd;
-                    border: 1px solid #495057;
-                    border-radius: 4px;
-                    padding: 4px 8px;
-                    font-size: 11px;
-                    min-width: 35px;
-                }
-                QPushButton:checked {
-                    background-color: #007bff;
-                    color: white;
-                    border-color: #007bff;
-                }
-                QPushButton:hover {
-                    background-color: #495057;
-                    color: white;
-                }
-            """)
-            btn.clicked.connect(lambda checked, t=tf: self.on_timeframe_changed(t))
-            self.timeframe_buttons[tf] = btn
-            timeframe_layout.addWidget(btn)
-        
-        # 기본 1일 선택
-        self.timeframe_buttons["1일"].setChecked(True)
-        
-        layout.addWidget(timeframe_group)
-        
-        # 지표 추가 버튼
-        self.add_indicator_btn = QPushButton("+ 지표")
-        self.add_indicator_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 12px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
-        self.add_indicator_btn.clicked.connect(self.show_quick_indicator_menu)
-        layout.addWidget(self.add_indicator_btn)
-        
-        layout.addStretch()
-        
-        # 설정 버튼
-        settings_btn = QPushButton("⚙️")
-        settings_btn.setFixedSize(30, 25)
-        settings_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-        settings_btn.clicked.connect(self.toggle_settings_panel)
-        layout.addWidget(settings_btn)
-    
-    def create_bottom_action_overlay(self, parent):
-        """하단 액션 버튼 오버레이 생성"""
-        self.bottom_action_widget = QWidget(parent)
-        self.bottom_action_widget.setStyleSheet("""
-            QWidget {
-                background-color: rgba(33, 37, 41, 0.9);
-                border-radius: 8px;
-            }
-        """)
-        
-        layout = QVBoxLayout(self.bottom_action_widget)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(5)
-        
-        # 차트 저장 버튼
-        save_btn = QPushButton("💾")
-        save_btn.setFixedSize(35, 35)
-        save_btn.setToolTip("차트 저장")
-        save_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-        """)
-        save_btn.clicked.connect(self.on_save_chart)
-        layout.addWidget(save_btn)
-        
-        # 차트 초기화 버튼
-        reset_btn = QPushButton("🔄")
-        reset_btn.setFixedSize(35, 35)
-        reset_btn.setToolTip("차트 초기화")
-        reset_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-        reset_btn.clicked.connect(self.reset_chart)
-        layout.addWidget(reset_btn)
-    
-    def show_quick_indicator_menu(self):
-        """빠른 지표 추가 메뉴"""
-        # 간단한 지표 추가 로직
-        from PyQt6.QtWidgets import QInputDialog
-        
-        indicators = ["SMA(20)", "EMA(20)", "볼린저밴드", "RSI", "MACD"]
-        indicator, ok = QInputDialog.getItem(
-            self, "지표 추가", "추가할 지표:", indicators, 0, False
-        )
-        
-        if ok and indicator:
-            # 기본 파라미터로 지표 추가
-            params = self.get_default_indicator_params(indicator)
-            indicator_id = f"{indicator}_{len(self.active_indicators)}"
-            self.add_indicator(indicator_id, params)
-    
-    def get_default_indicator_params(self, indicator_name):
-        """기본 지표 파라미터 반환"""
-        if "SMA" in indicator_name:
-            return {"type": "SMA", "period": 20, "color": "#2196F3"}
-        elif "EMA" in indicator_name:
-            return {"type": "EMA", "period": 20, "color": "#FF9800"}
-        elif "볼린저밴드" in indicator_name:
-            return {"type": "BBANDS", "period": 20, "std": 2.0, "color": "#9C27B0"}
-        elif "RSI" in indicator_name:
-            return {"type": "RSI", "period": 14, "color": "#F44336"}
-        elif "MACD" in indicator_name:
-            return {"type": "MACD", "fast": 12, "slow": 26, "signal": 9, "color": "#4CAF50"}
-        return {}
-    
-    def toggle_settings_panel(self):
-        """설정 패널 토글"""
-        if not hasattr(self, 'settings_panel') or self.settings_panel is None:
-            self.create_settings_panel()
-        
-        self.settings_visible = not self.settings_visible
-        if hasattr(self, 'settings_panel'):
-            self.settings_panel.setVisible(self.settings_visible)
-    
-    def create_settings_panel(self):
-        """설정 패널 생성"""
-        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel
-        
-        self.settings_panel = QDialog(self)
-        self.settings_panel.setWindowTitle("차트 설정")
-        self.settings_panel.setModal(False)
-        self.settings_panel.resize(300, 400)
-        
-        layout = QVBoxLayout(self.settings_panel)
-        layout.addWidget(QLabel("차트 설정 기능은 개발 중입니다."))
-    
-    def reset_chart(self):
-        """차트 초기화"""
-        # 모든 지표 제거
-        self.active_indicators.clear()
-        
-        # 차트 다시 그리기
-        self.update_chart()
-        
-        print("차트가 초기화되었습니다.")
-    
-    def resizeEvent(self, event):
-        """크기 변경 이벤트 처리"""
-        super().resizeEvent(event)
-        if hasattr(self, 'position_overlays'):
-            self.position_overlays()
-    
-    def position_overlays(self):
-        """오버레이 위치 조정"""
-        if not hasattr(self, 'top_control_widget'):
-            return
-            
-        # 차트 영역의 실제 크기 가져오기
-        chart_widget = self.top_control_widget.parent()
-        if chart_widget:
-            chart_rect = chart_widget.rect()
-            
-            # 상단 컨트롤 위치
-            self.top_control_widget.resize(chart_rect.width() - 20, 40)
-            self.top_control_widget.move(10, 10)
-            
-            # 차트 크기 조정 (오버레이 공간 확보)
-            self.candlestick_chart.setGeometry(0, 0, chart_rect.width(), chart_rect.height())
-            
-            # 하단 액션 버튼 위치
-            if hasattr(self, 'bottom_action_widget'):
-                self.bottom_action_widget.resize(45, 85)
-                self.bottom_action_widget.move(chart_rect.width() - 55, chart_rect.height() - 95)
     
     def create_control_area(self):
         """컨트롤 영역 생성"""
@@ -396,7 +140,14 @@ class ChartViewScreen(QWidget):
         return widget
     
     def connect_signals(self):
-        """시그널 연결"""        
+        """시그널 연결"""
+        # 차트 컨트롤 패널 시그널
+        self.chart_control.symbol_changed.connect(self.on_symbol_changed)
+        self.chart_control.timeframe_changed.connect(self.on_timeframe_changed)
+        self.chart_control.indicator_added.connect(self.on_indicator_added_from_control)
+        self.chart_control.chart_saved.connect(self.on_save_chart)
+        self.chart_control.settings_changed.connect(self.on_chart_settings_changed)
+        
         # 지표 관리 패널 시그널
         self.indicator_panel.indicator_added.connect(self.on_indicator_added)
         self.indicator_panel.indicator_removed.connect(self.on_indicator_removed)
@@ -420,52 +171,6 @@ class ChartViewScreen(QWidget):
         
         # 실시간 시뮬레이션 시작
         self.start_realtime_simulation()
-        
-        # 오버레이 위치 조정
-        QTimer.singleShot(100, self.position_overlays)
-    
-    def add_indicator(self, indicator_id, params):
-        """지표 추가"""
-        self.active_indicators[indicator_id] = params
-        
-        # 지표 계산 및 차트에 추가
-        data = self.calculate_indicator_data(params)
-        if data is not None:
-            self.candlestick_chart.add_indicator_overlay(indicator_id, data)
-            print(f"지표 추가됨: {indicator_id}")
-    
-    def calculate_indicator_data(self, params):
-        """지표 데이터 계산"""
-        if self.chart_data is None:
-            return None
-            
-        indicator_type = params.get("type", "")
-        
-        if indicator_type == "SMA":
-            period = params.get("period", 20)
-            return self.chart_data['close'].rolling(window=period).mean()
-        elif indicator_type == "EMA":
-            period = params.get("period", 20)
-            return self.chart_data['close'].ewm(span=period).mean()
-        elif indicator_type == "RSI":
-            period = params.get("period", 14)
-            return self.calculate_rsi(period)
-        # 다른 지표들 추가 가능
-        
-        return None
-    
-    def calculate_rsi(self, period=14):
-        """RSI 계산"""
-        if self.chart_data is None:
-            return None
-            
-        delta = self.chart_data['close'].diff()
-        gain = delta.where(delta > 0, 0).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
     
     def generate_sample_data(self, rows=200):
         """샘플 데이터 생성"""
@@ -835,34 +540,3 @@ class ChartViewScreen(QWidget):
     def get_current_data(self):
         """현재 차트 데이터 반환"""
         return self.chart_data.copy() if self.chart_data is not None else None
-    
-    def showEvent(self, event):
-        """화면 표시 이벤트 - 차트 초기화 문제 해결"""
-        super().showEvent(event)
-        
-        # 차트가 제대로 표시되도록 지연 후 업데이트
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(100, self._refresh_chart)
-        QTimer.singleShot(300, self._refresh_chart)
-    
-    def resizeEvent(self, event):
-        """리사이즈 이벤트 - 차트 크기 조정"""
-        super().resizeEvent(event)
-        
-        # 리사이즈 후 차트 업데이트
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(50, self._refresh_chart)
-    
-    def _refresh_chart(self):
-        """차트 새로고침"""
-        try:
-            if hasattr(self, 'candlestick_chart') and self.candlestick_chart:
-                # 차트 위젯 강제 업데이트
-                self.candlestick_chart.update()
-                self.candlestick_chart.repaint()
-                
-                # 차트 데이터가 있다면 다시 로드
-                if self.chart_data is not None:
-                    self.candlestick_chart.plot_data(self.chart_data)
-        except Exception as e:
-            print(f"차트 새로고침 중 오류: {e}")

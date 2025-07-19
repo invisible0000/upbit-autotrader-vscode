@@ -259,4 +259,94 @@ QSlider::handle:horizontal {
     border-radius: 9px;
 }
 
+/* 네비게이션 바 스타일 */
+QWidget#nav-main {
+    background-color: #ecf0f1;
+    border-right: 1px solid #bdc3c7;
+}
+
+/* 네비게이션 버튼 스타일 */
+NavigationButton {
+    text-align: left;
+    padding: 10px;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    color: #2c3e50;
+    font-size: 11pt;
+}
+
+NavigationButton:checked {
+    background-color: #3498db;
+    color: white;
+    font-weight: bold;
+}
+
+NavigationButton:hover:!checked {
+    background-color: rgba(52, 152, 219, 0.2);
+    color: #2c3e50;
+}
+
+/* 그룹박스 스타일 */
+QGroupBox {
+    font-weight: bold;
+    border: 1px solid #bdc3c7;
+    border-radius: 5px;
+    margin: 5px 0;
+    padding-top: 15px;
+    background-color: #ffffff;
+    color: #2c3e50;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 10px 0 10px;
+    color: #2c3e50;
+}
+
+/* 탭 위젯 스타일 */
+QTabWidget::pane {
+    border: 1px solid #bdc3c7;
+    background-color: #ffffff;
+}
+
+QTabBar::tab {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    padding: 8px 16px;
+    margin-right: 2px;
+    border: 1px solid #bdc3c7;
+    border-bottom: none;
+}
+
+QTabBar::tab:selected {
+    background-color: #ffffff;
+    color: #2c3e50;
+    border-bottom: 1px solid #ffffff;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #d5dbdb;
+}
+
+/* 스플리터 스타일 */
+QSplitter::handle {
+    background-color: #bdc3c7;
+}
+
+QSplitter::handle:horizontal {
+    width: 3px;
+}
+
+QSplitter::handle:vertical {
+    height: 3px;
+}
+
+/* 라벨 스타일 */
+QLabel {
+    color: #2c3e50;
+    background-color: transparent;
+}
+
 /* 다크 모드 스타일은 별도 파일로 분리 */
