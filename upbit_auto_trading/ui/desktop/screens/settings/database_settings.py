@@ -62,6 +62,11 @@ class DatabaseSettings(QWidget):
         self.browse_button.setObjectName("button-browse-db-path")
         path_input_layout.addWidget(self.browse_button)
         
+        # DB 생성 버튼 추가
+        self.create_db_button = QPushButton("DB 생성")
+        self.create_db_button.setObjectName("button-create-db")
+        path_input_layout.addWidget(self.create_db_button)
+        
         path_layout.addLayout(path_input_layout)
         
         # 경로 설명
@@ -171,6 +176,9 @@ class DatabaseSettings(QWidget):
         # 찾아보기 버튼 클릭 시 파일 대화상자 표시
         self.browse_button.clicked.connect(self._browse_db_path)
         
+        # DB 생성 버튼 클릭 시 파일 생성
+        self.create_db_button.clicked.connect(self.create_database_file)
+        
         # 저장 버튼 클릭 시 설정 저장
         self.save_button.clicked.connect(self.save_settings)
         
@@ -185,43 +193,104 @@ class DatabaseSettings(QWidget):
     
     def _browse_db_path(self):
         """데이터베이스 경로 찾아보기"""
-        # 파일 대화상자 표시
+        # 파일 대화상자 표시, 기본 확장자 .sqlite3
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "데이터베이스 파일 선택",
-            "",
-            "SQLite 데이터베이스 (*.db);;모든 파일 (*.*)"
+            "data/upbit_auto_trading.sqlite3",
+            "SQLite 데이터베이스 (*.sqlite3);;모든 파일 (*.*)"
         )
         
-        # 파일 경로가 선택되었으면 입력 필드에 설정
+        # 확장자 없으면 자동 추가
         if file_path:
+            root, ext = os.path.splitext(file_path)
+            if not ext:
+                file_path += ".sqlite3"
             self.db_path_input.setText(file_path)
-    
+
+    def create_database_file(self):
+        """입력된 경로에 DB 파일 생성"""
+        db_path = self.db_path_input.text().strip()
+        if not db_path:
+            QMessageBox.warning(self, "DB 경로 오류", "DB 경로와 파일명을 입력하세요.")
+            return
+        root, ext = os.path.splitext(db_path)
+        if not ext:
+            db_path += ".sqlite3"
+        try:
+            db_dir = os.path.dirname(db_path)
+            if not os.path.exists(db_dir):
+                os.makedirs(db_dir)
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            conn.close()
+            if os.path.exists(db_path):
+                QMessageBox.information(self, "DB 생성 완료", f"DB 파일이 생성되었습니다:\n{db_path}")
+            else:
+                QMessageBox.warning(self, "DB 생성 오류", f"DB 파일 생성에 실패했습니다. 경로를 확인하세요:\n{db_path}")
+        except Exception as e:
+            QMessageBox.warning(self, "DB 생성 오류", f"DB 생성 중 오류가 발생했습니다:\n{str(e)}")
+
     def _update_current_size(self):
         """현재 데이터베이스 크기 업데이트"""
         try:
-            # 데이터베이스 파일 경로
             db_path = self.db_path_input.text()
-            
-            # 파일이 존재하면 크기 계산
             if os.path.exists(db_path):
                 size_bytes = os.path.getsize(db_path)
-                
-                # 단위 변환
-                if size_bytes < 1024 * 1024:  # 1 MB 미만
+                if size_bytes < 1024 * 1024:
                     size_str = f"{size_bytes / 1024:.2f} KB"
-                elif size_bytes < 1024 * 1024 * 1024:  # 1 GB 미만
+                elif size_bytes < 1024 * 1024 * 1024:
                     size_str = f"{size_bytes / (1024 * 1024):.2f} MB"
-                else:  # 1 GB 이상
+                else:
                     size_str = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-                
                 self.current_size_label.setText(size_str)
+                # 최대 크기 초과 시 자동 삭제
+                max_size_gb = self.max_size_input.value()
+                if size_bytes > max_size_gb * 1024 * 1024 * 1024:
+                    self._delete_old_data_by_size(db_path, size_bytes, max_size_gb)
             else:
                 self.current_size_label.setText("파일 없음")
-        
         except Exception as e:
             self.current_size_label.setText("크기 계산 오류")
             print(f"데이터베이스 크기 계산 오류: {str(e)}")
+
+    def _delete_old_data_by_size(self, db_path, size_bytes, max_size_gb):
+        """최대 크기 초과 시 오래된 데이터 삭제"""
+        import sqlite3
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            # 예시: 거래 테이블에서 오래된 데이터 삭제 (테이블명/컬럼명은 실제 구조에 맞게 수정)
+            cursor.execute("DELETE FROM trades WHERE rowid IN (SELECT rowid FROM trades ORDER BY timestamp ASC LIMIT 100)")
+            conn.commit()
+            conn.close()
+            print("최대 크기 초과: 오래된 데이터 일부 삭제됨.")
+        except Exception as e:
+            print(f"오래된 데이터 삭제 오류: {str(e)}")
+
+    def _delete_old_data_by_retention(self):
+        """데이터 보존기간 초과 데이터 삭제"""
+        import sqlite3
+        from datetime import datetime, timedelta
+        db_path = self.db_path_input.text()
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            retention_days = self.retention_period_input.value()
+            cutoff = datetime.now() - timedelta(days=retention_days)
+            cutoff_str = cutoff.strftime('%Y-%m-%d %H:%M:%S')
+            # 예시: 거래 테이블에서 보존기간 초과 데이터 삭제 (테이블명/컬럼명은 실제 구조에 맞게 수정)
+            cursor.execute("DELETE FROM trades WHERE timestamp < ?", (cutoff_str,))
+            conn.commit()
+            conn.close()
+            print("보존기간 초과: 오래된 데이터 삭제됨.")
+        except Exception as e:
+            print(f"보존기간 초과 데이터 삭제 오류: {str(e)}")
+
+    def check_and_cleanup_database(self):
+        """최대 크기/보존기간 초과 데이터 정리 트리거"""
+        self._update_current_size()
+        self._delete_old_data_by_retention()
     
     def _reset_settings(self):
         """설정 초기화"""

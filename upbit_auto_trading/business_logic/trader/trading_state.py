@@ -25,3 +25,9 @@ class TradingState:
             "amount": amount,
             "price": price
         })
+
+    def get_position(self, symbol):
+        return self.positions.get(symbol, 0)
+
+    def get_entry_price(self, symbol):
+        return self.entry_prices.get(symbol, 0)
