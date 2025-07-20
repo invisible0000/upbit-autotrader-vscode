@@ -70,6 +70,10 @@ class ChartViewScreen(QWidget):
         self.trade_markers = []
         self.settings_visible = False  # 설정 패널 표시 상태 추가
         
+        # 화면 활성 상태 관리
+        self.is_screen_active = True  # 차트뷰 화면이 활성 상태인지
+        self.update_paused = False    # 업데이트 일시정지 상태
+        
         # 코인별 뷰포트 및 지표 설정 저장
         self.coin_settings = {}  # 코인별 설정 딕셔너리
         
@@ -1825,7 +1829,16 @@ class ChartViewScreen(QWidget):
         Args:
             preserve_viewport: 뷰포트 보존 여부 (기본값: True)
         """
-        # 🚨 응급처치: 무한 루프 완전 차단
+        # � 화면 활성 상태 확인
+        if hasattr(self, 'update_paused') and self.update_paused:
+            print("⏸️ 화면 비활성화 상태 - 차트 업데이트 스킵")
+            return
+            
+        if hasattr(self, 'is_screen_active') and not self.is_screen_active:
+            print("💤 화면 비활성화 상태 - 차트 업데이트 스킵")
+            return
+        
+        # �🚨 응급처치: 무한 루프 완전 차단
         if hasattr(self, '_emergency_stop_updates') and self._emergency_stop_updates:
             print("🚨 응급처치: 차트 업데이트 완전 차단 중")
             return
@@ -2815,6 +2828,55 @@ class ChartViewScreen(QWidget):
         except Exception as e:
             logger.error(f"긴급 중지 실행 중 오류: {e}")
             QMessageBox.warning(self, "오류", f"긴급 중지 실행 중 오류가 발생했습니다: {e}")
+    
+    def pause_chart_updates(self):
+        """차트 업데이트 일시정지 (다른 탭으로 이동시 호출)"""
+        print("⏸️ 차트뷰 화면 비활성화 - 업데이트 일시정지")
+        self.is_screen_active = False
+        self.update_paused = True
+        
+        try:
+            # 실시간 업데이트 중지
+            self.stop_realtime_updates()
+            print("  📡 실시간 업데이트 중지")
+            
+            # 렌더링 타이머 중지
+            if hasattr(self, 'render_timer') and self.render_timer:
+                self.render_timer.stop()
+                print("  ⏱️ 렌더링 타이머 정지")
+                
+        except Exception as e:
+            logger.error(f"차트 업데이트 일시정지 중 오류: {e}")
+    
+    def resume_chart_updates(self):
+        """차트 업데이트 재개 (차트뷰 탭 활성화시 호출)"""
+        print("▶️ 차트뷰 화면 활성화 - 업데이트 재개")
+        self.is_screen_active = True
+        self.update_paused = False
+        
+        try:
+            # 차트 데이터 새로고침 (놓친 업데이트 반영)
+            if self.current_symbol:
+                print("  🔄 차트 데이터 새로고침 중...")
+                self.refresh_chart_data()
+                
+        except Exception as e:
+            logger.error(f"차트 업데이트 재개 중 오류: {e}")
+    
+    def refresh_chart_data(self):
+        """차트 데이터 새로고침 (재활성화시 호출)"""
+        try:
+            # 기존 업데이트 메서드 활용
+            self.schedule_chart_update(preserve_viewport=True)
+            print("  ✅ 차트 데이터 새로고침 완료")
+            
+        except Exception as e:
+            logger.error(f"차트 데이터 새로고침 중 오류: {e}")
+            print(f"  ❌ 차트 데이터 새로고침 실패: {e}")
+    
+    def is_update_allowed(self):
+        """업데이트가 허용되는지 확인"""
+        return self.is_screen_active and not self.update_paused
 
 
 # 직접 실행을 위한 메인 블록

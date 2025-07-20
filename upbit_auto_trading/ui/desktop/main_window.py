@@ -117,6 +117,10 @@ class MainWindow(QMainWindow):
         """초기화"""
         super().__init__()
         
+        # 화면 캐시 (지연 로딩용)
+        self._screen_cache = {}
+        self._screen_widgets = {}
+        
         self.setWindowTitle("업비트 자동매매 시스템")
         self.setMinimumSize(1280, 720)  # 요구사항 문서의 최소 해상도 요구사항 적용
         
@@ -214,57 +218,23 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
     
     def _add_screens(self):
-        """화면 추가"""
-        # 대시보드 화면
+        """화면 추가 (지연 로딩 방식)"""
+        # 대시보드 화면만 먼저 로드 (기본 화면)
         dashboard_screen = DashboardScreen()
         self.stack_widget.addWidget(dashboard_screen)
-
-        # 차트 뷰 화면
-        try:
-            chart_view_screen = ChartViewScreen()
-            self.stack_widget.addWidget(chart_view_screen)
-        except Exception as e:
-            print(f"차트뷰 화면 생성 중 오류: {e}")
-            import traceback
-            traceback.print_exc()
-            # 임시 더미 화면 추가
-            chart_view_screen = create_placeholder_screen("차트 뷰 (오류 발생)")
-            self.stack_widget.addWidget(chart_view_screen)
-
-        # 종목 스크리닝 화면
-        asset_screener_screen = AssetScreenerScreen()
-        self.stack_widget.addWidget(asset_screener_screen)
-
-        # 매매 전략 관리 화면
-        strategy_screen = StrategyManagementScreen()
-        self.stack_widget.addWidget(strategy_screen)
-
-        # 백테스팅 화면
-        backtesting_screen = BacktestingScreen()
-        self.stack_widget.addWidget(backtesting_screen)
-
-        # 실시간 거래 화면
-        live_trading_screen = LiveTradingScreen()
-        self.stack_widget.addWidget(live_trading_screen)
-
-        # 포트폴리오 구성 화면
-        portfolio_screen = PortfolioConfigurationScreen()
-        self.stack_widget.addWidget(portfolio_screen)
-
-        # 모니터링 & 알림 화면
-        monitoring_alerts_screen = MonitoringAlertsScreen()
-        self.stack_widget.addWidget(monitoring_alerts_screen)
-
-        # 임시 화면들 추가 (아직 구현되지 않은 화면들)
-        self._add_placeholder_screens([])
-
-        # 알림 센터 화면
-        notification_center = NotificationCenter()
-        self.stack_widget.addWidget(notification_center)
-
-        # 설정 화면
-        settings_screen = SettingsScreen()
-        self.stack_widget.addWidget(settings_screen)
+        self._screen_widgets['대시보드'] = dashboard_screen
+        
+        # 나머지 화면들은 지연 로딩을 위해 None으로 초기화
+        self._screen_widgets['차트 뷰'] = None
+        self._screen_widgets['종목 스크리닝'] = None
+        self._screen_widgets['매매전략 관리'] = None
+        self._screen_widgets['백테스팅'] = None
+        self._screen_widgets['실시간 거래'] = None
+        self._screen_widgets['포트폴리오 구성'] = None
+        self._screen_widgets['모니터링/알림'] = None
+        self._screen_widgets['설정'] = None
+        
+        print("🏠 대시보드 화면만 초기화 완료, 나머지는 지연 로딩됩니다.")
     
     def _add_placeholder_screens(self, screens):
         """임시 화면 추가"""
@@ -283,33 +253,118 @@ class MainWindow(QMainWindow):
     
     def _change_screen(self, screen_name):
         """
-        화면 전환
+        화면 전환 (지연 로딩 방식)
         
         Args:
             screen_name (str): 화면 이름
         """
-        # 네비게이션 바 활성 화면 설정
-        self.nav_bar.set_active_screen(screen_name)
-
-        # 스택 위젯 인덱스 설정 (차트 뷰와 동일하게 실제 화면 인스턴스 기준)
-        if screen_name == "dashboard":
-            self.stack_widget.setCurrentIndex(0)
-        elif screen_name == "chart_view":
-            self.stack_widget.setCurrentIndex(1)
-        elif screen_name == "screener":
-            self.stack_widget.setCurrentIndex(2)  # AssetScreenerScreen 연결
-        elif screen_name == "strategy":
-            self.stack_widget.setCurrentIndex(3)
-        elif screen_name == "backtest":
-            self.stack_widget.setCurrentIndex(4)  # BacktestingScreen 연결
-        elif screen_name == "trading":
-            self.stack_widget.setCurrentIndex(5)  # 실시간 거래 화면
-        elif screen_name == "portfolio":
-            self.stack_widget.setCurrentIndex(6)  # 포트폴리오 구성 화면
-        elif screen_name == "monitoring":
-            self.stack_widget.setCurrentIndex(7)  # 모니터링 & 알림 화면
-        elif screen_name == "settings":
-            self.stack_widget.setCurrentIndex(9)  # 설정
+        print(f"🔄 화면 전환 요청: {screen_name}")
+        
+        # 현재 활성 화면에서 차트뷰인 경우 업데이트 일시정지
+        current_widget = self.stack_widget.currentWidget()
+        if current_widget:
+            # 차트뷰 화면인지 확인하고 일시정지
+            try:
+                if hasattr(current_widget, 'pause_chart_updates'):
+                    current_widget.pause_chart_updates()
+            except Exception as e:
+                print(f"⚠️ 이전 화면 일시정지 중 오류: {e}")
+        
+        # 화면 이름 매핑
+        screen_mapping = {
+            "dashboard": "대시보드",
+            "chart_view": "차트 뷰", 
+            "screener": "종목 스크리닝",
+            "strategy": "매매전략 관리",
+            "backtest": "백테스팅",
+            "trading": "실시간 거래",
+            "portfolio": "포트폴리오 구성",
+            "monitoring": "모니터링/알림",
+            "settings": "설정"
+        }
+        
+        mapped_name = screen_mapping.get(screen_name, screen_name)
+        
+        # 해당 화면이 이미 로드되었는지 확인
+        if self._screen_widgets.get(mapped_name) is None:
+            print(f"📥 {mapped_name} 화면 지연 로딩 중...")
+            self._load_screen_lazy(mapped_name)
+        
+        # 화면 전환
+        widget = self._screen_widgets.get(mapped_name)
+        if widget:
+            index = self.stack_widget.indexOf(widget)
+            if index >= 0:
+                self.stack_widget.setCurrentIndex(index)
+                print(f"✅ {mapped_name} 화면으로 전환 완료")
+                
+                # 차트뷰 화면으로 전환한 경우 업데이트 재개
+                try:
+                    if hasattr(widget, 'resume_chart_updates'):
+                        widget.resume_chart_updates()
+                except Exception as e:
+                    print(f"⚠️ 차트뷰 업데이트 재개 중 오류: {e}")
+                    
+            else:
+                print(f"❌ {mapped_name} 화면을 스택에서 찾을 수 없습니다")
+        else:
+            print(f"❌ {mapped_name} 화면 로딩 실패")
+    
+    def _load_screen_lazy(self, screen_name):
+        """지연 로딩으로 화면 생성"""
+        try:
+            if screen_name == "차트 뷰":
+                print("📊 차트뷰 화면 로딩 중...")
+                from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
+                screen = ChartViewScreen()
+                
+            elif screen_name == "종목 스크리닝":
+                from upbit_auto_trading.ui.desktop.screens.asset_screener.asset_screener_screen import AssetScreenerScreen
+                screen = AssetScreenerScreen()
+                
+            elif screen_name == "매매전략 관리":
+                from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
+                screen = StrategyManagementScreen()
+                
+            elif screen_name == "백테스팅":
+                from upbit_auto_trading.ui.desktop.screens.backtesting.backtesting_screen import BacktestingScreen
+                screen = BacktestingScreen()
+                
+            elif screen_name == "실시간 거래":
+                from upbit_auto_trading.ui.desktop.screens.live_trading.live_trading_screen import LiveTradingScreen
+                screen = LiveTradingScreen()
+                
+            elif screen_name == "포트폴리오 구성":
+                from upbit_auto_trading.ui.desktop.screens.portfolio_configuration.portfolio_configuration_screen import PortfolioConfigurationScreen
+                screen = PortfolioConfigurationScreen()
+                
+            elif screen_name == "모니터링/알림":
+                from upbit_auto_trading.ui.desktop.screens.monitoring_alerts.monitoring_alerts_screen import MonitoringAlertsScreen
+                screen = MonitoringAlertsScreen()
+                
+            elif screen_name == "설정":
+                from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
+                screen = SettingsScreen()
+                
+            else:
+                print(f"❌ 알 수 없는 화면: {screen_name}")
+                return
+            
+            # 스택에 추가하고 캐시에 저장
+            self.stack_widget.addWidget(screen)
+            self._screen_widgets[screen_name] = screen
+            print(f"✅ {screen_name} 화면 로딩 완료")
+            
+        except Exception as e:
+            print(f"❌ {screen_name} 화면 로딩 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # 오류 발생 시 플레이스홀더 화면 생성
+            from upbit_auto_trading.ui.desktop.common.widgets.placeholder import create_placeholder_screen
+            screen = create_placeholder_screen(f"{screen_name} (로딩 실패)")
+            self.stack_widget.addWidget(screen)
+            self._screen_widgets[screen_name] = screen
     
     def _toggle_theme(self):
         """테마 전환"""

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel, QMenu
 )
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QColor
 import sys
 import os
 from datetime import datetime
@@ -87,11 +87,11 @@ class StrategyListWidget(QWidget):
             
             # 전략 타입별 색상 구분
             if strategy.strategy_type == "이동평균 교차":
-                item.setBackground(Qt.GlobalColor.lightBlue)
+                item.setBackground(QColor(173, 216, 230))  # Light Blue
             elif strategy.strategy_type == "RSI":
-                item.setBackground(Qt.GlobalColor.lightGreen)
+                item.setBackground(QColor(144, 238, 144))  # Light Green
             elif strategy.strategy_type == "볼린저 밴드":
-                item.setBackground(Qt.GlobalColor.lightYellow)
+                item.setBackground(QColor(255, 255, 224))  # Light Yellow
             
             self.strategy_list.addItem(item)
         
