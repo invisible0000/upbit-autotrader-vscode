@@ -1,14 +1,16 @@
 """
-시장 데이터 저장소 모듈 (SQLite3 직접 사용)
+시장 데이터 저장소 모듈
 
 이 모듈은 시장 데이터의 저장 및 로드 기능을 제공합니다.
 """
 import pandas as pd
 import sqlite3
 import logging
-import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
+from sqlalchemy import text
+
+from upbit_auto_trading.data_layer.storage.database_manager import DatabaseManager
 
 
 class MarketDataStorage:
@@ -23,40 +25,7 @@ class MarketDataStorage:
         시장 데이터 저장소 초기화
         """
         self.logger = logging.getLogger(__name__)
-        self.db_path = "data/upbit_auto_trading.sqlite3"
-        
-        # data 디렉토리 생성
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        
-        # 테이블 초기화
-        self._init_tables()
-    
-    def _init_tables(self):
-        """데이터베이스 테이블 초기화"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS market_data (
-                    timestamp TEXT,
-                    symbol TEXT,
-                    open REAL,
-                    high REAL,
-                    low REAL,
-                    close REAL,
-                    volume REAL,
-                    timeframe TEXT,
-                    PRIMARY KEY (timestamp, symbol, timeframe)
-                )
-            ''')
-            
-            conn.commit()
-            conn.close()
-            self.logger.info("데이터베이스 테이블 초기화 완료")
-            
-        except Exception as e:
-            self.logger.error(f"테이블 초기화 실패: {e}")
+        self.db_manager = DatabaseManager()
     
     def save_market_data(self, data: pd.DataFrame) -> bool:
         """
@@ -85,7 +54,7 @@ class MarketDataStorage:
                 df = df.reset_index()
             
             # timestamp가 datetime 객체인 경우 문자열로 변환
-            if 'timestamp' in df.columns and hasattr(df['timestamp'].iloc[0], 'strftime'):
+            if 'timestamp' in df.columns and isinstance(df['timestamp'].iloc[0], datetime):
                 df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
             
             # 필수 컬럼 확인
@@ -96,14 +65,29 @@ class MarketDataStorage:
                     return False
             
             # 데이터베이스 연결
-            conn = sqlite3.connect(self.db_path)
+            engine = self.db_manager.get_engine()
+            conn = engine.connect()
             
-            # 데이터 삽입 (중복 시 무시)
+            # 테이블 생성 (없는 경우)
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS market_data (
+                    timestamp TEXT,
+                    symbol TEXT,
+                    open REAL,
+                    high REAL,
+                    low REAL,
+                    close REAL,
+                    volume REAL,
+                    timeframe TEXT,
+                    PRIMARY KEY (timestamp, symbol, timeframe)
+                )
+            '''))
+            
+            # 데이터 삽입
             df[required_columns].to_sql('market_data', conn, if_exists='append', index=False)
             
             conn.commit()
             conn.close()
-            
             self.logger.info(f"시장 데이터 저장 완료: {len(df)}개 데이터 포인트")
             return True
             
@@ -116,66 +100,57 @@ class MarketDataStorage:
         시장 데이터 로드
         
         Args:
-            symbol: 코인 심볼 (예: "KRW-BTC")
-            timeframe: 시간대 (예: "1d", "4h", "1h")
+            symbol: 코인 심볼 (예: 'KRW-BTC')
+            timeframe: 시간대 (예: '1m', '5m', '1h', '1d')
             start_date: 시작 날짜
             end_date: 종료 날짜
             
         Returns:
-            로드된 OHLCV 데이터
+            OHLCV 데이터가 포함된 DataFrame
         """
+        self.logger.info(f"시장 데이터 로드 중: {symbol}, {timeframe}, {start_date} ~ {end_date}")
+        
         try:
-            conn = sqlite3.connect(self.db_path)
+            # 데이터베이스 연결
+            engine = self.db_manager.get_engine()
+            conn = engine.connect()
             
+            # 쿼리 실행
             query = '''
-                SELECT timestamp, symbol, open, high, low, close, volume, timeframe
+                SELECT timestamp, open, high, low, close, volume
                 FROM market_data
-                WHERE symbol = ? AND timeframe = ? 
-                AND timestamp >= ? AND timestamp <= ?
-                ORDER BY timestamp ASC
+                WHERE symbol = ? AND timeframe = ? AND timestamp BETWEEN ? AND ?
+                ORDER BY timestamp
             '''
             
-            start_str = start_date.strftime('%Y-%m-%d %H:%M:%S')
-            end_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+            # 날짜 형식 변환
+            start_date_str = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            end_date_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
             
-            df = pd.read_sql_query(query, conn, params=(symbol, timeframe, start_str, end_str))
-            conn.close()
+            # 데이터 로드
+            df = pd.read_sql_query(
+                query,
+                conn,
+                params=(symbol, timeframe, start_date_str, end_date_str)
+            )
             
-            if not df.empty:
-                # timestamp를 datetime으로 변환
-                df['timestamp'] = pd.to_datetime(df['timestamp'])
-                df.set_index('timestamp', inplace=True)
+            # timestamp를 datetime으로 변환
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # timestamp를 인덱스로 설정
+            df.set_index('timestamp', inplace=True)
             
             self.logger.info(f"시장 데이터 로드 완료: {len(df)}개 데이터 포인트")
             return df
             
         except Exception as e:
             self.logger.error(f"시장 데이터 로드 중 오류 발생: {str(e)}")
-            return pd.DataFrame()
-    
-    def get_available_symbols(self) -> List[str]:
-        """
-        저장된 심볼 목록 조회
-        
-        Returns:
-            사용 가능한 심볼 목록
-        """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            
-            query = 'SELECT DISTINCT symbol FROM market_data ORDER BY symbol'
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            
-            return df['symbol'].tolist() if not df.empty else []
-            
-        except Exception as e:
-            self.logger.error(f"심볼 목록 조회 중 오류 발생: {str(e)}")
-            return []
+            # 오류 발생 시 빈 DataFrame 반환
+            return pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume'])
     
     def cleanup_old_data(self, days_to_keep: int) -> int:
         """
-        오래된 시장 데이터 정리
+        오래된 데이터 정리
         
         Args:
             days_to_keep: 보관할 일수
@@ -183,14 +158,18 @@ class MarketDataStorage:
         Returns:
             삭제된 레코드 수
         """
+        self.logger.info(f"오래된 데이터 정리 중: {days_to_keep}일 이전 데이터 삭제")
+        
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            # 데이터베이스 연결
+            engine = self.db_manager.get_engine()
+            conn = engine.connect()
             
             # 삭제 기준일 계산
             cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).strftime('%Y-%m-%d %H:%M:%S')
             
             # 삭제 전 레코드 수 확인
+            cursor = conn.cursor()
             cursor.execute('SELECT COUNT(*) FROM market_data')
             before_count = cursor.fetchone()[0]
             
@@ -205,10 +184,9 @@ class MarketDataStorage:
             # 삭제된 레코드 수 계산
             deleted_count = before_count - after_count
             
-            conn.close()
             self.logger.info(f"오래된 데이터 정리 완료: {deleted_count}개 레코드 삭제")
             return deleted_count
             
         except Exception as e:
-            self.logger.error(f"데이터 정리 중 오류 발생: {str(e)}")
+            self.logger.error(f"오래된 데이터 정리 중 오류 발생: {str(e)}")
             return 0

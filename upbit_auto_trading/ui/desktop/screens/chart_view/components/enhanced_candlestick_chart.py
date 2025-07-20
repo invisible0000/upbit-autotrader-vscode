@@ -120,9 +120,7 @@ class CandlestickChart(pg.PlotWidget):
     
     def __init__(self, parent=None):
         """캔들스틱 차트 초기화"""
-        super().__init__(parent)
-        
-        # 데이터 초기화
+        # 데이터 초기화 (super() 호출 전에 설정)
         self.data = None
         self.candlesticks = None
         self.indicator_overlays = {}
@@ -131,11 +129,21 @@ class CandlestickChart(pg.PlotWidget):
         # 뷰 범위 초기화
         self.view_range = [0, 100, 0, 100]  # [xMin, xMax, yMin, yMax]
         
+        # PlotWidget 초기화
+        super().__init__(parent)
+        
         # 차트 설정
         self._setup_chart()
     
     def _setup_chart(self):
         """차트 설정"""
+        # 크기 정책 설정
+        from PyQt6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # 최소 크기 설정
+        self.setMinimumSize(400, 300)
+        
         # 배경색 설정
         self.setBackground('w')
         
@@ -161,30 +169,120 @@ class CandlestickChart(pg.PlotWidget):
         # 범례 설정
         self.legend = self.addLegend()
     
-    def update_data(self, data):
-        """데이터 업데이트"""
+    def update_data(self, data, preserve_viewport=True):
+        """데이터 업데이트 - 자동 범위 조정 완전 비활성화
+        
+        Args:
+            data: 새로운 차트 데이터
+            preserve_viewport: 뷰포트 보존 여부 (기본값: True)
+        """
+        print(f"🔄 캔들 데이터 업데이트 시작 (preserve_viewport: {preserve_viewport})")
+        
+        # 🚫 자동 범위 조정 강제 비활성화 (핵심 해결책)
+        view_box = self.getViewBox()
+        view_box.disableAutoRange()  # 이것이 핵심!
+        
+        # 현재 뷰포트 저장 (preserve_viewport가 True인 경우)
+        current_viewport = None
+        if preserve_viewport:
+            try:
+                current_viewport = view_box.viewRange()
+                print(f"  💾 현재 뷰포트 저장: x={current_viewport[0]}, y={current_viewport[1]}")
+            except Exception as e:
+                print(f"  ❌ 뷰포트 저장 실패: {e}")
+                current_viewport = None
+        
         # 데이터 저장
         self.data = data
         
         # 기존 캔들스틱 제거
         if self.candlesticks is not None:
             self.removeItem(self.candlesticks)
+            print(f"  🗑️ 기존 캔들스틱 제거")
         
         # 새 캔들스틱 생성
         self.candlesticks = CandlestickItem(data)
         self.addItem(self.candlesticks)
+        print(f"  📊 새 캔들스틱 생성 완료 ({len(data)}개 캔들)")
         
-        # 뷰 범위 설정
-        self._update_view_range()
+        # 🚫 다시 한번 자동 범위 조정 비활성화 확인
+        view_box.disableAutoRange()
+        
+        # 뷰포트 복원 (자동 범위 조정 없이)
+        if preserve_viewport and current_viewport is not None:
+            try:
+                x_range, y_range = current_viewport
+                # 📍 자동 범위 조정 없이 직접 뷰포트 설정
+                view_box.setRange(
+                    xRange=x_range, 
+                    yRange=y_range, 
+                    padding=0,
+                    update=False  # 자동 업데이트 방지
+                )
+                print(f"  ✅ 뷰포트 복원 완료")
+            except Exception as e:
+                print(f"  ❌ 뷰포트 복원 실패: {e}")
+        elif not preserve_viewport:
+            # 전체 데이터 표시 (한 번만)
+            try:
+                view_box.autoRange(padding=0.1)
+                view_box.disableAutoRange()  # 즉시 다시 비활성화
+                print(f"  🔍 전체 데이터 범위 설정 후 자동 조정 비활성화")
+            except Exception as e:
+                print(f"  ❌ 전체 범위 설정 실패: {e}")
         
         # 날짜 축 설정
         self._setup_date_axis()
         
-        # 기존 지표 오버레이 업데이트
-        for indicator_id, overlay in self.indicator_overlays.items():
-            self.removeItem(overlay)
+        # 🚫 마지막으로 자동 범위 조정 비활성화 보장
+        view_box.disableAutoRange()
         
-        self.indicator_overlays = {}
+        # 기존 지표들은 데이터만 업데이트 (재생성 없음)
+        if hasattr(self, 'indicator_overlays') and self.indicator_overlays:
+            print(f"  🔄 기존 지표 {len(self.indicator_overlays)}개 데이터 업데이트")
+            for indicator_id in list(self.indicator_overlays.keys()):
+                self._update_indicator_data_only(indicator_id)
+        
+        print(f"🔄 캔들 데이터 업데이트 완료")
+    
+    def _update_indicator_data_only(self, indicator_id):
+        """지표 시각 객체는 유지하고 데이터만 업데이트"""
+        try:
+            if indicator_id not in self.indicator_overlays:
+                return
+            
+            overlay = self.indicator_overlays[indicator_id]
+            
+            # 부모 차트에서 새로운 지표 데이터 계산
+            parent = self.parent()
+            while parent and not hasattr(parent, 'calculate_indicator_data'):
+                parent = parent.parent() if hasattr(parent, 'parent') else None
+            
+            if parent and hasattr(parent, 'active_indicators') and indicator_id in parent.active_indicators:
+                params = parent.active_indicators[indicator_id]
+                new_data = parent.calculate_indicator_data(params)
+                
+                if new_data is not None and hasattr(overlay, 'setData'):
+                    # 데이터만 업데이트 (객체 재생성 없음)
+                    if hasattr(new_data, 'values'):
+                        overlay.setData(x=range(len(new_data)), y=new_data.values)
+                    else:
+                        overlay.setData(x=range(len(new_data)), y=new_data)
+                    print(f"    ✅ {indicator_id} 데이터 업데이트 완료")
+                else:
+                    print(f"    ❌ {indicator_id} 새 데이터 없음")
+            else:
+                print(f"    ❌ {indicator_id} 부모 차트 찾기 실패")
+                
+        except Exception as e:
+            print(f"    ❌ {indicator_id} 데이터 업데이트 실패: {e}")
+            # 실패한 경우 해당 지표만 제거하고 다시 추가
+            try:
+                if indicator_id in self.indicator_overlays:
+                    self.remove_indicator_overlay(indicator_id)
+                    print(f"    🔄 {indicator_id} 지표 제거 후 재추가 예정")
+            except Exception as remove_error:
+                print(f"    ❌ {indicator_id} 제거 실패: {remove_error}")
     
     def _update_view_range(self):
         """뷰 범위 업데이트"""
@@ -220,9 +318,22 @@ class CandlestickChart(pg.PlotWidget):
             if idx >= len(self.data):
                 idx = len(self.data) - 1
             
-            # 날짜 포맷팅
-            date = self.data.index[idx]
-            return date.strftime('%Y-%m-%d')
+            try:
+                # 날짜 포맷팅
+                date = self.data.index[idx]
+                
+                # pandas.Timestamp인지 확인
+                if hasattr(date, 'strftime'):
+                    return date.strftime('%Y-%m-%d')
+                # datetime 객체가 아닌 경우 문자열로 변환
+                elif hasattr(date, 'to_pydatetime'):
+                    return date.to_pydatetime().strftime('%Y-%m-%d')
+                else:
+                    # 그 외의 경우 문자열로 변환
+                    return str(date)
+            except Exception as e:
+                # 오류 발생 시 인덱스 번호 반환
+                return f"#{idx}"
         
         # 축 설정
         axis = self.getAxis('bottom')
@@ -239,248 +350,287 @@ class CandlestickChart(pg.PlotWidget):
     def add_indicator_overlay(self, indicator_id, indicator_data):
         """지표 오버레이 추가"""
         if self.data is None or len(self.data) == 0:
+            print(f"❌ 지표 추가 실패: 데이터 없음 ({indicator_id})")
             return
+        
+        # 기존 지표가 있다면 먼저 제거 (중복 방지)
+        if indicator_id in self.indicator_overlays:
+            print(f"🔄 기존 지표 제거 후 재생성: {indicator_id}")
+            self.remove_indicator_overlay(indicator_id)
+        
+        print(f"📈 지표 추가 시작: {indicator_id}")
         
         # 지표 유형 확인
         if indicator_id.startswith("SMA") or indicator_id.startswith("EMA"):
-            # 이동 평균선
-            data = indicator_data[indicator_id]
+            # 이동 평균선 - indicator_data는 이미 계산된 Series
+            data = indicator_data
+            
+            # NaN 값 제거 및 유효성 검사
+            if hasattr(data, 'dropna'):
+                data = data.dropna()
+            
+            if len(data) == 0:
+                print(f"❌ 지표 데이터가 비어있음: {indicator_id}")
+                return
+            
+            # 이상값 확인 및 필터링
+            if hasattr(data, 'quantile'):
+                q1 = data.quantile(0.25)
+                q3 = data.quantile(0.75)
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                
+                # 이상값 제거
+                data = data[(data >= lower_bound) & (data <= upper_bound)]
+                print(f"  📊 이상값 필터링 완료: {len(data)}개 유효 데이터")
             
             # 색상 설정
             if indicator_id.startswith("SMA"):
                 color = (0, 0, 255)  # 파란색
+                line_style = pg.QtCore.Qt.PenStyle.SolidLine
             else:
                 color = (255, 165, 0)  # 주황색
+                line_style = pg.QtCore.Qt.PenStyle.DashLine
             
             # 선 그리기
             overlay = self.plot(
                 x=range(len(data)),
                 y=data.values,
-                pen=pg.mkPen(color=color, width=2),
+                pen=pg.mkPen(color=color, width=2, style=line_style),
                 name=indicator_id
             )
+            
+            # 데이터 저장 (재적용을 위해)
+            overlay.data = data
             
             # 오버레이 저장
             self.indicator_overlays[indicator_id] = overlay
+            print(f"  ✅ {indicator_id} 추가 완료 (데이터: {len(data)}개)")
         
         elif indicator_id.startswith("BBANDS"):
-            # 볼린저 밴드
-            upper = indicator_data[f"{indicator_id}_upper"]
-            middle = indicator_data[f"{indicator_id}_middle"]
-            lower = indicator_data[f"{indicator_id}_lower"]
-            
-            # 상단 밴드
-            upper_overlay = self.plot(
-                x=range(len(upper)),
-                y=upper.values,
-                pen=pg.mkPen(color=(255, 0, 0), width=1),
-                name=f"{indicator_id} 상단"
-            )
-            
-            # 중간 밴드
-            middle_overlay = self.plot(
-                x=range(len(middle)),
-                y=middle.values,
-                pen=pg.mkPen(color=(0, 0, 255), width=1),
-                name=f"{indicator_id} 중간"
-            )
-            
-            # 하단 밴드
-            lower_overlay = self.plot(
-                x=range(len(lower)),
-                y=lower.values,
-                pen=pg.mkPen(color=(255, 0, 0), width=1),
-                name=f"{indicator_id} 하단"
-            )
-            
-            # 밴드 영역 채우기
-            fill = pg.FillBetweenItem(
-                upper_overlay,
-                lower_overlay,
-                brush=pg.mkBrush(color=(255, 0, 0, 50))
-            )
-            self.addItem(fill)
-            
-            # 오버레이 저장
-            self.indicator_overlays[f"{indicator_id}_upper"] = upper_overlay
-            self.indicator_overlays[f"{indicator_id}_middle"] = middle_overlay
-            self.indicator_overlays[f"{indicator_id}_lower"] = lower_overlay
-            self.indicator_overlays[f"{indicator_id}_fill"] = fill
+            # 볼린저 밴드 - 키 이름 동적 처리
+            try:
+                # 키 이름을 동적으로 찾기
+                upper_key = [k for k in indicator_data.keys() if k.endswith('_upper')][0]
+                middle_key = [k for k in indicator_data.keys() if k.endswith('_middle')][0]
+                lower_key = [k for k in indicator_data.keys() if k.endswith('_lower')][0]
+                
+                upper = indicator_data[upper_key]
+                middle = indicator_data[middle_key]
+                lower = indicator_data[lower_key]
+                
+                # 상단 밴드
+                upper_overlay = self.plot(
+                    x=range(len(upper)),
+                    y=upper.values,
+                    pen=pg.mkPen(color=(255, 0, 0), width=1),
+                    name=f"{indicator_id} 상단"
+                )
+                
+                # 중간 밴드
+                middle_overlay = self.plot(
+                    x=range(len(middle)),
+                    y=middle.values,
+                    pen=pg.mkPen(color=(0, 0, 255), width=1),
+                    name=f"{indicator_id} 중간"
+                )
+                
+                # 하단 밴드
+                lower_overlay = self.plot(
+                    x=range(len(lower)),
+                    y=lower.values,
+                    pen=pg.mkPen(color=(255, 0, 0), width=1),
+                    name=f"{indicator_id} 하단"
+                )
+                
+                # 밴드 영역 채우기
+                fill = pg.FillBetweenItem(
+                    upper_overlay,
+                    lower_overlay,
+                    brush=pg.mkBrush(color=(255, 0, 0, 50))
+                )
+                self.addItem(fill)
+                
+                # 오버레이 저장
+                self.indicator_overlays[f"{indicator_id}_upper"] = upper_overlay
+                self.indicator_overlays[f"{indicator_id}_middle"] = middle_overlay
+                self.indicator_overlays[f"{indicator_id}_lower"] = lower_overlay
+                self.indicator_overlays[f"{indicator_id}_fill"] = fill
+                
+                print(f"✅ 볼린저밴드 표시 완료: 상단/중간/하단 밴드")
+                
+            except Exception as e:
+                print(f"❌ 볼린저밴드 표시 오류: {e}")
+                print(f"📊 사용 가능한 키: {list(indicator_data.keys())}")
         
         elif indicator_id.startswith("RSI"):
-            # RSI (별도의 플롯 영역에 표시)
-            data = indicator_data[indicator_id]
+            # RSI (임시로 메인 차트에 표시 - 정규화 적용)
+            data = indicator_data[list(indicator_data.keys())[0]]  # 첫 번째 키의 데이터 사용
             
-            # 새 플롯 영역 생성
-            rsi_plot = self.scene().addPlot(row=1, col=0)
-            rsi_plot.setMaximumHeight(100)
-            rsi_plot.setXLink(self)  # x축 연결
-            
-            # RSI 선 그리기
-            rsi_line = rsi_plot.plot(
-                x=range(len(data)),
-                y=data.values,
-                pen=pg.mkPen(color=(128, 0, 128), width=2),
-                name=indicator_id
-            )
-            
-            # 과매수/과매도 영역 표시
-            rsi_plot.addLine(y=70, pen=pg.mkPen(color=(255, 0, 0), style=Qt.PenStyle.DashLine))
-            rsi_plot.addLine(y=30, pen=pg.mkPen(color=(0, 255, 0), style=Qt.PenStyle.DashLine))
-            
-            # 축 설정
-            rsi_plot.setYRange(0, 100)
-            rsi_plot.getAxis('left').setLabel('RSI')
-            
-            # 오버레이 저장
-            self.indicator_overlays[indicator_id] = rsi_plot
+            # RSI를 가격 범위로 정규화 (0-100 -> 현재 가격 범위)
+            if self.data is not None and len(self.data) > 0:
+                price_min = self.data['low'].min()
+                price_max = self.data['high'].max()
+                price_range = price_max - price_min
+                
+                # RSI (0-100)를 가격 범위로 변환
+                normalized_data = price_min + (data / 100) * price_range
+                
+                # RSI 선 그리기
+                overlay = self.plot(
+                    x=range(len(normalized_data)),
+                    y=normalized_data.values,
+                    pen=pg.mkPen(color=(128, 0, 128), width=2),
+                    name=f"{indicator_id} (정규화됨)"
+                )
+                
+                # 오버레이 저장
+                self.indicator_overlays[indicator_id] = overlay
+                print(f"✅ RSI가 정규화되어 메인 차트에 표시됨 (원본: 0-100 → 가격: {price_min:.0f}-{price_max:.0f})")
+            else:
+                print("❌ RSI 정규화 실패: 차트 데이터 없음")
         
         elif indicator_id.startswith("MACD"):
-            # MACD (별도의 플롯 영역에 표시)
-            macd_line = indicator_data[f"{indicator_id}_line"]
-            signal_line = indicator_data[f"{indicator_id}_signal"]
-            histogram = indicator_data[f"{indicator_id}_histogram"]
+            # MACD (임시로 메인 차트에 표시 - 정규화 적용)
+            macd_line_key = [k for k in indicator_data.keys() if k.endswith('_line')][0]
+            macd_line = indicator_data[macd_line_key]
             
-            # 새 플롯 영역 생성
-            macd_plot = self.scene().addPlot(row=2, col=0)
-            macd_plot.setMaximumHeight(100)
-            macd_plot.setXLink(self)  # x축 연결
-            
-            # MACD 선 그리기
-            macd_line_plot = macd_plot.plot(
-                x=range(len(macd_line)),
-                y=macd_line.values,
-                pen=pg.mkPen(color=(0, 0, 255), width=2),
-                name=f"{indicator_id} MACD"
-            )
-            
-            # 시그널 선 그리기
-            signal_line_plot = macd_plot.plot(
-                x=range(len(signal_line)),
-                y=signal_line.values,
-                pen=pg.mkPen(color=(255, 165, 0), width=2),
-                name=f"{indicator_id} Signal"
-            )
-            
-            # 히스토그램 그리기
-            bar_width = 0.8
-            for i in range(len(histogram)):
-                if i >= len(histogram):
-                    continue
+            # MACD를 가격 범위로 정규화
+            if self.data is not None and len(self.data) > 0:
+                price_min = self.data['low'].min()
+                price_max = self.data['high'].max()
+                price_range = price_max - price_min
                 
-                value = histogram.iloc[i]
-                color = (0, 255, 0) if value >= 0 else (255, 0, 0)
+                # MACD 값의 범위 계산
+                macd_min = macd_line.min()
+                macd_max = macd_line.max()
+                macd_range = macd_max - macd_min
                 
-                bar = pg.BarGraphItem(
-                    x=[i],
-                    height=[value],
-                    width=bar_width,
-                    brush=pg.mkBrush(color=color)
-                )
-                macd_plot.addItem(bar)
-            
-            # 축 설정
-            macd_plot.getAxis('left').setLabel('MACD')
-            
-            # 오버레이 저장
-            self.indicator_overlays[f"{indicator_id}_plot"] = macd_plot
-            self.indicator_overlays[f"{indicator_id}_line"] = macd_line_plot
-            self.indicator_overlays[f"{indicator_id}_signal"] = signal_line_plot
+                if macd_range > 0:
+                    # MACD를 가격 범위로 정규화
+                    normalized_macd = price_min + ((macd_line - macd_min) / macd_range) * price_range * 0.2  # 20% 범위 사용
+                    
+                    # MACD 선 그리기
+                    overlay = self.plot(
+                        x=range(len(normalized_macd)),
+                        y=normalized_macd.values,
+                        pen=pg.mkPen(color=(0, 0, 255), width=2),
+                        name=f"{indicator_id} (정규화됨)"
+                    )
+                    
+                    # 오버레이 저장
+                    self.indicator_overlays[indicator_id] = overlay
+                    print(f"✅ MACD가 정규화되어 메인 차트에 표시됨 (원본: {macd_min:.4f}-{macd_max:.4f} → 가격 20% 범위)")
+                else:
+                    print("❌ MACD 정규화 실패: MACD 범위가 0")
+            else:
+                print("❌ MACD 정규화 실패: 차트 데이터 없음")
         
         elif indicator_id.startswith("Stochastic"):
-            # 스토캐스틱 (별도의 플롯 영역에 표시)
-            k_line = indicator_data[f"{indicator_id}_k"]
-            d_line = indicator_data[f"{indicator_id}_d"]
-            
-            # 새 플롯 영역 생성
-            stoch_plot = self.scene().addPlot(row=3, col=0)
-            stoch_plot.setMaximumHeight(100)
-            stoch_plot.setXLink(self)  # x축 연결
+            # 스토캐스틱 (임시로 메인 차트에 표시 - 나중에 서브플롯으로 이동)
+            k_line_key = [k for k in indicator_data.keys() if k.endswith('_k')][0]
+            k_line = indicator_data[k_line_key]
             
             # %K 선 그리기
-            k_line_plot = stoch_plot.plot(
+            overlay = self.plot(
                 x=range(len(k_line)),
                 y=k_line.values,
                 pen=pg.mkPen(color=(0, 0, 255), width=2),
                 name=f"{indicator_id} %K"
             )
             
-            # %D 선 그리기
-            d_line_plot = stoch_plot.plot(
-                x=range(len(d_line)),
-                y=d_line.values,
-                pen=pg.mkPen(color=(255, 165, 0), width=2),
-                name=f"{indicator_id} %D"
-            )
-            
-            # 과매수/과매도 영역 표시
-            stoch_plot.addLine(y=80, pen=pg.mkPen(color=(255, 0, 0), style=Qt.PenStyle.DashLine))
-            stoch_plot.addLine(y=20, pen=pg.mkPen(color=(0, 255, 0), style=Qt.PenStyle.DashLine))
-            
-            # 축 설정
-            stoch_plot.setYRange(0, 100)
-            stoch_plot.getAxis('left').setLabel('Stochastic')
-            
             # 오버레이 저장
-            self.indicator_overlays[f"{indicator_id}_plot"] = stoch_plot
-            self.indicator_overlays[f"{indicator_id}_k"] = k_line_plot
-            self.indicator_overlays[f"{indicator_id}_d"] = d_line_plot
+            self.indicator_overlays[indicator_id] = overlay
+            print(f"⚠️ 스토캐스틱이 메인 차트에 임시 표시됨")
     
     def remove_indicator_overlay(self, indicator_id):
-        """지표 오버레이 제거"""
-        # 지표 유형 확인
+        """지표 오버레이 제거 - 강화된 버전"""
+        print(f"🗑️ 지표 제거 시작: {indicator_id}")
+        
+        removed_count = 0
+        
+        # 1. 직접 매칭되는 지표 제거
+        if indicator_id in self.indicator_overlays:
+            overlay = self.indicator_overlays[indicator_id]
+            try:
+                if hasattr(overlay, 'scene') and overlay.scene():
+                    overlay.scene().removeItem(overlay)
+                else:
+                    self.removeItem(overlay)
+                print(f"  ✅ {indicator_id} 직접 제거 완료")
+                removed_count += 1
+            except Exception as e:
+                print(f"  ❌ {indicator_id} 직접 제거 실패: {e}")
+            
+            # 딕셔너리에서 제거
+            del self.indicator_overlays[indicator_id]
+        
+        # 2. 복합 지표 (볼린저 밴드 등) 제거
         if indicator_id.startswith("BBANDS"):
-            # 볼린저 밴드
-            self.removeItem(self.indicator_overlays.get(f"{indicator_id}_upper"))
-            self.removeItem(self.indicator_overlays.get(f"{indicator_id}_middle"))
-            self.removeItem(self.indicator_overlays.get(f"{indicator_id}_lower"))
-            self.removeItem(self.indicator_overlays.get(f"{indicator_id}_fill"))
+            # 볼린저 밴드의 모든 구성 요소 찾기
+            keys_to_remove = []
+            for key in list(self.indicator_overlays.keys()):
+                if key.startswith(indicator_id):
+                    keys_to_remove.append(key)
             
-            # 오버레이 삭제
-            self.indicator_overlays.pop(f"{indicator_id}_upper", None)
-            self.indicator_overlays.pop(f"{indicator_id}_middle", None)
-            self.indicator_overlays.pop(f"{indicator_id}_lower", None)
-            self.indicator_overlays.pop(f"{indicator_id}_fill", None)
+            for key in keys_to_remove:
+                overlay = self.indicator_overlays[key]
+                try:
+                    if hasattr(overlay, 'scene') and overlay.scene():
+                        overlay.scene().removeItem(overlay)
+                    else:
+                        self.removeItem(overlay)
+                    print(f"  ✅ {key} 구성요소 제거 완료")
+                    removed_count += 1
+                except Exception as e:
+                    print(f"  ❌ {key} 구성요소 제거 실패: {e}")
+                
+                # 딕셔너리에서 제거
+                del self.indicator_overlays[key]
         
-        elif indicator_id.startswith("RSI"):
-            # RSI
-            rsi_plot = self.indicator_overlays.get(indicator_id)
-            if rsi_plot:
-                self.scene().removeItem(rsi_plot)
-            
-            # 오버레이 삭제
-            self.indicator_overlays.pop(indicator_id, None)
+        # 3. 모든 plot item 중에서 해당 이름을 가진 항목 강제 제거
+        try:
+            plot_items = self.plotItem.listDataItems()
+            for item in plot_items:
+                if hasattr(item, 'name') and item.name() == indicator_id:
+                    self.removeItem(item)
+                    print(f"  🔍 plot item에서 강제 제거: {indicator_id}")
+                    removed_count += 1
+                elif hasattr(item, 'name') and item.name() and indicator_id in item.name():
+                    self.removeItem(item)
+                    print(f"  🔍 plot item에서 관련 항목 제거: {item.name()}")
+                    removed_count += 1
+        except Exception as e:
+            print(f"  ❌ plot item 강제 제거 실패: {e}")
         
-        elif indicator_id.startswith("MACD"):
-            # MACD
-            macd_plot = self.indicator_overlays.get(f"{indicator_id}_plot")
-            if macd_plot:
-                self.scene().removeItem(macd_plot)
-            
-            # 오버레이 삭제
-            self.indicator_overlays.pop(f"{indicator_id}_plot", None)
-            self.indicator_overlays.pop(f"{indicator_id}_line", None)
-            self.indicator_overlays.pop(f"{indicator_id}_signal", None)
+        # 4. 범례에서 제거
+        try:
+            if hasattr(self, 'legend') and self.legend:
+                # 범례 아이템 중에서 해당 지표 제거
+                legend_items = self.legend.items[:]  # 복사본 생성
+                for item, label in legend_items:
+                    if hasattr(label, 'text') and (label.text == indicator_id or indicator_id in label.text):
+                        self.legend.removeItem(item)
+                        print(f"  🏷️ 범례에서 제거: {label.text}")
+                        removed_count += 1
+        except Exception as e:
+            print(f"  ❌ 범례 제거 실패: {e}")
         
-        elif indicator_id.startswith("Stochastic"):
-            # 스토캐스틱
-            stoch_plot = self.indicator_overlays.get(f"{indicator_id}_plot")
-            if stoch_plot:
-                self.scene().removeItem(stoch_plot)
-            
-            # 오버레이 삭제
-            self.indicator_overlays.pop(f"{indicator_id}_plot", None)
-            self.indicator_overlays.pop(f"{indicator_id}_k", None)
-            self.indicator_overlays.pop(f"{indicator_id}_d", None)
+        # 5. 강제 화면 갱신
+        try:
+            self.update()
+            self.repaint()
+        except Exception as e:
+            print(f"  ❌ 화면 갱신 실패: {e}")
         
-        else:
-            # 일반 지표
-            overlay = self.indicator_overlays.get(indicator_id)
-            if overlay:
-                self.removeItem(overlay)
-            
-            # 오버레이 삭제
-            self.indicator_overlays.pop(indicator_id, None)
+        print(f"🗑️ 지표 제거 완료: {indicator_id}, 제거된 항목 수: {removed_count}")
+        
+        # 남은 지표 수 확인
+        remaining_count = len(self.indicator_overlays)
+        print(f"  📊 남은 지표 수: {remaining_count}")
+        
+        return removed_count > 0
     
     def add_trade_marker(self, marker):
         """거래 마커 추가"""
@@ -590,3 +740,15 @@ class CandlestickChart(pg.PlotWidget):
     def set_crosshair_visible(self, visible):
         """십자선 표시 설정"""
         self.crosshair.setVisible(visible)
+    
+    def resizeEvent(self, event):
+        """크기 변경 이벤트 처리"""
+        super().resizeEvent(event)
+        
+        # 뷰 범위 다시 계산
+        if self.data is not None:
+            self._update_view_range()
+        
+        # 차트 다시 그리기
+        self.update()
+        self.repaint()

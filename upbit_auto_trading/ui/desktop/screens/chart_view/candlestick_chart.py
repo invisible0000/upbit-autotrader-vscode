@@ -158,11 +158,30 @@ class CandlestickChart(pg.PlotWidget):
         self.setMouseEnabled(x=True, y=True)  # 마우스로 확대/축소 및 이동 가능
         self.enableAutoRange(False)  # 자동 범위 조정 비활성화
         
+        # ViewBox에서 자동 범위 조정 완전 비활성화
+        view_box = self.getViewBox()
+        view_box.enableAutoRange(False)
+        view_box.setAutoPan(False)  # 자동 패닝 비활성화
+        view_box.setAutoVisible(False)  # 자동 가시성 조정 비활성화
+        
         # 범례 설정
         self.legend = self.addLegend()
     
-    def update_data(self, data):
-        """데이터 업데이트"""
+    def update_data(self, data, preserve_viewport=True):
+        """데이터 업데이트
+        
+        Args:
+            data: 새로운 차트 데이터
+            preserve_viewport: 뷰포트 보존 여부 (기본값: True)
+        """
+        # 현재 뷰포트 저장 (preserve_viewport가 True인 경우)
+        current_viewport = None
+        if preserve_viewport and hasattr(self, 'getViewBox'):
+            try:
+                current_viewport = self.getViewBox().viewRange()
+            except:
+                current_viewport = None
+        
         # 데이터 저장
         self.data = data
         
@@ -174,8 +193,19 @@ class CandlestickChart(pg.PlotWidget):
         self.candlesticks = CandlestickItem(data)
         self.addItem(self.candlesticks)
         
-        # 뷰 범위 설정
-        self._update_view_range()
+        # 뷰 범위 설정 (뷰포트 보존 여부에 따라)
+        if preserve_viewport and current_viewport is not None:
+            # 뷰포트 보존: 이전 뷰포트 복원
+            try:
+                x_range, y_range = current_viewport
+                self.setXRange(x_range[0], x_range[1], padding=0)
+                self.setYRange(y_range[0], y_range[1], padding=0)
+            except:
+                # 복원 실패 시 기본 범위 설정
+                self._update_view_range()
+        else:
+            # 뷰포트 보존하지 않음: 전체 데이터 표시
+            self._update_view_range()
         
         # 날짜 축 설정
         self._setup_date_axis()

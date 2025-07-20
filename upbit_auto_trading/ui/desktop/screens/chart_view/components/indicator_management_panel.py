@@ -6,6 +6,7 @@
 - 지표 가시성 토글
 """
 
+from typing import Any, Dict
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QCheckBox, QScrollArea, QFrame, QLineEdit,
@@ -47,6 +48,141 @@ class IndicatorConfigDialog(QDialog):
             self.setup_macd_params(form_layout)
         elif self.indicator_type == "스토캐스틱":
             self.setup_stochastic_params(form_layout)
+        
+        layout.addWidget(form_group)
+        
+        # 색상 설정
+        color_group = QGroupBox("표시 설정")
+        color_layout = QFormLayout(color_group)
+        
+        self.color_button = QPushButton()
+        self.color_button.setFixedHeight(30)
+        self.current_color = QColor("#2196F3")
+        self.update_color_button()
+        self.color_button.clicked.connect(self.choose_color)
+        color_layout.addRow("색상:", self.color_button)
+        
+        layout.addWidget(color_group)
+        
+        # 버튼
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def setup_sma_params(self, layout):
+        """SMA 파라미터 설정"""
+        self.sma_period = QSpinBox()
+        self.sma_period.setRange(1, 200)
+        self.sma_period.setValue(20)
+        layout.addRow("기간:", self.sma_period)
+    
+    def setup_ema_params(self, layout):
+        """EMA 파라미터 설정"""
+        self.ema_period = QSpinBox()
+        self.ema_period.setRange(1, 200)
+        self.ema_period.setValue(20)
+        layout.addRow("기간:", self.ema_period)
+    
+    def setup_bollinger_params(self, layout):
+        """볼린저밴드 파라미터 설정"""
+        self.bb_period = QSpinBox()
+        self.bb_period.setRange(1, 200)
+        self.bb_period.setValue(20)
+        layout.addRow("기간:", self.bb_period)
+        
+        self.bb_std = QDoubleSpinBox()
+        self.bb_std.setRange(0.1, 5.0)
+        self.bb_std.setSingleStep(0.1)
+        self.bb_std.setValue(2.0)
+        layout.addRow("표준편차:", self.bb_std)
+    
+    def setup_rsi_params(self, layout):
+        """RSI 파라미터 설정"""
+        self.rsi_period = QSpinBox()
+        self.rsi_period.setRange(1, 100)
+        self.rsi_period.setValue(14)
+        layout.addRow("기간:", self.rsi_period)
+    
+    def setup_macd_params(self, layout):
+        """MACD 파라미터 설정"""
+        self.macd_fast = QSpinBox()
+        self.macd_fast.setRange(1, 100)
+        self.macd_fast.setValue(12)
+        layout.addRow("빠른 기간:", self.macd_fast)
+        
+        self.macd_slow = QSpinBox()
+        self.macd_slow.setRange(1, 100)
+        self.macd_slow.setValue(26)
+        layout.addRow("느린 기간:", self.macd_slow)
+        
+        self.macd_signal = QSpinBox()
+        self.macd_signal.setRange(1, 50)
+        self.macd_signal.setValue(9)
+        layout.addRow("시그널 기간:", self.macd_signal)
+    
+    def setup_stochastic_params(self, layout):
+        """스토캐스틱 파라미터 설정"""
+        self.stoch_k = QSpinBox()
+        self.stoch_k.setRange(1, 100)
+        self.stoch_k.setValue(14)
+        layout.addRow("K 기간:", self.stoch_k)
+        
+        self.stoch_d = QSpinBox()
+        self.stoch_d.setRange(1, 100)
+        self.stoch_d.setValue(3)
+        layout.addRow("D 기간:", self.stoch_d)
+    
+    def choose_color(self):
+        """색상 선택"""
+        color = QColorDialog.getColor(self.current_color, self)
+        if color.isValid():
+            self.current_color = color
+            self.update_color_button()
+    
+    def update_color_button(self):
+        """색상 버튼 업데이트"""
+        self.color_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.current_color.name()};
+                border: 2px solid #666;
+                border-radius: 4px;
+            }}
+        """)
+        self.color_button.setText(self.current_color.name())
+    
+    def get_params(self) -> Dict[str, Any]:
+        """파라미터 반환"""
+        params: Dict[str, Any] = {
+            "color": self.current_color.name()
+        }
+        
+        if self.indicator_type == "이동평균 (SMA)":
+            params["type"] = "SMA"
+            params["period"] = self.sma_period.value()
+        elif self.indicator_type == "지수이동평균 (EMA)":
+            params["type"] = "EMA" 
+            params["period"] = self.ema_period.value()
+        elif self.indicator_type == "볼린저밴드 (BBANDS)":
+            params["type"] = "BBANDS"
+            params["period"] = self.bb_period.value()
+            params["std"] = self.bb_std.value()
+        elif self.indicator_type == "RSI":
+            params["type"] = "RSI"
+            params["period"] = self.rsi_period.value()
+        elif self.indicator_type == "MACD":
+            params["type"] = "MACD"
+            params["fast"] = self.macd_fast.value()
+            params["slow"] = self.macd_slow.value()
+            params["signal"] = self.macd_signal.value()
+        elif self.indicator_type == "스토캐스틱":
+            params["type"] = "Stochastic"
+            params["k"] = self.stoch_k.value()
+            params["d"] = self.stoch_d.value()
+        
+        return params
         
         layout.addWidget(form_group)
         
@@ -156,56 +292,6 @@ class IndicatorConfigDialog(QDialog):
         self.stoch_d.setRange(1, 50)
         self.stoch_d.setValue(3)
         layout.addRow("%D 기간:", self.stoch_d)
-        
-        self.stoch_smooth = QSpinBox()
-        self.stoch_smooth.setRange(1, 10)
-        self.stoch_smooth.setValue(3)
-        layout.addRow("평활화:", self.stoch_smooth)
-    
-    def select_color(self):
-        """색상 선택"""
-        color = QColorDialog.getColor(self.selected_color, self)
-        if color.isValid():
-            self.selected_color = color
-            self.color_btn.setStyleSheet(f"background-color: {color.name()}; color: white;")
-    
-    def get_params(self):
-        """파라미터 반환"""
-        params = {"color": self.selected_color.name()}
-        
-        if self.indicator_type == "이동평균 (SMA)":
-            params.update({"type": "SMA", "period": self.sma_period.value()})
-        elif self.indicator_type == "지수이동평균 (EMA)":
-            params.update({"type": "EMA", "period": self.ema_period.value()})
-        elif self.indicator_type == "볼린저밴드 (BBANDS)":
-            params.update({
-                "type": "BBANDS",
-                "period": self.bb_period.value(),
-                "std": self.bb_std.value()
-            })
-        elif self.indicator_type == "RSI":
-            params.update({
-                "type": "RSI",
-                "period": self.rsi_period.value(),
-                "overbought": self.rsi_overbought.value(),
-                "oversold": self.rsi_oversold.value()
-            })
-        elif self.indicator_type == "MACD":
-            params.update({
-                "type": "MACD",
-                "fast": self.macd_fast.value(),
-                "slow": self.macd_slow.value(),
-                "signal": self.macd_signal.value()
-            })
-        elif self.indicator_type == "스토캐스틱":
-            params.update({
-                "type": "Stochastic",
-                "k": self.stoch_k.value(),
-                "d": self.stoch_d.value(),
-                "smooth": self.stoch_smooth.value()
-            })
-        
-        return params
 
 
 class IndicatorItem(QWidget):

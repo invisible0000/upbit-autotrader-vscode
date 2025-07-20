@@ -43,7 +43,7 @@ class DatabaseManager:
             self.config = {
                 'database': {
                     'type': 'sqlite',
-                    'path': 'data/upbit_auto_trading.db'
+                    'path': 'data/upbit_auto_trading.sqlite3'
                 }
             }
             logger.warning("설정 파일을 찾을 수 없어 기본 설정을 사용합니다.")

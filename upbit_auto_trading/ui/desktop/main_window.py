@@ -220,8 +220,16 @@ class MainWindow(QMainWindow):
         self.stack_widget.addWidget(dashboard_screen)
 
         # 차트 뷰 화면
-        chart_view_screen = ChartViewScreen()
-        self.stack_widget.addWidget(chart_view_screen)
+        try:
+            chart_view_screen = ChartViewScreen()
+            self.stack_widget.addWidget(chart_view_screen)
+        except Exception as e:
+            print(f"차트뷰 화면 생성 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
+            # 임시 더미 화면 추가
+            chart_view_screen = create_placeholder_screen("차트 뷰 (오류 발생)")
+            self.stack_widget.addWidget(chart_view_screen)
 
         # 종목 스크리닝 화면
         asset_screener_screen = AssetScreenerScreen()

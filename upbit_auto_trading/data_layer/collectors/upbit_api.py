@@ -86,7 +86,8 @@ class UpbitAPI:
         self.secret_key = secret_key or os.environ.get("UPBIT_SECRET_KEY")
         
         if not self.access_key or not self.secret_key:
-            logger.warning("API 키가 설정되지 않았습니다. 일부 기능이 제한될 수 있습니다.")
+            # API 키가 없어도 공개 API는 사용 가능하므로 debug 레벨로 변경
+            logger.debug("API 키가 설정되지 않았습니다. 공개 API만 사용 가능합니다.")
             
         # 요청 제한 관리를 위한 변수
         self.request_timestamps = []
@@ -334,6 +335,92 @@ class UpbitAPI:
             
         except Exception as e:
             logger.exception(f"캔들 데이터 조회 중 오류가 발생했습니다: {e}")
+            return pd.DataFrame()
+    
+    def get_candles_before(self, symbol: str, timeframe: str, before_timestamp: datetime, count: int = 200) -> pd.DataFrame:
+        """특정 시점 이전의 캔들 데이터 조회 (무한 스크롤용)
+        
+        Args:
+            symbol: 코인 심볼 (예: "KRW-BTC")
+            timeframe: 시간대 (예: "1m", "5m", "15m", "1h", "4h", "1d")
+            before_timestamp: 이 시점 이전의 데이터를 조회
+            count: 조회할 캔들 개수 (최대 200)
+            
+        Returns:
+            pd.DataFrame: OHLCV 데이터
+        """
+        try:
+            # 시간대에 따라 다른 엔드포인트 사용
+            if timeframe.endswith('m'):
+                minutes = int(timeframe[:-1])
+                endpoint = f'/candles/minutes/{minutes}'
+            elif timeframe.endswith('h'):
+                hours = int(timeframe[:-1])
+                if hours == 1:
+                    endpoint = '/candles/minutes/60'
+                elif hours == 4:
+                    endpoint = '/candles/minutes/240'
+                else:
+                    raise ValueError(f"지원하지 않는 시간대입니다: {timeframe}")
+            elif timeframe == '1d':
+                endpoint = '/candles/days'
+            elif timeframe == '1w':
+                endpoint = '/candles/weeks'
+            elif timeframe == '1M':
+                endpoint = '/candles/months'
+            else:
+                raise ValueError(f"지원하지 않는 시간대입니다: {timeframe}")
+            
+            # 'to' 파라미터로 특정 시점 이전 데이터 요청
+            # 업비트 API는 ISO 8601 형식을 사용
+            to_param = before_timestamp.strftime('%Y-%m-%dT%H:%M:%S')
+            
+            params = {
+                'market': symbol,
+                'count': min(count, 200),  # 최대 200개
+                'to': to_param
+            }
+            
+            response = self._request('GET', endpoint, params=params)
+            
+            # 데이터프레임으로 변환
+            df = pd.DataFrame(response)
+            
+            if df.empty:
+                logger.warning(f"특정 시점({before_timestamp}) 이전의 데이터가 없습니다.")
+                return pd.DataFrame()
+            
+            # 컬럼 이름 변경
+            if 'candle_date_time_utc' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['candle_date_time_utc'])
+            elif 'candle_date_time_kst' in df.columns:
+                df['timestamp'] = pd.to_datetime(df['candle_date_time_kst'])
+            
+            # 필요한 컬럼만 선택
+            columns = ['timestamp', 'opening_price', 'high_price', 'low_price', 'trade_price', 'candle_acc_trade_volume']
+            if all(col in df.columns for col in columns):
+                df = df[columns]
+                df.columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                
+                # 시간 순서대로 정렬
+                df = df.sort_values('timestamp')
+                
+                # 인덱스 재설정
+                df = df.reset_index(drop=True)
+                
+                # 시간대 정보 추가
+                df['timeframe'] = timeframe
+                df['symbol'] = symbol
+                
+                logger.info(f"과거 데이터 조회 성공: {len(df)}개 캔들 ({before_timestamp} 이전)")
+                
+                return df
+            else:
+                logger.error(f"예상치 못한 응답 형식: {df.columns}")
+                return pd.DataFrame()
+            
+        except Exception as e:
+            logger.exception(f"과거 캔들 데이터 조회 중 오류가 발생했습니다: {e}")
             return pd.DataFrame()
     
     def get_orderbook(self, symbol: str) -> Dict:
@@ -899,4 +986,71 @@ class UpbitAPI:
         
         except Exception as e:
             logger.exception(f"과거 캔들 데이터 수집 중 오류가 발생했습니다: {e}")
+            return pd.DataFrame()
+    
+    def get_candles_range(self, symbol: str, timeframe: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """날짜 범위로 캔들 데이터 조회
+        
+        Args:
+            symbol: 코인 심볼 (예: "KRW-BTC")
+            timeframe: 시간대 (예: "1m", "5m", "15m", "1h", "4h", "1d")
+            start_date: 시작 날짜 (YYYY-MM-DD 형식)
+            end_date: 종료 날짜 (YYYY-MM-DD 형식)
+            
+        Returns:
+            pd.DataFrame: OHLCV 데이터
+        """
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)  # 종료일 포함
+            
+            all_data = []
+            current_date = end_dt
+            
+            logger.info(f"데이터 수집 시작: {symbol} {timeframe} ({start_date} ~ {end_date})")
+            
+            while current_date > start_dt:
+                try:
+                    # 200개씩 데이터 요청
+                    data = self.get_candles_before(symbol, timeframe, current_date, count=200)
+                    
+                    if data.empty:
+                        break
+                    
+                    # 시작 날짜 이후 데이터만 필터링
+                    filtered_data = data[data['timestamp'] >= start_dt]
+                    
+                    if not filtered_data.empty:
+                        all_data.append(filtered_data)
+                    
+                    # 다음 요청을 위해 가장 오래된 데이터의 시간으로 설정
+                    oldest_time = data['timestamp'].min()
+                    current_date = oldest_time - timedelta(seconds=1)
+                    
+                    # API 요청 제한 고려
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.error(f"데이터 수집 중 오류: {e}")
+                    break
+            
+            if all_data:
+                # 모든 데이터 병합
+                result = pd.concat(all_data, ignore_index=True)
+                
+                # 중복 제거 및 정렬
+                result = result.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
+                
+                # 심볼과 타임프레임 정보 추가
+                result['symbol'] = symbol
+                result['timeframe'] = timeframe
+                
+                logger.info(f"데이터 수집 완료: {len(result)}개 캔들")
+                return result
+            else:
+                logger.warning("수집된 데이터가 없습니다.")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            logger.error(f"날짜 범위 데이터 수집 실패: {e}")
             return pd.DataFrame()

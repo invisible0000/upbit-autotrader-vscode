@@ -34,17 +34,32 @@ sys.excepthook = exception_handler
 # --- 오류 로깅 기능 추가 끝 ---
 
 if __name__ == "__main__":
+    print("=== 데스크톱 UI 시작 ===")
+    
     # QApplication 생성
+    print("QApplication 생성 중...")
     app = QApplication(sys.argv)
+    print("QApplication 생성 완료")
     
     # 메인 윈도우 생성 및 실행
     try:
+        print("MainWindow import 시도...")
         from upbit_auto_trading.ui.desktop.main_window import MainWindow
-        main_window = MainWindow()
-        main_window.show()
+        print("MainWindow import 성공")
         
+        print("MainWindow 인스턴스 생성 중...")
+        main_window = MainWindow()
+        print("MainWindow 인스턴스 생성 완료")
+        
+        print("윈도우 표시 중...")
+        main_window.show()
+        print("윈도우 표시 완료")
+        
+        print("이벤트 루프 시작...")
         # 애플리케이션 이벤트 루프 시작
         sys.exit(app.exec())
     except Exception as e:
         print(f"애플리케이션 시작 중 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
