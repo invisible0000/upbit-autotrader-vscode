@@ -400,10 +400,28 @@ def get_strategy_manager(db_manager: DatabaseManager = None,
             from upbit_auto_trading.business_logic.strategy.basic_strategies import (
                 MovingAverageCrossStrategy, BollingerBandsStrategy, RSIStrategy
             )
+            from upbit_auto_trading.business_logic.strategy.role_based_strategy import (
+                MACDEntry, StochasticEntry, FixedTargetManagement, 
+                PartialExitManagement, TimeBasedExitManagement, TrailingStopManagement
+            )
             
+            # 진입 전략들
             strategy_factory.register_strategy("moving_average_cross", MovingAverageCrossStrategy)
             strategy_factory.register_strategy("bollinger_bands", BollingerBandsStrategy)
+            strategy_factory.register_strategy("bollinger_band_mean_reversion", BollingerBandsStrategy)  # 별칭
             strategy_factory.register_strategy("rsi", RSIStrategy)
+            strategy_factory.register_strategy("rsi_reversal", RSIStrategy)  # 별칭
+            strategy_factory.register_strategy("macd_cross", MACDEntry)
+            strategy_factory.register_strategy("stochastic", StochasticEntry)
+            strategy_factory.register_strategy("volatility_breakout", MovingAverageCrossStrategy)  # 임시로 MA 사용
+            
+            # 관리 전략들
+            strategy_factory.register_strategy("target_profit", FixedTargetManagement)
+            strategy_factory.register_strategy("partial_profit", PartialExitManagement)
+            strategy_factory.register_strategy("time_based_exit", TimeBasedExitManagement)
+            strategy_factory.register_strategy("volatility_based_management", TrailingStopManagement)
+            strategy_factory.register_strategy("fixed_stop_loss", TrailingStopManagement)  # 임시로 trailing stop 사용
+            strategy_factory.register_strategy("trailing_stop", TrailingStopManagement)
         
         _instance = StrategyManager(db_manager, strategy_factory)
     

@@ -258,7 +258,10 @@ class BacktestRunner:
         # 순 매도 금액 계산 (수수료 제외)
         net_sell_amount = sell_amount - fee
         
-        # 거래 정보 생성
+        # 거래 정보 생성 (더 상세한 정보 포함)
+        entry_amount = self.position['quantity'] * self.position['entry_price'] + self.position['entry_fee']
+        exit_amount = self.position['quantity'] * execution_price
+        
         trade = {
             'id': str(uuid.uuid4()),
             'symbol': self.symbol,
@@ -269,7 +272,10 @@ class BacktestRunner:
             'quantity': self.position['quantity'],
             'side': self.position['side'],
             'entry_fee': self.position['entry_fee'],
-            'exit_fee': fee
+            'exit_fee': fee,
+            'entry_amount': entry_amount,  # 매수 금액 (수수료 포함)
+            'exit_amount': exit_amount,    # 매도 금액 (수수료 미포함)
+            'net_exit_amount': net_sell_amount  # 순 매도 금액 (수수료 제외)
         }
         
         # 거래 지표 계산
@@ -440,9 +446,10 @@ class BacktestRunner:
         """
         self.logger.info("자본 곡선 생성 중")
         
-        # 결과 DataFrame 초기화
+        # 결과 DataFrame 초기화 (dtype 명시적 설정)
         equity_curve = data[['close']].copy()
-        equity_curve['equity'] = self.initial_capital
+        equity_curve['equity'] = float(self.initial_capital)
+        equity_curve['equity'] = equity_curve['equity'].astype('float64')  # dtype 명시적 설정
         
         # 거래가 없으면 초기 자본으로 채운 곡선 반환
         if not self.trades:
@@ -483,8 +490,8 @@ class BacktestRunner:
                 market_value = position['quantity'] * row['close']
                 current_equity = market_value  # 단순화를 위해 수수료는 고려하지 않음
             
-            # 자본 곡선 업데이트
-            equity_curve.at[timestamp, 'equity'] = current_equity
+            # 자본 곡선 업데이트 (dtype 명시적 변환)
+            equity_curve.at[timestamp, 'equity'] = float(current_equity)
         
         self.logger.info("자본 곡선 생성 완료")
         return equity_curve

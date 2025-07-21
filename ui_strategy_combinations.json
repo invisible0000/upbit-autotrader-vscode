@@ -1,0 +1,273 @@
+{
+  "version": "1.0",
+  "combinations": [
+    {
+      "combination_id": "sample_2",
+      "name": "이평교차 + 불타기 + 고정익절",
+      "description": "이동평균 교차 진입 후 불타기와 고정 익절/손절로 관리",
+      "entry_strategy": {
+        "strategy_id": "ma_cross_entry",
+        "strategy_name": "이동평균 교차",
+        "parameters": {
+          "short_period": 5,
+          "long_period": 20
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "pyramiding",
+          "strategy_name": "불타기",
+          "parameters": {
+            "trigger_rise_percent": 3.0,
+            "max_buys": 2
+          },
+          "priority": 1,
+          "enabled": true
+        },
+        {
+          "strategy_id": "fixed_target",
+          "strategy_name": "고정 익절/손절",
+          "parameters": {
+            "profit_target": 10.0,
+            "stop_loss": 5.0
+          },
+          "priority": 3,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T10:50:19.365092",
+      "updated_at": "2025-07-21T10:50:19.365092",
+      "is_active": true
+    },
+    {
+      "combination_id": "sample_3",
+      "name": "변동성 돌파 + 시간청산",
+      "description": "변동성 돌파 진입 후 시간 기반 강제 청산",
+      "entry_strategy": {
+        "strategy_id": "volatility_entry",
+        "strategy_name": "변동성 돌파",
+        "parameters": {
+          "lookback_period": 1,
+          "k_value": 0.5
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "time_based",
+          "strategy_name": "시간 청산",
+          "parameters": {
+            "max_holding_hours": 24
+          },
+          "priority": 2,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T10:50:19.365098",
+      "updated_at": "2025-07-21T10:50:19.365098",
+      "is_active": true
+    },
+    {
+      "combination_id": "788bed60-ff4f-499a-a489-d7b1f45c9b0f",
+      "name": "이동평균 교차 조합",
+      "description": "진입: 이동평균 교차, 관리: 1개",
+      "entry_strategy": {
+        "strategy_id": "entry_이동평균 교차",
+        "strategy_name": "이동평균 교차",
+        "parameters": {
+          "strategy_type": "ENTRY",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "mgmt_고정 손절",
+          "strategy_name": "고정 손절",
+          "parameters": {
+            "strategy_type": "MANAGEMENT",
+            "enabled": true
+          },
+          "priority": 1,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T19:14:57.993921",
+      "updated_at": "2025-07-21T19:14:57.993924",
+      "is_active": true
+    },
+    {
+      "combination_id": "93890a2f-eab5-43c2-a2af-bbcc83cdaf67",
+      "name": "이동평균 교차 조합",
+      "description": "진입: 이동평균 교차, 관리: 1개",
+      "entry_strategy": {
+        "strategy_id": "entry_이동평균 교차",
+        "strategy_name": "이동평균 교차",
+        "parameters": {
+          "strategy_type": "ENTRY",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "mgmt_고정 손절",
+          "strategy_name": "고정 손절",
+          "parameters": {
+            "strategy_type": "MANAGEMENT",
+            "enabled": true
+          },
+          "priority": 1,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T20:47:49.939839",
+      "updated_at": "2025-07-21T20:47:49.939843",
+      "is_active": true
+    },
+    {
+      "combination_id": "3d738745-c46f-4129-8428-7ba9d31591b5",
+      "name": "이동평균 교차 조합",
+      "description": "진입: 이동평균 교차, 관리: 1개",
+      "entry_strategy": {
+        "strategy_id": "entry_이동평균 교차",
+        "strategy_name": "이동평균 교차",
+        "parameters": {
+          "strategy_type": "ENTRY",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "mgmt_고정 손절",
+          "strategy_name": "고정 손절",
+          "parameters": {
+            "strategy_type": "MANAGEMENT",
+            "enabled": true
+          },
+          "priority": 1,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T23:21:21.447111",
+      "updated_at": "2025-07-21T23:21:21.447114",
+      "is_active": true
+    },
+    {
+      "combination_id": "ec61fc14-63da-444a-b1fb-c0d18fdc5b65",
+      "name": "이동평균 교차 조합",
+      "description": "진입: 이동평균 교차, 관리: 1개",
+      "entry_strategy": {
+        "strategy_id": "entry_이동평균 교차",
+        "strategy_name": "이동평균 교차",
+        "parameters": {
+          "strategy_type": "ENTRY",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "mgmt_고정 손절",
+          "strategy_name": "고정 손절",
+          "parameters": {
+            "strategy_type": "MANAGEMENT",
+            "enabled": true
+          },
+          "priority": 1,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-21T23:21:30.541981",
+      "updated_at": "2025-07-21T23:21:30.541986",
+      "is_active": true
+    },
+    {
+      "combination_id": "917d970e-a6fb-4edc-9919-b73a7b262772",
+      "name": "새 이동평균 교차 전략 조합",
+      "description": "진입: 새 이동평균 교차 전략, 관리: 1개",
+      "entry_strategy": {
+        "strategy_id": "94a6bbde-e1fd-4b4e-bf02-307acc311756",
+        "strategy_name": "새 이동평균 교차 전략",
+        "parameters": {
+          "strategy_type": "ENTRY",
+          "enabled": true
+        },
+        "enabled": true
+      },
+      "management_strategies": [
+        {
+          "strategy_id": "a01842c5-0915-49e7-ad4f-9f106c458318",
+          "strategy_name": "새 고정 손절 전략",
+          "parameters": {
+            "strategy_type": "MANAGEMENT",
+            "enabled": true
+          },
+          "priority": 1,
+          "enabled": true
+        }
+      ],
+      "execution_order": "parallel",
+      "conflict_resolution": "conservative",
+      "risk_limit": {
+        "max_position_size": 1.0,
+        "max_drawdown": 0.15,
+        "max_trades_per_day": 10,
+        "position_timeout_hours": 168
+      },
+      "created_at": "2025-07-22T00:57:40.701583",
+      "updated_at": "2025-07-22T00:57:40.701587",
+      "is_active": true
+    }
+  ]
+}

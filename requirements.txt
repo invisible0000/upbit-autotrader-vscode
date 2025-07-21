@@ -6,4 +6,4 @@ pyyaml
 pyjwt
 PyQt6
 pyqtgraph
-matplotlib
+matplotlib>=3.5.0

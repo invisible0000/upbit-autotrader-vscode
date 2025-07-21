@@ -168,3 +168,42 @@ class Notification(Base):
     
     def __repr__(self):
         return f"<Notification(id={self.id}, type='{self.type}', timestamp='{self.timestamp}')>"
+
+class StrategyCombination(Base):
+    """전략 조합 모델"""
+    __tablename__ = 'strategy_combination'
+    
+    id = Column(String(50), primary_key=True)
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    entry_strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    execution_order = Column(String(20), nullable=False, default='parallel')  # 'parallel', 'sequential'
+    conflict_resolution = Column(String(20), nullable=False, default='conservative')  # 'conservative', 'aggressive'
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # 관계
+    entry_strategy = relationship("Strategy", foreign_keys=[entry_strategy_id])
+    management_strategies = relationship("CombinationManagementStrategy", back_populates="combination")
+    
+    def __repr__(self):
+        return f"<StrategyCombination(id='{self.id}', name='{self.name}', is_active={self.is_active})>"
+
+class CombinationManagementStrategy(Base):
+    """조합에 포함된 관리 전략 모델"""
+    __tablename__ = 'combination_management_strategy'
+    
+    id = Column(Integer, primary_key=True)
+    combination_id = Column(String(50), ForeignKey('strategy_combination.id'), nullable=False)
+    strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    priority = Column(Integer, nullable=False, default=1)  # 우선순위 (1이 최고)
+    weight = Column(Float, nullable=False, default=1.0)  # 가중치
+    is_active = Column(Boolean, nullable=False, default=True)
+    
+    # 관계
+    combination = relationship("StrategyCombination", back_populates="management_strategies")
+    strategy = relationship("Strategy")
+    
+    def __repr__(self):
+        return f"<CombinationManagementStrategy(combination_id='{self.combination_id}', strategy_id='{self.strategy_id}', priority={self.priority})>"

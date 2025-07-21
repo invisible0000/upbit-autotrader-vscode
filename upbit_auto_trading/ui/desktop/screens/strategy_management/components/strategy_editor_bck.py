@@ -122,13 +122,8 @@ class StrategyEditorWidget(QWidget):
     
     def create_parameter_ui(self):
         """선택된 전략 유형에 따른 파라미터 UI 생성"""
-        # 기존 파라미터 UI 제거
-        for i in reversed(range(self.params_layout.count())):
-            item = self.params_layout.itemAt(i)
-            if item:
-                child = item.widget()
-                if child:
-                    child.setParent(None)
+        # 기존 파라미터 UI 완전 제거
+        self.clear_parameter_widgets()
         
         strategy_type = self.strategy_type.currentText()
         
@@ -140,6 +135,34 @@ class StrategyEditorWidget(QWidget):
             self.create_bollinger_ui()
         elif strategy_type == "변동성 돌파":
             self.create_volatility_ui()
+    
+    def clear_parameter_widgets(self):
+        """파라미터 위젯들을 완전히 제거"""
+        try:
+            # 모든 자식 위젯과 레이아웃을 재귀적으로 제거
+            while self.params_layout.count():
+                item = self.params_layout.takeAt(0)
+                if item:
+                    widget = item.widget()
+                    layout = item.layout()
+                    
+                    if widget:
+                        widget.deleteLater()
+                    elif layout:
+                        # 중첩된 레이아웃의 위젯들도 제거
+                        while layout.count():
+                            child_item = layout.takeAt(0)
+                            if child_item:
+                                child_widget = child_item.widget()
+                                if child_widget:
+                                    child_widget.deleteLater()
+                        layout.deleteLater()
+            
+            # 레이아웃 업데이트 강제 적용
+            self.params_layout.update()
+            
+        except Exception as e:
+            print(f"⚠️ 파라미터 위젯 제거 중 오류: {e}")
     
     def create_ma_cross_ui(self):
         """이동평균 교차 전략 파라미터 UI"""
@@ -269,17 +292,30 @@ class StrategyEditorWidget(QWidget):
     
     def new_strategy(self):
         """새 전략 생성"""
+        # 먼저 기존 UI 완전 정리
+        self.clear_parameter_widgets()
+        
+        # 전략 정보 초기화
         self.current_strategy_id = None
         self.strategy_name.clear()
         self.strategy_description.clear()
         self.strategy_type.setCurrentIndex(0)
+        
+        # 파라미터 UI 재생성
         self.create_parameter_ui()
+        
+        print("🆕 새 전략 생성 모드")
     
     def load_strategy(self, strategy_id: str):
         """전략 불러오기"""
         config = self.strategy_manager.load_strategy(strategy_id)
         if config:
             self.current_strategy_id = strategy_id
+            
+            # 먼저 기존 UI 완전 정리
+            self.clear_parameter_widgets()
+            
+            # 기본 정보 설정
             self.strategy_name.setText(config.name)
             self.strategy_type.setCurrentText(config.strategy_type)
             self.strategy_description.setText(config.description or "")
@@ -287,6 +323,8 @@ class StrategyEditorWidget(QWidget):
             # 파라미터 UI 재생성 후 값 설정
             self.create_parameter_ui()
             self.set_parameters(config.parameters)
+            
+            print(f"✅ 전략 로드 완료: {config.name} ({config.strategy_type})")
     
     def set_parameters(self, parameters: dict):
         """파라미터 값을 UI에 설정"""
@@ -343,7 +381,8 @@ class StrategyEditorWidget(QWidget):
         self.strategy_name.clear()
         self.strategy_description.clear()
         self.strategy_type.setCurrentIndex(0)
-        self.create_parameter_ui()  # 올바른 메서드 이름으로 수정
+        self.clear_parameter_widgets()  # 기존 위젯들 정리
+        self.create_parameter_ui()  # 새 파라미터 UI 생성
         print("[DEBUG] 새 전략 생성 모드로 전환")
     
     def run_backtest_strategy(self):

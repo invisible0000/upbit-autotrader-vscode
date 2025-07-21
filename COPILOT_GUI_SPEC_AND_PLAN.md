@@ -1,9 +1,21 @@
 # Upbit Autotrader GUI 명세 및 개발 계획
 
+## 📋 최신 업데이트: 매매 전략 관리 V1.0.1 (2025.01.21)
+
+### 🎯 주요 개선사항
+- **조합 전략 지원**: 이산/웨이팅 조합으로 다중 전략 결합
+- **고급 전략 추가**: 물타기, 불타기, 트레일링 스탑, 평균가 에버리징
+- **탭 기반 UI**: 기본 전략과 조합 전략 분리 관리
+- **UI 최적화**: 중복 버튼 제거, 검색/필터 기능 강화
+
+### 🔗 관련 문서
+- **상세 개발 계획**: `docs/STRATEGY_MANAGEMENT_V1.0.1_TASKS.md`
+- **UI 개발 가이드**: `docs/UI_DEVELOPMENT_GUIDE.md`
+
 ## 1. 주요 화면 설계
 - **메인 대시보드**: 글로벌 네비게이션(GNB), 사이드 메뉴, 포트폴리오 요약, 시장 개요, 실시간 거래 현황, 알림, 상태바
 - **종목 스크리닝**: 필터 설정, 결과 테이블, 결과 저장/포트폴리오 추가/CSV 내보내기
-- **매매전략 관리**: 전략 목록, 생성/수정/삭제/실행, 전략 상세/파라미터 입력
+- **매매전략 관리** 🆕: 탭 기반 (기본 전략 | 조합 전략), 8가지 전략 유형, 고급 파라미터 설정
 - **백테스팅**: 전략/포트폴리오 선택, 기간/자본/수수료 입력, 실행/결과/성과지표/거래내역/차트
 - **실시간 거래**: 활성 전략/포지션, 수동 주문 입력/실행, 실시간 시장 데이터/알림
 - **포트폴리오 구성**: 코인/비중/성과지표, 추가/제거/비중 조정
@@ -82,22 +94,76 @@ class ScreenerScreen(QWidget):
         layout.addWidget(self.save_button)
 ```
 
-### 3) 매매전략 관리
-- 구성: 전략 목록(StyledTableWidget), 전략 생성/수정/삭제/실행(PrimaryButton, SecondaryButton, DangerButton), 전략 상세/파라미터 입력(StyledLineEdit 등)
-- 주요 이벤트: 전략 선택/생성/수정/삭제/실행
+### 3) 매매전략 관리 🆕 V1.0.1 개선
+- **기존**: 단일 화면 3분할 구조 (목록-에디터-상세)
+- **개선**: 탭 기반 분리 (기본 전략 | 조합 전략)
+- **전략 유형 확장**: 4개 → 8개 (물타기, 불타기, 트레일링 스탑, 평균가 에버리징 추가)
+- **조합 전략**: 이산 조합(AND/OR/MAJORITY), 웨이팅 조합(가중평균)
+
 ```python
 class StrategyManagementScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        self.strategy_table = StyledTableWidget(rows=10, columns=4)
-        self.create_button = PrimaryButton("전략 생성")
-        self.edit_button = SecondaryButton("전략 수정")
-        self.delete_button = DangerButton("전략 삭제")
-        layout.addWidget(self.strategy_table)
-        layout.addWidget(self.create_button)
-        layout.addWidget(self.edit_button)
-        layout.addWidget(self.delete_button)
+        
+        # 검색/필터 툴바 (중복 버튼 제거)
+        self.toolbar = self.create_improved_toolbar()
+        layout.addWidget(self.toolbar)
+        
+        # 탭 위젯
+        self.tab_widget = QTabWidget()
+        
+        # 기본 전략 탭 (기존 UI 개선)
+        basic_tab = BasicStrategyTab()
+        self.tab_widget.addTab(basic_tab, "🔧 기본 전략")
+        
+        # 조합 전략 탭 (신규)
+        composite_tab = CompositeStrategyTab()
+        self.tab_widget.addTab(composite_tab, "🔗 조합 전략")
+        
+        layout.addWidget(self.tab_widget)
+
+class CompositeStrategyTab(QWidget):
+    """조합 전략 전용 탭"""
+    def __init__(self):
+        super().__init__()
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # 조합 전략 목록 (25%)
+        self.composite_list = CompositeStrategyList()
+        splitter.addWidget(self.composite_list)
+        
+        # 조합 에디터 (50%)
+        self.composite_editor = CompositeStrategyEditor()
+        splitter.addWidget(self.composite_editor)
+        
+        # 성과 비교 패널 (25%)
+        self.performance_panel = PerformanceComparisonPanel()
+        splitter.addWidget(self.performance_panel)
+        
+        splitter.setSizes([250, 500, 250])
+```
+
+**고급 전략 파라미터 예시:**
+```python
+# 물타기 전략 파라미터 UI
+class DollarCostAveragingForm(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        
+        # 기본 설정
+        self.initial_ratio = QDoubleSpinBox()  # 초기 투자 비율
+        self.additional_count = QSpinBox()     # 추가 매수 횟수
+        
+        # 추가 매수 조건
+        self.drop_thresholds = QLineEdit()     # 하락률 기준점 [-5,-10,-15]
+        self.investment_ratios = QLineEdit()   # 추가 투자 비율 [0.2,0.25,0.25]
+        
+        # 익절/손절 설정
+        self.profit_target = QDoubleSpinBox()  # 목표 수익률
+        self.stop_loss = QDoubleSpinBox()      # 절대 손절선
+        self.max_holding_days = QSpinBox()     # 최대 보유 기간
 ```
 
 ### 4) 백테스팅

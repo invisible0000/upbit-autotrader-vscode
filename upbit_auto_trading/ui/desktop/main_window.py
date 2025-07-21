@@ -209,6 +209,11 @@ class MainWindow(QMainWindow):
         reset_size_action.triggered.connect(self._reset_window_size)
         view_menu.addAction(reset_size_action)
         
+        # 창 크기 초기화 (중간) 액션 추가
+        reset_size_medium_action = QAction("창 크기 초기화(중간)", self)
+        reset_size_medium_action.triggered.connect(self._reset_window_size_medium)
+        view_menu.addAction(reset_size_medium_action)
+        
         # 도움말 메뉴
         help_menu = self.menuBar().addMenu("도움말")
         
@@ -325,6 +330,8 @@ class MainWindow(QMainWindow):
             elif screen_name == "매매전략 관리":
                 from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
                 screen = StrategyManagementScreen()
+                # 백테스팅 요청 시그널 연결
+                screen.backtest_requested.connect(self._on_backtest_requested)
                 
             elif screen_name == "백테스팅":
                 from upbit_auto_trading.ui.desktop.screens.backtesting.backtesting_screen import BacktestingScreen
@@ -408,6 +415,19 @@ class MainWindow(QMainWindow):
         
         # 모든 스플리터와 차트들을 다시 업데이트
         self._update_all_widgets()
+    
+    def _reset_window_size_medium(self):
+        """창 크기 초기화 (중간 크기)"""
+        # 현재 위치 저장
+        current_pos = self.pos()
+        
+        # 중간 크기로 초기화 (첨부 이미지의 해상도)
+        self.resize(1600, 1000)
+        
+        # 모든 스플리터와 차트들을 다시 업데이트
+        self._update_all_widgets()
+        
+        print("🖥️ 창 크기를 중간 크기(1600x1000)로 초기화했습니다.")
     
     def _update_all_widgets(self):
         """모든 위젯 업데이트"""
@@ -506,3 +526,38 @@ class MainWindow(QMainWindow):
         # 이벤트 수락
         if a0:
             a0.accept()
+    
+    def _on_backtest_requested(self, strategy_id):
+        """매매전략 관리에서 백테스팅 요청 시 처리"""
+        try:
+            print(f"🔬 백테스팅 요청 수신: 전략 ID = {strategy_id}")
+            
+            # 백테스팅 화면으로 전환
+            self._change_screen("backtest")
+            
+            # 백테스팅 화면에 전략 ID 전달
+            backtest_screen = self._screen_widgets.get("백테스팅")
+            if backtest_screen:
+                # 백테스팅 설정 패널에 전략 ID 설정
+                if hasattr(backtest_screen, 'setup_panel'):
+                    setup_panel = backtest_screen.setup_panel
+                    
+                    # 전략 목록 새로고침
+                    if hasattr(setup_panel, 'refresh_strategy_list'):
+                        setup_panel.refresh_strategy_list()
+                    
+                    # 해당 전략 선택
+                    if hasattr(setup_panel, 'strategy_selector'):
+                        for i in range(setup_panel.strategy_selector.count()):
+                            if setup_panel.strategy_selector.itemData(i) == strategy_id:
+                                setup_panel.strategy_selector.setCurrentIndex(i)
+                                break
+                
+                print(f"✅ 백테스팅 화면에 전략 ID 설정 완료: {strategy_id}")
+            else:
+                print("❌ 백테스팅 화면을 찾을 수 없습니다")
+                
+        except Exception as e:
+            print(f"❌ 백테스팅 요청 처리 실패: {e}")
+            import traceback
+            traceback.print_exc()

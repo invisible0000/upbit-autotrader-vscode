@@ -97,9 +97,18 @@ class MarketDataStorage:
             
             # 데이터베이스 연결
             conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
             
-            # 데이터 삽입 (중복 시 무시)
-            df[required_columns].to_sql('market_data', conn, if_exists='append', index=False)
+            # 중복 시 교체하도록 데이터 삽입
+            for _, row in df[required_columns].iterrows():
+                cursor.execute('''
+                    INSERT OR REPLACE INTO market_data 
+                    (timestamp, symbol, open, high, low, close, volume, timeframe)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    row['timestamp'], row['symbol'], row['open'], row['high'], 
+                    row['low'], row['close'], row['volume'], row['timeframe']
+                ))
             
             conn.commit()
             conn.close()
