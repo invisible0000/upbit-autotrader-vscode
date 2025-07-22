@@ -6,9 +6,30 @@
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](./LICENSE)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](./VERSION_0_1_MILESTONE_TASKS.md)
 
-> **Advanced cryptocurrency autotrading system for Upbit exchange with optimized chart visualization**
+> **Advanced cryptocurrency autotrading system for Upbit exchange with atomic strategy builder**
 
-업비트 API를 활용한 **프로덕션급** 암호화폐 자동 거래 시스템입니다. 최적화된 차트 시스템, 실시간 웹소켓 업데이트, 그리고 직관적인 사용자 인터페이스를 제공합니다.
+업비트 API를 활용한 **프로덕션급** 암호화폐 자동 거래 시스템입니다. 혁신적인 **원자적 전략 빌더**, 최적화된 차트 시스템, 실시간 웹소켓 업데이트를 제공합니다.
+
+## 🎯 **NEW! 원자적 전략 빌더**
+
+> **"누구나 5분 내에 강력한 매매 전략을 만들고, 즉시 백테스트하여 검증할 수 있는 올인원 플랫폼"**
+
+### 🧩 **드래그&드롭으로 전략 생성**
+- **📊 변수 선택**: RSI, 볼린저 밴드, 수익률 등
+- **🎯 조건 조합**: AND/OR 논리 연산으로 복잡한 조건 생성  
+- **⚡ 액션 설정**: 매수/매도/청산 등 다양한 실행 액션
+- **🔧 규칙 완성**: 진입/청산/관리 역할별 규칙 구성
+
+### 🌟 **기본 7규칙 전략 템플릿**
+1. **RSI 과매도 진입** - RSI < 20일 때 진입
+2. **수익 시 불타기** - 5% 수익마다 3회까지 추가 매수  
+3. **계획된 익절** - 불타기 완료 후 다음 수익 신호에 전량 매도
+4. **트레일링 스탑** - 고점 대비 3% 하락 시 익절
+5. **하락 시 물타기** - 5% 하락 시 2회까지 추가 매수
+6. **급락 감지** - 급격한 하락 시 즉시 비상 청산
+7. **급등 감지** - 급등 시 불타기 중단하여 더 높은 수익 추구
+
+📖 **[전략 빌더 사용 가이드](./ui_prototypes/basic_7_rule_strategy_guide.md)** | 🗺️ **[개발 로드맵](./STRATEGY_BUILDER_ROADMAP.md)**
 
 ---
 
