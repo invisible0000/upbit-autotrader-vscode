@@ -1,0 +1,27 @@
+{
+  "last_session_time": "2025-07-22T17:35:00Z",
+  "current_task_id": "완료됨 - 전략 조합 UI 탭 구현",
+  "last_edited_file": "upbit_auto_trading/ui/desktop/screens/strategy_management/components/strategy_combination_tab.py",
+  "short_term_goal": "백테스트 연동 시스템 구현",
+  "completed_tasks": [
+    "TASK-20250722-02_DB_CombinationStrategy_데이터모델_설계",
+    "TASK-20250722-03_UI_전략조합탭_화면구성"
+  ],
+  "next_priority_tasks": [
+    "백테스트 연동",
+    "실시간 거래 시스템",
+    "차트 뷰 동적 데이터 로딩"
+  ],
+  "current_system_state": {
+    "db_migration_system": "완료",
+    "combination_manager": "완료",
+    "strategy_combination_ui": "완료",
+    "test_coverage": "6/6 통과"
+  },
+  "technical_context": {
+    "architecture": "PyQt6 기반 데스크톱 앱",
+    "database": "SQLite + SQLAlchemy",
+    "testing": "pytest 기반 TDD",
+    "ui_pattern": "2x2 그리드 레이아웃, 드래그앤드롭"
+  }
+}
