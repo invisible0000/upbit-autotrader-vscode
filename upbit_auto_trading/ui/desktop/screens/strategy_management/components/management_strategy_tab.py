@@ -376,25 +376,19 @@ class ManagementStrategyTab(QWidget):
             created_at=datetime.now()
         )
         
-        # DB에 저장 - StrategyManager 타입 확인 후 적절한 메서드 호출
+        # DB에 저장
         try:
-            print(f"[DEBUG] StrategyManager 타입: {type(self.strategy_manager)}")
+            print(f"[DEBUG] 관리 전략 저장 시도: {strategy_config.name}")
             
-            # 먼저 StrategyConfig 객체로 시도
-            try:
-                success = self.strategy_manager.save_strategy(strategy_config)
-                print("[DEBUG] StrategyConfig 객체 방식 성공")
-            except TypeError as te:
-                print(f"[DEBUG] StrategyConfig 방식 실패, 개별 매개변수 방식 시도: {te}")
-                # 개별 매개변수 방식으로 시도
-                success = self.strategy_manager.save_strategy(
-                    strategy_id=strategy_config.strategy_id,
-                    strategy_type=strategy_config.strategy_type,
-                    name=strategy_config.name,
-                    description=strategy_config.description,
-                    parameters=strategy_config.parameters
-                )
-                print("[DEBUG] 개별 매개변수 방식 성공")
+            # 개별 매개변수 방식으로 저장 (strategy_manager.py의 StrategyManager 사용)
+            success = self.strategy_manager.save_strategy(
+                strategy_id=strategy_config.strategy_id,
+                strategy_type=strategy_config.strategy_type,
+                name=strategy_config.name,
+                description=strategy_config.description,
+                parameters=strategy_config.parameters
+            )
+            print(f"[DEBUG] 관리 전략 저장 결과: {success}")
                 
         except Exception as e:
             print(f"[UI] ❌ 관리 전략 저장 중 오류: {e}")

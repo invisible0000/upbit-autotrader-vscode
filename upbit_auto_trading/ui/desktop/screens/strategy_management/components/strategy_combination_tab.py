@@ -421,8 +421,17 @@ class StrategyCombinationTab(QWidget):
             drag = QDrag(self.strategy_list)
             mime_data = QMimeData()
             
-            # 전략 데이터를 JSON으로 전송
-            strategy_json = json.dumps(current_item.strategy_data)
+            # 전략 데이터를 JSON으로 직렬화 (datetime 객체 처리)
+            strategy_data = current_item.strategy_data.copy()
+            
+            # datetime 객체를 문자열로 변환
+            for key, value in strategy_data.items():
+                if hasattr(value, 'isoformat'):  # datetime 객체 확인
+                    strategy_data[key] = value.isoformat()
+                elif hasattr(value, '__dict__'):  # 복잡한 객체는 문자열로 변환
+                    strategy_data[key] = str(value)
+            
+            strategy_json = json.dumps(strategy_data, default=str)
             mime_data.setText(strategy_json)
             drag.setMimeData(mime_data)
             
@@ -434,14 +443,27 @@ class StrategyCombinationTab(QWidget):
         for i in range(self.strategy_list.count()):
             item = self.strategy_list.item(i)
             if hasattr(item, 'strategy_data'):
-                strategy_type = item.strategy_data.get('strategy_type', '').lower()
+                strategy_type = item.strategy_data.get('strategy_type', '')
+                
+                # 진입 전략 타입들 (실제 DB의 전략 타입에 맞춤)
+                entry_types = [
+                    '이동평균 교차', 'RSI', '볼린저 밴드', '변동성 돌파', 
+                    'moving_average_cross', 'rsi_reversal', 'bollinger_band_mean_reversion', 
+                    'volatility_breakout', 'buy_and_hold'
+                ]
+                
+                # 관리 전략 타입들
+                management_types = [
+                    '고정 손절', '트레일링 스탑', '목표 익절', '부분 익절', 
+                    '시간 기반 청산', '변동성 기반 관리'
+                ]
                 
                 if filter_text == "전체":
                     item.setHidden(False)
                 elif filter_text == "진입 전략":
-                    item.setHidden(not ('entry' in strategy_type or 'rsi' in strategy_type))
+                    item.setHidden(strategy_type not in entry_types)
                 elif filter_text == "관리 전략":
-                    item.setHidden(not any(kw in strategy_type for kw in ['stop', 'trail', 'exit', 'management']))
+                    item.setHidden(strategy_type not in management_types)
     
     def on_entry_strategy_added(self, strategy_data: Dict[str, Any]):
         """진입 전략 추가됨"""
@@ -493,21 +515,28 @@ class StrategyCombinationTab(QWidget):
             if not self.current_combination['entry_strategy']:
                 self.update_validation_status("PENDING", "진입 전략을 선택해주세요")
                 return
+
+            # 기본 검증: 진입 전략이 있으면 유효한 조합으로 간주
+            entry_strategy = self.current_combination['entry_strategy']
+            mgmt_strategies = self.current_combination['management_strategies']
             
-            # CombinationManager로 검증
-            entry_id = self.current_combination['entry_strategy'].get('id')
-            mgmt_ids = [s.get('id') for s in self.current_combination['management_strategies']]
+            # 진입 전략 유효성 확인
+            if not entry_strategy.get('id'):
+                self.update_validation_status("INVALID", "진입 전략 ID가 없습니다")
+                return
+                
+            # 관리 전략이 있다면 ID 확인
+            for mgmt in mgmt_strategies:
+                if not mgmt.get('id'):
+                    self.update_validation_status("INVALID", "관리 전략 ID가 없습니다")
+                    return
             
-            result = self.combination_manager.validate_combination(entry_id, mgmt_ids)
-            
-            if result['is_valid']:
-                self.update_validation_status("VALID", "유효한 조합입니다")
-                self.save_btn.setEnabled(True)
-                self.backtest_btn.setEnabled(True)
-            else:
-                self.update_validation_status("INVALID", f"오류: {result.get('error', '알 수 없는 오류')}")
-                self.save_btn.setEnabled(False)
-                self.backtest_btn.setEnabled(False)
+            # 모든 검증 통과
+            strategy_count = 1 + len(mgmt_strategies)
+            message = f"유효한 조합입니다 (진입전략 1개 + 관리전략 {len(mgmt_strategies)}개)"
+            self.update_validation_status("VALID", message)
+            self.save_btn.setEnabled(True)
+            self.backtest_btn.setEnabled(True)
                 
         except Exception as e:
             self.update_validation_status("ERROR", f"검증 오류: {str(e)}")

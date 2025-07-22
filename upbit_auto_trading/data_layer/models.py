@@ -73,6 +73,14 @@ class Strategy(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     parameters = Column(JSON, nullable=False)  # 전략 매개변수 (JSON 형식)
+    
+    # 전략 성질들
+    signal_type = Column(String(20), nullable=False, default='BUY_SELL')  # 신호 타입: BUY_SELL, STOP_LOSS, TRAILING, TAKE_PROFIT, PARTIAL_EXIT, TIME_EXIT, VOLATILITY, ADD_BUY
+    role = Column(String(20), nullable=False, default='ENTRY')  # 역할: ENTRY, EXIT, SCALE_IN, SCALE_OUT, MANAGEMENT
+    position_required = Column(Boolean, nullable=False, default=False)  # 포지션 보유 필요 여부
+    market_phase = Column(String(20), nullable=True, default='ALL')  # 시장 환경: ALL, TREND, VOLATILE, SIDEWAYS
+    risk_level = Column(String(20), nullable=True, default='MEDIUM')  # 위험도: LOW, MEDIUM, HIGH, VERY_HIGH
+    
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -81,7 +89,7 @@ class Strategy(Base):
     portfolio_coins = relationship("PortfolioCoin", back_populates="strategy")
     
     def __repr__(self):
-        return f"<Strategy(id='{self.id}', name='{self.name}')>"
+        return f"<Strategy(id='{self.id}', name='{self.name}', role='{self.role}', signal_type='{self.signal_type}')>"
 
 class Backtest(Base):
     """백테스트 모델"""

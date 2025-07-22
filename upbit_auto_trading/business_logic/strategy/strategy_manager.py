@@ -44,6 +44,52 @@ class StrategyManager:
         self.db_manager = db_manager
         self.strategy_factory = strategy_factory
     
+    def _clean_parameters_for_strategy(self, strategy_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        UI에서 전달받은 매개변수를 전략 클래스가 기대하는 형식으로 변환
+        
+        Args:
+            strategy_type: 전략 타입
+            parameters: 원본 매개변수
+            
+        Returns:
+            정제된 매개변수
+        """
+        cleaned = {}
+        
+        # 메타 정보 제거 (name, strategy_type, enabled 등)
+        meta_fields = {'name', 'strategy_type', 'enabled', 'description'}
+        
+        # 전략별 매개변수 매핑
+        if strategy_type == 'moving_average_cross':
+            # UI: short_period, long_period → 전략: short_window, long_window
+            cleaned['short_window'] = parameters.get('short_period', parameters.get('short_window', 5))
+            cleaned['long_window'] = parameters.get('long_period', parameters.get('long_window', 20))
+            
+        elif strategy_type == 'volatility_breakout':
+            # UI: period, k_value → 전략: short_window, long_window (임시 매핑)
+            cleaned['short_window'] = parameters.get('period', 20)
+            cleaned['long_window'] = parameters.get('period', 20) + 10  # 임시로 +10
+            
+        elif strategy_type in ['bollinger_band_mean_reversion', 'bollinger_bands']:
+            # 볼린저 밴드는 기본 매개변수 사용
+            cleaned['period'] = parameters.get('period', 20)
+            cleaned['std_dev'] = parameters.get('std_dev', parameters.get('std_multiplier', 2.0))
+            
+        elif strategy_type in ['rsi', 'rsi_reversal']:
+            # RSI 전략
+            cleaned['period'] = parameters.get('period', 14)
+            cleaned['oversold'] = parameters.get('oversold', 30)
+            cleaned['overbought'] = parameters.get('overbought', 70)
+            
+        else:
+            # 기타 전략: 메타 필드만 제거하고 나머지는 그대로
+            for key, value in parameters.items():
+                if key not in meta_fields:
+                    cleaned[key] = value
+        
+        return cleaned
+    
     def save_strategy(self, strategy_id: str, strategy_type: str, name: str, 
                      description: str, parameters: Dict[str, Any]) -> bool:
         """
@@ -60,15 +106,19 @@ class StrategyManager:
             저장 성공 여부
         """
         try:
+            # UI 매개변수를 전략 클래스 매개변수로 변환
+            cleaned_parameters = self._clean_parameters_for_strategy(strategy_type, parameters)
+            
             # 전략 타입 유효성 검사
-            temp_strategy = self.strategy_factory.create_strategy(strategy_type, parameters)
+            temp_strategy = self.strategy_factory.create_strategy(strategy_type, cleaned_parameters)
             if temp_strategy is None:
                 self.logger.error(f"전략 타입 '{strategy_type}'이 유효하지 않습니다.")
                 return False
             
             # 매개변수 유효성 검사
-            if not temp_strategy.validate_parameters(parameters):
-                self.logger.error(f"전략 매개변수가 유효하지 않습니다: {parameters}")
+            if not temp_strategy.validate_parameters(cleaned_parameters):
+                self.logger.error(f"전략 매개변수가 유효하지 않습니다.")
+                self.logger.error(f"전략 매개변수가 유효하지 않습니다: {cleaned_parameters}")
                 return False
             
             # 데이터베이스 세션 생성
@@ -82,7 +132,7 @@ class StrategyManager:
                     # 기존 전략 업데이트
                     existing_strategy.name = name
                     existing_strategy.description = description
-                    existing_strategy.parameters = json.dumps(parameters)
+                    existing_strategy.parameters = json.dumps(cleaned_parameters)
                     existing_strategy.updated_at = datetime.now(KST)
                 else:
                     # 새 전략 생성
@@ -90,7 +140,7 @@ class StrategyManager:
                         id=strategy_id,
                         name=name,
                         description=description,
-                        parameters=json.dumps(parameters)
+                        parameters=json.dumps(cleaned_parameters)
                     )
                     session.add(new_strategy)
                 

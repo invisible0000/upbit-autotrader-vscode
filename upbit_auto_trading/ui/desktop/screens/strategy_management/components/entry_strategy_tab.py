@@ -119,16 +119,13 @@ class EntryStrategyTab(QWidget):
             
             print(f"✅ DB에서 진입 전략 {len(entry_strategies)}개 로딩 완료")
             
-            # DB에서 로딩한 전략이 있으면 사용, 없으면 폴백
-            if entry_strategies:
-                self._populate_strategy_table(entry_strategies)
-            else:
-                print("� DB에 진입 전략이 없어 기본 전략으로 폴백합니다...")
-                self._load_fallback_strategies()
+            # DB에서 로딩한 전략만 표시 (폴백 제거)
+            self._populate_strategy_table(entry_strategies)
                 
         except Exception as e:
             print(f"❌ 진입 전략 로딩 실패: {e}")
-            self._load_fallback_strategies()
+            # 오류 시에도 빈 목록 표시
+            self._populate_strategy_table([])
     
     def _populate_strategy_table(self, strategies):
         """전략 목록을 테이블에 표시"""
@@ -206,74 +203,6 @@ class EntryStrategyTab(QWidget):
             desc_item = QTableWidgetItem(strategy.get("desc", ""))
             self.strategy_table.setItem(i, 5, desc_item)
     
-    def _load_fallback_strategies(self):
-        """DB 오류 시 기본 전략으로 폴백"""
-        print("🔄 기본 진입 전략 데이터로 폴백합니다...")
-        fallback_strategies = [
-            {"id": "ma_cross_fallback", "name": "이동평균 교차", "desc": "골든크로스/데드크로스 신호", "signal": "BUY/SELL", "status": "활성"},
-            {"id": "rsi_fallback", "name": "RSI 과매수/과매도", "desc": "RSI 30/70 돌파 신호", "signal": "BUY/SELL", "status": "활성"},
-            {"id": "bb_fallback", "name": "볼린저 밴드", "desc": "밴드 터치 후 반전 신호", "signal": "BUY/SELL", "status": "활성"}
-        ]
-        
-        # 동일한 테이블 생성 로직 사용
-        self._populate_strategy_table(fallback_strategies)
-        for i, strategy in enumerate(fallback_strategies):
-            # 순서 컬럼에 이동 버튼 위젯 추가
-            move_widget = QWidget()
-            move_layout = QHBoxLayout(move_widget)
-            move_layout.setContentsMargins(2, 2, 2, 2)
-            move_layout.setSpacing(2)
-            
-            up_button = QPushButton("▲")
-            down_button = QPushButton("▼")
-            up_button.setFixedSize(26, 14)
-            down_button.setFixedSize(26, 14)
-            
-            # 스타일 적용
-            button_style = """
-                QPushButton {
-                    background-color: #ffffff;
-                    border: 1px solid #999;
-                    border-radius: 3px;
-                    font-weight: bold;
-                    font-size: 12px;
-                    color: #333333;
-                    padding: 0px;
-                    margin: 0px;
-                }
-                QPushButton:hover {
-                    background-color: #f0f0f0;
-                    border: 1px solid #666;
-                    color: #000000;
-                }
-                QPushButton:pressed {
-                    background-color: #e0e0e0;
-                    color: #000000;
-                }
-            """
-            up_button.setStyleSheet(button_style)
-            down_button.setStyleSheet(button_style)
-            
-            # 툴팁 추가
-            up_button.setToolTip("위로 이동")
-            down_button.setToolTip("아래로 이동")
-            
-            # 버튼 이벤트 연결
-            up_button.setProperty("row", i)
-            down_button.setProperty("row", i)
-            up_button.clicked.connect(self._on_move_up_clicked)
-            down_button.clicked.connect(self._on_move_down_clicked)
-            
-            move_layout.addWidget(up_button)
-            move_layout.addWidget(down_button)
-            self.strategy_table.setCellWidget(i, 0, move_widget)  # 순서 컬럼
-            
-            self.strategy_table.setItem(i, 1, QTableWidgetItem("25/07/21"))  # 작성일
-            self.strategy_table.setItem(i, 2, QTableWidgetItem(strategy["name"]))  # 전략명
-            self.strategy_table.setItem(i, 3, QTableWidgetItem(strategy["status"]))  # 상태
-            self.strategy_table.setItem(i, 4, QTableWidgetItem(strategy["signal"]))  # 신호유형
-            self.strategy_table.setItem(i, 5, QTableWidgetItem(strategy["desc"]))  # 설명
-    
     def create_strategy(self):
         """진입 전략 생성"""
         print("[UI] 📈 진입 전략 생성 다이얼로그 열기")
@@ -345,26 +274,19 @@ class EntryStrategyTab(QWidget):
             created_at=datetime.now()
         )
         
-        # DB에 저장 - StrategyManager 타입 확인 후 적절한 메서드 호출
+        # DB에 저장
         try:
-            print(f"[DEBUG] StrategyManager 타입: {type(self.strategy_manager)}")
-            print(f"[DEBUG] save_strategy 메서드: {self.strategy_manager.save_strategy}")
+            print(f"[DEBUG] 전략 저장 시도: {strategy_config.name}")
             
-            # 먼저 StrategyConfig 객체로 시도
-            try:
-                success = self.strategy_manager.save_strategy(strategy_config)
-                print("[DEBUG] StrategyConfig 객체 방식 성공")
-            except TypeError as te:
-                print(f"[DEBUG] StrategyConfig 방식 실패, 개별 매개변수 방식 시도: {te}")
-                # 개별 매개변수 방식으로 시도
-                success = self.strategy_manager.save_strategy(
-                    strategy_id=strategy_config.strategy_id,
-                    strategy_type=strategy_config.strategy_type,
-                    name=strategy_config.name,
-                    description=strategy_config.description,
-                    parameters=strategy_config.parameters
-                )
-                print("[DEBUG] 개별 매개변수 방식 성공")
+            # 개별 매개변수 방식으로 저장 (strategy_manager.py의 StrategyManager 사용)
+            success = self.strategy_manager.save_strategy(
+                strategy_id=strategy_config.strategy_id,
+                strategy_type=strategy_config.strategy_type,
+                name=strategy_config.name,
+                description=strategy_config.description,
+                parameters=strategy_config.parameters
+            )
+            print(f"[DEBUG] 전략 저장 결과: {success}")
                 
         except Exception as e:
             print(f"[UI] ❌ 전략 저장 중 오류: {e}")
