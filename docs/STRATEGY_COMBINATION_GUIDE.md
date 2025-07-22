@@ -2,6 +2,35 @@
 
 ## 📋 개요
 
+**⚠️ 주의: 이 문서는 레거시 시스템 문서입니다.**
+
+**현재 활성 시스템**: 원자적 전략 빌더 (`ui_prototypes/`)  
+**참조 문서**: `ui_prototypes/basic_7_rule_strategy_guide.md`  
+**개발 로드맵**: `STRATEGY_BUILDER_ROADMAP.md`
+
+---
+
+## 🚀 **현재 시스템: 원자적 전략 빌더 (Phase 1 완료)**
+
+### 🧩 **새로운 아키텍처: Variable → Condition → Action → Rule → Strategy**
+
+원자적 전략 빌더는 전략 조합을 더 직관적이고 유연하게 구현합니다:
+
+1. **Variable**: RSI, 가격, 볼륨 등 기본 데이터
+2. **Condition**: Variable에 대한 논리적 판단 (`rsi < 20`)
+3. **Action**: 실제 거래 행동 (`market_buy 5%`)
+4. **Rule**: Condition + Action 조합 ("RSI < 20이면 5% 매수")
+5. **Strategy**: 여러 Rule의 집합 (완전한 매매 전략)
+
+### 📖 **실제 사용 예제**
+
+7규칙 기본 전략을 통해 완전한 매매 시스템을 5분 내에 구현할 수 있습니다.
+자세한 내용은 `ui_prototypes/basic_7_rule_strategy_guide.md`를 참조하세요.
+
+---
+
+## 📚 **레거시 시스템 문서 (참고용)**
+
 **전략 조합(Strategy Combination)**은 개별 전략들을 논리적으로 결합하여 완전한 트레이딩 시스템을 구성하는 고급 아키텍처입니다. 단순한 전략 나열이 아닌, 지능적인 조합 규칙과 상호작용 메커니즘을 포함합니다.
 
 ---
