@@ -1,0 +1,110 @@
+네, 문서 시리즈의 다음 장을 생성하겠습니다.
+
+요약표의 7번에 해당하는 마지막 규칙, **규칙 \#7: 급등 홀드** 문서입니다. 이 규칙은 시스템의 지능을 한 단계 끌어올리는 중요한 개념을 포함합니다.
+
+````markdown
+# 문서 #8: 규칙 #7 구현 - 급등 홀드 (MANAGEMENT)
+
+---
+
+### ## 1. 규칙 개요 (Rule Overview)
+
+이 규칙의 목적은 **비이성적인 과열 및 급등 상황에서 위험한 추격 매수(불타기)를 지능적으로 제어**하는 것입니다. 이 규칙은 직접적인 매매를 실행하는 대신, 다른 규칙의 동작을 일시적으로 '정지'시키는 '메타(Meta)' 역할을 수행합니다.
+
+* **역할 (Role):** `MANAGEMENT`
+* **활성화 상태 (Activation State):** `ACTIVE` (포지션 보유 중에만 작동)
+* **핵심 컴포넌트 (Core Components):** `RapidPriceSpikeTrigger`, `ModifyContextAction`
+* **핵심 속성 (Key Attribute):** **`priority: 1`** (급락 감지 다음으로 높은 우선순위)
+
+---
+
+### ## 2. 아키텍처 확장: '실행 컨텍스트'와 '메타 액션'
+
+이 정교한 규칙을 구현하기 위해, 기존 아키텍처에 두 가지 개념을 추가해야 합니다. 이는 `COMPONENT_SYSTEM_ARCHITECTURE.MD`에 명시된 `ExecutionContext`와 `ManagementActionComponent` 개념의 구체적인 확장입니다.
+
+* **실행 컨텍스트 (Execution Context):**
+    * 하나의 매매 사이클 동안 모든 규칙이 공유하는 '메모장' 또는 '상태 보드'입니다.
+    * 여기에 `is_pyramiding_paused: false` 와 같은 불리언(Boolean) 플래그를 추가하여, 특정 조건의 활성화 여부를 기록합니다.
+
+* **메타 액션 (Meta Action):**
+    * 매수/매도 주문을 내는 대신, **'실행 컨텍스트'의 상태를 변경**하는 특별한 종류의 액션입니다. `ModifyContextAction`이 그 예입니다.
+
+---
+
+### ## 3. 컴포넌트 구성 (Component Configuration)
+
+#### **3.1. 신규 '급등 홀드' 규칙 구성**
+
+이 규칙은 `ModifyContextAction`을 통해 '불타기 일시정지' 플래그를 `True`로 설정합니다.
+
+```json
+{
+  "rule_id": "hold_pyramiding_on_spike",
+  "description": "1분 내 5% 급등 시, 불타기 규칙을 일시 정지시킴",
+  "priority": 1,
+  "activation_state": "ACTIVE",
+  "trigger": {
+    "component": "RapidPriceSpikeTrigger",
+    "config": {
+      "spike_percent": 5,
+      "time_frame_seconds": 60
+    }
+  },
+  "action": {
+    "component": "ModifyContextAction",
+    "config": {
+      "set_flag": "is_pyramiding_paused",
+      "value": true
+    }
+  }
+}
+````
+
+#### **3.2. 기존 '불타기' 규칙(규칙 \#2)의 수정**
+
+'규칙 \#7'이 효과를 발휘하려면, '규칙 \#2'는 이제 '실행 컨텍스트'의 상태를 확인해야 합니다. 이를 위해 `ContextCondition`이 추가됩니다.
+
+```json
+{
+  "rule_id": "scale_in_on_profit",
+  "description": "수익률 5% 도달 시, (일시정지 아닐 때만) 3회까지 추가 매수",
+  "activation_state": "ACTIVE",
+  "trigger": {
+      "component": "ProfitLossTrigger",
+      "config": { "profit_percent": 5, "direction": "above" }
+  },
+  "conditions": [
+    {
+      "component": "ExecutionCountCondition",
+      "config": { "target_rule_id": "scale_in_on_profit", "less_than": 3 }
+    },
+    {
+      "component": "ContextCondition",
+      "config": { "check_flag": "is_pyramiding_paused", "is_value": false }
+    }
+  ],
+  "action": {
+      "component": "AdditionalBuy",
+      "config": { "amount": 100000 }
+  }
+}
+```
+
+-----
+
+### \#\# 4. 실행 엔진에서의 동작 방식
+
+1.  **상황 발생**: 포지션 진입 후, 가격이 45초 만에 6% 급등합니다.
+2.  **충돌 발생**: `ExecutionEngine`의 단일 실행 사이클 내에서 아래 두 규칙의 트리거가 모두 `True`가 됩니다.
+      * **규칙 \#2 (불타기)**: 수익률이 5%를 넘었으므로 발동.
+      * **규칙 \#7 (급등 홀드)**: 1분 내 5% 이상 급등했으므로 발동.
+3.  **우선순위 해결**: 엔진은 '발동 리스트'에 담긴 `규칙 #2`와 `규칙 #7`을 `priority`로 정렬합니다. `규칙 #7(priority: 1)`이 `규칙 #2(priority: 10-기본값)`보다 우선순위가 높습니다.
+4.  **메타 액션 실행**: 엔진은 **규칙 \#7**의 `ModifyContextAction`을 실행합니다. 이로 인해 `실행 컨텍스트`의 `is_pyramiding_paused` 플래그가 `True`로 변경됩니다. 규칙 \#2의 `AdditionalBuy` 액션은 이번 사이클에서 무시됩니다.
+5.  **이후 동작 제어**:
+      * 다음 데이터 틱부터 가격이 계속 오르더라도, \*\*규칙 \#2 (불타기)\*\*는 자신의 `ContextCondition`을 통과하지 못합니다 (`is_pyramiding_paused`가 `True`이기 때문).
+      * 결과적으로 **불타기는 완벽하게 차단**되고, `규칙 #4 (트레일링 스탑)`만이 활성화되어 급등으로 발생한 수익을 안전하게 지키게 됩니다.
+
+<!-- end list -->
+
+```
+```

@@ -1,0 +1,78 @@
+네, 문서 시리즈의 다음 장을 생성하겠습니다.
+
+요약표의 6번에 해당하는 **규칙 \#6: 급락 감지** 문서입니다.
+
+````markdown
+# 문서 #7: 규칙 #6 구현 - 급락 감지 (EXIT / RISK_MGMT)
+
+---
+
+### ## 1. 규칙 개요 (Rule Overview)
+
+이 규칙은 시스템의 **최상위 비상 탈출 장치** 역할을 합니다. 일반적인 손실 관리 규칙(e.g., 트레일링 스탑)이 반응하기 힘든 갑작스러운 시장 붕괴 상황에서, 다른 모든 논리를 무시하고 즉시 포지션을 청산하여 치명적인 손실을 방지하는 것을 최우선 목표로 합니다.
+
+* **역할 (Role):** `EXIT` / `RISK_MGMT`
+* **활성화 상태 (Activation State):** `ACTIVE` (포지션 보유 중에만 작동)
+* **핵심 컴포넌트 (Core Components):** `RapidPriceDropTrigger`, `FullPositionSell`
+* **핵심 속성 (Key Attribute):** **`priority: 0` (최상위 우선순위)**
+
+---
+
+### ## 2. 컴포넌트 구성 (Component Configuration)
+
+이 규칙의 가장 큰 특징은 다른 규칙들과의 충돌 시 항상 이길 수 있도록 **가장 높은 우선순위(`priority: 0`)**를 명시적으로 부여받는다는 점입니다.
+
+```json
+{
+  "rule_id": "emergency_exit_on_crash",
+  "description": "1분 내에 5% 이상 급락 시, 모든 규칙에 우선하여 즉시 전량 매도",
+  "priority": 0,
+  "activation_state": "ACTIVE",
+  "trigger": {
+    "component": "RapidPriceDropTrigger",
+    "config": {
+      "drop_percent": -5,
+      "time_frame_seconds": 60
+    }
+  },
+  "action": {
+    "component": "FullPositionSell",
+    "config": {}
+  }
+}
+````
+
+#### **2.1. 핵심 속성 (`priority`)**
+
+  * `priority: 0`: 실행 엔진이 처리할 규칙의 우선순위를 정의합니다. 숫자가 낮을수록 우선순위가 높으며, `0`은 최상위 레벨을 의미합니다. 이 규칙이 다른 어떤 규칙과 동시에 발동 조건을 만족하더라도, 항상 이 규칙이 채택되도록 보장합니다.
+
+#### **2.2. 트리거 설정 (`RapidPriceDropTrigger`)**
+
+  * `component: "RapidPriceDropTrigger"`: 단기간 내의 가격 변화율을 감지하는 특수 트리거 컴포넌트입니다.
+  * `drop_percent: -5`: 하락률 감지 임계값을 -5%로 설정합니다.
+  * `time_frame_seconds: 60`: 60초라는 짧은 시간 프레임 내의 가격 변화를 감시합니다.
+
+#### **2.3. 액션 설정 (`FullPositionSell`)**
+
+  * `component: "FullPositionSell"`: 포지션 전체를 즉시 시장가로 청산하는 표준 액션입니다.
+
+-----
+
+### \#\# 3. 실행 엔진에서의 동작 방식 (우선순위 적용)
+
+이 규칙의 존재로 인해 `ExecutionEngine`의 신호 처리 방식은 더욱 정교해집니다.
+
+1.  **감시 시작**: 포지션이 `ACTIVE` 상태가 되면, 이 규칙은 다른 관리 규칙들과 함께 동시에 시장을 감시합니다.
+2.  **충돌 상황 발생**: 시장이 폭락하여 **단일 데이터 틱** 안에서, `-5% 하락` 조건과 `-5% 급락` 조건이 동시에 만족되었다고 가정합니다.
+      * \*\*규칙 \#5 (물타기)\*\*의 `PriceChangeTrigger`가 `True`를 반환합니다.
+      * \*\*규칙 \#6 (급락 감지)\*\*의 `RapidPriceDropTrigger`도 `True`를 반환합니다.
+3.  **발동 규칙 수집 및 정렬**: `ExecutionEngine`은 발동된 `규칙 #5`와 `규칙 #6`을 '실행 후보 리스트'에 담습니다. 그 후, **액션을 실행하기 전에 리스트를 `priority` 순으로 정렬**합니다.
+      * 정렬 결과: `[규칙 #6 (priority: 0), 규칙 #5 (priority: 10-기본값)]`
+4.  **최우선 규칙 실행**: 엔진은 정렬된 리스트의 가장 첫 번째, 즉 **가장 우선순위가 높은 `규칙 #6`의 `FullPositionSell` 액션만을 최종 실행**합니다.
+5.  **나머지 규칙 무시**: 리스트의 나머지 규칙들(이 경우 `규칙 #5`)은 이번 실행 사이클에서 **자동으로 무시**됩니다.
+6.  **사이클 종료**: 포지션이 전량 청산되고 상태가 `CLOSED`로 변경됩니다. 결과적으로 시스템은 폭락장에서 물타기를 하는 대신, 가장 안전한 탈출을 감행하게 됩니다.
+
+<!-- end list -->
+
+```
+```

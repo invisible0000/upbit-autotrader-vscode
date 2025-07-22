@@ -1,0 +1,122 @@
+네, 바이브 코딩 에이전트 전달을 위한 최종 문서 시리즈의 마지막, 세 번째 문서를 생성하겠습니다.
+
+**문서 3: 구현 가이드 및 예제**입니다.
+
+````markdown
+# 바이브 코딩 에이전트 전달 문서 3/3: 구현 가이드 및 예제
+
+---
+
+### ## 1. UI 구현 가이드: 전략 메이커 🎨
+
+사용자가 컴포넌트를 조합하여 시각적으로 전략을 구축하는 '전략 메이커' UI는 다음 핵심 요소로 구성됩니다.
+
+* **3-Panel 구조**:
+    1.  **컴포넌트 팔레트 (좌측)**: 사용 가능한 모든 `트리거`, `액션`, `조건` 컴포넌트들을 카테고리별로 보여주는 목록입니다.
+    2.  **전략 캔버스 (중앙)**: 사용자가 팔레트에서 컴포넌트를 드래그 & 드롭하여 배치하고, 컴포넌트 간의 논리적 흐름을 시각적으로 연결하는 작업 공간입니다.
+    3.  **설정 패널 (우측)**: 캔버스에서 특정 컴포넌트를 선택했을 때, 해당 컴포넌트의 상세 파라미터(e.g., RSI 기간, 매수 비율 등)를 설정하는 동적 폼입니다.
+
+* **드래그 & 드롭 인터페이스**:
+    사용자는 마우스操作만으로 컴포넌트를 캔버스에 추가하고, 각 컴포넌트의 입출력 포트를 연결하여 복잡한 실행 순서와 조건을 구성할 수 있습니다.
+
+---
+
+### ## 2. 완성된 전략 템플릿 (JSON) 📜
+
+지금까지 우리가 함께 설계한 **'7규칙 최종 전략'**의 완전한 데이터 구조입니다. 이는 시스템이 저장하고 실행하는 전략의 가장 완벽한 실전 예제입니다.
+
+```json
+{
+  "strategy_id": "ADV_RSI_PYRAMID_V1",
+  "strategy_name": "RSI 진입 후 지능형 관리 전략",
+  "rules": [
+    {
+      "rule_id": "rule_1_entry_rsi_oversold",
+      "priority": 10,
+      "activation_state": "READY",
+      "trigger": {"component": "RSITrigger", "config": {"period": 14, "threshold": 20, "direction": "below"}},
+      "action": {"component": "MarketBuyAction", "config": {"amount_percent": 10, "position_tag": "AUTO"}}
+    },
+    {
+      "rule_id": "rule_2_scale_in_on_profit",
+      "priority": 10,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "ProfitLossTrigger", "config": {"profit_percent": 5, "direction": "above"}},
+      "conditions": [
+        {"component": "ExecutionCountCondition", "config": {"target_rule_id": "rule_2_scale_in_on_profit", "less_than": 3}},
+        {"component": "ContextCondition", "config": {"check_flag": "is_pyramiding_paused", "is_value": false}}
+      ],
+      "action": {"component": "AdditionalBuy", "config": {"amount": 100000}}
+    },
+    {
+      "rule_id": "rule_3_exit_after_pyramiding",
+      "priority": 9,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "ProfitLossTrigger", "config": {"profit_percent": 5, "direction": "above"}},
+      "conditions": [
+        {"component": "ExecutionCountCondition", "config": {"target_rule_id": "rule_2_scale_in_on_profit", "equal_to": 3}}
+      ],
+      "action": {"component": "FullPositionSell", "config": {}}
+    },
+    {
+      "rule_id": "rule_4_exit_trailing_stop",
+      "priority": 9,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "ProfitLossTrigger", "config": {"activation_profit_percent": 5, "trail_percent": 3}},
+      "action": {"component": "FullPositionSell", "config": {}}
+    },
+    {
+      "rule_id": "rule_5_downward_averaging",
+      "priority": 10,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "PriceChangeTrigger", "config": {"reference": "average_price", "change_percent": -5, "direction": "below"}},
+      "conditions": [
+        {"component": "ExecutionCountCondition", "config": {"target_rule_id": "rule_5_downward_averaging", "less_than": 2}}
+      ],
+      "action": {"component": "AdditionalBuy", "config": {"amount": 200000}}
+    },
+    {
+      "rule_id": "rule_6_emergency_exit_on_crash",
+      "priority": 0,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "RapidPriceDropTrigger", "config": {"drop_percent": -5, "time_frame_seconds": 60}},
+      "action": {"component": "FullPositionSell", "config": {}}
+    },
+    {
+      "rule_id": "rule_7_hold_pyramiding_on_spike",
+      "priority": 1,
+      "activation_state": "ACTIVE",
+      "trigger": {"component": "RapidPriceSpikeTrigger", "config": {"spike_percent": 5, "time_frame_seconds": 60}},
+      "action": {"component": "ModifyContextAction", "config": {"set_flag": "is_pyramiding_paused", "value": true}}
+    }
+  ]
+}
+````
+
+-----
+
+### \#\# 3. 복합 시나리오 실행 흐름 ⚙️
+
+'급락' 상황에서 `ExecutionEngine`이 `우선순위`를 기반으로 여러 규칙의 충돌을 해결하는 과정입니다.
+
+1.  **상황 발생**: 포지션이 `ACTIVE` 상태일 때, 시장이 폭락하여 단일 데이터 틱에 -6%의 가격 하락이 발생합니다.
+
+2.  **규칙 동시 발동**: `ExecutionEngine`은 이 한 번의 실행 사이클에서 아래 두 규칙의 트리거가 모두 `True`임을 감지합니다.
+
+      * **규칙 \#5 (물타기)**: 평단가 대비 -5% 이상 하락했으므로 발동.
+      * **규칙 \#6 (급락 감지)**: 1분 내 -5% 이상 하락했으므로 발동.
+
+3.  **실행 후보 수집**: 엔진은 발동된 `규칙 #5`와 `규칙 #6`을 '실행 후보 리스트'에 담습니다.
+
+4.  **우선순위 정렬**: 엔진은 액션을 실행하기 전, 리스트를 각 규칙의 `priority` 값으로 정렬합니다. `규칙 #6`(priority: 0)이 `규칙 #5`(priority: 10-기본값)보다 앞에 위치하게 됩니다.
+
+      * **정렬 후 리스트**: `[규칙 #6, 규칙 #5]`
+
+5.  **최종 액션 선택 및 실행**: 엔진은 정렬된 리스트의 가장 첫 번째, 즉 우선순위가 가장 높은 **`규칙 #6`의 `FullPositionSell` 액션을 실행**합니다.
+
+6.  **나머지 액션 무시**: 리스트에 남아있던 `규칙 #5`의 `AdditionalBuy` 액션은 이번 사이클에서 실행되지 않고 폐기됩니다.
+
+이 과정을 통해 시스템은 위험한 상황에서 자산을 추가 투입하는 대신, 가장 안전한 '전량 매도'를 수행하여 리스크를 효과적으로 관리합니다.
+
+```
+```
