@@ -118,6 +118,373 @@ class ConfirmationTrigger:
             
         signal = self.strategy.generate_signal(market_data)
         if signal:
+            signal.confidence *= self.weight
+        return signal
+```
+
+---
+
+## 🔄 **실제 조합 실행 플로우 (Combination Execution Flow)**
+
+### **🎯 조합 전략 실행 생명주기**
+
+```python
+class CombinationExecutionFlow:
+    """조합 전략 실행 플로우"""
+    
+    def __init__(self, combination_config):
+        self.state = "WAITING"  # WAITING → ENTRY → POSITION → EXIT → COMPLETED
+        self.position = None
+        self.entry_strategies = combination_config["entry_strategies"]
+        self.management_strategies = combination_config["management_strategies"]
+        self.exit_strategies = combination_config["exit_strategies"]
+    
+    def execute_cycle(self, market_data):
+        """매 사이클마다 실행되는 핵심 로직"""
+        
+        if self.state == "WAITING":
+            # 📊 진입 조건 평가
+            entry_decision = self._evaluate_entry_combination(market_data)
+            if entry_decision["should_enter"]:
+                self._execute_entry(entry_decision)
+                self.state = "POSITION"
+                
+        elif self.state == "POSITION":
+            # 🛡️ 관리 조건 평가 (피라미딩, 부분청산 등)
+            management_actions = self._evaluate_management_combination(market_data)
+            if management_actions:
+                self._execute_management(management_actions)
+            
+            # 🚪 청산 조건 평가
+            exit_decision = self._evaluate_exit_combination(market_data)
+            if exit_decision["should_exit"]:
+                self._execute_exit(exit_decision)
+                self.state = "COMPLETED"
+    
+    def _evaluate_entry_combination(self, market_data):
+        """진입 조건 조합 평가"""
+        # 1단계: 모든 진입 전략 신호 수집
+        entry_signals = []
+        for strategy in self.entry_strategies:
+            signal = strategy.generate_signal(market_data)
+            if signal:
+                entry_signals.append({
+                    "strategy_id": strategy.id,
+                    "signal": signal,
+                    "weight": strategy.weight,
+                    "trigger_mode": strategy.trigger_mode
+                })
+        
+        # 2단계: 조합 규칙 적용
+        primary_signals = [s for s in entry_signals if s["trigger_mode"] == "PRIMARY"]
+        confirmation_signals = [s for s in entry_signals if s["trigger_mode"] == "CONFIRMATION"]
+        
+        # 3단계: 최종 결정
+        decision = {"should_enter": False, "confidence": 0.0, "reasoning": []}
+        
+        if primary_signals:
+            # PRIMARY 신호가 있으면 기본 신뢰도 계산
+            primary_confidence = sum(s["signal"].confidence * s["weight"] for s in primary_signals)
+            decision["confidence"] = primary_confidence
+            decision["reasoning"].append(f"Primary signals: {len(primary_signals)}")
+            
+            # CONFIRMATION 신호로 신뢰도 증폭
+            if confirmation_signals:
+                confirmation_boost = sum(s["signal"].confidence * s["weight"] for s in confirmation_signals) * 0.3
+                decision["confidence"] += confirmation_boost
+                decision["reasoning"].append(f"Confirmation boost: +{confirmation_boost:.2f}")
+            
+            # 최종 진입 결정 (60% 이상 신뢰도)
+            if decision["confidence"] >= 0.6:
+                decision["should_enter"] = True
+                decision["reasoning"].append(f"Entry approved: {decision['confidence']:.2f} >= 0.6")
+        
+        return decision
+    
+    def _evaluate_management_combination(self, market_data):
+        """관리 조건 조합 평가"""
+        actions = []
+        
+        for strategy in self.management_strategies:
+            signal = strategy.generate_signal(market_data, self.position)
+            if signal:
+                if signal.signal_type == "ADD_BUY":
+                    # 피라미딩 검증
+                    if self._validate_add_buy(signal):
+                        actions.append({
+                            "type": "ADD_BUY",
+                            "amount": signal.additional_data["add_amount"],
+                            "strategy": strategy.id,
+                            "reason": signal.reason
+                        })
+                
+                elif signal.signal_type == "PARTIAL_EXIT":
+                    # 부분 청산 검증
+                    if self._validate_partial_exit(signal):
+                        actions.append({
+                            "type": "PARTIAL_EXIT",
+                            "ratio": signal.additional_data["exit_ratio"],
+                            "strategy": strategy.id,
+                            "reason": signal.reason
+                        })
+        
+        return actions
+    
+    def _evaluate_exit_combination(self, market_data):
+        """청산 조건 조합 평가"""
+        exit_signals = []
+        
+        for strategy in self.exit_strategies:
+            signal = strategy.generate_signal(market_data, self.position)
+            if signal:
+                exit_signals.append({
+                    "strategy_id": strategy.id,
+                    "signal": signal,
+                    "priority": self._get_exit_priority(signal.signal_type),
+                    "urgency": signal.additional_data.get("urgency", "NORMAL")
+                })
+        
+        # 우선순위 정렬 (STOP_LOSS > TRAILING > TAKE_PROFIT)
+        exit_signals.sort(key=lambda x: x["priority"])
+        
+        decision = {"should_exit": False, "exit_type": None, "reasoning": []}
+        
+        if exit_signals:
+            # 가장 높은 우선순위 신호 채택
+            top_signal = exit_signals[0]
+            
+            if top_signal["urgency"] == "URGENT":
+                # 긴급 청산 (손절 등)
+                decision["should_exit"] = True
+                decision["exit_type"] = "URGENT"
+                decision["reasoning"].append(f"Urgent exit: {top_signal['signal'].signal_type}")
+            
+            elif top_signal["signal"].confidence >= 0.7:
+                # 일반 청산
+                decision["should_exit"] = True
+                decision["exit_type"] = "NORMAL"
+                decision["reasoning"].append(f"Normal exit: {top_signal['signal'].signal_type}")
+        
+        return decision
+```
+
+### **🎪 개별 감시 vs 조합 감시 전략**
+
+#### **통합 감시 시스템 (Unified Monitoring System)**
+
+```python
+class UnifiedMonitoringSystem:
+    """통합 감시 시스템 - 모든 전략을 하나의 엔진에서 조율"""
+    
+    def __init__(self, combination_config):
+        self.all_strategies = self._categorize_strategies(combination_config)
+        self.current_state = "NO_POSITION"
+        self.position_context = None
+        
+    def monitor_cycle(self, market_data):
+        """통합 감시 사이클"""
+        monitoring_result = {
+            "timestamp": market_data["timestamp"],
+            "active_strategies": [],
+            "signals_generated": [],
+            "actions_taken": []
+        }
+        
+        # 현재 상태에 따라 활성화할 전략 그룹 결정
+        active_strategy_groups = self._get_active_strategy_groups()
+        
+        for group_name, strategies in active_strategy_groups.items():
+            group_signals = []
+            
+            for strategy in strategies:
+                # 개별 전략 실행 (중복 계산 방지)
+                signal = self._execute_strategy_with_cache(strategy, market_data)
+                if signal:
+                    group_signals.append(signal)
+            
+            # 그룹별 조합 로직 적용
+            group_decision = self._apply_group_combination_logic(group_name, group_signals)
+            
+            if group_decision["action_required"]:
+                monitoring_result["actions_taken"].append(group_decision)
+                self._update_system_state(group_decision)
+        
+        return monitoring_result
+    
+    def _get_active_strategy_groups(self):
+        """현재 상태에 따른 활성 전략 그룹 반환"""
+        active_groups = {}
+        
+        if self.current_state == "NO_POSITION":
+            # 포지션 없음 → 진입 전략만 활성화
+            active_groups["entry"] = self.all_strategies["entry"]
+            active_groups["filters"] = self.all_strategies["filters"]
+            
+        elif self.current_state == "POSITION_ACTIVE":
+            # 포지션 보유 → 관리/청산 전략 활성화
+            active_groups["management"] = self.all_strategies["management"]  
+            active_groups["exit"] = self.all_strategies["exit"]
+            
+        return active_groups
+    
+    def _apply_group_combination_logic(self, group_name, signals):
+        """그룹별 조합 로직 적용"""
+        if group_name == "entry":
+            return self._combine_entry_signals(signals)
+        elif group_name == "management":
+            return self._combine_management_signals(signals)
+        elif group_name == "exit":
+            return self._combine_exit_signals(signals)
+        else:
+            return {"action_required": False}
+    
+    def _combine_entry_signals(self, signals):
+        """진입 신호 조합 로직"""
+        # PRIMARY + CONFIRMATION 조합
+        primary_signals = [s for s in signals if s.trigger_mode == "PRIMARY"]
+        confirmation_signals = [s for s in signals if s.trigger_mode == "CONFIRMATION"]
+        
+        if primary_signals:
+            total_confidence = sum(s.confidence * s.weight for s in primary_signals)
+            if confirmation_signals:
+                total_confidence += sum(s.confidence * s.weight for s in confirmation_signals) * 0.3
+            
+            if total_confidence >= 0.6:
+                return {
+                    "action_required": True,
+                    "action_type": "ENTER_POSITION",
+                    "confidence": total_confidence,
+                    "contributing_signals": len(signals)
+                }
+        
+        return {"action_required": False}
+    
+    def _combine_exit_signals(self, signals):
+        """청산 신호 조합 로직"""
+        # 우선순위 기반 조합 (STOP_LOSS > TRAILING > TAKE_PROFIT)
+        if not signals:
+            return {"action_required": False}
+        
+        # 긴급 신호 우선 처리
+        urgent_signals = [s for s in signals if s.additional_data.get("urgency") == "URGENT"]
+        if urgent_signals:
+            return {
+                "action_required": True,
+                "action_type": "EXIT_POSITION",
+                "exit_mode": "URGENT",
+                "signal_source": urgent_signals[0].strategy_id
+            }
+        
+        # 일반 신호 평가
+        high_confidence_signals = [s for s in signals if s.confidence >= 0.7]
+        if high_confidence_signals:
+            return {
+                "action_required": True,
+                "action_type": "EXIT_POSITION", 
+                "exit_mode": "NORMAL",
+                "signal_source": high_confidence_signals[0].strategy_id
+            }
+        
+        return {"action_required": False}
+```
+
+---
+
+## 🚀 **백테스트 통합 실행 예제**
+
+### **📊 완전한 백테스트 시나리오**
+
+```python
+# 조합 전략 설정
+combination_config = {
+    "combination_id": "rsi_macd_trailing_combo",
+    "combination_name": "RSI + MACD + 트레일링 스탑 조합",
+    "symbol": "KRW-BTC",
+    "timeframe": "1h",
+    
+    "entry_strategies": [
+        {
+            "strategy_id": "rsi_oversold",
+            "trigger_mode": "PRIMARY",
+            "weight": 0.6,
+            "parameters": {"rsi_period": 14, "oversold_threshold": 30}
+        },
+        {
+            "strategy_id": "macd_golden_cross",
+            "trigger_mode": "CONFIRMATION", 
+            "weight": 0.4,
+            "parameters": {"fast_period": 12, "slow_period": 26}
+        }
+    ],
+    
+    "management_strategies": [
+        {
+            "strategy_id": "upward_pyramiding",
+            "weight": 1.0,
+            "parameters": {
+                "add_trigger_percent": 0.05,
+                "add_amount": 100000,
+                "max_add_count": 3
+            }
+        }
+    ],
+    
+    "exit_strategies": [
+        {
+            "strategy_id": "trailing_stop",
+            "weight": 1.0,
+            "parameters": {"trail_percent": 0.03, "activation_percent": 0.02}
+        },
+        {
+            "strategy_id": "fixed_stop_loss",
+            "weight": 1.0,
+            "parameters": {"stop_loss_percent": 0.05}
+        }
+    ]
+}
+
+# 백테스트 실행
+def run_complete_backtest():
+    # 1. 조합 전략 실행 엔진 초기화
+    combo_executor = CombinationExecutionFlow(combination_config)
+    
+    # 2. 시장 데이터 로드
+    market_data = load_market_data("KRW-BTC", "2024-01-01", "2024-06-01", "1h")
+    
+    # 3. 시뮬레이션 실행
+    execution_log = []
+    
+    for data_point in market_data:
+        # 매 시간마다 전략 실행
+        cycle_result = combo_executor.execute_cycle(data_point)
+        execution_log.append(cycle_result)
+        
+        # 상태 변화 로깅
+        if cycle_result.get("state_changed"):
+            print(f"⚡ 상태 변화: {cycle_result['old_state']} → {cycle_result['new_state']}")
+            
+        # 거래 실행 로깅  
+        if cycle_result.get("trade_executed"):
+            trade = cycle_result["trade_executed"]
+            print(f"💰 거래 실행: {trade['type']} | 가격: {trade['price']} | 수량: {trade['quantity']}")
+    
+    # 4. 성과 분석
+    performance = analyze_performance(execution_log)
+    
+    print(f"""
+    🎯 백테스트 결과:
+    📈 총 거래 횟수: {performance['total_trades']}
+    💰 총 수익률: {performance['total_return']:.2f}%
+    📉 최대 낙폭: {performance['max_drawdown']:.2f}%
+    🎪 조합 효과: {performance['combination_benefit']:.2f}%
+    """)
+    
+    return execution_log, performance
+
+# 백테스트 실행
+if __name__ == "__main__":
+    log, perf = run_complete_backtest()
+```
             # 의존 신호들과 결합하여 최종 신호 강도 계산
             combined_confidence = self.combine_with_dependencies(
                 signal.confidence, dependency_signals

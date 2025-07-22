@@ -36,7 +36,13 @@
 | 스토캐스틱 | ENTRY | BUY/SELL | 과매수/과매도 구간 신호 |
 | 변동성 돌파 | ENTRY | BUY/SELL | 변동성 기반 돌파 신호 |
 
-### 🛡️ **관리 전략 (Management Strategies)**
+### � **증액 전략 (Scale-In Strategies)**
+| 전략명 | 역할 | 신호 타입 | 설명 |
+|-------|------|-----------|------|
+| 상승 피라미딩 | SCALE_IN | ADD_BUY | 수익 발생 시 추가 매수 |
+| 하락 물타기 | SCALE_IN | ADD_BUY | 손실 발생 시 평단가 낮추기 |
+
+### �🛡️ **관리 전략 (Management Strategies)**
 | 전략명 | 역할 | 신호 타입 | 설명 |
 |-------|------|-----------|------|
 | 고정 손절 | EXIT | STOP_LOSS | 고정 손절률 적용 |
