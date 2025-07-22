@@ -65,9 +65,9 @@ class Trade(Base):
     def __repr__(self):
         return f"<Trade(symbol='{self.symbol}', timestamp='{self.timestamp}', side='{self.side}')>"
 
-class Strategy(Base):
-    """전략 모델"""
-    __tablename__ = 'strategy'
+class LegacyStrategy(Base):
+    """레거시 전략 모델 (기존 고정 전략용)"""
+    __tablename__ = 'legacy_strategy'
     
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False)
@@ -85,18 +85,18 @@ class Strategy(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # 관계
-    backtests = relationship("Backtest", back_populates="strategy")
-    portfolio_coins = relationship("PortfolioCoin", back_populates="strategy")
-    
+    backtests = relationship("Backtest", back_populates="legacy_strategy")
+    portfolio_coins = relationship("PortfolioCoin", back_populates="legacy_strategy")
     def __repr__(self):
-        return f"<Strategy(id='{self.id}', name='{self.name}', role='{self.role}', signal_type='{self.signal_type}')>"
+        return f"<LegacyStrategy(id='{self.id}', name='{self.name}', role='{self.role}', signal_type='{self.signal_type}')>"
 
 class Backtest(Base):
     """백테스트 모델"""
     __tablename__ = 'backtest'
     
     id = Column(String(50), primary_key=True)
-    strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    legacy_strategy_id = Column(String(50), ForeignKey('legacy_strategy.id'), nullable=True)  # 레거시 전략용
+    component_strategy_id = Column(String(50), nullable=True)  # 컴포넌트 전략용 (나중에 ForeignKey 추가)
     symbol = Column(String(20), nullable=False)
     portfolio_id = Column(String(50), ForeignKey('portfolio.id'), nullable=True)
     timeframe = Column(String(10), nullable=False)
@@ -107,7 +107,7 @@ class Backtest(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # 관계
-    strategy = relationship("Strategy", back_populates="backtests")
+    legacy_strategy = relationship("LegacyStrategy", back_populates="backtests")
     portfolio = relationship("Portfolio", back_populates="backtests")
     trades = relationship("Trade", back_populates="backtest")
     
@@ -138,12 +138,13 @@ class PortfolioCoin(Base):
     id = Column(Integer, primary_key=True)
     portfolio_id = Column(String(50), ForeignKey('portfolio.id'), nullable=False)
     symbol = Column(String(20), nullable=False)
-    strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    legacy_strategy_id = Column(String(50), ForeignKey('legacy_strategy.id'), nullable=True)  # 레거시 전략용
+    component_strategy_id = Column(String(50), nullable=True)  # 컴포넌트 전략용 (나중에 ForeignKey 추가)
     weight = Column(Float, nullable=False)
     
     # 관계
     portfolio = relationship("Portfolio", back_populates="coins")
-    strategy = relationship("Strategy", back_populates="portfolio_coins")
+    legacy_strategy = relationship("LegacyStrategy", back_populates="portfolio_coins")
     
     def __repr__(self):
         return f"<PortfolioCoin(portfolio_id='{self.portfolio_id}', symbol='{self.symbol}', weight={self.weight})>"
@@ -153,7 +154,8 @@ class TradingSession(Base):
     __tablename__ = 'trading_session'
     
     id = Column(String(50), primary_key=True)
-    strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    legacy_strategy_id = Column(String(50), ForeignKey('legacy_strategy.id'), nullable=True)  # 레거시 전략용
+    component_strategy_id = Column(String(50), nullable=True)  # 컴포넌트 전략용
     symbol = Column(String(20), nullable=False)
     status = Column(String(20), nullable=False)  # 'active', 'paused', 'stopped'
     amount = Column(Float, nullable=False)
@@ -177,14 +179,14 @@ class Notification(Base):
     def __repr__(self):
         return f"<Notification(id={self.id}, type='{self.type}', timestamp='{self.timestamp}')>"
 
-class StrategyCombination(Base):
-    """전략 조합 모델"""
-    __tablename__ = 'strategy_combination'
+class LegacyStrategyCombination(Base):
+    """레거시 전략 조합 모델 (기존 고정 전략용)"""
+    __tablename__ = 'legacy_strategy_combination'
     
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
-    entry_strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    entry_strategy_id = Column(String(50), ForeignKey('legacy_strategy.id'), nullable=False)
     execution_order = Column(String(20), nullable=False, default='parallel')  # 'parallel', 'sequential'
     conflict_resolution = Column(String(20), nullable=False, default='conservative')  # 'conservative', 'aggressive'
     is_active = Column(Boolean, nullable=False, default=True)
@@ -192,26 +194,26 @@ class StrategyCombination(Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # 관계
-    entry_strategy = relationship("Strategy", foreign_keys=[entry_strategy_id])
-    management_strategies = relationship("CombinationManagementStrategy", back_populates="combination")
+    entry_strategy = relationship("LegacyStrategy", foreign_keys=[entry_strategy_id])
+    management_strategies = relationship("LegacyCombinationManagementStrategy", back_populates="combination")
     
     def __repr__(self):
-        return f"<StrategyCombination(id='{self.id}', name='{self.name}', is_active={self.is_active})>"
+        return f"<LegacyStrategyCombination(id='{self.id}', name='{self.name}', is_active={self.is_active})>"
 
-class CombinationManagementStrategy(Base):
-    """조합에 포함된 관리 전략 모델"""
-    __tablename__ = 'combination_management_strategy'
+class LegacyCombinationManagementStrategy(Base):
+    """레거시 조합에 포함된 관리 전략 모델"""
+    __tablename__ = 'legacy_combination_management_strategy'
     
     id = Column(Integer, primary_key=True)
-    combination_id = Column(String(50), ForeignKey('strategy_combination.id'), nullable=False)
-    strategy_id = Column(String(50), ForeignKey('strategy.id'), nullable=False)
+    combination_id = Column(String(50), ForeignKey('legacy_strategy_combination.id'), nullable=False)
+    strategy_id = Column(String(50), ForeignKey('legacy_strategy.id'), nullable=False)
     priority = Column(Integer, nullable=False, default=1)  # 우선순위 (1이 최고)
     weight = Column(Float, nullable=False, default=1.0)  # 가중치
     is_active = Column(Boolean, nullable=False, default=True)
     
     # 관계
-    combination = relationship("StrategyCombination", back_populates="management_strategies")
-    strategy = relationship("Strategy")
+    combination = relationship("LegacyStrategyCombination", back_populates="management_strategies")
+    strategy = relationship("LegacyStrategy")
     
     def __repr__(self):
-        return f"<CombinationManagementStrategy(combination_id='{self.combination_id}', strategy_id='{self.strategy_id}', priority={self.priority})>"
+        return f"<LegacyCombinationManagementStrategy(combination_id='{self.combination_id}', strategy_id='{self.strategy_id}', priority={self.priority})>"
