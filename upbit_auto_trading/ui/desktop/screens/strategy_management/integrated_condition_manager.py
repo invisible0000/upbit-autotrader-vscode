@@ -13,6 +13,57 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QPixmap, QIcon
 import random
 
+# 차트 라이브러리 import
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    import numpy as np
+    import pandas as pd
+    from datetime import datetime, timedelta
+    
+    # 한글 폰트 설정
+    import matplotlib.font_manager as fm
+    
+    # 시스템에서 사용 가능한 한글 폰트 찾기
+    font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
+    korean_fonts = []
+    
+    for font_path in font_list:
+        try:
+            font_prop = fm.FontProperties(fname=font_path)
+            font_name = font_prop.get_name()
+            if any(keyword in font_name.lower() for keyword in ['malgun', 'gulim', 'dotum', 'batang', 'nanum', '맑은 고딕', '굴림']):
+                korean_fonts.append(font_name)
+        except:
+            continue
+    
+    # 우선순위에 따라 폰트 설정
+    preferred_fonts = ['Malgun Gothic', 'NanumGothic', 'Gulim', 'Dotum']
+    selected_font = None
+    
+    for pref_font in preferred_fonts:
+        if pref_font in korean_fonts:
+            selected_font = pref_font
+            break
+    
+    if not selected_font and korean_fonts:
+        selected_font = korean_fonts[0]
+    
+    if selected_font:
+        plt.rcParams['font.family'] = selected_font
+        plt.rcParams['axes.unicode_minus'] = False
+        print(f"✅ 차트 한글 폰트 설정: {selected_font}")
+    else:
+        plt.rcParams['axes.unicode_minus'] = False
+        print("⚠️ 한글 폰트를 찾을 수 없어 기본 폰트 사용")
+    
+    print("✅ 차트 라이브러리 로드 성공")
+    CHART_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ 차트 라이브러리를 찾을 수 없습니다: {e}")
+    CHART_AVAILABLE = False
+
 # 우리의 컴포넌트 시스템 import
 import sys
 import os
@@ -105,6 +156,8 @@ class IntegratedConditionManager(QWidget):
         
         # 3: 케이스 시뮬레이션 버튼들 (우측 상단)
         self.simulation_area = self.create_simulation_area()
+        self.simulation_area.setMinimumWidth(360)  # 최소 너비 증가 (250 → 360)
+        self.simulation_area.setMaximumWidth(400)  # 최대 너비 증가 (280 → 400)
         grid_layout.addWidget(self.simulation_area, 0, 2, 1, 1)
         
         # 5: 선택한 트리거 상세 정보 (중앙 하단)
@@ -113,6 +166,8 @@ class IntegratedConditionManager(QWidget):
         
         # 6: 작동 마커 차트 + 작동 기록 (우측 하단)
         self.test_result_area = self.create_test_result_area()
+        self.test_result_area.setMinimumWidth(360)  # 최소 너비 증가 (250 → 360)
+        self.test_result_area.setMaximumWidth(400)  # 최대 너비 증가 (280 → 400)
         grid_layout.addWidget(self.test_result_area, 1, 2, 1, 1)
         
         # 그리드 비율 설정 - 두 번째 첨부 이미지와 유사하게 (1:2:1)
@@ -120,9 +175,9 @@ class IntegratedConditionManager(QWidget):
         grid_layout.setColumnStretch(1, 2)  # 트리거 관리 (넓게)
         grid_layout.setColumnStretch(2, 1)  # 시뮬레이션 (좁게)
         
-        # 행 비율 설정 (상단 좀 더 크게)
-        grid_layout.setRowStretch(0, 3)  # 상단
-        grid_layout.setRowStretch(1, 2)  # 하단
+        # 행 비율 설정 (상단 영역도 증가: 3 → 5, 하단 영역: 4 → 6)
+        grid_layout.setRowStretch(0, 5)  # 상단 (케이스 시뮬레이션 포함)
+        grid_layout.setRowStretch(1, 6)  # 하단 (트리거 디테일 & 테스트 결과)
         
         main_layout.addWidget(grid_widget)
         
@@ -189,24 +244,27 @@ class IntegratedConditionManager(QWidget):
         layout.addWidget(header_widget)
     
     def create_condition_builder_area(self):
-        """영역 1+4: 조건 빌더 (좌측 통합) - CardWidget 스타일"""
+        """영역 1+4: 조건 빌더 (좌측 통합) - 통일된 테두리 스타일"""
         group = QGroupBox("🎯 조건 빌더")
         group.setStyleSheet("""
             QGroupBox {
                 background-color: white;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
                 font-weight: bold;
-                padding-top: 10px;  /* 상단 패딩 줄이기 */
-                margin: 1px;        /* 마진 줄이기 */
+                padding-top: 12px;
+                margin: 2px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+                left: 15px;
+                padding: 0 8px 0 8px;
                 background-color: white;
-                color: #333333;
-                font-size: 11px;    /* 폰트 크기 줄이기 */
+                color: #2c3e50;
+                font-size: 11px;
+                font-weight: bold;
+                border-radius: 4px;
+                border: 1px solid #2c3e50;
             }
         """)
         layout = QVBoxLayout(group)
@@ -236,24 +294,27 @@ class IntegratedConditionManager(QWidget):
         return group
     
     def create_trigger_list_area(self):
-        """영역 2: 등록된 트리거 리스트 (중앙 상단) - 대시보드 스타일"""
+        """영역 2: 등록된 트리거 리스트 (중앙 상단) - 통일된 테두리 스타일"""
         group = QGroupBox("📋 등록된 트리거 리스트")
         group.setStyleSheet("""
             QGroupBox {
                 background-color: white;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
                 font-weight: bold;
-                padding-top: 10px;  /* 상단 패딩 줄이기 */
-                margin: 1px;        /* 마진 줄이기 */
+                padding-top: 12px;
+                margin: 2px;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+                left: 15px;
+                padding: 0 8px 0 8px;
                 background-color: white;
-                color: #333333;
-                font-size: 11px;    /* 폰트 크기 줄이기 */
+                color: #27ae60;
+                font-size: 11px;
+                font-weight: bold;
+                border-radius: 4px;
+                border: 1px solid #27ae60;
             }
         """)
         layout = QVBoxLayout(group)
@@ -366,40 +427,50 @@ class IntegratedConditionManager(QWidget):
     
     def create_simulation_area(self):
         """영역 3: 케이스 시뮬레이션 버튼들 (우측 상단)"""
-        group = QGroupBox("🎮 케이스 시뮬레이션")
+        group = QGroupBox("Case Simulation")
         group.setStyleSheet(self.get_groupbox_style("#6f42c1"))
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
         layout.setSpacing(3)  # 간격 줄이기
         
+        # 고정 높이 제거하여 자동 크기 조정되도록 함 (트리거 리스트와 동일)
+        # group.setFixedHeight(280)  # 이 줄 제거
+        
+        # 크기 정책도 제거 (트리거 리스트와 동일)
+        # from PyQt6.QtWidgets import QSizePolicy
+        # group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
         # 설명
-        desc_label = QLabel("📈 가상 시나리오로 트리거 테스트")
+        desc_label = QLabel("Virtual scenarios for trigger testing")
         desc_label.setStyleSheet("color: #6c757d; font-size: 11px; margin-bottom: 10px;")
         layout.addWidget(desc_label)
         
-        # 시뮬레이션 버튼들
+        # 시뮬레이션 버튼들 - 한글로 변경
         simulation_buttons = [
-            ("📈 상승", "상승 추세 시나리오", "#28a745"),
-            ("📉 하락", "하락 추세 시나리오", "#dc3545"),
-            ("🚀 급등", "급등 시나리오", "#007bff"),
-            ("💥 급락", "급락 시나리오", "#fd7e14"),
-            ("➡️ 횡보", "횡보 시나리오", "#6c757d"),
-            ("🔄 지수크로스", "이동평균 교차", "#17a2b8")
+            ("상승 추세", "상승 추세 시나리오", "#28a745"),
+            ("하락 추세", "하락 추세 시나리오", "#dc3545"),
+            ("급등", "급등 시나리오", "#007bff"),
+            ("급락", "급락 시나리오", "#fd7e14"),
+            ("횡보", "횡보 시나리오", "#6c757d"),
+            ("이동평균 교차", "이동평균 교차", "#17a2b8")
         ]
         
         for i, (icon_text, tooltip, color) in enumerate(simulation_buttons):
             btn = QPushButton(icon_text)
             btn.setToolTip(tooltip)
+            btn.setFixedHeight(60)  # 버튼 높이 10% 감소 (81 → 73)
+            btn.setMinimumWidth(200)  # 최소 너비 10% 감소 (324 → 292)
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
                     color: white;
                     border: none;
-                    border-radius: 8px;
-                    padding: 12px;
-                    font-size: 14px;
+                    border-radius: 10px;
+                    padding: 14px 20px;
+                    font-size: 15px;
                     font-weight: bold;
-                    margin: 2px;
+                    margin: 2px 4px;
+                    text-align: center;
                 }}
                 QPushButton:hover {{
                     background-color: {color}dd;
@@ -410,11 +481,15 @@ class IntegratedConditionManager(QWidget):
             """)
             btn.clicked.connect(lambda checked, scenario=icon_text: self.run_simulation(scenario))
             layout.addWidget(btn)
+            
+            # 버튼 사이에 최소 간격만 추가 (5 → 2)
+            if i < len(simulation_buttons) - 1:
+                layout.addSpacing(2)
         
         layout.addStretch()
         
         # 시뮬레이션 상태
-        self.simulation_status = QLabel("💡 트리거를 선택하고 시나리오를 클릭하세요")
+        self.simulation_status = QLabel("Select a trigger and click a scenario")
         self.simulation_status.setStyleSheet("""
             background-color: #f8f9fa;
             border: 2px solid #dee2e6;
@@ -431,7 +506,7 @@ class IntegratedConditionManager(QWidget):
     
     def create_trigger_detail_area(self):
         """영역 5: 선택한 트리거 상세 정보 (중앙 하단)"""
-        group = QGroupBox("📊 트리거 상세 정보")
+        group = QGroupBox("Trigger Details")
         group.setStyleSheet(self.get_groupbox_style("#17a2b8"))
         layout = QVBoxLayout(group)
         
@@ -453,7 +528,7 @@ class IntegratedConditionManager(QWidget):
             }
         """)
         self.trigger_detail_text.setReadOnly(True)
-        self.trigger_detail_text.setPlainText("트리거를 선택하면 상세 정보가 표시됩니다.")
+        self.trigger_detail_text.setPlainText("Select a trigger to view details.")
         layout.addWidget(self.trigger_detail_text)
         
         # 빠른 액션 버튼들
@@ -477,25 +552,30 @@ class IntegratedConditionManager(QWidget):
     
     def create_test_result_area(self):
         """영역 6: 작동 마커 차트 + 작동 기록 (우측 하단)"""
-        group = QGroupBox("📈 테스트 결과 & 작동 기록")
+        group = QGroupBox("Test Results & Chart")
         group.setStyleSheet(self.get_groupbox_style("#fd7e14"))
         layout = QVBoxLayout(group)
         
-        # 미니 차트 영역 (모의)
-        chart_label = QLabel("📊 미니 차트 영역")
-        chart_label.setStyleSheet("""
-            border: 3px dashed #fd7e14;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            color: #fd7e14;
-            font-weight: bold;
-            font-size: 14px;
-            background-color: #fff8f0;
-            min-height: 120px;
-        """)
-        chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(chart_label)
+        # 고정 높이 제거하여 자동 크기 조정되도록 함 (트리거 상세 정보와 동일)
+        # group.setFixedHeight(380)  # 이 줄 제거
+        
+        # 크기 정책도 제거 (트리거 상세 정보와 동일)
+        # from PyQt6.QtWidgets import QSizePolicy
+        # group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        
+        # 미니 차트 영역 - matplotlib 차트 또는 대체 라벨
+        if CHART_AVAILABLE:
+            try:
+                self.mini_chart_widget = self.create_mini_chart_widget()
+                layout.addWidget(self.mini_chart_widget)
+                print("✅ 미니 차트 위젯 생성 완료")
+            except Exception as e:
+                print(f"❌ 차트 위젯 생성 실패: {e}")
+                chart_label = self.create_fallback_chart_label()
+                layout.addWidget(chart_label)
+        else:
+            chart_label = self.create_fallback_chart_label()
+            layout.addWidget(chart_label)
         
         # 작동 기록 리스트
         self.test_history_list = QListWidget()
@@ -504,7 +584,7 @@ class IntegratedConditionManager(QWidget):
                 border: 2px solid #ddd;
                 border-radius: 8px;
                 background-color: white;
-                max-height: 180px;
+                max-height: 280px;
                 font-size: 11px;
             }
             QListWidget::item {
@@ -530,6 +610,148 @@ class IntegratedConditionManager(QWidget):
         layout.addWidget(self.test_history_list)
         
         return group
+    
+    def create_mini_chart_widget(self):
+        """미니 차트 위젯 생성 - matplotlib 기반"""
+        if not CHART_AVAILABLE:
+            return self.create_fallback_chart_label()
+        
+        try:
+            # matplotlib Figure와 Canvas 생성
+            self.chart_figure = Figure(figsize=(5, 3), dpi=80)  # 차트 높이 증가 (2 → 3)
+            self.chart_canvas = FigureCanvas(self.chart_figure)
+            self.chart_canvas.setMinimumHeight(150)  # 최소 높이 증가 (100 → 150)
+            self.chart_canvas.setMaximumHeight(250)  # 최대 높이 증가 (150 → 250)
+            
+            # 차트 영역 스타일링
+            self.chart_figure.patch.set_facecolor('#fff8f0')
+            
+            # 기본 차트 그리기
+            self.update_chart_with_sample_data()
+            
+            return self.chart_canvas
+            
+        except Exception as e:
+            print(f"❌ 차트 위젯 생성 실패: {e}")
+            return self.create_fallback_chart_label()
+    
+    def create_fallback_chart_label(self):
+        """차트 라이브러리가 없을 때 대체 라벨"""
+        chart_label = QLabel("📊 미니 차트 영역")
+        chart_label.setStyleSheet("""
+            border: 3px dashed #fd7e14;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            color: #fd7e14;
+            font-weight: bold;
+            font-size: 14px;
+            background-color: #fff8f0;
+            min-height: 180px;
+        """)
+        chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        return chart_label
+    
+    def update_chart_with_sample_data(self):
+        """샘플 데이터로 차트 업데이트"""
+        if not CHART_AVAILABLE or not hasattr(self, 'chart_figure'):
+            return
+        
+        try:
+            # 기존 차트 지우기
+            self.chart_figure.clear()
+            
+            # 서브플롯 생성
+            ax = self.chart_figure.add_subplot(111)
+            
+            # 샘플 가격 데이터 생성
+            x = np.arange(50)
+            base_price = 50000
+            price_data = base_price + np.cumsum(np.random.randn(50) * 100)
+            
+            # 가격 선 그리기
+            ax.plot(x, price_data, color='#3498db', linewidth=2, label='Price')
+            
+            # 트리거 포인트 예시 (랜덤하게 몇 개)
+            trigger_points = np.random.choice(x, size=3, replace=False)
+            trigger_prices = price_data[trigger_points]
+            ax.scatter(trigger_points, trigger_prices, color='#e74c3c', s=50, 
+                      zorder=5, label='Trigger', marker='o')
+            
+            # 차트 스타일링 - 심플하게
+            ax.set_title('Simulation Result', fontsize=10, fontweight='bold')
+            ax.legend(fontsize=8, loc='upper left')
+            ax.grid(True, alpha=0.2)
+            
+            # X/Y축 틱 및 라벨 제거
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            
+            # 차트 여백 조정 - 더 타이트하게
+            self.chart_figure.tight_layout(pad=0.5)
+            self.chart_figure.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.1)
+            
+            # 차트 업데이트
+            if hasattr(self, 'chart_canvas'):
+                self.chart_canvas.draw()
+            
+            print("✅ 차트 업데이트 완료")
+            
+        except Exception as e:
+            print(f"❌ 차트 업데이트 실패: {e}")
+    
+    def update_chart_with_simulation_results(self, simulation_data, trigger_results):
+        """시뮬레이션 결과로 차트 업데이트"""
+        if not CHART_AVAILABLE or not hasattr(self, 'chart_figure'):
+            return
+        
+        try:
+            # 기존 차트 지우기
+            self.chart_figure.clear()
+            ax = self.chart_figure.add_subplot(111)
+            
+            # 시뮬레이션 데이터 시각화
+            if 'price_data' in simulation_data:
+                price_data = simulation_data['price_data']
+                x = np.arange(len(price_data))
+                
+                ax.plot(x, price_data, color='#3498db', linewidth=2, label='Price')
+                
+                # 트리거 발생 지점 표시
+                if trigger_results and 'trigger_points' in trigger_results:
+                    trigger_x = trigger_results['trigger_points']
+                    trigger_y = [price_data[i] for i in trigger_x if i < len(price_data)]
+                    trigger_x = [i for i in trigger_x if i < len(price_data)]
+                    
+                    ax.scatter(trigger_x, trigger_y, color='#e74c3c', s=50, 
+                              zorder=5, label='Trigger Points', marker='o')
+                
+                # 차트 스타일링 - 심플하게
+                ax.set_title(f'{simulation_data.get("scenario", "Simulation")} Result', 
+                            fontsize=10, fontweight='bold')
+                ax.legend(fontsize=8, loc='upper left')
+                ax.grid(True, alpha=0.2)
+                
+                # X/Y축 틱 및 라벨 제거
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_xlabel('')
+                ax.set_ylabel('')
+            
+            # 차트 여백 조정 - 더 타이트하게
+            self.chart_figure.tight_layout(pad=0.5)
+            self.chart_figure.subplots_adjust(left=0.05, right=0.95, top=0.85, bottom=0.1)
+            
+            # 차트 업데이트
+            if hasattr(self, 'chart_canvas'):
+                self.chart_canvas.draw()
+            
+            print("Chart updated successfully")
+            
+        except Exception as e:
+            print(f"Chart update failed: {e}")
     
     def create_search_input(self):
         """검색 입력 생성 - 기존 시스템 스타일 적용"""
@@ -557,15 +779,15 @@ class IntegratedConditionManager(QWidget):
         return search_input
     
     def get_groupbox_style(self, color):
-        """그룹박스 스타일 생성 - 기존 시스템과 통일"""
+        """그룹박스 스타일 생성 - 통일된 테두리 스타일"""
         return f"""
             QGroupBox {{
                 font-weight: bold;
-                border: 2px solid {color};
+                border: 2px solid #ddd;
                 border-radius: 8px;
-                margin: 2px;        /* 마진 줄이기 */
-                padding-top: 10px;  /* 상단 패딩 줄이기 */
-                background-color: #fafafa;
+                margin: 2px;
+                padding-top: 12px;
+                background-color: white;
             }}
             QGroupBox::title {{
                 subcontrol-origin: margin;
@@ -573,9 +795,10 @@ class IntegratedConditionManager(QWidget):
                 padding: 0 8px 0 8px;
                 background-color: white;
                 color: {color};
-                font-size: 11px;     /* 폰트 크기 줄이기 */
+                font-size: 11px;
                 font-weight: bold;
                 border-radius: 4px;
+                border: 1px solid {color};
             }}
         """
     
@@ -720,14 +943,14 @@ class IntegratedConditionManager(QWidget):
         self.trigger_detail_text.setPlainText(detail_text.strip())
         
         # 시뮬레이션 상태 업데이트
-        self.simulation_status.setText(f"🎯 '{condition_data.get('name', 'Unknown')}' 선택됨 - 시나리오를 클릭하세요")
+        self.simulation_status.setText(f"'{condition_data.get('name', 'Unknown')}' selected - Click a scenario")
         
-        print(f"📊 트리거 선택: {condition_data.get('name', 'Unknown')}")
+        print(f"Trigger selected: {condition_data.get('name', 'Unknown')}")
     
     def run_simulation(self, scenario):
         """시뮬레이션 실행 - 실제 조건 로직 기반"""
         if not self.selected_condition:
-            QMessageBox.warning(self, "⚠️ 경고", "먼저 트리거를 선택해주세요.")
+            QMessageBox.warning(self, "Warning", "Please select a trigger first.")
             return
         
         condition_name = self.selected_condition.get('name', 'Unknown')
@@ -735,15 +958,19 @@ class IntegratedConditionManager(QWidget):
         operator = self.selected_condition.get('operator', '>')
         target_value = self.selected_condition.get('target_value', '0')
         
+        # target_value 검증 및 기본값 설정
+        if target_value is None or target_value == '':
+            target_value = '0'
+        
         # 시뮬레이션 상태 업데이트
-        self.simulation_status.setText(f"🔄 {scenario} 시나리오 실행 중...")
+        self.simulation_status.setText(f"Running {scenario} scenario...")
         
         # 시나리오별 가상 데이터 생성
         simulation_data = self.generate_simulation_data(scenario, variable_name)
         
         # 조건 평가
         try:
-            target_num = float(target_value)
+            target_num = float(str(target_value))
             current_value = simulation_data['current_value']
             
             # 연산자에 따른 결과 계산
@@ -768,29 +995,104 @@ class IntegratedConditionManager(QWidget):
             current_value = 0
         
         # 결과 표시
-        result_emoji = "✅" if result else "❌"
-        status_text = "조건 만족" if result else "조건 불만족"
+        result_text = "PASS" if result else "FAIL"
+        status_text = "Condition met" if result else "Condition not met"
         
         self.simulation_status.setText(
-            f"{result_emoji} {scenario}: {status_text}\n"
-            f"현재값: {current_value:.2f} {operator} {target_value}"
+            f"{result_text}: {scenario}\n"
+            f"Current: {current_value:.2f} {operator} {target_value}"
         )
         
         # 상세 로그
         detail_log = (
-            f"{result_emoji} {scenario} 시뮬레이션\n"
-            f"변수: {variable_name}\n"
-            f"조건: {current_value:.2f} {operator} {target_value}\n"
-            f"결과: {status_text}"
+            f"{result_text} {scenario} simulation\n"
+            f"Variable: {variable_name}\n"
+            f"Condition: {current_value:.2f} {operator} {target_value}\n"
+            f"Result: {status_text}"
         )
         
         # 테스트 기록 추가
-        self.add_test_history_item(f"{result_emoji} {scenario} - {condition_name} ({status_text})", "test")
+        self.add_test_history_item(f"{result_text} {scenario} - {condition_name} ({status_text})", "test")
         
         # 시그널 발생
         self.condition_tested.emit(self.selected_condition, result)
         
-        print(f"🎮 시뮬레이션 실행: {scenario} → {result} (값: {current_value})")
+        # 차트 업데이트 (시뮬레이션 데이터 포함)
+        if hasattr(self, 'chart_canvas'):
+            chart_simulation_data = {
+                'scenario': scenario,
+                'price_data': self.generate_price_data_for_chart(scenario, 50),
+                'current_value': current_value,
+                'target_value': float(target_value) if target_value.replace('.', '').replace('-', '').isdigit() else 0
+            }
+            
+            trigger_results = {
+                'trigger_points': [25, 35, 42] if result else [10, 30, 45],  # 예시 트리거 포인트
+                'trigger_activated': result
+            }
+            
+            self.update_chart_with_simulation_results(chart_simulation_data, trigger_results)
+        
+        print(f"Simulation: {scenario} -> {result} (value: {current_value})")
+    
+    def generate_price_data_for_chart(self, scenario, length=50):
+        """차트용 가격 데이터 생성"""
+        try:
+            if not CHART_AVAILABLE:
+                return []
+            
+            import numpy as np
+            import random
+            
+            # 기본 가격 설정
+            base_price = 50000
+            x = np.arange(length)
+            
+            # 시나리오별 가격 패턴 생성
+            if scenario in ["상승 추세", "Uptrend"]:
+                trend = np.linspace(0, 5000, length)  # 상승 트렌드
+                noise = np.random.randn(length) * 300
+                price_data = base_price + trend + noise
+            elif scenario in ["하락 추세", "Downtrend"]:
+                trend = np.linspace(0, -3000, length)  # 하락 트렌드
+                noise = np.random.randn(length) * 300
+                price_data = base_price + trend + noise
+            elif scenario in ["급등", "Surge"]:
+                # 중간에 급등하는 패턴
+                trend = np.concatenate([
+                    np.linspace(0, 500, length//3),
+                    np.linspace(500, 8000, length//3),
+                    np.linspace(8000, 7000, length - 2*(length//3))
+                ])
+                noise = np.random.randn(length) * 400
+                price_data = base_price + trend + noise
+            elif scenario in ["급락", "Crash"]:
+                # 중간에 급락하는 패턴
+                trend = np.concatenate([
+                    np.linspace(0, 1000, length//3),
+                    np.linspace(1000, -5000, length//3),
+                    np.linspace(-5000, -4000, length - 2*(length//3))
+                ])
+                noise = np.random.randn(length) * 400
+                price_data = base_price + trend + noise
+            elif scenario in ["횡보", "Sideways"]:
+                # 횡보 패턴
+                noise = np.random.randn(length) * 200
+                price_data = base_price + noise
+            elif scenario in ["이동평균 교차", "MA Cross"]:
+                # 이동평균 교차 패턴
+                noise = np.random.randn(length) * 300
+                price_data = base_price + np.cumsum(noise * 0.05)
+            else:
+                # 기본 랜덤 패턴
+                noise = np.random.randn(length) * 500
+                price_data = base_price + np.cumsum(noise * 0.1)
+            
+            return price_data.tolist()
+            
+        except Exception as e:
+            print(f"Price data generation failed: {e}")
+            return [50000 + random.randint(-1000, 1000) for _ in range(length)]
     
     def generate_simulation_data(self, scenario, variable_name):
         """시나리오별 가상 데이터 생성"""
@@ -810,17 +1112,18 @@ class IntegratedConditionManager(QWidget):
             base_value = random.uniform(-0.5, 0.5)
         
         # 시나리오별 변화 적용
-        if scenario == "📈 상승":
+        # 영어와 한국어 시나리오 모두 지원
+        if scenario in ["Uptrend", "상승 추세"]:
             multiplier = random.uniform(1.1, 1.3)  # 10-30% 상승
-        elif scenario == "📉 하락":
+        elif scenario in ["Downtrend", "하락 추세"]:
             multiplier = random.uniform(0.7, 0.9)  # 10-30% 하락
-        elif scenario == "🚀 급등":
+        elif scenario in ["Surge", "급등"]:
             multiplier = random.uniform(1.5, 2.0)  # 50-100% 급등
-        elif scenario == "💥 급락":
+        elif scenario in ["Crash", "급락"]:
             multiplier = random.uniform(0.3, 0.6)  # 40-70% 급락
-        elif scenario == "➡️ 횡보":
+        elif scenario in ["Sideways", "횡보"]:
             multiplier = random.uniform(0.98, 1.02)  # ±2% 범위
-        elif scenario == "🔄 지수크로스":
+        elif scenario in ["MA Cross", "이동평균 교차"]:
             multiplier = random.uniform(0.95, 1.05)  # ±5% 범위
         else:
             multiplier = random.uniform(0.9, 1.1)  # 기본 ±10%
