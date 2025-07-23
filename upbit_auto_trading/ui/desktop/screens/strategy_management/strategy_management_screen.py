@@ -1,6 +1,7 @@
 """
 매매 전략 관리 화면 - 새로운 컴포넌트 기반 전략 관리
-- 전략 메이커 탭 (컴포넌트 기반)
+- 트리거 빌더 탭 (조건 생성 및 관리)
+- 전략 메이커 탭 (실제 매매 전략 생성)
 - 백테스팅 탭
 - 전략 분석 탭
 """
@@ -35,21 +36,23 @@ class StrategyManagementScreen(QWidget):
         self.tab_widget = QTabWidget()
         
         # 탭들 생성
+        self.trigger_builder_tab = self.create_trigger_builder_tab()
         self.strategy_maker_tab = self.create_strategy_maker_tab()
         self.backtest_tab = self.create_backtest_tab()
         self.analysis_tab = self.create_analysis_tab()
         
         # 탭 추가
-        self.tab_widget.addTab(self.strategy_maker_tab, "🎯 전략 메이커")
+        self.tab_widget.addTab(self.trigger_builder_tab, "🎯 트리거 빌더")
+        self.tab_widget.addTab(self.strategy_maker_tab, "⚙️ 전략 메이커")
         self.tab_widget.addTab(self.backtest_tab, "📊 백테스팅")
         self.tab_widget.addTab(self.analysis_tab, "📈 전략 분석")
         
         layout.addWidget(self.tab_widget)
         
-        print("✅ 새로운 매매전략 관리 화면 초기화 완료")
+        print("✅ 매매전략 관리 화면 초기화 완료 (4개 탭: 트리거 빌더, 전략 메이커, 백테스팅, 전략 분석)")
     
-    def create_strategy_maker_tab(self):
-        """전략 메이커 탭 생성"""
+    def create_trigger_builder_tab(self):
+        """트리거 빌더 탭 생성 - 기존 통합 조건 관리자"""
         try:
             # 통합 조건 관리자를 탭으로 임베드
             condition_manager = IntegratedConditionManager()
@@ -62,20 +65,131 @@ class StrategyManagementScreen(QWidget):
             layout.addWidget(QLabel(f"통합 조건 관리자 로딩 실패: {e}"))
             return fallback_widget
     
+    def create_strategy_maker_tab(self):
+        """전략 메이커 탭 생성 - 실제 매매 전략 생성"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # 헤더
+        header_label = QLabel("⚙️ 전략 메이커")
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+            margin: 10px;
+        """)
+        layout.addWidget(header_label)
+        
+        # 설명
+        desc_label = QLabel("""
+        📋 전략 메이커는 트리거들을 조합하여 완전한 매매 전략을 생성하는 도구입니다.
+        
+        🔧 주요 기능:
+        • 트리거 조합을 통한 진입/청산 조건 설정
+        • 리스크 관리 설정 (손절, 익절, 포지션 사이징)
+        • 전략 시뮬레이션 및 검증
+        • 실거래 연동 준비
+        """)
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        desc_label.setStyleSheet("""
+            font-size: 12px;
+            color: #34495e;
+            background-color: #f8f9fa;
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px;
+            line-height: 1.6;
+        """)
+        layout.addWidget(desc_label)
+        
+        # 개발 상태 알림
+        status_label = QLabel("🚧 현재 개발 중입니다. 트리거 빌더에서 조건을 먼저 생성해주세요.")
+        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_label.setStyleSheet("""
+            color: #e67e22;
+            font-style: italic;
+            font-size: 13px;
+            padding: 15px;
+            background-color: #fef9e7;
+            border: 1px solid #f39c12;
+            border-radius: 6px;
+            margin: 10px;
+        """)
+        layout.addWidget(status_label)
+        
+        # TODO: 실제 전략 메이커 UI 구현
+        # - 트리거 조합 인터페이스
+        # - 진입/청산 조건 설정
+        # - 리스크 관리 도구
+        # - 전략 백테스팅 연동
+        
+        layout.addStretch()
+        
+        return widget
+    
     def create_backtest_tab(self):
         """백테스팅 탭 생성"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        label = QLabel("백테스팅 기능")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        # 헤더
+        header_label = QLabel("📊 백테스팅")
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 20px;
+            background-color: #e8f4fd;
+            border-radius: 8px;
+            margin: 10px;
+        """)
+        layout.addWidget(header_label)
         
-        # TODO: 백테스팅 UI 구현
-        info_label = QLabel("추후 백테스팅 기능이 여기에 구현됩니다.")
-        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info_label.setStyleSheet("color: #666; font-style: italic;")
-        layout.addWidget(info_label)
+        # 설명
+        desc_label = QLabel("""
+        📈 백테스팅은 과거 데이터를 활용해 전략의 성과를 검증하는 도구입니다.
+        
+        🔧 주요 기능:
+        • 과거 데이터 기반 전략 성과 시뮬레이션
+        • 수익률, 샤프 비율, 최대 낙폭 등 성과 지표 계산
+        • 기간별 성과 분석 및 시각화
+        • 리스크 조정 수익률 평가
+        """)
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        desc_label.setStyleSheet("""
+            font-size: 12px;
+            color: #34495e;
+            background-color: #f8f9fa;
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px;
+            line-height: 1.6;
+        """)
+        layout.addWidget(desc_label)
+        
+        # 개발 상태 알림
+        status_label = QLabel("🚧 백테스팅 엔진 개발 중입니다. 전략 메이커에서 전략을 먼저 생성해주세요.")
+        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_label.setStyleSheet("""
+            color: #2980b9;
+            font-style: italic;
+            font-size: 13px;
+            padding: 15px;
+            background-color: #ebf3fd;
+            border: 1px solid #3498db;
+            border-radius: 6px;
+            margin: 10px;
+        """)
+        layout.addWidget(status_label)
+        
+        layout.addStretch()
         
         return widget
     
@@ -84,15 +198,60 @@ class StrategyManagementScreen(QWidget):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        label = QLabel("전략 분석 기능")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        # 헤더
+        header_label = QLabel("📈 전략 분석")
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        header_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 20px;
+            background-color: #eaf2f8;
+            border-radius: 8px;
+            margin: 10px;
+        """)
+        layout.addWidget(header_label)
         
-        # TODO: 전략 분석 UI 구현
-        info_label = QLabel("추후 전략 분석 기능이 여기에 구현됩니다.")
-        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        info_label.setStyleSheet("color: #666; font-style: italic;")
-        layout.addWidget(info_label)
+        # 설명
+        desc_label = QLabel("""
+        📊 전략 분석은 백테스팅 결과를 심층 분석하고 최적화하는 도구입니다.
+        
+        🔧 주요 기능:
+        • 상세 성과 분석 리포트 생성
+        • 전략 파라미터 최적화
+        • 위험 요소 식별 및 개선 제안
+        • 실거래 적용 시뮬레이션
+        • 포트폴리오 다각화 분석
+        """)
+        desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        desc_label.setStyleSheet("""
+            font-size: 12px;
+            color: #34495e;
+            background-color: #f8f9fa;
+            border: 2px dashed #1abc9c;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px;
+            line-height: 1.6;
+        """)
+        layout.addWidget(desc_label)
+        
+        # 개발 상태 알림
+        status_label = QLabel("🚧 전략 분석 도구 개발 중입니다. 백테스팅 결과가 준비되면 활성화됩니다.")
+        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_label.setStyleSheet("""
+            color: #16a085;
+            font-style: italic;
+            font-size: 13px;
+            padding: 15px;
+            background-color: #e8f6f3;
+            border: 1px solid #1abc9c;
+            border-radius: 6px;
+            margin: 10px;
+        """)
+        layout.addWidget(status_label)
+        
+        layout.addStretch()
         
         return widget
     
