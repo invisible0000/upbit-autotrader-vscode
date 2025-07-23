@@ -1,8 +1,8 @@
 """
-전략 관리 화면 패키지 - 컴포넌트 기반 전략 관리
-- 전략 메이커, 백테스팅, 전략 분석 탭
+전략 관리 스크린 패키지
 """
 
 from .strategy_management_screen import StrategyManagementScreen
+from .integrated_condition_manager import IntegratedConditionManager
 
-__all__ = ['StrategyManagementScreen']
+__all__ = ['StrategyManagementScreen', 'IntegratedConditionManager']

@@ -328,10 +328,14 @@ class MainWindow(QMainWindow):
                 screen = AssetScreenerScreen()
                 
             elif screen_name == "매매전략 관리":
+                # 컴포넌트 기반 전략 관리 화면 사용
                 from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
                 screen = StrategyManagementScreen()
-                # 백테스팅 요청 시그널 연결
-                screen.backtest_requested.connect(self._on_backtest_requested)
+                # 백테스팅 요청 시그널 연결 (시그널이 있는 경우)
+                if hasattr(screen, 'backtest_requested'):
+                    screen.backtest_requested.connect(self._on_backtest_requested)
+                else:
+                    print("⚠️ StrategyManagementScreen에 backtest_requested 시그널이 없습니다")
                 
             elif screen_name == "백테스팅":
                 from upbit_auto_trading.ui.desktop.screens.backtesting.backtesting_screen import BacktestingScreen

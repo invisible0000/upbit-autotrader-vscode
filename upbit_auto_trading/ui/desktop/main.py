@@ -6,6 +6,14 @@ import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
+# 프로젝트 루트 경로 추가
+current_dir = os.path.dirname(__file__)  # desktop 폴더
+ui_dir = os.path.dirname(current_dir)    # ui 폴더
+upbit_auto_trading_dir = os.path.dirname(ui_dir)  # upbit_auto_trading 폴더
+project_root = os.path.dirname(upbit_auto_trading_dir)  # 프로젝트 루트
+
+sys.path.insert(0, project_root)
+
 from upbit_auto_trading.ui.desktop.main_window import MainWindow
 
 

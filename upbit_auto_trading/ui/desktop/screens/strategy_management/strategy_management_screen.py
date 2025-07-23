@@ -12,11 +12,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon
 
-# 새로운 전략 메이커 import
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))))
-from strategy_maker_ui import StrategyMakerUI
+# 통합 조건 관리 시스템 import
+from .integrated_condition_manager import IntegratedConditionManager
 
 class StrategyManagementScreen(QWidget):
     """컴포넌트 기반 전략 관리 화면"""
@@ -33,10 +30,6 @@ class StrategyManagementScreen(QWidget):
     def init_ui(self):
         """UI 초기화"""
         layout = QVBoxLayout(self)
-        
-        # 툴바 생성
-        toolbar = self.create_toolbar()
-        layout.addWidget(toolbar)
         
         # 탭 위젯 생성
         self.tab_widget = QTabWidget()
@@ -55,48 +48,18 @@ class StrategyManagementScreen(QWidget):
         
         print("✅ 새로운 매매전략 관리 화면 초기화 완료")
     
-    def create_toolbar(self):
-        """툴바 생성"""
-        toolbar_widget = QWidget()
-        layout = QHBoxLayout(toolbar_widget)
-        
-        # 제목
-        title_label = QLabel("📊 매매 전략 관리")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
-        layout.addWidget(title_label)
-        
-        layout.addStretch()
-        
-        # 새로고침 버튼
-        refresh_button = QPushButton("🔄 새로고침")
-        refresh_button.setStyleSheet("""
-            QPushButton {
-                background-color: #f8f9fa;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                padding: 5px 15px;
-            }
-            QPushButton:hover {
-                background-color: #e9ecef;
-            }
-        """)
-        refresh_button.clicked.connect(self.refresh_all_data)
-        layout.addWidget(refresh_button)
-        
-        return toolbar_widget
-    
     def create_strategy_maker_tab(self):
         """전략 메이커 탭 생성"""
         try:
-            # 전략 메이커 UI를 탭으로 임베드
-            strategy_maker = StrategyMakerUI()
-            return strategy_maker
+            # 통합 조건 관리자를 탭으로 임베드
+            condition_manager = IntegratedConditionManager()
+            return condition_manager
         except Exception as e:
-            print(f"❌ 전략 메이커 로딩 실패: {e}")
+            print(f"❌ 통합 조건 관리자 로딩 실패: {e}")
             # 대체 위젯 생성
             fallback_widget = QWidget()
             layout = QVBoxLayout(fallback_widget)
-            layout.addWidget(QLabel(f"전략 메이커 로딩 실패: {e}"))
+            layout.addWidget(QLabel(f"통합 조건 관리자 로딩 실패: {e}"))
             return fallback_widget
     
     def create_backtest_tab(self):

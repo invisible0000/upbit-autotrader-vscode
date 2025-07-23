@@ -938,7 +938,12 @@ class ConditionDialog(QDialog):
             
             var_id = self.variable_combo.currentData()
             operator = self.operator_combo.currentData()
-            condition_name = self.condition_name.text() or "[자동 생성]"
+            condition_name = self.condition_name.text().strip()
+            
+            # 이름 검증
+            if not condition_name:
+                QMessageBox.warning(self, "입력 오류", "조건명을 입력해주세요.")
+                return
             
             # 비교 대상 설정
             if self.use_external_variable.isChecked():

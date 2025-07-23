@@ -302,32 +302,22 @@ class ConditionStorage:
         except Exception as e:
             return False, f"업데이트 중 오류: {str(e)}"
     
-    def delete_condition(self, condition_id: int, hard_delete: bool = True) -> Tuple[bool, str]:
-        """조건 삭제 (기본: 하드 삭제, 옵션: 소프트 삭제)"""
+    def delete_condition(self, condition_id: int) -> Tuple[bool, str]:
+        """조건 삭제 (소프트 삭제)"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                if hard_delete:
-                    # 하드 삭제: 완전히 제거
-                    cursor.execute(
-                        "DELETE FROM trading_conditions WHERE id = ?",
-                        (condition_id,)
-                    )
-                    success_message = "조건이 완전히 삭제되었습니다."
-                else:
-                    # 소프트 삭제: 비활성화만
-                    cursor.execute(
-                        "UPDATE trading_conditions SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (condition_id,)
-                    )
-                    success_message = "조건이 비활성화되었습니다."
+                cursor.execute(
+                    "UPDATE trading_conditions SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (condition_id,)
+                )
                 
                 if cursor.rowcount == 0:
                     return False, "조건을 찾을 수 없습니다."
                 
                 conn.commit()
-                return True, success_message
+                return True, "조건이 삭제되었습니다."
                 
         except Exception as e:
             return False, f"삭제 중 오류: {str(e)}"

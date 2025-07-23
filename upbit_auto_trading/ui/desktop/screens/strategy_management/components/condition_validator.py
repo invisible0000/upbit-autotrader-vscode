@@ -64,9 +64,9 @@ class ConditionValidator:
         if len(name.strip()) > 50:
             return False, "조건 이름은 50글자 이하여야 합니다."
         
-        # 특수문자 검사 (SQL 인젝션 방지용만 제한)
-        if re.search(r'["|\\]', name):
-            return False, "조건 이름에는 \", \\ 문자를 사용할 수 없습니다."
+        # 특수문자 검사 (일부 허용)
+        if re.search(r'[<>"|\\]', name):
+            return False, "조건 이름에는 <, >, \", |, \\ 문자를 사용할 수 없습니다."
         
         return True, None
     
