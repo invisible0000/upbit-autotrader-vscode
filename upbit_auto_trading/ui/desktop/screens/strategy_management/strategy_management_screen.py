@@ -67,70 +67,70 @@ class StrategyManagementScreen(QWidget):
     
     def create_strategy_maker_tab(self):
         """전략 메이커 탭 생성 - 실제 매매 전략 생성"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # 헤더
-        header_label = QLabel("⚙️ 전략 메이커")
-        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        header_label.setStyleSheet("""
-            font-size: 18px;
-            font-weight: bold;
-            color: #2c3e50;
-            padding: 20px;
-            background-color: #ecf0f1;
-            border-radius: 8px;
-            margin: 10px;
-        """)
-        layout.addWidget(header_label)
-        
-        # 설명
-        desc_label = QLabel("""
-        📋 전략 메이커는 트리거들을 조합하여 완전한 매매 전략을 생성하는 도구입니다.
-        
-        🔧 주요 기능:
-        • 트리거 조합을 통한 진입/청산 조건 설정
-        • 리스크 관리 설정 (손절, 익절, 포지션 사이징)
-        • 전략 시뮬레이션 및 검증
-        • 실거래 연동 준비
-        """)
-        desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        desc_label.setStyleSheet("""
-            font-size: 12px;
-            color: #34495e;
-            background-color: #f8f9fa;
-            border: 2px dashed #bdc3c7;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 10px;
-            line-height: 1.6;
-        """)
-        layout.addWidget(desc_label)
-        
-        # 개발 상태 알림
-        status_label = QLabel("🚧 현재 개발 중입니다. 트리거 빌더에서 조건을 먼저 생성해주세요.")
-        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        status_label.setStyleSheet("""
-            color: #e67e22;
-            font-style: italic;
-            font-size: 13px;
-            padding: 15px;
-            background-color: #fef9e7;
-            border: 1px solid #f39c12;
-            border-radius: 6px;
-            margin: 10px;
-        """)
-        layout.addWidget(status_label)
-        
-        # TODO: 실제 전략 메이커 UI 구현
-        # - 트리거 조합 인터페이스
-        # - 진입/청산 조건 설정
-        # - 리스크 관리 도구
-        # - 전략 백테스팅 연동
-        
-        layout.addStretch()
-        
-        return widget
+        try:
+            # 전략 메이커 컴포넌트 임포트 및 생성
+            from .components.strategy_maker import StrategyMaker
+            strategy_maker = StrategyMaker()
+            return strategy_maker
+        except Exception as e:
+            print(f"❌ 전략 메이커 로딩 실패: {e}")
+            # 대체 위젯 생성
+            widget = QWidget()
+            layout = QVBoxLayout(widget)
+            
+            # 헤더
+            header_label = QLabel("⚙️ 전략 메이커")
+            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header_label.setStyleSheet("""
+                font-size: 18px;
+                font-weight: bold;
+                color: #2c3e50;
+                padding: 20px;
+                background-color: #ecf0f1;
+                border-radius: 8px;
+                margin: 10px;
+            """)
+            layout.addWidget(header_label)
+            
+            # 에러 메시지
+            error_label = QLabel(f"❌ 전략 메이커 로딩 실패: {e}")
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            error_label.setStyleSheet("""
+                color: #e74c3c;
+                font-size: 12px;
+                padding: 20px;
+                background-color: #fadbd8;
+                border: 1px solid #e74c3c;
+                border-radius: 6px;
+                margin: 10px;
+            """)
+            layout.addWidget(error_label)
+            
+            # 설명
+            desc_label = QLabel("""
+            � 전략 메이커는 트리거들을 조합하여 완전한 매매 전략을 생성하는 도구입니다.
+            
+            🔧 주요 기능:
+            • 트리거 조합을 통한 진입/청산 조건 설정
+            • 리스크 관리 설정 (손절, 익절, 포지션 사이징)
+            • 전략 시뮬레이션 및 검증
+            • 실거래 연동 준비
+            """)
+            desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            desc_label.setStyleSheet("""
+                font-size: 12px;
+                color: #34495e;
+                background-color: #f8f9fa;
+                border: 2px dashed #bdc3c7;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 10px;
+                line-height: 1.6;
+            """)
+            layout.addWidget(desc_label)
+            
+            layout.addStretch()
+            return widget
     
     def create_backtest_tab(self):
         """백테스팅 탭 생성"""
