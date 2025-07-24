@@ -4,13 +4,35 @@
 """
 
 import sys
+import json
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, 
-    QLabel, QMessageBox, QDialog, QComboBox, QLineEdit, QTextEdit, 
-    QButtonGroup, QRadioButton, QApplication
+    QLabel, QMessageBox, QDialog, QComboBox, QLineEdit, 
+    QButtonGroup, QRadioButton, QApplication, QCheckBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from typing import Dict, Any, Optional
+
+# 공통 컴포넌트 import
+try:
+    from upbit_auto_trading.ui.desktop.common.components import (
+        PrimaryButton, SecondaryButton, DangerButton,
+        StyledLineEdit, StyledComboBox, StyledCheckBox, StyledGroupBox,
+        CardWidget, FormRow
+    )
+    STYLED_COMPONENTS_AVAILABLE = True
+except ImportError:
+    # 공통 컴포넌트가 없을 경우 기본 위젯 사용
+    PrimaryButton = QPushButton
+    SecondaryButton = QPushButton
+    DangerButton = QPushButton
+    StyledLineEdit = QLineEdit
+    StyledComboBox = QComboBox
+    StyledCheckBox = QCheckBox
+    StyledGroupBox = QGroupBox
+    CardWidget = QWidget
+    FormRow = QWidget
+    STYLED_COMPONENTS_AVAILABLE = False
 
 from .variable_definitions import VariableDefinitions
 from .parameter_widgets import ParameterWidgetFactory
@@ -46,8 +68,8 @@ class ConditionDialog(QWidget):
         self.setWindowTitle("🎯 조건 생성기 v4 (컴포넌트 기반)")
         self.setMinimumSize(500, 400)  # 크기 대폭 줄이기
         layout = QVBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)  # 마진 줄이기
-        layout.setSpacing(3)  # 간격 줄이기
+        layout.setContentsMargins(3, 3, 3, 3)  # 마진 더 줄이기
+        layout.setSpacing(2)  # 간격 더 줄이기
         
         # 1. 변수 선택
         self.create_variable_section(layout)
@@ -70,10 +92,10 @@ class ConditionDialog(QWidget):
     
     def create_variable_section(self, layout):
         """변수 선택 섹션"""
-        group = QGroupBox("📊 1단계: 변수 선택")
+        group = StyledGroupBox("📊 1단계: 변수 선택")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
-        group_layout.setSpacing(3)  # 간격 줄이기
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(2)
         
         # 범주 + 변수 선택을 한 줄로 합치기
         category_var_layout = QHBoxLayout()
@@ -81,12 +103,12 @@ class ConditionDialog(QWidget):
         # 범주 선택
         category_var_layout.addWidget(QLabel("범주:"))
         
-        self.category_combo = QComboBox()
+        self.category_combo = StyledComboBox()
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
                 "indicator": "지표",
-                "price": "시장가", 
+                "price": "시장가",
                 "capital": "자본",
                 "state": "상태"
             }
@@ -99,43 +121,36 @@ class ConditionDialog(QWidget):
         
         # 변수 선택
         category_var_layout.addWidget(QLabel("변수:"))
-        self.variable_combo = QComboBox()
+        self.variable_combo = StyledComboBox()
         category_var_layout.addWidget(self.variable_combo)
         
         # 변수별 헬프 버튼
-        help_btn = QPushButton("❓")
+        help_btn = QPushButton("?")
         help_btn.setMaximumWidth(30)
+        help_btn.setMinimumWidth(30)
+        help_btn.setFixedHeight(25)
+        help_btn.setToolTip("선택한 변수의 상세 도움말")
         help_btn.setStyleSheet("""
             QPushButton {
-                background-color: #ffc107;
-                color: #212529;
-                border: none;
-                border-radius: 15px;
+                background-color: #e9ecef;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                color: #495057;
                 font-weight: bold;
                 font-size: 12px;
             }
             QPushButton:hover {
-                background-color: #ffca2c;
+                background-color: #dee2e6;
+            }
+            QPushButton:pressed {
+                background-color: #adb5bd;
             }
         """)
         help_btn.clicked.connect(self.show_variable_help)
         category_var_layout.addWidget(help_btn)
         
         # 지원 현황 버튼
-        info_btn = QPushButton("📋 지원 현황")
-        info_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #17a2b8;
-                color: white;
-                border: none;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-size: 10px;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-        """)
+        info_btn = PrimaryButton("📋 지원 현황")
         info_btn.clicked.connect(self.show_variable_info)
         category_var_layout.addWidget(info_btn)
         
@@ -145,33 +160,33 @@ class ConditionDialog(QWidget):
         self.param_scroll, self.param_layout = self.parameter_factory.create_scrollable_parameter_area()
         group_layout.addWidget(self.param_scroll)
         
-        # 변수 설명
-        self.variable_description = QLabel("변수를 선택하면 설명이 표시됩니다.")
-        self.variable_description.setStyleSheet("""
-            background: #f8f9fa; 
-            padding: 10px; 
-            border-radius: 6px; 
-            color: #666;
-            font-style: italic;
-        """)
-        self.variable_description.setWordWrap(True)
-        group_layout.addWidget(self.variable_description)
-        
         group.setLayout(group_layout)
         layout.addWidget(group)
     
     def create_comparison_section(self, layout):
         """비교 설정 섹션"""
-        group = QGroupBox("⚖️ 2단계: 비교 설정")
+        group = StyledGroupBox("⚖️ 2단계: 비교 설정")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
-        group_layout.setSpacing(3)  # 간격 줄이기
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(2)
+        
+        # 비교값, 연산자, 외부값 사용 버튼을 한 줄로 배치
+        comparison_layout = QHBoxLayout()
+        
+        # 비교값
+        comparison_layout.addWidget(QLabel("비교값:"))
+        self.target_input = StyledLineEdit("예: 70, 30, 0.5")
+        self.target_input.setMinimumWidth(140)  # 비교값 입력 박스 폭 확장
+        comparison_layout.addWidget(self.target_input)
+        
+        # 간격 추가
+        comparison_layout.addSpacing(15)
         
         # 연산자
-        op_layout = QHBoxLayout()
-        op_layout.addWidget(QLabel("연산자:"))
+        comparison_layout.addWidget(QLabel("연산자:"))
         
-        self.operator_combo = QComboBox()
+        self.operator_combo = StyledComboBox()
+        self.operator_combo.setMaximumWidth(130)  # 연산자 콤보박스 폭 제한
         operators = [
             (">", "초과 (크다)"),
             (">=", "이상 (크거나 같다)"),
@@ -182,50 +197,26 @@ class ConditionDialog(QWidget):
         ]
         for op_symbol, op_desc in operators:
             self.operator_combo.addItem(f"{op_symbol} - {op_desc}", op_symbol)
-        op_layout.addWidget(self.operator_combo)
-        group_layout.addLayout(op_layout)
+        comparison_layout.addWidget(self.operator_combo)
         
-        # 외부값 사용 체크박스
-        comparison_type_layout = QHBoxLayout()
-        self.use_external_variable = QPushButton("🔄 외부값 사용")
+        # 간격 추가
+        comparison_layout.addSpacing(15)
+        
+        # 외부값 사용 버튼
+        self.use_external_variable = SecondaryButton("🔄 외부값 사용")
         self.use_external_variable.setCheckable(True)
-        self.use_external_variable.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                padding: 6px 12px;
-                border-radius: 4px;
-                font-size: 10px;
-            }
-            QPushButton:checked {
-                background-color: #28a745;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-            QPushButton:checked:hover {
-                background-color: #218838;
-            }
-        """)
+        self.use_external_variable.setMaximumWidth(120)  # 외부값 사용 버튼 폭 늘리기
+        self.use_external_variable.setMinimumWidth(120)  # 최소 폭도 설정
         self.use_external_variable.clicked.connect(self.toggle_comparison_mode)
-        comparison_type_layout.addWidget(self.use_external_variable)
-        comparison_type_layout.addStretch()
-        group_layout.addLayout(comparison_type_layout)
+        comparison_layout.addWidget(self.use_external_variable)
+        comparison_layout.addStretch()
+        group_layout.addLayout(comparison_layout)
         
-        # 비교값 입력
-        target_layout = QHBoxLayout()
-        target_layout.addWidget(QLabel("비교값:"))
-        self.target_input = QLineEdit()
-        self.target_input.setPlaceholderText("예: 70, 30, 0.5")
-        target_layout.addWidget(self.target_input)
-        group_layout.addLayout(target_layout)
-        
-        # 추세 방향성
-        trend_layout = QVBoxLayout()
+        # 추세 방향성을 한 줄로 배치
+        trend_layout = QHBoxLayout()
         trend_layout.addWidget(QLabel("추세 방향성:"))
+        trend_layout.addSpacing(10)  # 레이블과 첫 번째 라디오 버튼 사이 간격
         
-        trend_buttons_layout = QHBoxLayout()
         self.trend_group = QButtonGroup()
         
         trend_options = [
@@ -235,81 +226,65 @@ class ConditionDialog(QWidget):
             ("both", "양방향")
         ]
         
-        for trend_id, trend_name in trend_options:
+        for i, (trend_id, trend_name) in enumerate(trend_options):
             radio = QRadioButton(trend_name)
             radio.setProperty("trend_id", trend_id)
             self.trend_group.addButton(radio)
-            trend_buttons_layout.addWidget(radio)
+            trend_layout.addWidget(radio)
+            
+            # 라디오 버튼들 사이에 간격 추가 (마지막 제외)
+            if i < len(trend_options) - 1:
+                trend_layout.addSpacing(15)
             
             if trend_id == "static":
                 radio.setChecked(True)
         
-        trend_layout.addLayout(trend_buttons_layout)
-        
-        # 추세 도움말
-        trend_help = QLabel("💡 정적: 단순 비교 | 상승중: 값이 증가 추세 | 하락중: 값이 감소 추세 | 양방향: 변화량 감지")
-        trend_help.setStyleSheet("color: #666; font-size: 10px; font-style: italic; margin-top: 5px;")
-        trend_help.setWordWrap(True)
-        trend_layout.addWidget(trend_help)
-        
+        trend_layout.addStretch()
         group_layout.addLayout(trend_layout)
         group.setLayout(group_layout)
         layout.addWidget(group)
     
     def create_external_variable_section(self, layout):
         """외부 변수 설정 섹션"""
-        self.external_variable_widget = QGroupBox("🔗 2-1단계: 외부 변수 설정 (골든크로스 등)")
+        self.external_variable_widget = StyledGroupBox("🔗 2-1단계: 외부 변수 설정 (골든크로스 등)")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
-        group_layout.setSpacing(3)  # 간격 줄이기
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(2)
+        
+        # 범주와 변수 선택을 한 줄로 배치
+        category_var_layout = QHBoxLayout()
         
         # 범주 선택
-        category_layout = QHBoxLayout()
-        category_layout.addWidget(QLabel("범주:"))
+        category_var_layout.addWidget(QLabel("범주:"))
         
-        self.external_category_combo = QComboBox()
+        self.external_category_combo = StyledComboBox()
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
                 "indicator": "지표",
                 "price": "시장가",
-                "capital": "자본", 
+                "capital": "자본",
                 "state": "상태"
             }
             self.external_category_combo.addItem(category_names.get(category_id, category_id), category_id)
-        category_layout.addWidget(self.external_category_combo)
+        category_var_layout.addWidget(self.external_category_combo)
         
-        # 외부 변수 안내
-        info_label = QLabel("💡 골든크로스: SMA(20) > SMA(60) 같은 조건 생성")
-        info_label.setStyleSheet("color: #17a2b8; font-size: 10px; font-style: italic;")
-        category_layout.addWidget(info_label)
-        category_layout.addStretch()
-        group_layout.addLayout(category_layout)
+        # 간격 추가
+        category_var_layout.addSpacing(20)
         
         # 변수 선택
-        var_layout = QHBoxLayout()
-        var_layout.addWidget(QLabel("변수:"))
-        self.external_variable_combo = QComboBox()
-        var_layout.addWidget(self.external_variable_combo)
-        var_layout.addStretch()
-        group_layout.addLayout(var_layout)
+        category_var_layout.addWidget(QLabel("변수:"))
+        self.external_variable_combo = StyledComboBox()
+        self.external_variable_combo.setMinimumWidth(250)  # 2.5배 폭 확장
+        category_var_layout.addWidget(self.external_variable_combo)
+        category_var_layout.addStretch()
+        group_layout.addLayout(category_var_layout)
         
         # 외부 변수 파라미터 (스크롤 가능)
-        self.external_param_scroll, self.external_param_layout = self.parameter_factory.create_scrollable_parameter_area(80, 120)
+        self.external_param_scroll, self.external_param_layout = (
+            self.parameter_factory.create_scrollable_parameter_area(80, 120)
+        )
         group_layout.addWidget(self.external_param_scroll)
-        
-        # 외부 변수 설명
-        self.external_variable_description = QLabel("외부 변수를 선택하면 설명이 표시됩니다.")
-        self.external_variable_description.setStyleSheet("""
-            background: #f8f9fa; 
-            padding: 8px; 
-            border-radius: 4px; 
-            color: #666;
-            font-style: italic;
-            font-size: 11px;
-        """)
-        self.external_variable_description.setWordWrap(True)
-        group_layout.addWidget(self.external_variable_description)
         
         # 초기에는 비활성화
         self.external_variable_widget.setEnabled(False)
@@ -320,25 +295,23 @@ class ConditionDialog(QWidget):
     
     def create_info_section(self, layout):
         """조건 정보 섹션"""
-        group = QGroupBox("📝 3단계: 조건 정보")
+        group = StyledGroupBox("📝 3단계: 조건 정보")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
-        group_layout.setSpacing(3)  # 간격 줄이기
+        group_layout.setContentsMargins(4, 4, 4, 4)
+        group_layout.setSpacing(2)
         
         # 조건 이름
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("이름:"))
-        self.condition_name = QLineEdit()
-        self.condition_name.setPlaceholderText("예: RSI 과매수 진입")
+        self.condition_name = StyledLineEdit("예: RSI 과매수 진입")
         name_layout.addWidget(self.condition_name)
         group_layout.addLayout(name_layout)
         
         # 설명
-        desc_layout = QVBoxLayout()
+        desc_layout = QHBoxLayout()
         desc_layout.addWidget(QLabel("설명:"))
-        self.condition_description = QTextEdit()
+        self.condition_description = StyledLineEdit()
         self.condition_description.setPlaceholderText("이 조건이 언제 발생하는지 설명해주세요.")
-        self.condition_description.setMaximumHeight(60)
         desc_layout.addWidget(self.condition_description)
         group_layout.addLayout(desc_layout)
         
@@ -347,19 +320,21 @@ class ConditionDialog(QWidget):
     
     def create_preview_section(self, layout):
         """미리보기 섹션"""
-        group = QGroupBox("👀 미리보기")
+        group = StyledGroupBox("👀 미리보기")
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
-        group_layout.setSpacing(3)  # 간격 줄이기
+        group_layout.setContentsMargins(4, 4, 4, 4)
+        group_layout.setSpacing(2)
         
         self.preview_label = QLabel("조건을 설정하면 미리보기가 표시됩니다.")
         self.preview_label.setStyleSheet("""
-            background: #f8f9fa; 
-            padding: 8px;  /* 패딩 줄이기 */
-            border: 2px dashed #dee2e6;
-            border-radius: 8px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 11px;  /* 폰트 크기 줄이기 */
+            QLabel {
+                background-color: #f8f9fa;
+                padding: 6px;
+                border: 2px dashed #dee2e6;
+                border-radius: 6px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 10px;
+            }
         """)
         self.preview_label.setWordWrap(True)
         group_layout.addWidget(self.preview_label)
@@ -422,15 +397,9 @@ class ConditionDialog(QWidget):
             self.parameter_factory.create_parameter_widgets(var_id, params, self.param_layout)
     
     def update_variable_description(self):
-        """변수 설명 업데이트"""
-        var_id = self.variable_combo.currentData()
-        if not var_id:
-            self.variable_description.setText("변수를 선택하면 설명이 표시됩니다.")
-            return
-        
-        descriptions = self.variable_definitions.get_variable_descriptions()
-        desc = descriptions.get(var_id, "설명 준비 중...")
-        self.variable_description.setText(f"📖 {desc}")
+        """변수 설명 업데이트 - 설명 박스가 제거됨"""
+        # 변수 설명 박스가 제거되어서 더 이상 사용하지 않음
+        pass
     
     def update_placeholders(self):
         """변수별 플레이스홀더 업데이트"""
@@ -457,14 +426,21 @@ class ConditionDialog(QWidget):
         
         if is_external:
             self.target_input.setPlaceholderText("외부 변수 사용 중...")
-            self.target_input.setStyleSheet("background-color: #f8f9fa; color: #6c757d;")
+            self.target_input.setStyleSheet("""
+                QLineEdit {
+                    background-color: #f8f9fa;
+                    color: #6c757d;
+                    border: 1px solid #cccccc;
+                    border-radius: 4px;
+                    padding: 4px 8px;
+                }
+            """)
             self.use_external_variable.setText("🔄 고정값 사용")
-            self.external_variable_widget.setStyleSheet("QGroupBox { color: #000; }")
             self.update_external_variables()
         else:
+            # 기본 스타일로 복원
             self.target_input.setStyleSheet("")
             self.use_external_variable.setText("🔄 외부값 사용")
-            self.external_variable_widget.setStyleSheet("QGroupBox { color: #999; }")
             self.update_placeholders()
         
         self.update_preview()
@@ -497,11 +473,6 @@ class ConditionDialog(QWidget):
         
         # 기존 파라미터 제거
         self.parameter_factory.clear_parameter_widgets(self.external_param_layout)
-        
-        # 외부 변수 설명 업데이트
-        descriptions = self.variable_definitions.get_variable_descriptions()
-        desc = descriptions.get(external_var_id, "외부 변수 설명")
-        self.external_variable_description.setText(f"📖 {desc}")
         
         # 파라미터 생성
         params = self.variable_definitions.get_variable_parameters(external_var_id)
@@ -548,7 +519,7 @@ class ConditionDialog(QWidget):
         
         condition_data = {
             'name': condition_name,
-            'description': self.condition_description.toPlainText().strip(),
+            'description': self.condition_description.text().strip(),
             'variable_id': var_id,
             'variable_name': self.variable_combo.currentText(),
             'variable_params': self.parameter_factory.get_parameter_values(var_id),
@@ -585,15 +556,20 @@ class ConditionDialog(QWidget):
         if self.use_external_variable.isChecked():
             external_var_id = self.external_variable_combo.currentData()
             if external_var_id:
+                # 외부변수의 파라미터 수집
+                external_param_key = f"{external_var_id}_external"
+                external_params = self.parameter_factory.get_parameter_values(external_param_key)
+                
                 external_variable_info = {
                     'variable_id': external_var_id,
                     'variable_name': self.external_variable_combo.currentText(),
-                    'category': self.external_category_combo.currentData()
+                    'category': self.external_category_combo.currentData(),
+                    'variable_params': external_params  # 외부변수 파라미터 추가
                 }
         
         condition_data = {
             'name': condition_name,  # 자동 생성 제거
-            'description': self.condition_description.toPlainText().strip(),
+            'description': self.condition_description.text().strip(),
             'variable_id': var_id,
             'variable_name': self.variable_combo.currentText(),
             'variable_params': self.parameter_factory.get_parameter_values(var_id),
@@ -609,11 +585,17 @@ class ConditionDialog(QWidget):
     def load_condition(self, condition_data: Dict[str, Any]):
         """기존 조건을 UI에 로드 (편집용)"""
         try:
-            # 조건명 설정
+            print(f"🔧 조건 로드 시작: ID {condition_data.get('id')}")
+            
+            # 조건 정보 로드
             self.condition_name.setText(condition_data.get('name', ''))
+            self.condition_name.setReadOnly(False)  # 이름 수정 가능
+            
+            # 윈도우 타이틀 변경
+            self.setWindowTitle(f"🔧 조건 편집: {condition_data.get('name', 'Unknown')}")
             
             # 설명 설정
-            self.condition_description.setPlainText(condition_data.get('description', ''))
+            self.condition_description.setText(condition_data.get('description', ''))
             
             # 카테고리 설정
             category = condition_data.get('category', 'custom')
@@ -633,8 +615,20 @@ class ConditionDialog(QWidget):
             
             # 변수 파라미터 설정
             variable_params = condition_data.get('variable_params', {})
-            if variable_params and hasattr(self, 'parameter_factory'):
-                self.parameter_factory.set_parameter_values(variable_id, variable_params)
+            if variable_params:
+                # 파라미터 위젯이 생성된 후 값 설정
+                if isinstance(variable_params, str):
+                    try:
+                        variable_params = json.loads(variable_params)
+                    except json.JSONDecodeError:
+                        variable_params = {}
+                
+                # 파라미터 값 복원 (variable_id 타입 검증 추가)
+                if variable_id and isinstance(variable_id, str):
+                    self.parameter_factory.set_parameter_values(variable_id, variable_params)
+                    print(f"✅ 주 변수 파라미터 복원: {variable_params}")
+                else:
+                    print(f"Warning: variable_id가 올바르지 않습니다: {variable_id}")
             
             # 연산자 설정
             operator = condition_data.get('operator', '>')
@@ -661,11 +655,29 @@ class ConditionDialog(QWidget):
                 # 외부 변수 설정
                 ext_var_id = external_variable.get('variable_id')
                 if ext_var_id:
-                    self.update_external_variables_by_category()
+                    self.update_external_variables()
                     for i in range(self.external_variable_combo.count()):
                         if self.external_variable_combo.itemData(i) == ext_var_id:
                             self.external_variable_combo.setCurrentIndex(i)
                             break
+                    
+                    # 외부 변수 파라미터 복원
+                    ext_variable_params = external_variable.get('variable_params') or external_variable.get('parameters')
+                    if ext_variable_params:
+                        if isinstance(ext_variable_params, str):
+                            try:
+                                ext_variable_params = json.loads(ext_variable_params)
+                            except json.JSONDecodeError:
+                                ext_variable_params = {}
+                        
+                        # 외부 변수 파라미터 값 복원
+                        if ext_var_id and isinstance(ext_var_id, str):
+                            # 외부변수 파라미터 키는 "{variable_id}_external" 형식으로 생성됨
+                            external_param_key = f"{ext_var_id}_external"
+                            self.parameter_factory.set_parameter_values(external_param_key, ext_variable_params)
+                            print(f"✅ 외부 변수 파라미터 복원: {external_param_key} = {ext_variable_params}")
+                        else:
+                            print(f"Warning: 외부 변수 variable_id가 올바르지 않습니다: {ext_var_id}")
             else:
                 # 고정값 사용
                 self.use_external_variable.setChecked(False)
@@ -679,8 +691,17 @@ class ConditionDialog(QWidget):
                     button.setChecked(True)
                     break
             
-            # UI 업데이트
-            self.update_external_variable_visibility()
+            # UI 업데이트 - 외부 변수 모드에 따른 UI 상태 설정
+            if self.use_external_variable.isChecked():
+                self.external_variable_widget.setEnabled(True)
+                self.target_input.setEnabled(False)
+                self.target_input.setPlaceholderText("외부 변수 사용 중...")
+                self.use_external_variable.setText("🔄 고정값 사용")
+            else:
+                self.external_variable_widget.setEnabled(False)
+                self.target_input.setEnabled(True)
+                self.use_external_variable.setText("🔄 외부값 사용")
+            
             self.update_preview()
             
             print(f"✅ 조건 로드 완료: {condition_data.get('name', 'Unknown')}")
@@ -690,7 +711,7 @@ class ConditionDialog(QWidget):
             QMessageBox.critical(self, "❌ 오류", f"조건 로드 중 오류가 발생했습니다:\n{e}")
 
     def save_condition(self):
-        """조건 저장 (덮어쓰기 확인 포함)"""
+        """조건 저장 (편집 모드에서는 업데이트, 신규는 생성)"""
         try:
             condition_data = self.collect_condition_data()
             if not condition_data:
@@ -706,11 +727,12 @@ class ConditionDialog(QWidget):
             
             # 첫 번째 저장 시도 (덮어쓰기 없이)
             success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=False)
+            operation_type = "생성"
             
             if not success and "이미 존재합니다" in save_message:
                 # 덮어쓰기 확인 다이얼로그
                 reply = QMessageBox.question(
-                    self, "🔄 덮어쓰기 확인", 
+                    self, "🔄 덮어쓰기 확인",
                     f"{save_message}\n\n기존 조건을 덮어쓰시겠습니까?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No
@@ -719,6 +741,7 @@ class ConditionDialog(QWidget):
                 if reply == QMessageBox.StandardButton.Yes:
                     # 덮어쓰기로 다시 저장
                     success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=True)
+                    operation_type = "덮어쓰기"
                 else:
                     return  # 사용자가 취소함
             
@@ -730,7 +753,7 @@ class ConditionDialog(QWidget):
                 # 시그널 발생
                 self.condition_saved.emit(self.current_condition)
                 
-                QMessageBox.information(self, "✅ 성공", save_message)
+                QMessageBox.information(self, "✅ 성공", f"조건 {operation_type} 완료: {save_message}")
                 # self.accept()  # 창을 닫지 않고 계속 사용 가능하도록
             else:
                 QMessageBox.critical(self, "❌ 오류", save_message)
@@ -760,36 +783,31 @@ class ConditionDialog(QWidget):
         
         layout = QVBoxLayout()
         
-        info_text = """
-🎯 현재 지원되는 변수들:
-
-📈 기술 지표:
-• RSI - 상대강도지수 (과매수/과매도)
-• SMA - 단순이동평균 (추세 확인)  
-• EMA - 지수이동평균 (빠른 신호)
-• BOLLINGER_BAND - 볼린저밴드 (변동성)
-• MACD - 추세 변화 감지
-
-💰 시장 데이터:
-• CURRENT_PRICE - 현재가
-• OPEN_PRICE - 시가
-• HIGH_PRICE - 고가
-• LOW_PRICE - 저가
-• VOLUME - 거래량
-
-🏦 자본 관리:
-• CASH_BALANCE - 현금 잔고
-• COIN_BALANCE - 코인 보유량
-• TOTAL_BALANCE - 총 자산
-
-📊 포지션 상태:
-• PROFIT_PERCENT - 수익률(%)
-• PROFIT_AMOUNT - 수익 금액
-• POSITION_SIZE - 포지션 크기
-• AVG_BUY_PRICE - 평균 매수가
-
-💡 각 변수마다 개별 파라미터 설정 가능!
-        """
+        # variable_definitions에서 변수 정보 동적으로 생성
+        category_variables = self.variable_definitions.get_category_variables()
+        descriptions = self.variable_definitions.get_variable_descriptions()
+        
+        info_text = "🎯 현재 지원되는 변수들:\n\n"
+        
+        category_names = {
+            "indicator": "📈 기술 지표:",
+            "price": "💰 시장 데이터:",
+            "capital": "🏦 자본 관리:",
+            "state": "📊 포지션 상태:"
+        }
+        
+        for category_id, variables in category_variables.items():
+            category_name = category_names.get(category_id, f"🔹 {category_id}:")
+            info_text += f"{category_name}\n"
+            
+            for var_id, var_name in variables:
+                desc = descriptions.get(var_id, "설명 준비 중")
+                info_text += f"• {var_name} - {desc}\n"
+            
+            info_text += "\n"
+        
+        info_text += "💡 각 변수마다 개별 파라미터 설정 가능!\n"
+        info_text += "❓ 변수별 상세 도움말은 헬프 버튼(❓)을 클릭하세요."
         
         info_label = QLabel(info_text)
         info_label.setStyleSheet("""
@@ -816,12 +834,64 @@ class ConditionDialog(QWidget):
             QMessageBox.information(self, "💡 도움말", "먼저 변수를 선택해주세요.")
             return
         
-        # TODO: 상세 도움말 다이얼로그 구현
-        QMessageBox.information(self, "💡 도움말", f"{var_id} 변수의 상세 도움말을 준비 중입니다.")
+        # variable_definitions에서 변수 설명 가져오기
+        descriptions = self.variable_definitions.get_variable_descriptions()
+        desc = descriptions.get(var_id, f"{var_id} 변수의 설명이 준비되지 않았습니다.")
+        
+        # 변수별 파라미터 정보도 포함
+        params = self.variable_definitions.get_variable_parameters(var_id)
+        param_info = ""
+        if params:
+            param_info = "\n\n📋 파라미터:\n"
+            for param_name, param_config in params.items():
+                label = param_config.get('label', param_name)
+                help_text = param_config.get('help', '설명 없음')
+                param_info += f"• {label}: {help_text}\n"
+        
+        # 플레이스홀더 예시도 포함
+        placeholders = self.variable_definitions.get_variable_placeholders()
+        example_info = ""
+        if var_id in placeholders:
+            var_placeholders = placeholders[var_id]
+            example_info = "\n\n💡 사용 예시:\n"
+            if 'target' in var_placeholders:
+                example_info += f"• 비교값: {var_placeholders['target']}\n"
+            if 'name' in var_placeholders:
+                example_info += f"• 조건명: {var_placeholders['name']}\n"
+            if 'description' in var_placeholders:
+                example_info += f"• 설명: {var_placeholders['description']}\n"
+        
+        full_help = f"📖 {desc}{param_info}{example_info}"
+        
+        help_dialog = QDialog(self)
+        help_dialog.setWindowTitle(f"💡 {var_id} 변수 도움말")
+        help_dialog.setMinimumSize(500, 300)
+        
+        layout = QVBoxLayout()
+        
+        help_label = QLabel(full_help)
+        help_label.setStyleSheet("""
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Malgun Gothic';
+            line-height: 1.5;
+        """)
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+        
+        close_btn = QPushButton("확인")
+        close_btn.clicked.connect(help_dialog.accept)
+        layout.addWidget(close_btn)
+        
+        help_dialog.setLayout(layout)
+        help_dialog.exec()
+    
     
     def get_condition_data(self):
         """생성된 조건 데이터 반환"""
         return self.current_condition
+
 
 # 실행 코드
 if __name__ == "__main__":

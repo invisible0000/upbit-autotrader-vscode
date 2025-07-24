@@ -427,7 +427,7 @@ class IntegratedConditionManager(QWidget):
     
     def create_simulation_area(self):
         """영역 3: 케이스 시뮬레이션 버튼들 (우측 상단)"""
-        group = QGroupBox("Case Simulation")
+        group = QGroupBox("케이스 시뮬레이션")
         group.setStyleSheet(self.get_groupbox_style("#6f42c1"))
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
@@ -506,7 +506,7 @@ class IntegratedConditionManager(QWidget):
     
     def create_trigger_detail_area(self):
         """영역 5: 선택한 트리거 상세 정보 (중앙 하단)"""
-        group = QGroupBox("Trigger Details")
+        group = QGroupBox("트리거 상세정보")
         group.setStyleSheet(self.get_groupbox_style("#17a2b8"))
         layout = QVBoxLayout(group)
         
@@ -552,7 +552,7 @@ class IntegratedConditionManager(QWidget):
     
     def create_test_result_area(self):
         """영역 6: 작동 마커 차트 + 작동 기록 (우측 하단)"""
-        group = QGroupBox("Test Results & Chart")
+        group = QGroupBox("테스트 결과 차트")
         group.setStyleSheet(self.get_groupbox_style("#fd7e14"))
         layout = QVBoxLayout(group)
         
@@ -922,21 +922,70 @@ class IntegratedConditionManager(QWidget):
         
         self.selected_condition = condition_data
         
-        # 상세 정보 표시
+        # 디버깅: 조건 데이터 전체 출력
+        print(f"🔍 조건 데이터 전체: {condition_data}")
+        
+        # 외부변수 정보 추출 (데이터베이스 구조에 맞게 수정)
+        external_variable_info = condition_data.get('external_variable', None)
+        variable_params = condition_data.get('variable_params', {})
+        comparison_type = condition_data.get('comparison_type', 'Unknown')
+        target_value = condition_data.get('target_value', 'Unknown')
+        
+        # 외부변수 사용 여부 판정
+        use_external = comparison_type == 'external' and external_variable_info is not None
+        
+        print(f"🔍 external_variable_info: {external_variable_info}")
+        print(f"🔍 use_external: {use_external}")
+        print(f"🔍 comparison_type: {comparison_type}")
+        
+        # 비교 설정 정보 상세화
+        if comparison_type == 'external' and use_external:
+            if external_variable_info and isinstance(external_variable_info, dict):
+                ext_var_name = external_variable_info.get('variable_name', '알 수 없음')
+                ext_var_id = external_variable_info.get('variable_id', '알 수 없음')
+                
+                # 외부변수 파라미터는 condition_dialog에서 다시 로드할 때만 확인 가능
+                # 데이터베이스에서는 external_variable 객체에 parameters가 있을 수 있음
+                ext_param_values = {}
+                if 'parameters' in external_variable_info:
+                    ext_param_values = external_variable_info.get('parameters', {})
+                elif 'variable_params' in external_variable_info:
+                    ext_param_values = external_variable_info.get('variable_params', {})
+                
+                print(f"🔍 외부변수 ID: {ext_var_id}")
+                print(f"🔍 외부변수 파라미터: {ext_param_values}")
+                
+                if ext_param_values:
+                    comparison_info = (f"  • 연산자: {condition_data.get('operator', 'Unknown')}\n"
+                                     f"  • 비교 타입: 외부변수 비교\n"
+                                     f"  • 외부변수: {ext_var_name}\n"
+                                     f"  • 외부변수 파라미터: {ext_param_values}")
+                else:
+                    comparison_info = (f"  • 연산자: {condition_data.get('operator', 'Unknown')}\n"
+                                     f"  • 비교 타입: 외부변수 비교\n"
+                                     f"  • 외부변수: {ext_var_name}\n"
+                                     f"  • 외부변수 파라미터: 저장되지 않음")
+            else:
+                comparison_info = (f"  • 연산자: {condition_data.get('operator', 'Unknown')}\n"
+                                 f"  • 비교 타입: 외부변수 비교 (설정 오류)\n"
+                                 f"  • 대상값: {target_value}")
+        else:
+            comparison_info = (f"  • 연산자: {condition_data.get('operator', 'Unknown')}\n"
+                             f"  • 비교 타입: 고정값 비교\n"
+                             f"  • 대상값: {target_value}")
+        
+        # 상세 정보 표시 (간소화)
         detail_text = f"""
 🎯 조건명: {condition_data.get('name', 'Unknown')}
 📝 설명: {condition_data.get('description', 'No description')}
 
 📊 변수 정보:
-  • 변수: {condition_data.get('variable_name', 'Unknown')}
-  • 파라미터: {condition_data.get('variable_params', {})}
+  • 기본 변수: {condition_data.get('variable_name', 'Unknown')}
+  • 기본 변수 파라미터: {variable_params}
 
 ⚖️ 비교 설정:
-  • 연산자: {condition_data.get('operator', 'Unknown')}
-  • 비교 타입: {condition_data.get('comparison_type', 'Unknown')}
-  • 대상값: {condition_data.get('target_value', 'Unknown')}
+{comparison_info}
 
-🏷️ 카테고리: {condition_data.get('category', 'Unknown')}
 🕐 생성일: {condition_data.get('created_at', 'Unknown')}
         """
         

@@ -25,28 +25,48 @@ class ParameterWidgetFactory:
         
         # 파라미터 라벨 추가
         param_label = QLabel("📋 파라미터:")
-        param_label.setStyleSheet("font-weight: bold; margin-top: 8px;")
+        param_label.setStyleSheet("font-weight: bold; margin-top: 4px; margin-bottom: 2px;")
         layout.addWidget(param_label)
         
         var_widgets = {}
         
         for param_name, param_config in params.items():
+            # 간격을 줄인 파라미터 행 레이아웃
             param_row = QHBoxLayout()
-            param_row.addWidget(QLabel(f"{param_config['label']}:"))
+            param_row.setContentsMargins(0, 0, 0, 0)  # 마진 제거
+            param_row.setSpacing(5)  # 간격 축소
+            
+            # 라벨을 왼쪽으로 붙이기
+            label_text = f"{param_config['label']}:"
+            param_label = QLabel(label_text)
+            param_label.setFixedWidth(60)  # 라벨 폭 고정
+            param_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            param_row.addWidget(param_label)
             
             # 위젯 타입별 생성
             widget = self._create_widget_by_type(param_config)
+            widget.setFixedWidth(80)  # 입력 박스 폭 고정
             param_row.addWidget(widget)
             
-            # 도움말 추가
+            # 최대값 표시 추가
+            if param_config['type'] in ['int', 'float']:
+                max_val = param_config.get('max', '∞')
+                range_label = QLabel(f"(최대: {max_val})")
+                range_label.setStyleSheet("color: #888; font-size: 10px;")
+                param_row.addWidget(range_label)
+            
+            # 도움말을 더 작게 표시
             if 'help' in param_config:
                 help_label = QLabel(f"💡 {param_config['help']}")
-                help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+                help_label.setStyleSheet("color: #666; font-size: 9px; font-style: italic;")
                 param_row.addWidget(help_label)
             
-            # 위젯을 컨테이너에 추가
+            param_row.addStretch()  # 남은 공간을 오른쪽으로
+            
+            # 위젯을 컨테이너에 추가 (마진 축소)
             param_widget = QWidget()
             param_widget.setLayout(param_row)
+            param_widget.setMaximumHeight(25)  # 높이 제한
             layout.addWidget(param_widget)
             
             var_widgets[param_name] = widget
@@ -182,3 +202,35 @@ class ParameterWidgetFactory:
         for var_id in self.widgets:
             all_values[var_id] = self.get_parameter_values(var_id)
         return all_values
+    
+    def set_parameter_values(self, var_id: str, values: Dict[str, Any]):
+        """특정 변수의 파라미터 값들 설정"""
+        if var_id not in self.widgets:
+            print(f"⚠️ 변수 {var_id}의 위젯이 없습니다.")
+            return
+        
+        for param_name, value in values.items():
+            if param_name in self.widgets[var_id]:
+                widget = self.widgets[var_id][param_name]
+                
+                if isinstance(widget, QSpinBox):
+                    try:
+                        widget.setValue(int(value))
+                    except (ValueError, TypeError):
+                        print(f"⚠️ SpinBox 값 설정 실패: {param_name}={value}")
+                        
+                elif isinstance(widget, QLineEdit):
+                    widget.setText(str(value))
+                    
+                elif isinstance(widget, QComboBox):
+                    # 콤보박스에서 해당 텍스트 찾아서 선택
+                    index = widget.findText(str(value))
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                    else:
+                        print(f"⚠️ ComboBox 옵션 찾기 실패: {param_name}={value}")
+                        
+                else:
+                    print(f"⚠️ 지원하지 않는 위젯 타입: {type(widget)}")
+            else:
+                print(f"⚠️ 파라미터 {param_name}의 위젯이 없습니다.")

@@ -39,6 +39,10 @@ class ConditionDialog(QWidget):
         self.current_condition = None
         self.parameter_factory = ParameterWidgetFactory(update_callback=self.update_preview)
         
+        # 편집 모드 관리
+        self.is_edit_mode = False
+        self.current_condition_id = None
+        
         self.init_ui()
     
     def init_ui(self):
@@ -63,6 +67,9 @@ class ConditionDialog(QWidget):
         
         # 4. 미리보기
         self.create_preview_section(layout)
+        
+        # 5. 버튼 섹션
+        self.create_button_section(layout)
         
         self.setLayout(layout)
         self.connect_events()
@@ -315,6 +322,56 @@ class ConditionDialog(QWidget):
         group.setLayout(group_layout)
         layout.addWidget(group)
     
+    def create_button_section(self, layout):
+        """버튼 섹션"""
+        button_layout = QHBoxLayout()
+        
+        # 새 조건 버튼 (편집 모드 해제용)
+        self.new_condition_btn = QPushButton("🆕 새 조건")
+        self.new_condition_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #17a2b8;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #138496;
+            }
+            QPushButton:pressed {
+                background-color: #117a8b;
+            }
+        """)
+        self.new_condition_btn.clicked.connect(self._exit_edit_mode)
+        button_layout.addWidget(self.new_condition_btn)
+        
+        button_layout.addStretch()  # 가운데 공간
+        
+        # 저장 버튼
+        self.save_btn = QPushButton("💾 저장")
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                padding: 8px 16px;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """)
+        self.save_btn.clicked.connect(self.save_condition)
+        button_layout.addWidget(self.save_btn)
+        
+        layout.addLayout(button_layout)
+    
     def connect_events(self):
         """이벤트 연결"""
         self.category_combo.currentTextChanged.connect(self.update_variables_by_category)
@@ -367,6 +424,15 @@ class ConditionDialog(QWidget):
         
         if params:
             self.parameter_factory.create_parameter_widgets(var_id, params, self.param_layout)
+            
+            # 편집 모드에서 pending 파라미터가 있으면 적용
+            if hasattr(self, '_pending_main_params') and self._pending_main_params:
+                pending = self._pending_main_params
+                if pending['variable_id'] == var_id:
+                    print(f"🔄 주변수 파라미터 적용: {var_id} -> {pending['parameters']}")
+                    self.parameter_factory.set_parameter_values(var_id, pending['parameters'])
+                    # pending 파라미터 제거
+                    del self._pending_main_params
     
     def update_placeholders(self):
         """변수별 플레이스홀더 업데이트"""
@@ -440,6 +506,18 @@ class ConditionDialog(QWidget):
             self.parameter_factory.create_parameter_widgets(
                 f"{external_var_id}_external", params, self.external_param_layout
             )
+            
+            # 편집 모드에서 pending 파라미터가 있으면 적용
+            if hasattr(self, '_pending_external_params') and self._pending_external_params:
+                pending = self._pending_external_params
+                if pending['variable_id'] == external_var_id:
+                    print(f"🔄 외부변수 파라미터 적용: {external_var_id} -> {pending['parameters']}")
+                    self.parameter_factory.set_parameter_values(
+                        f"{external_var_id}_external", 
+                        pending['parameters']
+                    )
+                    # pending 파라미터 제거
+                    del self._pending_external_params
     
     def update_preview(self):
         """미리보기 업데이트"""
@@ -553,7 +631,12 @@ class ConditionDialog(QWidget):
                 # 시그널 발생
                 self.condition_saved.emit(self.current_condition)
                 
-                QMessageBox.information(self, "✅ 성공", save_message)
+                # 편집 모드에 따른 메시지 표시
+                if self.is_edit_mode:
+                    QMessageBox.information(self, "✅ 업데이트 완료", "조건이 성공적으로 업데이트되었습니다.")
+                    # 편집 모드 해제는 사용자가 직접 닫기 버튼을 누르거나 새 조건 버튼을 누를 때
+                else:
+                    QMessageBox.information(self, "✅ 저장 완료", save_message)
                 # self.accept()  # 창을 닫지 않고 계속 사용 가능하도록
             else:
                 QMessageBox.critical(self, "❌ 오류", save_message)
@@ -651,9 +734,16 @@ class ConditionDialog(QWidget):
         try:
             print(f"🔄 조건 로드 시작: {condition_data.get('name', 'Unknown')}")
             
+            # 편집 모드 활성화
+            self.is_edit_mode = True
+            self.current_condition_id = condition_data.get('id')
+            
             # 1. 조건 이름과 설명
             self.condition_name.setText(condition_data.get('name', ''))
             self.condition_description.setText(condition_data.get('description', ''))
+            
+            # 편집 모드 UI 설정
+            self._setup_edit_mode_ui()
             
             # 2. 변수 선택
             variable_id = condition_data.get('variable_id', '')
@@ -726,8 +816,8 @@ class ConditionDialog(QWidget):
                     button.setChecked(True)
                     break
             
-            # 7. 변수 파라미터 설정은 추후 구현
-            # TODO: 파라미터 위젯 값 설정 기능 추가
+            # 7. 파라미터 복원
+            self._restore_parameters(condition_data)
             
             # 8. 미리보기 업데이트
             self.update_preview()
@@ -737,6 +827,94 @@ class ConditionDialog(QWidget):
         except Exception as e:
             print(f"❌ 조건 로드 실패: {e}")
             QMessageBox.warning(self, "⚠️ 로드 오류", f"조건 로드 중 오류가 발생했습니다:\n{str(e)}")
+    
+    def _restore_parameters(self, condition_data: Dict[str, Any]):
+        """파라미터 복원"""
+        try:
+            # 주 변수 파라미터 복원
+            variable_id = condition_data.get('variable_id', '')
+            variable_params = condition_data.get('variable_params')
+            
+            if variable_id and variable_params:
+                if isinstance(variable_params, str):
+                    import json
+                    variable_params = json.loads(variable_params)
+                
+                print(f"🔄 주변수 파라미터 복원 예약: {variable_id} -> {variable_params}")
+                # 주변수 파라미터는 변수 선택 후에 복원되어야 함
+                self._pending_main_params = {
+                    'variable_id': variable_id,
+                    'parameters': variable_params
+                }
+            
+            # 외부 변수 파라미터 복원
+            external_variable = condition_data.get('external_variable')
+            if external_variable:
+                if isinstance(external_variable, str):
+                    import json
+                    external_variable = json.loads(external_variable)
+                
+                ext_variable_id = external_variable.get('variable_id', '')
+                ext_parameters = external_variable.get('parameters', {})
+                
+                if ext_variable_id and ext_parameters:
+                    print(f"🔄 외부변수 파라미터 복원 예약: {ext_variable_id} -> {ext_parameters}")
+                    # 외부변수 파라미터는 변수 선택 후에 복원되어야 함
+                    self._pending_external_params = {
+                        'variable_id': ext_variable_id,
+                        'parameters': ext_parameters
+                    }
+                    
+        except Exception as e:
+            print(f"⚠️ 파라미터 복원 실패: {e}")
+    
+    def _setup_edit_mode_ui(self):
+        """편집 모드 UI 설정"""
+        if self.is_edit_mode:
+            # 조건 이름을 읽기 전용으로 설정
+            self.condition_name.setReadOnly(True)
+            self.condition_name.setStyleSheet("""
+                QLineEdit {
+                    background-color: #f0f0f0;
+                    color: #666666;
+                    border: 2px solid #ddd;
+                }
+            """)
+            
+            # 윈도우 타이틀 변경
+            condition_name = self.condition_name.text() or 'Unknown'
+            self.setWindowTitle(f"🔧 조건 편집: {condition_name}")
+    
+    def _exit_edit_mode(self):
+        """편집 모드 해제"""
+        self.is_edit_mode = False
+        self.current_condition_id = None
+        
+        # 조건 이름 필드를 다시 편집 가능하게 설정
+        self.condition_name.setReadOnly(False)
+        self.condition_name.setStyleSheet("")
+        
+        # 윈도우 타이틀 복원
+        self.setWindowTitle("🎯 조건 생성기 v4 (컴포넌트 기반)")
+        
+        # 폼 초기화
+        self.condition_name.clear()
+        self.condition_description.clear()
+        self.target_input.clear()
+        
+        # 콤보박스 초기화
+        self.category_combo.setCurrentIndex(0)
+        self.variable_combo.setCurrentIndex(0)
+        self.operator_combo.setCurrentIndex(0)
+        
+        # 외부변수 체크박스 해제
+        self.use_external_variable.setChecked(False)
+        self.toggle_comparison_mode()
+        
+        # 미리보기 업데이트
+        self.update_preview()
+
+
 
 # 실행 코드
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ class VariableDefinitions:
                     "label": "기간",
                     "type": "int",
                     "min": 2,
-                    "max": 50,
+                    "max": 240,
                     "default": 14,
                     "suffix": " 봉",
                     "help": "RSI 계산 기간 (일반적으로 14)"
@@ -78,7 +78,7 @@ class VariableDefinitions:
                     "label": "기간",
                     "type": "int",
                     "min": 10,
-                    "max": 50,
+                    "max": 240,
                     "default": 20,
                     "suffix": " 봉",
                     "help": "볼린저밴드 계산 기간 (통상 20)"
@@ -119,7 +119,7 @@ class VariableDefinitions:
                     "label": "느린선 기간", 
                     "type": "int",
                     "min": 15,
-                    "max": 50,
+                    "max": 240,
                     "default": 26,
                     "suffix": " 봉",
                     "help": "MACD 느린 이동평균 (26EMA)"

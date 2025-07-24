@@ -2,6 +2,7 @@
 전략 메이커 - 트리거들을 조합하여 완전한 매매 전략 생성
 """
 
+import json
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QMessageBox, QTextEdit, QFrame, QListWidget, QListWidgetItem,
@@ -943,7 +944,41 @@ class StrategyMaker(QWidget):
             # 외부 변수 정보
             external_var = condition_data.get('external_variable')
             if external_var:
-                details_text += f"🔗 외부 변수: {external_var}\n"
+                if isinstance(external_var, str):
+                    try:
+                        external_var = json.loads(external_var)
+                    except json.JSONDecodeError:
+                        pass
+                
+                if isinstance(external_var, dict):
+                    ext_var_name = external_var.get('variable_name', 'Unknown')
+                    ext_var_id = external_var.get('variable_id', 'Unknown')
+                    ext_params = external_var.get('parameters') or external_var.get('variable_params')
+                    
+                    details_text += f"🔗 외부 변수: {ext_var_name} ({ext_var_id})\n"
+                    if ext_params:
+                        if isinstance(ext_params, dict):
+                            param_str = ", ".join([f"{k}={v}" for k, v in ext_params.items()])
+                            details_text += f"⚙️ 외부 파라미터: {param_str}\n"
+                        else:
+                            details_text += f"⚙️ 외부 파라미터: {ext_params}\n"
+                else:
+                    details_text += f"🔗 외부 변수: {external_var}\n"
+                
+            # 주 변수 파라미터 정보
+            variable_params = condition_data.get('variable_params')
+            if variable_params:
+                if isinstance(variable_params, str):
+                    try:
+                        variable_params = json.loads(variable_params)
+                    except json.JSONDecodeError:
+                        pass
+                
+                if isinstance(variable_params, dict):
+                    param_str = ", ".join([f"{k}={v}" for k, v in variable_params.items()])
+                    details_text += f"⚙️ 주 파라미터: {param_str}\n"
+                else:
+                    details_text += f"⚙️ 주 파라미터: {variable_params}\n"
             
             # 생성 정보
             created_at = condition_data.get('created_at')

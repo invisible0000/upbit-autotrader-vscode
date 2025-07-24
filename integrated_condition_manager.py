@@ -859,9 +859,42 @@ class IntegratedConditionManager(QWidget):
         
         self.selected_condition = condition_data
         
+        # 외부변수 정보 처리
+        external_variable_info = condition_data.get('external_variable')
+        if external_variable_info:
+            # JSON 문자열인 경우 파싱
+            if isinstance(external_variable_info, str):
+                try:
+                    import json
+                    external_variable_info = json.loads(external_variable_info)
+                except json.JSONDecodeError:
+                    external_variable_info = None
+        
+        # 비교 설정 섹션 구성
+        comparison_type = condition_data.get('comparison_type', 'fixed')
+        if comparison_type == 'external' and external_variable_info:
+            # 외부 변수 사용
+            ext_var_name = external_variable_info.get('variable_name', 'Unknown')
+            ext_var_category = external_variable_info.get('category', 'Unknown')
+            ext_var_params = external_variable_info.get('variable_params', {})
+            
+            # 외부변수 파라미터 텍스트 생성
+            if ext_var_params:
+                params_text = ""
+                for key, value in ext_var_params.items():
+                    params_text += f"\n    - {key}: {value}"
+            else:
+                params_text = "\n    - 파라미터 없음"
+            
+            comparison_info = f"""외부 변수 '{ext_var_name}' (카테고리: {ext_var_category})
+  • 파라미터:{params_text}"""
+        else:
+            # 고정값 사용
+            target_value = condition_data.get('target_value', 'Unknown')
+            comparison_info = f"고정값: {target_value}"
+        
         # 상세 정보 표시
-        detail_text = f"""
-🎯 조건명: {condition_data.get('name', 'Unknown')}
+        detail_text = f"""🎯 조건명: {condition_data.get('name', 'Unknown')}
 📝 설명: {condition_data.get('description', 'No description')}
 
 📊 변수 정보:
@@ -870,12 +903,10 @@ class IntegratedConditionManager(QWidget):
 
 ⚖️ 비교 설정:
   • 연산자: {condition_data.get('operator', 'Unknown')}
-  • 비교 타입: {condition_data.get('comparison_type', 'Unknown')}
-  • 대상값: {condition_data.get('target_value', 'Unknown')}
+  • {comparison_info}
 
 🏷️ 카테고리: {condition_data.get('category', 'Unknown')}
-🕐 생성일: {condition_data.get('created_at', 'Unknown')}
-        """
+🕐 생성일: {condition_data.get('created_at', 'Unknown')}"""
         
         self.trigger_detail_text.setPlainText(detail_text.strip())
         

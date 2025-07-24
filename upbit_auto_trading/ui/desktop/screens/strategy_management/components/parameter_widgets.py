@@ -32,17 +32,31 @@ class ParameterWidgetFactory:
         
         for param_name, param_config in params.items():
             param_row = QHBoxLayout()
-            param_row.addWidget(QLabel(f"{param_config['label']}:"))
+            
+            # 라벨 추가
+            label = QLabel(f"{param_config['label']}:")
+            label.setMinimumWidth(80)  # 라벨 최소 폭 설정
+            param_row.addWidget(label)
             
             # 위젯 타입별 생성
             widget = self._create_widget_by_type(param_config)
+            widget.setMinimumWidth(100)  # 입력 위젯 최소 폭 설정
             param_row.addWidget(widget)
+            
+            # 범위 표시 추가 (콤팩트하게)
+            range_label = self._create_range_label(param_config)
+            if range_label:
+                param_row.addWidget(range_label)
             
             # 도움말 추가
             if 'help' in param_config:
                 help_label = QLabel(f"💡 {param_config['help']}")
-                help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+                help_label.setStyleSheet("color: #666; font-size: 9px; font-style: italic;")
+                help_label.setWordWrap(True)
                 param_row.addWidget(help_label)
+            
+            # 여백 추가
+            param_row.addStretch()
             
             # 위젯을 컨테이너에 추가
             param_widget = QWidget()
@@ -70,6 +84,10 @@ class ParameterWidgetFactory:
             widget = QLineEdit()
             widget.setText(str(param_config.get('default', 1.0)))
             widget.setPlaceholderText(param_config.get('placeholder', ''))
+            
+            # float 검증 함수 연결
+            widget.textChanged.connect(lambda text, w=widget, config=param_config: self._validate_float_input(text, w, config))
+            
             if self.update_callback:
                 widget.textChanged.connect(self.update_callback)
                 
@@ -133,6 +151,98 @@ class ParameterWidgetFactory:
             }
         """
     
+    def _create_range_label(self, param_config: Dict[str, Any]) -> Optional[QLabel]:
+        """파라미터 범위 표시 라벨 생성 (콤팩트)"""
+        param_type = param_config['type']
+        
+        if param_type == 'int':
+            min_val = param_config.get('min', 1)
+            max_val = param_config.get('max', 100)
+            range_text = f"({min_val}-{max_val})"
+            
+        elif param_type == 'float':
+            min_val = param_config.get('min')
+            max_val = param_config.get('max')
+            if min_val is not None and max_val is not None:
+                range_text = f"({min_val}-{max_val})"
+            else:
+                return None  # float는 범위가 명시되지 않으면 표시하지 않음
+                
+        else:  # enum
+            options = param_config.get('options', [])
+            if options:
+                if len(options) <= 3:
+                    range_text = f"({'/'.join(options)})"
+                else:
+                    range_text = f"({len(options)}개 선택)"
+            else:
+                return None
+        
+        # 범위 라벨 생성
+        range_label = QLabel(range_text)
+        range_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 9px;
+                font-weight: normal;
+                padding: 2px 4px;
+                background-color: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 3px;
+                margin-left: 2px;
+            }
+        """)
+        range_label.setMaximumWidth(80)  # 최대 폭 제한
+        
+        return range_label
+    
+    def _validate_float_input(self, text: str, widget: QLineEdit, param_config: Dict[str, Any]):
+        """float 입력 유효성 검증"""
+        if not text.strip():
+            # 빈 값은 기본 스타일
+            widget.setStyleSheet("")
+            return
+        
+        try:
+            value = float(text)
+            min_val = param_config.get('min')
+            max_val = param_config.get('max')
+            
+            # 범위 검증
+            is_valid = True
+            if min_val is not None and value < min_val:
+                is_valid = False
+            if max_val is not None and value > max_val:
+                is_valid = False
+            
+            if is_valid:
+                # 유효한 값 - 정상 스타일
+                widget.setStyleSheet("""
+                    QLineEdit {
+                        border: 1px solid #28a745;
+                        background-color: #f8fff8;
+                    }
+                """)
+            else:
+                # 범위 밖 값 - 경고 스타일
+                widget.setStyleSheet("""
+                    QLineEdit {
+                        border: 1px solid #dc3545;
+                        background-color: #fff5f5;
+                        color: #dc3545;
+                    }
+                """)
+                
+        except ValueError:
+            # 잘못된 형식 - 오류 스타일
+            widget.setStyleSheet("""
+                QLineEdit {
+                    border: 1px solid #dc3545;
+                    background-color: #fff5f5;
+                    color: #dc3545;
+                }
+            """)
+    
     def create_scrollable_parameter_area(self, min_height: int = 120, 
                                        max_height: int = 200) -> tuple:
         """스크롤 가능한 파라미터 영역 생성"""
@@ -166,6 +276,27 @@ class ParameterWidgetFactory:
                 values[param_name] = None
         
         return values
+    
+    def set_parameter_values(self, var_id: str, values: Dict[str, Any]):
+        """특정 변수의 파라미터 값들 설정"""
+        if var_id not in self.widgets or not values:
+            return
+        
+        for param_name, value in values.items():
+            if param_name in self.widgets[var_id]:
+                widget = self.widgets[var_id][param_name]
+                
+                if isinstance(widget, QSpinBox):
+                    if isinstance(value, (int, float)):
+                        widget.setValue(int(value))
+                elif isinstance(widget, QLineEdit):
+                    widget.setText(str(value))
+                elif isinstance(widget, QComboBox):
+                    # 콤보박스에서 값 찾아서 설정
+                    for i in range(widget.count()):
+                        if widget.itemText(i) == str(value):
+                            widget.setCurrentIndex(i)
+                            break
     
     def clear_parameter_widgets(self, layout: QVBoxLayout):
         """파라미터 위젯들 제거"""
