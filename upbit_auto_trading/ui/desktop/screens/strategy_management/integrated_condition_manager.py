@@ -92,9 +92,9 @@ def reload_condition_dialog():
 # 리로드 실행
 reload_condition_dialog()
 
-from components.condition_dialog import ConditionDialog
-from components.condition_storage import ConditionStorage
-from components.condition_loader import ConditionLoader
+from .components.condition_dialog import ConditionDialog
+from .components.condition_storage import ConditionStorage
+from .components.condition_loader import ConditionLoader
 
 # 기존 UI 컴포넌트 임포트 (스타일 통일을 위해)
 try:

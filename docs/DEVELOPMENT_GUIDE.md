@@ -54,6 +54,88 @@ upbit_auto_trading/
 
 ---
 
+## 🗄️ 데이터베이스 개발 원칙
+
+### 📊 **DB 파일 관리 표준**
+
+#### **1. 확장자 및 위치 규칙**
+```bash
+# ✅ 올바른 DB 파일 구조
+data/
+├── app_settings.sqlite3      # 프로그램 설정 DB
+└── market_data.sqlite3       # 백테스팅용 시장 데이터 DB
+
+# ❌ 잘못된 구조 (금지)
+- 루트 폴더의 .db 파일들
+- 확장자 없는 DB 파일들
+- 서로 다른 폴더의 DB 파일들
+```
+
+#### **2. DB 파일 목적별 분리**
+```python
+# 프로그램 설정 DB (app_settings.sqlite3)
+TABLES = [
+    "trading_conditions",    # 매매 조건
+    "component_strategy",    # 전략 정보
+    "strategy_components",   # 전략 구성요소
+    "strategy_execution",    # 전략 실행 기록
+    "system_settings",       # 시스템 설정
+    "user_preferences"       # 사용자 설정
+]
+
+# 시장 데이터 DB (market_data.sqlite3)
+TABLES = [
+    "candle_data",          # 캔들 데이터
+    "ticker_data",          # 가격 정보
+    "orderbook_data",       # 호가 데이터
+    "trade_history"         # 거래 이력
+]
+```
+
+#### **3. DB 연결 표준화**
+```python
+# ✅ 표준 DB 연결 방식
+class DatabaseManager:
+    def __init__(self):
+        self.app_db = "data/app_settings.sqlite3"
+        self.market_db = "data/market_data.sqlite3"
+    
+    def get_app_connection(self):
+        return sqlite3.connect(self.app_db)
+    
+    def get_market_connection(self):
+        return sqlite3.connect(self.market_db)
+
+# ✅ 클래스별 기본 경로 설정
+class ConditionStorage:
+    def __init__(self, db_path: str = "data/app_settings.sqlite3"):
+        self.db_path = db_path
+
+class MarketDataStorage:
+    def __init__(self, db_path: str = "data/market_data.sqlite3"):
+        self.db_path = db_path
+```
+
+#### **4. 마이그레이션 가이드라인**
+```python
+# DB 구조 변경 시 마이그레이션 스크립트 작성
+# scripts/migrate_v1_to_v2.py 형태로 버전별 관리
+
+def migrate_database():
+    """
+    v1.0 → v2.0 마이그레이션
+    - .db → .sqlite3 확장자 변경
+    - 분산된 DB들을 2개로 통합
+    """
+    # 1. 백업 생성
+    # 2. 스키마 업데이트  
+    # 3. 데이터 마이그레이션
+    # 4. 검증
+    pass
+```
+
+---
+
 ## 📝 코딩 스타일 가이드
 
 ### 🎨 **Python 스타일 규칙**

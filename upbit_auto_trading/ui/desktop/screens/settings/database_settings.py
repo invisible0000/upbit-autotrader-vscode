@@ -69,8 +69,8 @@ class DatabaseSettings(QWidget):
         
         path_layout.addLayout(path_input_layout)
         
-        # 경로 설명
-        path_info = QLabel("* 데이터베이스 파일의 경로를 설정합니다.\n* 기본 경로는 'data/upbit_auto_trading.db'입니다.")
+        # 경로 설명 (올바른 기본 경로)
+        path_info = QLabel("* 데이터베이스 파일의 경로를 설정합니다.\n* 기본 경로는 'data/app_settings.sqlite3'입니다.")
         path_info.setObjectName("label-path-info")
         path_info.setStyleSheet("color: #666666; font-size: 10px;")
         path_layout.addWidget(path_info)
@@ -193,19 +193,16 @@ class DatabaseSettings(QWidget):
     
     def _browse_db_path(self):
         """데이터베이스 경로 찾아보기"""
-        # 파일 대화상자 표시, 기본 확장자 .sqlite3
-        file_path, _ = QFileDialog.getSaveFileName(
+        # 파일 대화상자 표시, 기존 파일 선택용
+        file_path, _ = QFileDialog.getOpenFileName(
             self,
             "데이터베이스 파일 선택",
-            "data/upbit_auto_trading.sqlite3",
+            "data/",
             "SQLite 데이터베이스 (*.sqlite3);;모든 파일 (*.*)"
         )
         
-        # 확장자 없으면 자동 추가
+        # 파일이 선택되었으면 경로 설정
         if file_path:
-            root, ext = os.path.splitext(file_path)
-            if not ext:
-                file_path += ".sqlite3"
             self.db_path_input.setText(file_path)
 
     def create_database_file(self):
@@ -294,8 +291,8 @@ class DatabaseSettings(QWidget):
     
     def _reset_settings(self):
         """설정 초기화"""
-        # 기본 설정으로 초기화
-        self.db_path_input.setText("data/upbit_auto_trading.db")
+        # 기본 설정으로 초기화 (올바른 확장자)
+        self.db_path_input.setText("data/app_settings.sqlite3")
         self.max_size_input.setValue(10)
         self.retention_period_input.setValue(90)
         

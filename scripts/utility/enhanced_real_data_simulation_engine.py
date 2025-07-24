@@ -18,8 +18,8 @@ from extended_data_scenario_mapper import ExtendedDataScenarioMapper
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class EnhancedRealDataSimulationEngine:
-    def __init__(self, unified_db_path: str = "upbit_trading_unified.db", 
-                 data_db_path: str = "data/upbit_auto_trading.sqlite3"):
+    def __init__(self, unified_db_path: str = "data/app_settings.sqlite3",
+                 data_db_path: str = "data/market_data.sqlite3"):
         """
         향상된 실제 데이터 기반 시뮬레이션 엔진 초기화
         

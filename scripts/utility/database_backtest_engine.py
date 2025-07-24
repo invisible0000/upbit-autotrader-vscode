@@ -57,7 +57,7 @@ class DatabaseBacktestConfig:
     trading_fee_rate: float = 0.0005
     slippage_rate: float = 0.001
     risk_settings: Dict[str, Any] = None
-    db_path: str = "data/upbit_auto_trading.sqlite3"
+    db_path: str = "data/market_data.sqlite3"
 
 
 class DatabaseBacktestEngine:

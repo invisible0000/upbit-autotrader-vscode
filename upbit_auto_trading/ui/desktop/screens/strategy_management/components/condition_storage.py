@@ -12,7 +12,7 @@ import os
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "upbit_trading_unified.db"):
+    def __init__(self, db_path: str = "data/app_settings.sqlite3"):
         self.db_path = db_path
         self._ensure_database_exists()
         self._verify_unified_schema()
