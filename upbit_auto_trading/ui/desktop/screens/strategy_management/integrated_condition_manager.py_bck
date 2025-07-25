@@ -15,7 +15,7 @@ import random
 
 # 새로운 컴포넌트들 import
 from .trigger_builder.components.chart_visualizer import ChartVisualizer
-from .trigger_builder.components.data_generators import DataGenerators  
+from .trigger_builder.components.data_generators import DataGenerators
 from .trigger_builder.components.trigger_calculator import TriggerCalculator
 
 # 차트 라이브러리 import
@@ -97,16 +97,10 @@ def reload_condition_dialog():
 # 리로드 실행
 reload_condition_dialog()
 
-from components.condition_dialog import ConditionDialog
-from components.condition_storage import ConditionStorage
-from components.condition_loader import ConditionLoader
-# DataSourceSelectorWidget는 이제 trigger_builder/components에 있음
-try:
-    from trigger_builder.components import DataSourceSelectorWidget
-    print("✅ DataSourceSelectorWidget 로드 성공")
-except ImportError as e:
-    print(f"❌ DataSourceSelectorWidget 로드 실패: {e}")
-    DataSourceSelectorWidget = None
+from .components.condition_dialog import ConditionDialog
+from .components.condition_storage import ConditionStorage
+from .components.condition_loader import ConditionLoader
+from .components.data_source_selector import DataSourceSelectorWidget
 
 # 기존 UI 컴포넌트 임포트 (스타일 통일을 위해)
 try:
@@ -394,25 +388,17 @@ class IntegratedConditionManager(QWidget):
         # 하단 버튼들 - 대시보드 버튼 스타일
         button_layout = QHBoxLayout()
         
-        # 통일된 버튼 스타일 정의
-        button_base_style = """
+        # 트리거 저장 버튼 추가
+        save_btn = QPushButton("💾 트리거 저장")
+        save_btn.setStyleSheet("""
             QPushButton {
+                background-color: #28a745;
                 color: white;
                 border: none;
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: 4px;
                 font-size: 11px;
                 font-weight: bold;
-                min-height: 16px;
-                max-height: 32px;
-            }
-        """
-        
-        # 트리거 저장 버튼 추가 (클래스 변수로 저장)
-        self.save_btn = QPushButton("💾 트리거 저장")
-        self.save_btn.setStyleSheet(button_base_style + """
-            QPushButton {
-                background-color: #28a745;
             }
             QPushButton:hover {
                 background-color: #218838;
@@ -420,77 +406,31 @@ class IntegratedConditionManager(QWidget):
             QPushButton:pressed {
                 background-color: #1e7e34;
             }
-            QPushButton:disabled {
-                background-color: #6c757d;
-                color: #adb5bd;
-                cursor: not-allowed;
-            }
         """)
-        self.save_btn.clicked.connect(self.save_current_condition)
+        save_btn.clicked.connect(self.save_current_condition)
         
-        # 편집 버튼 (동적으로 변경됨) - QPushButton으로 통일
-        self.edit_btn = QPushButton("✏️ 편집")
-        self.edit_btn.setStyleSheet(button_base_style + """
-            QPushButton {
-                background-color: #007bff;
-            }
-            QPushButton:hover {
-                background-color: #0056b3;
-            }
-            QPushButton:pressed {
-                background-color: #004085;
-            }
-        """)
+        # 편집 버튼 (동적으로 변경됨)
+        self.edit_btn = SecondaryButton("✏️ 편집")
         self.edit_btn.clicked.connect(self.edit_selected_trigger)
         
-        # 편집 취소 버튼 (항상 표시)
-        self.cancel_edit_btn = QPushButton("❌ 편집 취소")
-        self.cancel_edit_btn.setStyleSheet(button_base_style + """
-            QPushButton {
-                background-color: #6c757d;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-            QPushButton:pressed {
-                background-color: #545b62;
-            }
-        """)
-        self.cancel_edit_btn.clicked.connect(self.cancel_edit_trigger)
-        
-        # 트리거 복사 버튼 추가
-        copy_trigger_btn = QPushButton("📋 복사")
-        copy_trigger_btn.setStyleSheet(button_base_style + """
-            QPushButton {
-                background-color: #17a2b8;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-            QPushButton:pressed {
-                background-color: #117a8b;
-            }
-        """)
-        copy_trigger_btn.clicked.connect(self.copy_trigger_for_edit)
-        
         delete_btn = QPushButton("🗑️ 삭제")
-        delete_btn.setStyleSheet(button_base_style + """
+        delete_btn.setStyleSheet("""
             QPushButton {
                 background-color: #e74c3c;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                font-size: 11px;
             }
             QPushButton:hover {
                 background-color: #c0392b;
             }
-            QPushButton:pressed {
-                background-color: #a93226;
-            }
         """)
         delete_btn.clicked.connect(self.delete_selected_trigger)
         
-        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(save_btn)
         button_layout.addWidget(self.edit_btn)
-        button_layout.addWidget(self.cancel_edit_btn)  # 편집 취소 버튼 추가
-        button_layout.addWidget(copy_trigger_btn)      # 복사 버튼 추가
         button_layout.addWidget(delete_btn)
         button_layout.addStretch()
         
@@ -513,45 +453,10 @@ class IntegratedConditionManager(QWidget):
         # from PyQt6.QtWidgets import QSizePolicy
         # group.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         
-        # 데이터 소스 선택 위젯 추가 (리팩토링된 위치에서 로드)
-        if DataSourceSelectorWidget is not None:
-            try:
-                self.data_source_selector = DataSourceSelectorWidget()
-                self.data_source_selector.source_changed.connect(self.on_data_source_changed)
-                layout.addWidget(self.data_source_selector)
-                print("✅ DataSourceSelectorWidget 생성 성공")
-            except Exception as e:
-                print(f"⚠️ 데이터 소스 선택기 초기화 실패: {e}")
-                # 대체 라벨 - 더 자연스러운 메시지
-                fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-                fallback_label.setStyleSheet("""
-                    background-color: #e7f3ff;
-                    border: 1px solid #007bff;
-                    border-radius: 4px;
-                    padding: 8px;
-                    font-size: 11px;
-                    color: #007bff;
-                    text-align: center;
-                    font-weight: bold;
-                """)
-                fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout.addWidget(fallback_label)
-        else:
-            print("⚠️ DataSourceSelectorWidget 클래스를 로드할 수 없음")
-            # 대체 라벨 - 더 자연스러운 메시지
-            fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-            fallback_label.setStyleSheet("""
-                background-color: #e7f3ff;
-                border: 1px solid #007bff;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 11px;
-                color: #007bff;
-                text-align: center;
-                font-weight: bold;
-            """)
-            fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(fallback_label)
+        # 데이터 소스 선택 위젯 추가
+        self.data_source_selector = DataSourceSelectorWidget()
+        self.data_source_selector.source_changed.connect(self.on_data_source_changed)
+        layout.addWidget(self.data_source_selector)
         
         # 구분선
         separator = QFrame()
@@ -1050,19 +955,27 @@ class IntegratedConditionManager(QWidget):
         try:
             print(f"📊 데이터 소스 변경: {source_type}")
             
-            # 시뮬레이션 상태 업데이트 (메시지 박스 없이)
+            # 시뮬레이션 상태 업데이트
             self.simulation_status.setText(
-                f"📊 데이터 소스: {source_type}\n"
-                "시뮬레이션 준비 완료"
+                f"데이터 소스 변경됨: {source_type}\n"
+                "새로운 소스로 시뮬레이션 준비 완료"
             )
             
-            # 메시지 박스 제거 (UI 방해 요소 최소화)
-            # QMessageBox.information(...) 제거
+            # 메시지 박스로 사용자에게 알림
+            QMessageBox.information(
+                self, 
+                "데이터 소스 변경",
+                f"시뮬레이션 데이터 소스가 '{source_type}'로 변경되었습니다.\n"
+                "이제 새로운 데이터 소스를 사용하여 시뮬레이션이 실행됩니다."
+            )
             
         except Exception as e:
             print(f"❌ 데이터 소스 변경 중 오류: {e}")
-            # 오류 시에도 조용히 처리
-            self.simulation_status.setText("📊 데이터 소스: 시뮬레이션 모드\n준비 완료")
+            QMessageBox.warning(
+                self,
+                "오류",
+                f"데이터 소스 변경 중 오류가 발생했습니다:\n{e}"
+            )
     
     def run_simulation(self, scenario):
         """시뮬레이션 실행 - 실제 조건 로직 기반 (상세 로깅 포함)"""
@@ -1158,9 +1071,6 @@ class IntegratedConditionManager(QWidget):
         # 차트 업데이트 (실제 트리거 포인트 계산)
         trigger_points = []
         if hasattr(self, 'chart_canvas'):
-            # 차트용 목표값 설정 (외부변수 고려)
-            chart_target_value = target_num  # 계산된 실제 목표값 사용
-            
             # 변수 타입에 따른 적절한 데이터 생성
             if 'rsi' in variable_name.lower():
                 # RSI용 데이터 (0-100 범위)
@@ -1171,7 +1081,7 @@ class IntegratedConditionManager(QWidget):
                     'scenario': scenario,
                     'price_data': data_for_chart,  # RSI 값들
                     'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
+                    'target_value': target_val,
                     'data_type': 'rsi'
                 }
             elif 'macd' in variable_name.lower():
@@ -1183,7 +1093,7 @@ class IntegratedConditionManager(QWidget):
                     'scenario': scenario,
                     'price_data': data_for_chart,  # MACD 값들
                     'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
+                    'target_value': target_val,
                     'data_type': 'macd'
                 }
             else:
@@ -1191,11 +1101,16 @@ class IntegratedConditionManager(QWidget):
                 price_data = self.generate_price_data_for_chart(scenario, 50)
                 trigger_points = self.calculate_trigger_points(price_data, operator, target_num)
                 
+                # target_value 유효성 검사
+                target_val = target_num
+                if str(target_value).replace('.', '').replace('-', '').isdigit():
+                    target_val = float(target_value)
+                
                 chart_simulation_data = {
                     'scenario': scenario,
                     'price_data': price_data,
                     'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
+                    'target_value': target_val,
                     'data_type': 'price'
                 }
             
@@ -1244,6 +1159,221 @@ class IntegratedConditionManager(QWidget):
     def generate_simulation_data(self, scenario, variable_name):
         """시뮬레이션 데이터 생성 - 새로운 DataGenerators 사용"""
         return self.data_generators.generate_simulation_data(scenario, variable_name)
+    
+    def filter_triggers(self, text):
+                # 상승 추세: RSI가 50에서 70으로 증가
+                trend = np.linspace(0, 20, length)
+                noise = np.random.randn(length) * 5
+                rsi_data = base_rsi + trend + noise
+            elif scenario in ["하락 추세", "Downtrend"]:
+                # 하락 추세: RSI가 50에서 30으로 감소
+                trend = np.linspace(0, -20, length)
+                noise = np.random.randn(length) * 5
+                rsi_data = base_rsi + trend + noise
+            elif scenario in ["급등", "Surge"]:
+                # 급등: RSI가 빠르게 과매수 구간(70+)으로
+                trend = np.concatenate([
+                    np.linspace(0, 10, length // 3),
+                    np.linspace(10, 35, length // 3),
+                    np.linspace(35, 30, length - 2 * (length // 3))
+                ])
+                noise = np.random.randn(length) * 3
+                rsi_data = base_rsi + trend + noise
+            elif scenario in ["급락", "Crash"]:
+                # 급락: RSI가 빠르게 과매도 구간(30-)으로
+                trend = np.concatenate([
+                    np.linspace(0, 5, length // 3),
+                    np.linspace(5, -35, length // 3),
+                    np.linspace(-35, -30, length - 2 * (length // 3))
+                ])
+                noise = np.random.randn(length) * 3
+                rsi_data = base_rsi + trend + noise
+            elif scenario in ["횡보", "Sideways"]:
+                # 횡보: RSI 50 근처에서 변동
+                noise = np.random.randn(length) * 8
+                rsi_data = base_rsi + noise
+            else:
+                # 기본: RSI 랜덤 변동
+                noise = np.random.randn(length) * 10
+                rsi_data = base_rsi + np.cumsum(noise * 0.1)
+            
+            # RSI 범위 제한 (0-100)
+            rsi_data = np.clip(rsi_data, 0, 100)
+            
+            print(f"📊 RSI 데이터 생성: {scenario}, 범위 {rsi_data.min():.1f}-{rsi_data.max():.1f}")
+            return rsi_data.tolist()
+            
+        except Exception as e:
+            print(f"❌ RSI 데이터 생성 실패: {e}")
+            # 기본 RSI 데이터
+            import random
+            return [random.uniform(20, 80) for _ in range(length)]
+    
+    def generate_macd_data_for_chart(self, scenario, length=50):
+        """MACD용 시뮬레이션 데이터 생성 (-2 ~ 2 범위)"""
+        try:
+            import numpy as np
+            
+            # MACD 기본값 설정
+            base_macd = 0  # 중립값
+            
+            # 시나리오별 MACD 패턴
+            if scenario in ["상승 추세", "Uptrend"]:
+                # 상승 추세: MACD가 양수로 증가
+                trend = np.linspace(0, 1.5, length)
+                noise = np.random.randn(length) * 0.1
+                macd_data = base_macd + trend + noise
+            elif scenario in ["하락 추세", "Downtrend"]:
+                # 하락 추세: MACD가 음수로 감소
+                trend = np.linspace(0, -1.5, length)
+                noise = np.random.randn(length) * 0.1
+                macd_data = base_macd + trend + noise
+            elif scenario in ["급등", "Surge"]:
+                # 급등: MACD가 빠르게 큰 양수로
+                trend = np.concatenate([
+                    np.linspace(0, 0.5, length // 3),
+                    np.linspace(0.5, 2.0, length // 3),
+                    np.linspace(2.0, 1.5, length - 2 * (length // 3))
+                ])
+                noise = np.random.randn(length) * 0.05
+                macd_data = base_macd + trend + noise
+            elif scenario in ["급락", "Crash"]:
+                # 급락: MACD가 빠르게 큰 음수로
+                trend = np.concatenate([
+                    np.linspace(0, -0.3, length // 3),
+                    np.linspace(-0.3, -2.0, length // 3),
+                    np.linspace(-2.0, -1.5, length - 2 * (length // 3))
+                ])
+                noise = np.random.randn(length) * 0.05
+                macd_data = base_macd + trend + noise
+            elif scenario in ["이동평균 교차", "MA Cross"]:
+                # 이동평균 교차: MACD가 0 근처에서 교차
+                noise = np.random.randn(length) * 0.2
+                macd_data = np.sin(np.linspace(0, 4*np.pi, length)) * 0.5 + noise
+            else:
+                # 기본: MACD 랜덤 변동
+                noise = np.random.randn(length) * 0.3
+                macd_data = base_macd + np.cumsum(noise * 0.05)
+            
+            # MACD 범위 제한 (-2 ~ 2)
+            macd_data = np.clip(macd_data, -2, 2)
+            
+            print(f"📊 MACD 데이터 생성: {scenario}, 범위 {macd_data.min():.2f}-{macd_data.max():.2f}")
+            return macd_data.tolist()
+            
+        except Exception as e:
+            print(f"❌ MACD 데이터 생성 실패: {e}")
+            # 기본 MACD 데이터
+            import random
+            return [random.uniform(-1, 1) for _ in range(length)]
+    
+    def generate_simulation_data(self, scenario, variable_name):
+        """시나리오별 실제 데이터 기반 시뮬레이션 - 업그레이드 버전"""
+        try:
+            # 실제 데이터 시뮬레이션 엔진 사용
+            from .real_data_simulation import get_simulation_engine
+            
+            engine = get_simulation_engine()
+            real_data = engine.get_scenario_data(scenario, length=50)
+            
+            if real_data and real_data.get('data_source') == 'real_market_data':
+                # 실제 시장 데이터 사용 성공
+                print(f"✅ 실제 시장 데이터 사용: {scenario} ({real_data.get('period', 'Unknown')})")
+                
+                # 변수 타입에 따른 값 조정
+                current_value = real_data['current_value']
+                
+                if 'rsi' in variable_name.lower():
+                    # RSI 시뮬레이션을 위한 값 조정 (0-100 범위)
+                    current_value = min(max(current_value % 100, 0), 100)
+                elif 'ma' in variable_name.lower() or '이동평균' in variable_name.lower():
+                    # 이동평균 관련은 그대로 사용
+                    pass
+                elif 'macd' in variable_name.lower():
+                    # MACD는 -1 ~ 1 범위로 조정
+                    current_value = (current_value / 50000) - 1
+                
+                return {
+                    'current_value': current_value,
+                    'base_value': real_data['base_value'],
+                    'change_percent': real_data['change_percent'],
+                    'scenario': scenario,
+                    'data_source': 'real_market_data',
+                    'period': real_data.get('period', 'Unknown')
+                }
+            else:
+                # 실제 데이터 로드 실패 시 폴백
+                print(f"⚠️ 실제 데이터 로드 실패, 시뮬레이션 데이터 사용: {scenario}")
+        
+        except Exception as e:
+            print(f"❌ 실제 데이터 엔진 오류: {e}")
+        
+        # 폴백: 변수 타입별 시뮬레이션 데이터 생성 (개선된 버전)
+        import random
+        
+        # 변수 타입에 따른 시나리오별 값 생성
+        if 'rsi' in variable_name.lower():
+            # RSI 시뮬레이션 (0-100 범위)
+            if scenario in ["Uptrend", "상승 추세"]:
+                base_value = random.uniform(55, 75)  # 상승 시 RSI 높음
+            elif scenario in ["Downtrend", "하락 추세"]:
+                base_value = random.uniform(25, 45)  # 하락 시 RSI 낮음
+            elif scenario in ["Surge", "급등"]:
+                base_value = random.uniform(70, 85)  # 급등 시 과매수
+            elif scenario in ["Crash", "급락"]:
+                base_value = random.uniform(15, 35)  # 급락 시 과매도
+            else:
+                base_value = random.uniform(40, 60)  # 중립
+                
+        elif 'macd' in variable_name.lower():
+            # MACD 시뮬레이션 (-2 ~ 2 범위)
+            if scenario in ["Uptrend", "상승 추세"]:
+                base_value = random.uniform(0.2, 1.5)  # 상승 시 양수
+            elif scenario in ["Downtrend", "하락 추세"]:
+                base_value = random.uniform(-1.5, -0.2)  # 하락 시 음수
+            elif scenario in ["Surge", "급등"]:
+                base_value = random.uniform(1.0, 2.0)  # 급등 시 큰 양수
+            elif scenario in ["Crash", "급락"]:
+                base_value = random.uniform(-2.0, -1.0)  # 급락 시 큰 음수
+            elif scenario in ["MA Cross", "이동평균 교차"]:
+                base_value = random.uniform(-0.3, 0.3)  # 교차점 근처
+            else:
+                base_value = random.uniform(-0.5, 0.5)  # 중립
+                
+        elif 'price' in variable_name.lower() or '가격' in variable_name.lower():
+            # 가격 시뮬레이션 (5백만원 기준)
+            base_price = 5000000
+            if scenario in ["Uptrend", "상승 추세"]:
+                base_value = base_price * random.uniform(1.05, 1.15)
+            elif scenario in ["Downtrend", "하락 추세"]:
+                base_value = base_price * random.uniform(0.85, 0.95)
+            elif scenario in ["Surge", "급등"]:
+                base_value = base_price * random.uniform(1.2, 1.5)
+            elif scenario in ["Crash", "급락"]:
+                base_value = base_price * random.uniform(0.6, 0.8)
+            else:
+                base_value = base_price * random.uniform(0.98, 1.02)
+                
+        elif 'volume' in variable_name.lower() or '거래량' in variable_name.lower():
+            # 거래량 시뮬레이션
+            if scenario in ["Surge", "급등", "Crash", "급락"]:
+                base_value = random.uniform(5000000, 20000000)  # 높은 거래량
+            else:
+                base_value = random.uniform(1000000, 5000000)  # 일반 거래량
+        else:
+            # 기타 지표들
+            base_value = random.uniform(30, 70)
+        
+        # 최종 값 반환
+        current_value = base_value
+        
+        return {
+            'current_value': current_value,
+            'base_value': base_value,
+            'change_percent': 0,  # 변경율은 시나리오별 값에 이미 반영됨
+            'scenario': scenario,
+            'data_source': 'fallback_simulation'
+        }
     
     def add_test_history_item(self, text, item_type):
         """테스트 기록 항목 추가"""
@@ -1315,31 +1445,16 @@ class IntegratedConditionManager(QWidget):
             return
         
         try:
-            # 현재 편집 버튼 텍스트로 모드 확인 (더 안전한 방법)
-            is_currently_editing = self.edit_btn.text() == "💾 편집 저장"
-            
-            if is_currently_editing:
+            # 편집 모드인지 확인
+            if hasattr(self.condition_dialog, 'edit_mode') and self.condition_dialog.edit_mode:
                 # 이미 편집 모드인 경우: 편집 저장
                 self.condition_dialog.save_condition()
             else:
                 # 편집 모드 시작
                 if hasattr(self.condition_dialog, 'load_condition'):
-                    # 조건 빌더 먼저 초기화
-                    if hasattr(self.condition_dialog, 'clear_all_inputs'):
-                        self.condition_dialog.clear_all_inputs()
-                    
-                    # 선택된 조건 로드
                     self.condition_dialog.load_condition(self.selected_condition)
-                    
-                    # 편집 모드 상태 설정
-                    if hasattr(self.condition_dialog, 'edit_mode'):
-                        self.condition_dialog.edit_mode = True
-                        self.condition_dialog.edit_condition_id = self.selected_condition.get('id')
-                        self.condition_dialog.editing_condition_name = self.selected_condition.get('name', '')
-                    
                     # 편집 버튼 상태 변경
                     self.update_edit_button_state(True)
-                    
                     QMessageBox.information(self, "✅ 편집 모드",
                                         f"'{self.selected_condition.get('name', '')}' 조건이 편집 모드로 로드되었습니다.\n"
                                         "수정 후 '편집 저장' 버튼을 눌러 저장하세요.")
@@ -1357,26 +1472,18 @@ class IntegratedConditionManager(QWidget):
     
     def update_edit_button_state(self, is_edit_mode: bool):
         """편집 버튼 상태 업데이트"""
-        # 통일된 버튼 스타일 정의
-        button_base_style = """
-            QPushButton {
-                color: white;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: bold;
-                min-height: 16px;
-                max-height: 32px;
-            }
-        """
-        
         if is_edit_mode:
             # 편집 모드: "편집 저장" 버튼으로 변경
             self.edit_btn.setText("💾 편집 저장")
-            self.edit_btn.setStyleSheet(button_base_style + """
+            self.edit_btn.setStyleSheet("""
                 QPushButton {
                     background-color: #fd7e14;
+                    color: white;
+                    border: none;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-weight: bold;
                 }
                 QPushButton:hover {
                     background-color: #e8681a;
@@ -1385,143 +1492,10 @@ class IntegratedConditionManager(QWidget):
                     background-color: #d9580d;
                 }
             """)
-            
-            # 편집 모드에서는 트리거 저장 버튼 비활성화 (혼동 방지)
-            self.save_btn.setEnabled(False)
-            self.save_btn.setToolTip("편집 모드에서는 '편집 저장' 버튼을 사용하세요")
-            
         else:
             # 일반 모드: "편집" 버튼으로 복원
             self.edit_btn.setText("✏️ 편집")
-            self.edit_btn.setStyleSheet(button_base_style + """
-                QPushButton {
-                    background-color: #007bff;
-                }
-                QPushButton:hover {
-                    background-color: #0056b3;
-                }
-                QPushButton:pressed {
-                    background-color: #004085;
-                }
-            """)
-            
-            # 일반 모드에서는 트리거 저장 버튼 활성화
-            self.save_btn.setEnabled(True)
-            self.save_btn.setToolTip("")
-        
-        # 편집 취소 버튼은 항상 표시되므로 show/hide 제거
-    
-    def cancel_edit_trigger(self):
-        """트리거 편집 취소"""
-        try:
-            # 편집 모드 종료
-            self.update_edit_button_state(False)
-            
-            # 조건 빌더의 편집 모드 강제 해제
-            if hasattr(self.condition_dialog, 'edit_mode'):
-                self.condition_dialog.edit_mode = False
-                self.condition_dialog.edit_condition_id = None
-                self.condition_dialog.editing_condition_name = None
-                print("✅ 조건 빌더 편집 모드 강제 해제")
-            
-            # 조건 빌더 완전 초기화 (모든 필드를 기본값으로)
-            if hasattr(self.condition_dialog, 'clear_all_inputs'):
-                self.condition_dialog.clear_all_inputs()
-                print("✅ 조건 빌더 완전 초기화 완료")
-            elif hasattr(self.condition_dialog, 'reset_form'):
-                self.condition_dialog.reset_form()
-                print("✅ 조건 빌더 폼 리셋 완료")
-            else:
-                print("⚠️ 조건 빌더 초기화 메서드를 찾을 수 없음")
-            
-            # 선택된 조건 해제
-            self.selected_condition = None
-            
-            # 트리거 리스트에서 선택 해제
-            if hasattr(self, 'trigger_tree'):
-                self.trigger_tree.clearSelection()
-                print("✅ 트리거 리스트 선택 해제")
-            
-            # 트리거 상세 정보 초기화
-            self.trigger_detail_text.setPlainText("트리거를 선택하면 상세 정보가 표시됩니다.")
-            
-            # 상태 업데이트
-            self.simulation_status.setText("📝 편집이 취소되었습니다.\n조건 빌더와 선택이 초기화되었습니다.")
-            self.add_test_history_item("편집 취소 및 초기화 완료", "ready")
-            
-            print("✅ 편집 취소 및 전체 초기화 완료")
-            
-        except Exception as e:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "❌ 오류", f"편집 취소 중 오류가 발생했습니다:\n{e}")
-            print(f"❌ 편집 취소 오류: {e}")
-    
-    def copy_trigger_for_edit(self):
-        """선택한 트리거를 복사하여 편집 모드로 로드 (이름은 자동으로 변경)"""
-        if not self.selected_condition:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "⚠️ 경고", "복사할 트리거를 선택해주세요.")
-            return
-        
-        try:
-            # 원본 조건 데이터 복사
-            original_condition = self.selected_condition.copy()
-            
-            # 새로운 이름 생성 (원본 이름 + "_copy")
-            original_name = original_condition.get('name', 'Unknown')
-            new_name = f"{original_name}_copy"
-            
-            # 이미 같은 이름이 있는지 확인하고 번호 추가
-            counter = 1
-            while self._check_condition_name_exists(new_name):
-                new_name = f"{original_name}_copy_{counter}"
-                counter += 1
-            
-            # 새로운 조건 데이터 생성
-            copied_condition = original_condition.copy()
-            copied_condition['name'] = new_name
-            
-            # ID 제거 (새로 생성될 때 새 ID 할당)
-            if 'id' in copied_condition:
-                del copied_condition['id']
-            
-            # 생성일 업데이트
-            copied_condition['created_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            # 조건 빌더에 복사된 데이터 로드
-            if hasattr(self.condition_dialog, 'load_condition'):
-                self.condition_dialog.load_condition(copied_condition)
-                
-                # 편집 모드 시작
-                self.update_edit_button_state(True)
-                
-                # 상태 업데이트
-                self.simulation_status.setText(f"📋 '{original_name}' 복사 완료!\n새 이름: '{new_name}'")
-                self.add_test_history_item(f"트리거 복사: {original_name} → {new_name}", "save")
-                
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.information(self, "📋 복사 완료", 
-                                    f"'{original_name}' 트리거가 복사되었습니다.\n\n"
-                                    f"새 이름: '{new_name}'\n"
-                                    f"필요한 수정을 한 후 '편집 저장'을 눌러 저장하세요.")
-                
-                print(f"✅ 트리거 복사 완료: {original_name} → {new_name}")
-            else:
-                from PyQt6.QtWidgets import QMessageBox
-                QMessageBox.warning(self, "⚠️ 경고", "조건 빌더에 데이터를 로드할 수 없습니다.")
-                
-        except Exception as e:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "❌ 오류", f"트리거 복사 중 오류가 발생했습니다:\n{e}")
-            print(f"❌ 트리거 복사 오류: {e}")
-    
-    def _check_condition_name_exists(self, name: str) -> bool:
-        """조건 이름이 이미 존재하는지 확인"""
-        try:
-            conditions = self.storage.get_all_conditions()
-            return any(condition.get('name') == name for condition in conditions)
-        except Exception:
-            return False
+            self.edit_btn.setStyleSheet("")  # 기본 SecondaryButton 스타일 사용
     
     def delete_selected_trigger(self):
         """선택한 트리거 삭제 구현"""

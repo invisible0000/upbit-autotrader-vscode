@@ -393,3 +393,15 @@ class VariableDefinitions:
                 ("AVG_BUY_PRICE", "평균 매수가")
             ]
         }
+    
+    @staticmethod
+    def get_variable_category(variable_id: str) -> str:
+        """변수 ID로부터 카테고리 찾기"""
+        category_variables = VariableDefinitions.get_category_variables()
+        
+        for category, variables in category_variables.items():
+            for var_id, var_name in variables:
+                if var_id == variable_id:
+                    return category
+        
+        return "custom"  # 기본값

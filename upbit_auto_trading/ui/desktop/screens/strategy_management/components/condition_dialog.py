@@ -546,7 +546,15 @@ class ConditionDialog(QWidget):
         # 조건 이름 검증
         condition_name = self.condition_name.text().strip()
         if not condition_name:
-            QMessageBox.warning(self, "⚠️ 경고", "조건 이름이 비어 있으면 저장할 수 없습니다.\n조건 이름을 입력해주세요.")
+            # 편집 모드가 아닌 경우 더 명확한 안내
+            if not self.edit_mode:
+                QMessageBox.warning(self, "⚠️ 경고", 
+                                  "조건 이름이 비어 있습니다.\n\n"
+                                  "💡 조건을 저장하려면:\n"
+                                  "1. 조건 이름을 입력해주세요\n"
+                                  "2. 또는 편집하고 싶은 트리거를 먼저 선택하고 '편집' 버튼을 누르세요")
+            else:
+                QMessageBox.warning(self, "⚠️ 경고", "조건 이름이 비어 있으면 저장할 수 없습니다.\n조건 이름을 입력해주세요.")
             return None
         
         # 추세 방향성
@@ -610,21 +618,36 @@ class ConditionDialog(QWidget):
             # 설명 설정
             self.condition_description.setText(condition_data.get('description', ''))
             
-            # 카테고리 설정
-            category = condition_data.get('category', 'custom')
-            for i in range(self.category_combo.count()):
-                if self.category_combo.itemData(i) == category:
-                    self.category_combo.setCurrentIndex(i)
-                    break
-            
-            # 변수 설정
+            # 변수 ID에서 카테고리 찾기 (더 정확한 방법)
             variable_id = condition_data.get('variable_id')
             if variable_id:
-                self.update_variables_by_category()  # 카테고리별 변수 업데이트
+                # variable_id에서 카테고리를 찾아서 설정
+                category = self.variable_definitions.get_variable_category(variable_id)
+                print(f"🔍 변수 ID '{variable_id}'의 카테고리: '{category}'")
+                
+                # 카테고리 콤보박스 설정
+                for i in range(self.category_combo.count()):
+                    if self.category_combo.itemData(i) == category:
+                        self.category_combo.setCurrentIndex(i)
+                        print(f"✅ 카테고리 설정: {category}")
+                        break
+                
+                # 카테고리가 변경되었으므로 변수 목록 업데이트
+                self.update_variables_by_category()
+                
+                # 변수 콤보박스에서 해당 변수 찾아서 설정
                 for i in range(self.variable_combo.count()):
                     if self.variable_combo.itemData(i) == variable_id:
                         self.variable_combo.setCurrentIndex(i)
+                        print(f"✅ 변수 설정: {variable_id}")
                         break
+                
+                # 변수가 변경되었으므로 파라미터 위젯 업데이트
+                self.update_variable_params()
+                self.update_variable_description()
+                self.update_placeholders()
+            else:
+                print("⚠️ variable_id가 없습니다.")
             
             # 변수 파라미터 설정
             variable_params = condition_data.get('variable_params', {})
@@ -726,9 +749,22 @@ class ConditionDialog(QWidget):
     def save_condition(self):
         """조건 저장 (편집 모드에서는 업데이트, 신규는 생성)"""
         try:
+            # 먼저 조건 이름 검증 (우선순위)
+            condition_name = self.condition_name.text().strip()
+            if not condition_name:
+                QMessageBox.warning(self, "⚠️ 경고", "조건 이름이 비어 있으면 저장할 수 없습니다.\n조건 이름을 입력해주세요.")
+                return
+            
+            # 변수 선택 검증
+            var_id = self.variable_combo.currentData()
+            if not var_id:
+                QMessageBox.warning(self, "⚠️ 경고", "변수를 선택해주세요.")
+                return
+            
+            # 조건 데이터 수집
             condition_data = self.collect_condition_data()
             if not condition_data:
-                QMessageBox.warning(self, "⚠️ 경고", "변수를 선택해주세요.")
+                QMessageBox.warning(self, "⚠️ 경고", "조건 데이터를 생성할 수 없습니다.")
                 return
             
             # 조건 빌드 및 검증
@@ -826,16 +862,48 @@ class ConditionDialog(QWidget):
             self.condition_name.clear()
             self.condition_description.clear()
             
+            # 비교값 초기화 (문제 해결의 핵심)
+            self.target_input.clear()
+            
             # 콤보박스 초기값으로 설정
             if self.category_combo.count() > 0:
                 self.category_combo.setCurrentIndex(0)
             if self.variable_combo.count() > 0:
                 self.variable_combo.setCurrentIndex(0)
+            if self.operator_combo.count() > 0:
+                self.operator_combo.setCurrentIndex(0)
+            
+            # 외부 변수 관련 필드 초기화
+            if hasattr(self, 'external_category_combo') and self.external_category_combo.count() > 0:
+                self.external_category_combo.setCurrentIndex(0)
+            if hasattr(self, 'external_variable_combo') and self.external_variable_combo.count() > 0:
+                self.external_variable_combo.setCurrentIndex(0)
+            
+            # 외부값 사용 버튼 초기화
+            if hasattr(self, 'use_external_variable'):
+                self.use_external_variable.setChecked(False)
+                self.toggle_comparison_mode()  # 외부값 모드 해제
+            
+            # 추세 방향성 라디오 버튼 초기화 (추세 무관으로)
+            if hasattr(self, 'trend_group'):
+                for button in self.trend_group.buttons():
+                    if button.property("trend_id") == "both":
+                        button.setChecked(True)
+                    else:
+                        button.setChecked(False)
+            
+            # 편집 모드 해제
+            self.edit_mode = False
+            self.edit_condition_id = None
+            self.editing_condition_name = None
             
             # 미리보기 초기화
             self.preview_label.setText("조건을 설정하면 미리보기가 표시됩니다.")
             
-            print("✅ 모든 입력 필드 초기화 완료")
+            # 변수별 파라미터 위젯 초기화
+            self.update_variables_by_category()
+            
+            print("✅ 모든 입력 필드 완전 초기화 완료 (비교값 포함)")
             
         except Exception as e:
             print(f"❌ 입력 필드 초기화 실패: {e}")
