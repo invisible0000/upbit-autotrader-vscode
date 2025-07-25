@@ -46,6 +46,7 @@ class ConditionDialog(QWidget):
     
     # 시그널 정의
     condition_saved = pyqtSignal(dict)  # 조건 저장 완료 시그널
+    edit_mode_changed = pyqtSignal(bool)  # 편집 모드 변경 시그널
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -60,6 +61,11 @@ class ConditionDialog(QWidget):
         # UI 관련 속성
         self.current_condition = None
         self.parameter_factory = ParameterWidgetFactory(update_callback=self.update_preview)
+        
+        # 편집 모드 관련 속성
+        self.edit_mode = False
+        self.edit_condition_id = None
+        self.editing_condition_name = None
         
         self.init_ui()
     
@@ -176,7 +182,7 @@ class ConditionDialog(QWidget):
         # 비교값
         comparison_layout.addWidget(QLabel("비교값:"))
         self.target_input = StyledLineEdit("예: 70, 30, 0.5")
-        self.target_input.setMinimumWidth(140)  # 비교값 입력 박스 폭 확장
+        self.target_input.setMinimumWidth(100)  # 비교값 입력 박스 폭 확장
         comparison_layout.addWidget(self.target_input)
         
         # 간격 추가
@@ -220,10 +226,9 @@ class ConditionDialog(QWidget):
         self.trend_group = QButtonGroup()
         
         trend_options = [
-            ("static", "정적 비교"),
-            ("rising", "상승중"),
-            ("falling", "하락중"),
-            ("both", "양방향")
+            ("rising", "상승 추세"),
+            ("falling", "하락 추세"),
+            ("both", "추세 무관")
         ]
         
         for i, (trend_id, trend_name) in enumerate(trend_options):
@@ -236,7 +241,7 @@ class ConditionDialog(QWidget):
             if i < len(trend_options) - 1:
                 trend_layout.addSpacing(15)
             
-            if trend_id == "static":
+            if trend_id == "both":  # 기본값을 "추세 무관"으로 변경
                 radio.setChecked(True)
         
         trend_layout.addStretch()
@@ -500,7 +505,7 @@ class ConditionDialog(QWidget):
             condition_name = "이름 미입력"  # 미리보기용 기본값
         
         # 추세 방향성
-        trend_direction = "static"
+        trend_direction = "both"  # 기본값 변경
         for button in self.trend_group.buttons():
             if button.isChecked():
                 trend_direction = button.property("trend_id")
@@ -545,7 +550,7 @@ class ConditionDialog(QWidget):
             return None
         
         # 추세 방향성
-        trend_direction = "static"
+        trend_direction = "both"  # 기본값 변경
         for button in self.trend_group.buttons():
             if button.isChecked():
                 trend_direction = button.property("trend_id")
@@ -587,9 +592,17 @@ class ConditionDialog(QWidget):
         try:
             print(f"🔧 조건 로드 시작: ID {condition_data.get('id')}")
             
+            # 편집 모드 설정
+            self.edit_mode = True
+            self.edit_condition_id = condition_data.get('id')
+            self.editing_condition_name = condition_data.get('name', '')
+            
+            # 편집 모드 변경 시그널 발생
+            self.edit_mode_changed.emit(True)
+            
             # 조건 정보 로드
             self.condition_name.setText(condition_data.get('name', ''))
-            self.condition_name.setReadOnly(False)  # 이름 수정 가능
+            self.condition_name.setReadOnly(False)  # 편집 모드에서도 이름 수정 가능
             
             # 윈도우 타이틀 변경
             self.setWindowTitle(f"🔧 조건 편집: {condition_data.get('name', 'Unknown')}")
@@ -725,41 +738,107 @@ class ConditionDialog(QWidget):
                 QMessageBox.warning(self, "⚠️ 검증 오류", message)
                 return
             
-            # 첫 번째 저장 시도 (덮어쓰기 없이)
-            success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=False)
-            operation_type = "생성"
-            
-            if not success and "이미 존재합니다" in save_message:
-                # 덮어쓰기 확인 다이얼로그
-                reply = QMessageBox.question(
-                    self, "🔄 덮어쓰기 확인",
-                    f"{save_message}\n\n기존 조건을 덮어쓰시겠습니까?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.No
-                )
+            # 편집 모드인지 확인
+            if self.edit_mode and self.edit_condition_id:
+                # 편집 모드: 기존 조건 덮어쓰기
+                built_condition['id'] = self.edit_condition_id
+                # 편집 모드에서는 사용자가 입력한 이름 사용 (변경 허용)
+                # built_condition['name']은 이미 collect_condition_data()에서 설정됨
                 
-                if reply == QMessageBox.StandardButton.Yes:
-                    # 덮어쓰기로 다시 저장
-                    success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=True)
-                    operation_type = "덮어쓰기"
+                success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=True)
+                operation_type = "편집 완료"
+                
+                if success:
+                    self.current_condition = built_condition
+                    if condition_id is not None:
+                        self.current_condition['id'] = condition_id
+                    
+                    # 편집 모드 해제
+                    self.exit_edit_mode()
+                    
+                    # 시그널 발생
+                    self.condition_saved.emit(self.current_condition)
+                    
+                    QMessageBox.information(self, "✅ 성공", f"조건 {operation_type} 완료: {save_message}")
                 else:
-                    return  # 사용자가 취소함
-            
-            if success:
-                self.current_condition = built_condition
-                if condition_id is not None:
-                    self.current_condition['id'] = condition_id
-                
-                # 시그널 발생
-                self.condition_saved.emit(self.current_condition)
-                
-                QMessageBox.information(self, "✅ 성공", f"조건 {operation_type} 완료: {save_message}")
-                # self.accept()  # 창을 닫지 않고 계속 사용 가능하도록
+                    QMessageBox.critical(self, "❌ 오류", save_message)
+                    
             else:
-                QMessageBox.critical(self, "❌ 오류", save_message)
+                # 신규 생성 모드
+                # 첫 번째 저장 시도 (덮어쓰기 없이)
+                success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=False)
+                operation_type = "생성"
+                
+                if not success and "이미 존재합니다" in save_message:
+                    # 덮어쓰기 확인 다이얼로그
+                    reply = QMessageBox.question(
+                        self, "🔄 덮어쓰기 확인",
+                        f"{save_message}\n\n기존 조건을 덮어쓰시겠습니까?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        # 덮어쓰기로 다시 저장
+                        success, save_message, condition_id = self.storage.save_condition(built_condition, overwrite=True)
+                        operation_type = "덮어쓰기"
+                    else:
+                        return  # 사용자가 취소함
+                
+                if success:
+                    self.current_condition = built_condition
+                    if condition_id is not None:
+                        self.current_condition['id'] = condition_id
+                    
+                    # 시그널 발생
+                    self.condition_saved.emit(self.current_condition)
+                    
+                    QMessageBox.information(self, "✅ 성공", f"조건 {operation_type} 완료: {save_message}")
+                    # self.accept()  # 창을 닫지 않고 계속 사용 가능하도록
+                else:
+                    QMessageBox.critical(self, "❌ 오류", save_message)
                 
         except Exception as e:
             QMessageBox.critical(self, "❌ 오류", f"조건 저장 중 오류:\n{str(e)}")
+    
+    def exit_edit_mode(self):
+        """편집 모드 해제"""
+        self.edit_mode = False
+        self.edit_condition_id = None
+        self.editing_condition_name = None
+        
+        # 이름 입력 상자를 다시 편집 가능하게 변경
+        self.condition_name.setReadOnly(False)
+        self.condition_name.setStyleSheet("")
+        
+        # 윈도우 타이틀 초기화
+        self.setWindowTitle("🎯 조건 생성기 v4 (컴포넌트 기반)")
+        
+        # 편집 모드 변경 시그널 발생
+        self.edit_mode_changed.emit(False)
+        
+        print("✅ 편집 모드 해제 완료")
+    
+    def clear_all_inputs(self):
+        """모든 입력 필드 초기화"""
+        try:
+            # 조건 이름과 설명 초기화
+            self.condition_name.clear()
+            self.condition_description.clear()
+            
+            # 콤보박스 초기값으로 설정
+            if self.category_combo.count() > 0:
+                self.category_combo.setCurrentIndex(0)
+            if self.variable_combo.count() > 0:
+                self.variable_combo.setCurrentIndex(0)
+            
+            # 미리보기 초기화
+            self.preview_label.setText("조건을 설정하면 미리보기가 표시됩니다.")
+            
+            print("✅ 모든 입력 필드 초기화 완료")
+            
+        except Exception as e:
+            print(f"❌ 입력 필드 초기화 실패: {e}")
     
     def refresh_data(self):
         """데이터 새로고침"""

@@ -111,68 +111,110 @@ class ConditionStorage:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
-                # 기존 조건 확인
-                cursor.execute(
-                    "SELECT id FROM trading_conditions WHERE name = ?",
-                    (condition_data['name'],)
-                )
-                existing_row = cursor.fetchone()
-                
-                if existing_row and not overwrite:
-                    return False, f"조건명 '{condition_data['name']}'이 이미 존재합니다.", None
-                
-                if existing_row and overwrite:
-                    # 기존 조건 업데이트
-                    condition_id = existing_row[0]
-                    cursor.execute("""
-                        UPDATE trading_conditions SET
-                            description = ?, variable_id = ?, variable_name = ?,
-                            variable_params = ?, operator = ?, comparison_type = ?,
-                            target_value = ?, external_variable = ?, trend_direction = ?, 
-                            category = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    """, (
-                        condition_data.get('description', ''),
-                        condition_data['variable_id'],
-                        condition_data['variable_name'],
-                        json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
-                        condition_data['operator'],
-                        condition_data.get('comparison_type', 'fixed'),
-                        condition_data.get('target_value'),
-                        json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
-                        condition_data.get('trend_direction', 'static'),
-                        condition_data.get('category', 'custom'),
-                        condition_id
-                    ))
+                # ID가 있는 경우 (편집 모드)
+                if 'id' in condition_data and condition_data['id'] is not None:
+                    condition_id = condition_data['id']
                     
-                    conn.commit()
-                    return True, f"조건 '{condition_data['name']}'이 업데이트되었습니다.", condition_id
+                    # ID로 기존 조건 확인
+                    cursor.execute(
+                        "SELECT id, name FROM trading_conditions WHERE id = ?",
+                        (condition_id,)
+                    )
+                    existing_row = cursor.fetchone()
+                    
+                    if existing_row:
+                        # 기존 조건 업데이트 (ID 기반)
+                        cursor.execute("""
+                            UPDATE trading_conditions SET
+                                name = ?, description = ?, variable_id = ?, variable_name = ?,
+                                variable_params = ?, operator = ?, comparison_type = ?,
+                                target_value = ?, external_variable = ?, trend_direction = ?, 
+                                category = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        """, (
+                            condition_data['name'],
+                            condition_data.get('description', ''),
+                            condition_data['variable_id'],
+                            condition_data['variable_name'],
+                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
+                            condition_data['operator'],
+                            condition_data.get('comparison_type', 'fixed'),
+                            condition_data.get('target_value'),
+                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            condition_data.get('trend_direction', 'static'),
+                            condition_data.get('category', 'custom'),
+                            condition_id
+                        ))
+                        
+                        conn.commit()
+                        return True, f"조건 '{condition_data['name']}'이 업데이트되었습니다. (ID: {condition_id})", condition_id
+                    else:
+                        return False, f"ID {condition_id}에 해당하는 조건을 찾을 수 없습니다.", None
                 
+                # ID가 없는 경우 (신규 생성)
                 else:
-                    # 새 조건 저장
-                    cursor.execute("""
-                        INSERT INTO trading_conditions (
-                            name, description, variable_id, variable_name,
-                            variable_params, operator, comparison_type,
-                            target_value, external_variable, trend_direction, category
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        condition_data['name'],
-                        condition_data.get('description', ''),
-                        condition_data['variable_id'],
-                        condition_data['variable_name'],
-                        json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
-                        condition_data['operator'],
-                        condition_data.get('comparison_type', 'fixed'),
-                        condition_data.get('target_value'),
-                        json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
-                        condition_data.get('trend_direction', 'static'),
-                        condition_data.get('category', 'custom')
-                    ))
+                    # 이름 중복 확인
+                    cursor.execute(
+                        "SELECT id FROM trading_conditions WHERE name = ?",
+                        (condition_data['name'],)
+                    )
+                    existing_row = cursor.fetchone()
                     
-                    condition_id = cursor.lastrowid
-                    conn.commit()
-                    return True, f"조건 '{condition_data['name']}'이 저장되었습니다.", condition_id
+                    if existing_row and not overwrite:
+                        return False, f"조건명 '{condition_data['name']}'이 이미 존재합니다.", None
+                    
+                    if existing_row and overwrite:
+                        # 기존 조건 업데이트 (이름 기반)
+                        condition_id = existing_row[0]
+                        cursor.execute("""
+                            UPDATE trading_conditions SET
+                                description = ?, variable_id = ?, variable_name = ?,
+                                variable_params = ?, operator = ?, comparison_type = ?,
+                                target_value = ?, external_variable = ?, trend_direction = ?, 
+                                category = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        """, (
+                            condition_data.get('description', ''),
+                            condition_data['variable_id'],
+                            condition_data['variable_name'],
+                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
+                            condition_data['operator'],
+                            condition_data.get('comparison_type', 'fixed'),
+                            condition_data.get('target_value'),
+                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            condition_data.get('trend_direction', 'static'),
+                            condition_data.get('category', 'custom'),
+                            condition_id
+                        ))
+                        
+                        conn.commit()
+                        return True, f"조건 '{condition_data['name']}'이 업데이트되었습니다.", condition_id
+                    
+                    else:
+                        # 새 조건 저장
+                        cursor.execute("""
+                            INSERT INTO trading_conditions (
+                                name, description, variable_id, variable_name,
+                                variable_params, operator, comparison_type,
+                                target_value, external_variable, trend_direction, category
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            condition_data['name'],
+                            condition_data.get('description', ''),
+                            condition_data['variable_id'],
+                            condition_data['variable_name'],
+                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
+                            condition_data['operator'],
+                            condition_data.get('comparison_type', 'fixed'),
+                            condition_data.get('target_value'),
+                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            condition_data.get('trend_direction', 'static'),
+                            condition_data.get('category', 'custom')
+                        ))
+                        
+                        condition_id = cursor.lastrowid
+                        conn.commit()
+                        return True, f"조건 '{condition_data['name']}'이 저장되었습니다.", condition_id
                 
         except sqlite3.IntegrityError as e:
             return False, f"데이터 무결성 오류: {str(e)}", None
