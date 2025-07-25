@@ -15,8 +15,17 @@ import random
 
 # 새로운 컴포넌트들 import
 from .trigger_builder.components.chart_visualizer import ChartVisualizer
-from .trigger_builder.components.data_generators import DataGenerators  
+from .trigger_builder.components.simulation_engines import get_embedded_simulation_engine  
 from .trigger_builder.components.trigger_calculator import TriggerCalculator
+
+# 새로운 차트 변수 카테고리 시스템 import
+try:
+    from .trigger_builder.components.chart_variable_service import get_chart_variable_service
+    from .trigger_builder.components.variable_display_system import get_variable_registry
+    CHART_VARIABLE_SYSTEM_AVAILABLE = True
+except ImportError:
+    CHART_VARIABLE_SYSTEM_AVAILABLE = False
+    print("⚠️ 차트 변수 카테고리 시스템을 로드할 수 없습니다.")
 
 # 차트 라이브러리 import
 try:
@@ -97,12 +106,12 @@ def reload_condition_dialog():
 # 리로드 실행
 reload_condition_dialog()
 
-from components.condition_dialog import ConditionDialog
-from components.condition_storage import ConditionStorage
-from components.condition_loader import ConditionLoader
+from .trigger_builder.components.condition_dialog import ConditionDialog
+from .components.condition_storage import ConditionStorage
+from .components.condition_loader import ConditionLoader
 # DataSourceSelectorWidget는 이제 trigger_builder/components에 있음
 try:
-    from trigger_builder.components import DataSourceSelectorWidget
+    from .trigger_builder.components import DataSourceSelectorWidget
     print("✅ DataSourceSelectorWidget 로드 성공")
 except ImportError as e:
     print(f"❌ DataSourceSelectorWidget 로드 실패: {e}")
@@ -142,8 +151,22 @@ class IntegratedConditionManager(QWidget):
         
         # 새로운 컴포넌트 초기화
         self.chart_visualizer = ChartVisualizer()
-        self.data_generators = DataGenerators()
+        self.simulation_engine = get_embedded_simulation_engine()
         self.trigger_calculator = TriggerCalculator()
+        
+        # 차트 변수 카테고리 시스템 초기화
+        if CHART_VARIABLE_SYSTEM_AVAILABLE:
+            try:
+                self.chart_variable_service = get_chart_variable_service()
+                self.variable_registry = get_variable_registry()
+                print("✅ 차트 변수 카테고리 시스템 로드 완료")
+            except Exception as e:
+                print(f"⚠️ 차트 변수 카테고리 시스템 초기화 실패: {e}")
+                self.chart_variable_service = None
+                self.variable_registry = None
+        else:
+            self.chart_variable_service = None
+            self.variable_registry = None
         
         self.init_ui()
         self.load_trigger_list()
@@ -1230,20 +1253,27 @@ class IntegratedConditionManager(QWidget):
         return self.trigger_calculator.calculate_trigger_points(price_data, operator, target_value)
     
     def generate_price_data_for_chart(self, scenario, length=50):
-        """차트용 가격 데이터 생성 - 새로운 DataGenerators 사용"""
-        return self.data_generators.generate_price_data_for_chart(scenario, length)
+        """차트용 가격 데이터 생성 - 시뮬레이션 엔진 사용"""
+        scenario_data = self.simulation_engine.get_scenario_data(scenario, length)
+        return scenario_data.get('price_data', [])
     
     def generate_rsi_data_for_chart(self, scenario, length=50):
-        """RSI 데이터 생성 - 새로운 DataGenerators 사용"""
-        return self.data_generators.generate_rsi_data_for_chart(scenario, length)
+        """RSI 데이터 생성 - 시뮬레이션 엔진 사용"""
+        market_data = self.simulation_engine.load_market_data(length)
+        if market_data is not None and 'rsi' in market_data.columns:
+            return market_data['rsi'].tolist()
+        return [50] * length  # 기본값
     
     def generate_macd_data_for_chart(self, scenario, length=50):
-        """MACD 데이터 생성 - 새로운 DataGenerators 사용"""
-        return self.data_generators.generate_macd_data_for_chart(scenario, length)
+        """MACD 데이터 생성 - 시뮬레이션 엔진 사용"""
+        market_data = self.simulation_engine.load_market_data(length)
+        if market_data is not None and 'macd' in market_data.columns:
+            return market_data['macd'].tolist()
+        return [0] * length  # 기본값
     
     def generate_simulation_data(self, scenario, variable_name):
-        """시뮬레이션 데이터 생성 - 새로운 DataGenerators 사용"""
-        return self.data_generators.generate_simulation_data(scenario, variable_name)
+        """시뮬레이션 데이터 생성 - 시뮬레이션 엔진 사용"""
+        return self.simulation_engine.get_scenario_data(scenario, 100)
     
     def add_test_history_item(self, text, item_type):
         """테스트 기록 항목 추가"""
@@ -1628,6 +1658,246 @@ class IntegratedConditionManager(QWidget):
         except Exception as e:
             print(f"❌ 조건 저장 실패: {e}")
             QMessageBox.critical(self, "❌ 오류", f"조건 저장 중 오류가 발생했습니다:\n{e}")
+
+    def create_chart_variable_selector(self):
+        """차트 변수 선택기 생성"""
+        if not self.chart_variable_service:
+            return None
+        
+        group = QGroupBox("📊 차트 변수 선택")
+        group.setStyleSheet("""
+            QGroupBox {
+                background-color: #f8f9fa;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                padding-top: 10px;
+                margin: 2px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #495057;
+                font-weight: bold;
+            }
+        """)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(8, 8, 8, 8)
+        
+        # 변수 카테고리 선택
+        category_layout = QHBoxLayout()
+        category_label = QLabel("카테고리:")
+        category_combo = QComboBox()
+        
+        # 카테고리 목록 추가
+        categories = [
+            ("전체", ""),
+            ("가격 오버레이", "price_overlay"),
+            ("오실레이터", "oscillator"),
+            ("모멘텀", "momentum"),
+            ("거래량", "volume")
+        ]
+        
+        for display_name, category_value in categories:
+            category_combo.addItem(display_name, category_value)
+        
+        category_combo.currentTextChanged.connect(self.on_category_changed)
+        
+        category_layout.addWidget(category_label)
+        category_layout.addWidget(category_combo)
+        layout.addLayout(category_layout)
+        
+        # 변수 리스트
+        self.variable_list = QListWidget()
+        self.variable_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background-color: white;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            QListWidget::item:selected {
+                background-color: #007bff;
+                color: white;
+            }
+        """)
+        
+        self.variable_list.itemSelectionChanged.connect(self.on_variable_selected)
+        layout.addWidget(self.variable_list)
+        
+        # 호환성 정보 표시
+        self.compatibility_info = QLabel()
+        self.compatibility_info.setStyleSheet("""
+            QLabel {
+                background-color: #e9ecef;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 10px;
+            }
+        """)
+        self.compatibility_info.setWordWrap(True)
+        layout.addWidget(self.compatibility_info)
+        
+        # 차트 프리뷰 버튼
+        preview_btn = QPushButton("📈 차트 프리뷰")
+        preview_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+        """)
+        preview_btn.clicked.connect(self.show_chart_preview)
+        layout.addWidget(preview_btn)
+        
+        # 초기 변수 목록 로드
+        self.load_variables_by_category("")
+        
+        return group
+    
+    def on_category_changed(self, category_text):
+        """카테고리 변경 시 변수 목록 업데이트"""
+        category_mapping = {
+            "전체": "",
+            "가격 오버레이": "price_overlay",
+            "오실레이터": "oscillator", 
+            "모멘텀": "momentum",
+            "거래량": "volume"
+        }
+        
+        category = category_mapping.get(category_text, "")
+        self.load_variables_by_category(category)
+    
+    def load_variables_by_category(self, category):
+        """카테고리별 변수 목록 로드"""
+        if not self.chart_variable_service:
+            return
+        
+        self.variable_list.clear()
+        
+        try:
+            variables = self.chart_variable_service.get_available_variables_by_category(category)
+            
+            for var in variables:
+                item = QListWidgetItem()
+                item.setText(f"{var.variable_name} ({var.unit})")
+                item.setData(Qt.ItemDataRole.UserRole, var)
+                
+                # 카테고리별 아이콘 추가
+                if var.category == "price_overlay":
+                    item.setText(f"💰 {item.text()}")
+                elif var.category == "oscillator":
+                    item.setText(f"📊 {item.text()}")
+                elif var.category == "momentum":
+                    item.setText(f"🚀 {item.text()}")
+                elif var.category == "volume":
+                    item.setText(f"📈 {item.text()}")
+                
+                self.variable_list.addItem(item)
+                
+        except Exception as e:
+            print(f"⚠️ 변수 목록 로드 실패: {e}")
+    
+    def on_variable_selected(self):
+        """변수 선택 시 호환성 정보 표시"""
+        current_item = self.variable_list.currentItem()
+        if not current_item or not self.chart_variable_service:
+            self.compatibility_info.clear()
+            return
+        
+        var_config = current_item.data(Qt.ItemDataRole.UserRole)
+        if not var_config:
+            return
+        
+        # 호환성 정보 생성
+        compatibility_text = f"📋 {var_config.variable_name}\n"
+        compatibility_text += f"카테고리: {var_config.category}\n"
+        compatibility_text += f"표시 방식: {var_config.display_type}\n"
+        
+        if var_config.scale_min is not None and var_config.scale_max is not None:
+            compatibility_text += f"스케일: {var_config.scale_min} ~ {var_config.scale_max}\n"
+        
+        compatibility_text += f"단위: {var_config.unit}\n"
+        
+        if var_config.compatible_categories:
+            compatible_names = []
+            for cat in var_config.compatible_categories:
+                if cat == "price_overlay":
+                    compatible_names.append("가격 오버레이")
+                elif cat == "oscillator":
+                    compatible_names.append("오실레이터")
+                elif cat == "momentum":
+                    compatible_names.append("모멘텀")
+                elif cat == "volume":
+                    compatible_names.append("거래량")
+                elif cat == "currency":
+                    compatible_names.append("통화")
+                elif cat == "percentage":
+                    compatible_names.append("퍼센트")
+                else:
+                    compatible_names.append(cat)
+            
+            compatibility_text += f"호환 카테고리: {', '.join(compatible_names)}"
+        
+        self.compatibility_info.setText(compatibility_text)
+    
+    def show_chart_preview(self):
+        """차트 프리뷰 표시"""
+        current_item = self.variable_list.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "정보", "먼저 변수를 선택해주세요.")
+            return
+        
+        var_config = current_item.data(Qt.ItemDataRole.UserRole)
+        if not var_config:
+            return
+        
+        try:
+            # 간단한 정보 다이얼로그로 차트 정보 표시
+            info_text = f"차트 변수: {var_config.variable_name}\n"
+            info_text += f"카테고리: {var_config.category}\n"
+            info_text += f"표시 방식: {var_config.display_type}\n"
+            
+            if var_config.category == "price_overlay":
+                info_text += "\n📊 메인 차트에 표시됩니다:\n"
+                if var_config.display_type == "main_line":
+                    info_text += "- 선 형태로 시가 차트에 오버레이"
+                elif var_config.display_type == "main_band":
+                    info_text += "- 밴드 형태로 시가 차트에 오버레이"
+                elif var_config.display_type == "main_level":
+                    info_text += "- 수평선으로 시가 차트에 표시"
+            else:
+                info_text += f"\n📈 별도 서브플롯에 표시됩니다:\n"
+                info_text += f"- 높이 비율: {var_config.subplot_height_ratio}\n"
+                if var_config.scale_min is not None and var_config.scale_max is not None:
+                    info_text += f"- 스케일: {var_config.scale_min} ~ {var_config.scale_max}"
+            
+            QMessageBox.information(self, f"📊 {var_config.variable_name} 차트 정보", info_text)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "⚠️ 경고", f"차트 프리뷰 실패: {e}")
+    
+    def validate_variable_compatibility(self, base_variable_id, external_variable_id):
+        """변수 호환성 검사"""
+        if not self.chart_variable_service:
+            return True, "차트 변수 서비스를 사용할 수 없습니다."
+        
+        try:
+            return self.chart_variable_service.is_compatible_external_variable(
+                base_variable_id, external_variable_id
+            )
+        except Exception as e:
+            return False, f"호환성 검사 오류: {e}"
 
 
 if __name__ == "__main__":

@@ -13,8 +13,21 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon
 
-# 통합 조건 관리 시스템 import
-from .integrated_condition_manager import IntegratedConditionManager
+# 리팩토링된 트리거 빌더 시스템 import
+try:
+    from .trigger_builder.trigger_builder_screen import TriggerBuilderScreen
+    TRIGGER_BUILDER_AVAILABLE = True
+    print("✅ 리팩토링된 TriggerBuilderScreen 로드 성공")
+except ImportError as e:
+    print(f"⚠️ 리팩토링된 TriggerBuilderScreen 로드 실패: {e}")
+    TRIGGER_BUILDER_AVAILABLE = False
+    # 폴백: 기존 통합 조건 관리 시스템
+    try:
+        from .integrated_condition_manager import IntegratedConditionManager
+        print("✅ 폴백: IntegratedConditionManager 로드 성공")
+    except ImportError as fallback_error:
+        print(f"❌ 폴백도 실패: {fallback_error}")
+        IntegratedConditionManager = None
 
 class StrategyManagementScreen(QWidget):
     """컴포넌트 기반 전략 관리 화면"""
@@ -52,17 +65,43 @@ class StrategyManagementScreen(QWidget):
         print("✅ 매매전략 관리 화면 초기화 완료 (4개 탭: 트리거 빌더, 전략 메이커, 백테스팅, 전략 분석)")
     
     def create_trigger_builder_tab(self):
-        """트리거 빌더 탭 생성 - 기존 통합 조건 관리자"""
+        """트리거 빌더 탭 생성 - 리팩토링된 컴포넌트 기반"""
         try:
-            # 통합 조건 관리자를 탭으로 임베드
-            condition_manager = IntegratedConditionManager()
-            return condition_manager
+            if TRIGGER_BUILDER_AVAILABLE:
+                # 새로운 리팩토링된 트리거 빌더 사용
+                print("🔄 리팩토링된 TriggerBuilderScreen 로드 중...")
+                trigger_builder = TriggerBuilderScreen()
+                print("✅ 리팩토링된 TriggerBuilderScreen 로드 완료")
+                return trigger_builder
+            else:
+                # 폴백: 기존 통합 조건 관리자
+                print("🔄 폴백: IntegratedConditionManager 로드 중...")
+                if IntegratedConditionManager:
+                    condition_manager = IntegratedConditionManager()
+                    print("✅ 폴백: IntegratedConditionManager 로드 완료")
+                    return condition_manager
+                else:
+                    raise Exception("Both TriggerBuilderScreen and IntegratedConditionManager unavailable")
         except Exception as e:
-            print(f"❌ 통합 조건 관리자 로딩 실패: {e}")
-            # 대체 위젯 생성
+            print(f"❌ 트리거 빌더 로딩 실패: {e}")
+            # 최종 대체 위젯 생성
             fallback_widget = QWidget()
             layout = QVBoxLayout(fallback_widget)
-            layout.addWidget(QLabel(f"통합 조건 관리자 로딩 실패: {e}"))
+            
+            error_label = QLabel(f"🔧 트리거 빌더 로딩 실패\n\n에러: {e}")
+            error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            error_label.setStyleSheet("""
+                QLabel {
+                    color: #e74c3c;
+                    font-size: 14px;
+                    padding: 20px;
+                    background-color: #fdf2f2;
+                    border: 2px dashed #e74c3c;
+                    border-radius: 8px;
+                }
+            """)
+            layout.addWidget(error_label)
+            
             return fallback_widget
     
     def create_strategy_maker_tab(self):

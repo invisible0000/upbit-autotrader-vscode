@@ -4,10 +4,8 @@
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QRadioButton, QButtonGroup, QGroupBox, QFrame, 
-                             QPushButton, QMessageBox)
+                             QRadioButton, QButtonGroup, QGroupBox, QFrame)
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont
 import logging
 
 
@@ -52,8 +50,8 @@ class DataSourceSelectorWidget(QWidget):
     def load_available_sources(self):
         """사용 가능한 데이터 소스 로드"""
         try:
-            # 같은 폴더의 data_source_manager 임포트
-            from .data_source_manager import get_data_source_manager
+            # 2단계 상위 디렉터리의 data_source_manager 임포트
+            from ...data_source_manager import get_data_source_manager
             self.manager = get_data_source_manager()
             
             # 기존 버튼들 제거
@@ -133,30 +131,6 @@ class DataSourceSelectorWidget(QWidget):
             recommended_label.setStyleSheet("font-size: 8px;")
             layout.addWidget(recommended_label)
         
-        # 헬프 버튼 추가
-        help_btn = QPushButton("❓")
-        help_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e7f3ff;
-                color: #007bff;
-                border: 1px solid #007bff;
-                border-radius: 8px;
-                font-size: 8px;
-                font-weight: bold;
-                max-width: 16px;
-                max-height: 16px;
-                min-width: 16px;
-                min-height: 16px;
-                padding: 0px;
-            }
-            QPushButton:hover {
-                background-color: #007bff;
-                color: white;
-            }
-        """)
-        help_btn.clicked.connect(lambda: self.show_data_source_help(source_key, source_info))
-        layout.addWidget(help_btn)
-        
         layout.addStretch()
         
         # 이벤트 연결
@@ -189,56 +163,3 @@ class DataSourceSelectorWidget(QWidget):
     def get_current_source(self) -> str:
         """현재 선택된 데이터 소스 반환"""
         return self.current_source or ""
-    
-    def show_data_source_help(self, source_key: str, source_info: dict):
-        """데이터 소스 상세 설명 표시"""
-        title = f"📊 {source_info['name']} 상세 정보"
-        
-        # 상세 설명 구성
-        description = source_info.get('description', '설명 없음')
-        pros = source_info.get('pros', [])
-        cons = source_info.get('cons', [])
-        performance = source_info.get('performance', '정보 없음')
-        quality = source_info.get('quality', '정보 없음')
-        
-        help_text = f"""
-🔍 {description}
-
-✅ 장점:
-{chr(10).join([f"  • {pro}" for pro in pros])}
-
-⚠️ 단점:
-{chr(10).join([f"  • {con}" for con in cons])}
-
-⚡ 성능: {performance}
-🎯 품질: {quality}
-
-💡 이 데이터 소스는 {'추천' if source_info.get('recommended', False) else '선택 가능한'} 옵션입니다.
-        """.strip()
-        
-        # 메시지 박스 표시
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle(title)
-        msg_box.setText(help_text)
-        msg_box.setIcon(QMessageBox.Icon.Information)
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        
-        # 스타일링 및 크기 조정
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: white;
-                font-size: 11px;
-            }
-            QMessageBox QLabel {
-                color: #333;
-                padding: 15px;
-                min-width: 500px;
-                max-width: 600px;
-                min-height: 200px;
-                line-height: 1.4;
-            }
-        """)
-        
-        # 내용에 맞게 크기 조정
-        msg_box.adjustSize()
-        msg_box.exec()

@@ -34,16 +34,17 @@ except ImportError:
     FormRow = QWidget
     STYLED_COMPONENTS_AVAILABLE = False
 
-from .variable_definitions import VariableDefinitions
-from .parameter_widgets import ParameterWidgetFactory
-from .condition_validator import ConditionValidator
-from .condition_builder import ConditionBuilder
-from .condition_storage import ConditionStorage
-from .preview_components import PreviewGenerator
+# 컴포넌트들을 절대 경로로 import
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.variable_definitions import VariableDefinitions
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.parameter_widgets import ParameterWidgetFactory
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_validator import ConditionValidator
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_builder import ConditionBuilder
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.preview_components import PreviewGenerator
 
 # 변수 호환성 검증 import
 try:
-    from ..trigger_builder.components.chart_variable_service import get_chart_variable_service
+    from .chart_variable_service import get_chart_variable_service
     COMPATIBILITY_SERVICE_AVAILABLE = True
 except ImportError:
     COMPATIBILITY_SERVICE_AVAILABLE = False
@@ -302,19 +303,62 @@ class ConditionDialog(QWidget):
         category_var_layout.addStretch()
         group_layout.addLayout(category_var_layout)
         
-        # 호환성 상태 표시 라벨 추가
-        self.compatibility_status_label = QLabel()
-        self.compatibility_status_label.setWordWrap(True)
-        self.compatibility_status_label.setStyleSheet("""
-            QLabel {
-                padding: 8px;
+        # 호환성 상태 표시 위젯 (스크롤 가능한 텍스트 영역)
+        from PyQt6.QtWidgets import QScrollArea, QTextEdit
+        from PyQt6.QtCore import Qt
+        
+        self.compatibility_scroll_area = QScrollArea()
+        self.compatibility_scroll_area.setWidgetResizable(True)
+        self.compatibility_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.compatibility_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.compatibility_scroll_area.setMaximumHeight(90)  # 약 3줄 높이
+        self.compatibility_scroll_area.setMinimumHeight(30)
+        self.compatibility_scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: #f0f0f0;
+                width: 8px;
                 border-radius: 4px;
-                margin: 5px 0;
-                font-size: 12px;
+            }
+            QScrollBar::handle:vertical {
+                background: #c0c0c0;
+                border-radius: 4px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #a0a0a0;
             }
         """)
-        self.compatibility_status_label.hide()  # 초기에는 숨김
-        group_layout.addWidget(self.compatibility_status_label)
+        
+        # 호환성 상태 텍스트 위젯
+        self.compatibility_status_label = QTextEdit()
+        self.compatibility_status_label.setReadOnly(True)
+        # PyQt6 호환성을 위해 setWordWrapMode 제거하고 QTextEdit 기본 설정 사용
+        self.compatibility_status_label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.compatibility_status_label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.compatibility_status_label.setStyleSheet("""
+            QTextEdit {
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 8px;
+                font-size: 12px;
+                background-color: #f8f9fa;
+                color: #333;
+                font-family: 'Malgun Gothic';
+            }
+        """)
+        
+        # QTextEdit의 문서 여백 설정으로 줄간격 조정
+        document = self.compatibility_status_label.document()
+        document.setDocumentMargin(2)  # 문서 여백을 최소화
+        
+        # 스크롤 영역에 텍스트 위젯 설정
+        self.compatibility_scroll_area.setWidget(self.compatibility_status_label)
+        self.compatibility_scroll_area.hide()  # 초기에는 숨김
+        group_layout.addWidget(self.compatibility_scroll_area)
         
         # 외부 변수 파라미터 (스크롤 가능)
         self.external_param_scroll, self.external_param_layout = (
@@ -372,6 +416,9 @@ class ConditionDialog(QWidget):
                 font-size: 10px;
             }
         """)
+        
+        # QLabel 여백 설정으로 줄간격 조정
+        self.preview_label.setContentsMargins(0, 0, 0, 0)
         self.preview_label.setWordWrap(True)
         group_layout.addWidget(self.preview_label)
         
@@ -530,6 +577,57 @@ class ConditionDialog(QWidget):
         condition_data = self.collect_condition_data_for_preview()
         if condition_data:
             preview_text = self.preview_generator.generate_condition_preview(condition_data)
+            
+            # 기본 변수의 카테고리 정보 추가
+            base_var_id = condition_data.get('variable_id')
+            if base_var_id:
+                base_category = self._get_variable_category(base_var_id)
+                category_names = {
+                    'price_overlay': '가격오버레이',
+                    'oscillator': '오실레이터',
+                    'momentum': '모멘텀',
+                    'volume': '거래량',
+                    'unknown': '미분류'
+                }
+                category_display = category_names.get(base_category, base_category)
+                preview_text += f"\n\n📊 변수 카테고리: {category_display}"
+            
+            # 호환성 정보 추가 (외부변수 사용 시)
+            if condition_data.get('comparison_type') == 'external' and condition_data.get('external_variable'):
+                external_var_info = condition_data.get('external_variable')
+                
+                if base_var_id and external_var_info and self.compatibility_service:
+                    external_var_id = external_var_info.get('variable_id')
+                    if external_var_id:
+                        try:
+                            is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
+                                base_var_id, external_var_id
+                            )
+                            
+                            # 호환성 정보를 미리보기에 추가
+                            base_category = self._get_variable_category(base_var_id)
+                            external_category = self._get_variable_category(external_var_id)
+                            
+                            category_names = {
+                                'price_overlay': '가격오버레이',
+                                'oscillator': '오실레이터',
+                                'momentum': '모멘텀',
+                                'volume': '거래량',
+                                'unknown': '미분류'
+                            }
+                            base_display = category_names.get(base_category, base_category)
+                            external_display = category_names.get(external_category, external_category)
+                            
+                            compatibility_text = f"\n🔗 호환성: {base_display} ↔ {external_display}"
+                            if is_compatible:
+                                compatibility_text += " ✅"
+                            else:
+                                compatibility_text += " ❌"
+                            
+                            preview_text += compatibility_text
+                        except Exception as e:
+                            preview_text += f"\n🔗 호환성: 확인 중 오류 ({e})"
+            
             self.preview_label.setText(preview_text)
     
     def collect_condition_data_for_preview(self) -> Optional[Dict[str, Any]]:
@@ -1061,6 +1159,47 @@ class ConditionDialog(QWidget):
                 help_text = param_config.get('help', '설명 없음')
                 param_info += f"• {label}: {help_text}\n"
         
+        # 호환성 정보 추가
+        compatibility_info = ""
+        if self.compatibility_service:
+            try:
+                # 현재 변수의 카테고리 정보 가져오기
+                var_category = self._get_variable_category(var_id)
+                if var_category and var_category != 'unknown':
+                    # 카테고리명을 사용자 친화적으로 변환
+                    category_names = {
+                        'price_overlay': '가격오버레이',
+                        'oscillator': '오실레이터',
+                        'momentum': '모멘텀',
+                        'volume': '거래량'
+                    }
+                    category_display = category_names.get(var_category, var_category)
+                    
+                    compatibility_info = f"\n\n🔗 호환성 정보:\n"
+                    compatibility_info += f"• 카테고리: {category_display}\n"
+                    
+                    # 호환 가능한 변수들 나열
+                    compatible_vars = self._get_compatible_variables(var_id)
+                    if compatible_vars:
+                        compatibility_info += f"• 호환 변수: {', '.join(compatible_vars)}\n"
+                    else:
+                        compatibility_info += f"• 호환 변수: 동일 카테고리 내 다른 변수들\n"
+                    
+                    # 카테고리별 설명 추가
+                    category_descriptions = {
+                        'price_overlay': '가격 스케일을 사용하는 지표들 (원화 단위)',
+                        'oscillator': '0-100% 범위의 오실레이터 지표들',
+                        'momentum': '모멘텀을 측정하는 지표들',
+                        'volume': '거래량 관련 지표들'
+                    }
+                    
+                    if var_category in category_descriptions:
+                        compatibility_info += f"• 설명: {category_descriptions[var_category]}\n"
+                else:
+                    compatibility_info = f"\n\n🔗 호환성 정보:\n• 카테고리: 조회 중... (변수 ID: {var_id})\n"
+            except Exception as e:
+                compatibility_info = f"\n\n🔗 호환성 정보: 조회 중 오류 발생 ({e})\n"
+        
         # 플레이스홀더 예시도 포함
         placeholders = self.variable_definitions.get_variable_placeholders()
         example_info = ""
@@ -1074,11 +1213,11 @@ class ConditionDialog(QWidget):
             if 'description' in var_placeholders:
                 example_info += f"• 설명: {var_placeholders['description']}\n"
         
-        full_help = f"📖 {desc}{param_info}{example_info}"
+        full_help = f"📖 {desc}{param_info}{compatibility_info}{example_info}"
         
         help_dialog = QDialog(self)
         help_dialog.setWindowTitle(f"💡 {var_id} 변수 도움말")
-        help_dialog.setMinimumSize(500, 300)
+        help_dialog.setMinimumSize(500, 400)  # 호환성 정보 때문에 높이 증가
         
         layout = QVBoxLayout()
         
@@ -1103,7 +1242,7 @@ class ConditionDialog(QWidget):
     def check_variable_compatibility(self):
         """변수 호환성 검증 및 UI 업데이트"""
         if not self.compatibility_service:
-            self.compatibility_status_label.hide()
+            self.compatibility_scroll_area.hide()
             return
         
         # 기본 변수와 외부변수 ID 가져오기
@@ -1112,12 +1251,12 @@ class ConditionDialog(QWidget):
         
         # 외부변수가 선택되지 않았으면 호환성 표시 숨김
         if not external_variable_id or not base_variable_id:
-            self.compatibility_status_label.hide()
+            self.compatibility_scroll_area.hide()
             return
         
         # 외부변수 모드가 아니면 검증하지 않음
         if not self.use_external_variable.isChecked():
-            self.compatibility_status_label.hide()
+            self.compatibility_scroll_area.hide()
             return
         
         try:
@@ -1132,18 +1271,18 @@ class ConditionDialog(QWidget):
             
             if is_compatible:
                 # 호환 가능한 경우
-                self.compatibility_status_label.setText(
-                    f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다."
-                )
+                message = f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다."
+                self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
-                    QLabel {
-                        padding: 8px;
+                    QTextEdit {
+                        border: 1px solid #c3e6cb;
                         border-radius: 4px;
-                        margin: 5px 0;
+                        padding: 8px;
                         font-size: 12px;
+                        line-height: 1.0;
                         background-color: #d4edda;
                         color: #155724;
-                        border: 1px solid #c3e6cb;
+                        font-family: 'Malgun Gothic';
                     }
                 """)
                 
@@ -1157,16 +1296,17 @@ class ConditionDialog(QWidget):
                     base_variable_id, external_variable_id, base_var_name, external_var_name, reason
                 )
                 
-                self.compatibility_status_label.setText(user_message)
+                self.compatibility_status_label.setPlainText(user_message)
                 self.compatibility_status_label.setStyleSheet("""
-                    QLabel {
-                        padding: 8px;
+                    QTextEdit {
+                        border: 1px solid #f5c6cb;
                         border-radius: 4px;
-                        margin: 5px 0;
+                        padding: 8px;
                         font-size: 12px;
+                        line-height: 1.0;
                         background-color: #f8d7da;
                         color: #721c24;
-                        border: 1px solid #f5c6cb;
+                        font-family: 'Malgun Gothic';
                     }
                 """)
                 
@@ -1174,8 +1314,15 @@ class ConditionDialog(QWidget):
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(False)
             
-            # 라벨 표시
-            self.compatibility_status_label.show()
+            # 스크롤 영역 표시
+            self.compatibility_scroll_area.show()
+            
+            # 텍스트 높이에 따라 스크롤 영역 높이 조정
+            text_height = self.compatibility_status_label.document().size().height()
+            if text_height > 60:  # 3줄 이상이면 스크롤 영역 고정 높이
+                self.compatibility_scroll_area.setMaximumHeight(90)
+            else:  # 3줄 이하면 내용에 맞춰 조정
+                self.compatibility_scroll_area.setMaximumHeight(int(text_height) + 20)
             
             # 디버깅 로그
             print(f"🔍 호환성 검증: {base_var_name} ↔ {external_var_name} = {is_compatible}")
@@ -1184,21 +1331,21 @@ class ConditionDialog(QWidget):
                 
         except Exception as e:
             # 오류 발생 시
-            self.compatibility_status_label.setText(
-                f"⚠️ 호환성 검사 중 오류가 발생했습니다: {str(e)}"
-            )
+            error_message = f"⚠️ 호환성 검사 중 오류가 발생했습니다: {str(e)}"
+            self.compatibility_status_label.setPlainText(error_message)
             self.compatibility_status_label.setStyleSheet("""
-                QLabel {
-                    padding: 8px;
+                QTextEdit {
+                    border: 1px solid #ffeaa7;
                     border-radius: 4px;
-                    margin: 5px 0;
+                    padding: 8px;
                     font-size: 12px;
+                    line-height: 1.0;
                     background-color: #fff3cd;
                     color: #856404;
-                    border: 1px solid #ffeaa7;
+                    font-family: 'Malgun Gothic';
                 }
             """)
-            self.compatibility_status_label.show()
+            self.compatibility_scroll_area.show()
             print(f"❌ 호환성 검증 오류: {e}")
     
     def _generate_user_friendly_compatibility_message(self, base_var_id: str, external_var_id: str, 
@@ -1226,21 +1373,87 @@ class ConditionDialog(QWidget):
         # 기본 메시지
         return f"❌ {base_var_name}와(과) {external_var_name}는 호환되지 않습니다.\n\n사유: {reason}\n\n💡 제안: 같은 카테고리나 호환되는 단위의 변수를 선택해주세요."
     
+    def _get_variable_category(self, var_id: str) -> str:
+        """변수의 카테고리 정보 반환"""
+        try:
+            if self.compatibility_service:
+                # 호환성 서비스에서 변수 정보 조회
+                # 대소문자 구분 없이 매핑 (CURRENT_PRICE -> current_price)
+                var_id_lower = var_id.lower()
+                category_mapping = {
+                    'current_price': 'price_overlay',
+                    'moving_average': 'price_overlay', 
+                    'bollinger_band': 'price_overlay',
+                    'rsi': 'oscillator',
+                    'stochastic': 'oscillator',
+                    'cci': 'oscillator',
+                    'macd': 'momentum',
+                    'volume': 'volume',
+                    'dmi': 'momentum',
+                    'geometric_mean': 'price_overlay'
+                }
+                result = category_mapping.get(var_id_lower, 'unknown')
+                print(f"🔍 변수 '{var_id}' (소문자: '{var_id_lower}') 카테고리: '{result}'")
+                return result
+        except Exception as e:
+            print(f"❌ 카테고리 조회 오류: {e}")
+        return 'unknown'
+    
+    def _get_compatible_variables(self, var_id: str) -> list:
+        """호환 가능한 변수들의 목록 반환"""
+        try:
+            if self.compatibility_service:
+                # 같은 카테고리의 변수들 찾기
+                category = self._get_variable_category(var_id)
+                compatible_vars = []
+                
+                # 모든 변수들에 대해 호환성 검사
+                all_variables = ['current_price', 'moving_average', 'bollinger_band', 
+                               'rsi', 'stochastic', 'macd', 'volume']
+                
+                for var in all_variables:
+                    if var != var_id:
+                        try:
+                            is_compatible, _ = self.compatibility_service.is_compatible_external_variable(var_id, var)
+                            if is_compatible:
+                                # 변수 ID를 사용자 친화적 이름으로 변환
+                                friendly_names = {
+                                    'current_price': '현재가',
+                                    'moving_average': '이동평균',
+                                    'bollinger_band': '볼린저밴드',
+                                    'rsi': 'RSI',
+                                    'stochastic': '스토캐스틱',
+                                    'macd': 'MACD',
+                                    'volume': '거래량'
+                                }
+                                compatible_vars.append(friendly_names.get(var, var))
+                        except Exception:
+                            continue
+                
+                return compatible_vars
+        except Exception:
+            pass
+        return []
+    
     def get_current_variable_id(self) -> str:
         """현재 선택된 기본 변수의 ID 반환"""
         # 먼저 콤보박스의 currentData()에서 직접 가져오기
         var_id = self.variable_combo.currentData()
         if var_id:
+            print(f"🔍 콤보박스에서 직접 가져온 변수 ID: '{var_id}'")
             return var_id
         
         # 콤보박스 데이터가 없으면 변수명으로 매핑
         variable_name = self.variable_combo.currentText()
+        print(f"🔍 콤보박스 텍스트: '{variable_name}'")
         
         # 아이콘 제거하고 순수 변수명만 추출
         if " " in variable_name:
             clean_name = variable_name.split(" ", 1)[-1]  # 첫 번째 공백 뒤의 텍스트
         else:
             clean_name = variable_name
+        
+        print(f"🔍 정리된 변수명: '{clean_name}'")
         
         # 변수명을 ID로 매핑
         name_to_id_mapping = {
@@ -1261,20 +1474,24 @@ class ConditionDialog(QWidget):
         # 정확한 매핑 찾기
         mapped_id = name_to_id_mapping.get(clean_name)
         if mapped_id:
+            print(f"🔍 매핑된 변수 ID: '{mapped_id}'")
             return mapped_id
         
         # 부분 매칭 시도
         for name_key, id_value in name_to_id_mapping.items():
             if name_key.lower() in clean_name.lower() or clean_name.lower() in name_key.lower():
+                print(f"🔍 부분 매칭된 변수 ID: '{id_value}' (키: '{name_key}')")
                 return id_value
         
         # 마지막 폴백: 변수명을 소문자로 변환하고 공백을 언더스코어로
-        return clean_name.lower().replace(" ", "_").replace("지표", "")
+        fallback_id = clean_name.lower().replace(" ", "_").replace("지표", "")
+        print(f"🔍 폴백 변수 ID: '{fallback_id}'")
+        return fallback_id
     
     def update_compatibility_for_fixed_mode(self):
         """고정값 비교 모드에서 호환성 라벨 숨기기"""
-        if hasattr(self, 'compatibility_status_label'):
-            self.compatibility_status_label.hide()
+        if hasattr(self, 'compatibility_scroll_area'):
+            self.compatibility_scroll_area.hide()
             
             # 저장 버튼 다시 활성화 (고정값 모드에서는 호환성 제약 없음)
             if hasattr(self, 'save_btn'):

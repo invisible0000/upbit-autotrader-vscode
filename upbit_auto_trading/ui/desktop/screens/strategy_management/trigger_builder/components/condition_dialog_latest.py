@@ -34,16 +34,17 @@ except ImportError:
     FormRow = QWidget
     STYLED_COMPONENTS_AVAILABLE = False
 
-from .variable_definitions import VariableDefinitions
-from .parameter_widgets import ParameterWidgetFactory
-from .condition_validator import ConditionValidator
-from .condition_builder import ConditionBuilder
-from .condition_storage import ConditionStorage
-from .preview_components import PreviewGenerator
+# 컴포넌트들을 절대 경로로 import
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.variable_definitions import VariableDefinitions
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.parameter_widgets import ParameterWidgetFactory
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_validator import ConditionValidator
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_builder import ConditionBuilder
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.preview_components import PreviewGenerator
 
 # 변수 호환성 검증 import
 try:
-    from ..trigger_builder.components.chart_variable_service import get_chart_variable_service
+    from .chart_variable_service import get_chart_variable_service
     COMPATIBILITY_SERVICE_AVAILABLE = True
 except ImportError:
     COMPATIBILITY_SERVICE_AVAILABLE = False

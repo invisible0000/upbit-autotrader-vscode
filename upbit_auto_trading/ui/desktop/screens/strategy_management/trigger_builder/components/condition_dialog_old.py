@@ -12,16 +12,17 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from typing import Dict, Any, Optional
 
-from .variable_definitions import VariableDefinitions
-from .parameter_widgets import ParameterWidgetFactory
-from .condition_validator import ConditionValidator
-from .condition_builder import ConditionBuilder
-from .condition_storage import ConditionStorage
-from .preview_components import PreviewGenerator
+# 기존 완성된 컴포넌트들 import (절대 경로)
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.variable_definitions import VariableDefinitions
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.parameter_widgets import ParameterWidgetFactory
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_validator import ConditionValidator
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_builder import ConditionBuilder
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
+from upbit_auto_trading.ui.desktop.screens.strategy_management.components.preview_components import PreviewGenerator
 
 # 변수 호환성 검증 서비스 import
 try:
-    from upbit_auto_trading.ui.desktop.screens.strategy_management.trigger_builder.components.chart_variable_service import get_chart_variable_service
+    from .chart_variable_service import get_chart_variable_service
     COMPATIBILITY_SERVICE_AVAILABLE = True
 except ImportError:
     COMPATIBILITY_SERVICE_AVAILABLE = False
@@ -638,12 +639,12 @@ class ConditionDialog(QWidget):
                 self.use_external_variable.isChecked() and 
                 self.compatibility_service):
                 
-                base_variable_id = self.get_current_variable_id()
-                external_variable_id = self.external_variable_combo.currentData()
+                base_variable_name = self.variable_combo.currentText()
+                external_variable_name = self.external_variable_combo.currentText()
                 
-                if external_variable_id and base_variable_id:
+                if external_variable_name and base_variable_name:
                     is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                        base_variable_id, external_variable_id
+                        base_variable_name, external_variable_name
                     )
                     
                     if not is_compatible:
@@ -652,7 +653,7 @@ class ConditionDialog(QWidget):
                         external_var_name = self.external_variable_combo.currentText()
                         
                         user_message = self._generate_user_friendly_compatibility_message(
-                            base_variable_id, external_variable_id, 
+                            base_variable_name, external_variable_name, 
                             base_var_name, external_var_name, reason
                         )
                         
@@ -992,12 +993,12 @@ class ConditionDialog(QWidget):
                 self.compatibility_status_label.hide()
             return
         
-        # 기본 변수와 외부변수 ID 가져오기
-        base_variable_id = self.get_current_variable_id()
-        external_variable_id = self.external_variable_combo.currentData()
+        # 기본 변수와 외부변수 이름 가져오기
+        base_variable_name = self.variable_combo.currentText()
+        external_variable_name = self.external_variable_combo.currentText()
         
         # 외부변수가 선택되지 않았거나 외부변수 모드가 아니면 호환성 표시 숨김
-        if (not external_variable_id or not base_variable_id or 
+        if (not external_variable_name or not base_variable_name or 
             not hasattr(self, 'use_external_variable') or 
             not self.use_external_variable.isChecked()):
             if self.compatibility_status_label:
@@ -1007,7 +1008,7 @@ class ConditionDialog(QWidget):
         try:
             # 호환성 검증 수행
             is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                base_variable_id, external_variable_id
+                base_variable_name, external_variable_name
             )
             
             # 변수명 가져오기 (사용자 친화적 표시용)
@@ -1031,7 +1032,7 @@ class ConditionDialog(QWidget):
             else:
                 # 호환되지 않는 경우
                 message = self._generate_user_friendly_compatibility_message(
-                    base_variable_id, external_variable_id, base_var_name, external_var_name, reason
+                    base_variable_name, external_variable_name, base_var_name, external_var_name, reason
                 )
                 self.compatibility_status_label.setStyleSheet("""
                     QLabel {
@@ -1072,7 +1073,7 @@ class ConditionDialog(QWidget):
             self.compatibility_status_label.show()
             print(f"❌ 호환성 검증 오류: {e}")
     
-    def _generate_user_friendly_compatibility_message(self, base_var_id: str, external_var_id: str, 
+    def _generate_user_friendly_compatibility_message(self, base_var_name_id: str, external_var_name_id: str, 
                                                     base_var_name: str, external_var_name: str, 
                                                     reason: str) -> str:
         """사용자 친화적인 호환성 오류 메시지 생성"""
@@ -1087,7 +1088,7 @@ class ConditionDialog(QWidget):
             ('current_price', 'volume'): f"❌ {base_var_name}(가격)과 {external_var_name}(거래량)은 의미가 달라 비교할 수 없습니다.\n\n💡 제안: 현재가와 비교하려면 같은 가격 지표인 '이동평균'을 선택해보세요.",
         }
         
-        key = (base_var_id, external_var_id)
+        key = (base_var_name_id, external_var_name_id)
         if key in specific_messages:
             return specific_messages[key]
         

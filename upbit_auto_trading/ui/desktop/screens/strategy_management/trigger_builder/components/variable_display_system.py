@@ -2,11 +2,19 @@
 변수 카테고리 및 차트 표현 시스템
 
 변수의 성격에 따른 차트 표현 방식을 정의하고 관리하는 시스템
+새로운 데이터베이스 기반 시스템과 레거시 시스템의 브리지 역할
 """
 
 from enum import Enum
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+
+# 새로운 서비스 임포트
+try:
+    from .chart_variable_service import get_chart_variable_service, VariableDisplayConfig
+    _service_available = True
+except ImportError:
+    _service_available = False
 
 
 class VariableCategory(Enum):
@@ -57,8 +65,39 @@ class VariableRegistry:
     
     def __init__(self):
         self._registry: Dict[str, VariableDisplayConfig] = {}
-        self._initialize_default_variables()
-    
+        if _service_available:
+            # 새로운 데이터베이스 기반 서비스 사용
+            self._service = get_chart_variable_service()
+            self._load_from_service()
+        else:
+            # 레거시 시스템 사용
+            self._initialize_default_variables()
+
+    def _load_from_service(self):
+        """새로운 서비스에서 변수 설정 로드"""
+        if not _service_available:
+            return
+        
+        try:
+            # 모든 활성 변수 로드
+            all_variables = self._service.get_available_variables_by_category()
+            for var_config in all_variables:
+                # 서비스의 VariableDisplayConfig를 레거시 형식으로 변환
+                legacy_config = VariableDisplayConfig(
+                    category=VariableCategory(var_config.category),
+                    display_type=ChartDisplayType(var_config.display_type),
+                    scale_min=var_config.scale_min,
+                    scale_max=var_config.scale_max,
+                    unit=var_config.unit,
+                    color=var_config.default_color,
+                    subplot_height_ratio=var_config.subplot_height_ratio,
+                    allow_external_vars=[VariableCategory(cat) for cat in var_config.compatible_categories]
+                )
+                self._registry[var_config.variable_name] = legacy_config
+        except Exception as e:
+            print(f"⚠️ 서비스에서 변수 로드 실패, 레거시 시스템 사용: {e}")
+            self._initialize_default_variables()
+
     def _initialize_default_variables(self):
         """기본 변수들을 등록"""
         
