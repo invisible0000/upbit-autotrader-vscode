@@ -14,6 +14,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import numpy as np
 
+from PyQt6.QtWidgets import QApplication
+
 from .chart_variable_service import get_chart_variable_service, ChartLayoutInfo
 
 
@@ -358,6 +360,32 @@ class ChartRenderingEngine:
 
     def _apply_chart_styling(self, fig: go.Figure, layout_info: ChartLayoutInfo):
         """차트 스타일링 적용"""
+        # 테마 감지 - QApplication의 palette를 이용해 다크 테마 판별
+        is_dark_theme = False
+        try:
+            if QApplication.instance():
+                palette = QApplication.instance().palette()
+                bg_color_obj = palette.color(palette.ColorRole.Window)
+                is_dark_theme = bg_color_obj.lightness() < 128
+        except Exception:
+            pass
+        
+        # 테마에 따른 plotly 템플릿 적용
+        if is_dark_theme:
+            fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor='rgba(0,0,0,0)',  # 투명 배경
+                plot_bgcolor='rgba(0,0,0,0)',   # 투명 플롯 배경
+                font=dict(color='white')
+            )
+        else:
+            fig.update_layout(
+                template="plotly_white",
+                paper_bgcolor='rgba(255,255,255,0)',  # 투명 배경
+                plot_bgcolor='rgba(255,255,255,0)',   # 투명 플롯 배경
+                font=dict(color='black')
+            )
+        
         fig.update_layout(
             title="트레이딩 차트",
             xaxis_rangeslider_visible=False,
@@ -372,12 +400,13 @@ class ChartRenderingEngine:
             )
         )
         
-        # X축 설정 (시간축 공유)
-        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+        # X축 설정 (시간축 공유) - 테마에 따른 그리드 색상 적용
+        grid_color = 'rgba(255,255,255,0.2)' if is_dark_theme else 'lightgray'
+        fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor=grid_color)
         
-        # Y축 설정
+        # Y축 설정 - 테마에 따른 그리드 색상 적용
         for i in range(1, len(layout_info.height_ratios) + 1):
-            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray', row=i, col=1)
+            fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor=grid_color, row=i, col=1)
 
     def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
         """RSI 계산"""

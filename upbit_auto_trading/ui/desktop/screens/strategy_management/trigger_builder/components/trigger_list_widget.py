@@ -39,29 +39,9 @@ class TriggerListWidget(QWidget):
     
     def setup_ui(self):
         """UI 구성 - integrated_condition_manager.py와 정확히 동일"""
-        # 메인 그룹박스 (원본과 정확히 동일한 스타일)
+        # 메인 그룹박스 (스타일은 애플리케이션 테마를 따름)
         self.group = QGroupBox("📋 등록된 트리거 리스트")
-        self.group.setStyleSheet("""
-            QGroupBox {
-                background-color: white;
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                font-weight: bold;
-                padding-top: 12px;
-                margin: 2px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 8px 0 8px;
-                background-color: white;
-                color: #27ae60;
-                font-size: 11px;
-                font-weight: bold;
-                border-radius: 4px;
-                border: 1px solid #27ae60;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -93,29 +73,7 @@ class TriggerListWidget(QWidget):
         self.trigger_tree.setColumnWidth(1, 120)  # 변수 폭
         self.trigger_tree.setColumnWidth(2, 140)  # 조건 폭
         
-        self.trigger_tree.setStyleSheet("""
-            QTreeWidget {
-                border: 1px solid #cccccc;
-                gridline-color: #e0e0e0;
-                background-color: white;
-                border-radius: 4px;
-            }
-            QTreeWidget::item {
-                padding: 4px 8px;
-                border-bottom: 1px solid #f0f0f0;
-            }
-            QTreeWidget::item:selected {
-                background-color: #3498db;
-                color: white;
-            }
-            QHeaderView::section {
-                background-color: #f0f0f0;
-                padding: 6px;
-                border: 1px solid #cccccc;
-                font-weight: bold;
-                font-size: 11px;
-            }
-        """)
+        # 트리거 트리 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
         
         # 트리거 선택 시그널 연결
         self.trigger_tree.itemClicked.connect(self.on_trigger_selected)
@@ -155,7 +113,6 @@ class TriggerListWidget(QWidget):
             QPushButton:disabled {
                 background-color: #6c757d;
                 color: #adb5bd;
-                cursor: not-allowed;
             }
         """)
         self.save_btn.clicked.connect(self.save_current_condition)

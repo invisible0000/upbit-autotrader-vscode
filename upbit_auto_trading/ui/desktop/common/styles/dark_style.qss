@@ -171,6 +171,21 @@ QLineEdit:focus {
     border: 1px solid #3498db;
 }
 
+/* 텍스트 에디트 스타일 */
+QTextEdit {
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+QTextEdit:focus {
+    border: 1px solid #3498db;
+}
+
 /* 콤보박스 스타일 */
 QComboBox {
     border: 1px solid #3a3a3a;
@@ -185,13 +200,40 @@ QComboBox::drop-down {
     subcontrol-position: top right;
     width: 20px;
     border-left: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border: none;
+    width: 0px;
+    height: 0px;
 }
 
 QComboBox QAbstractItemView {
     border: 1px solid #3a3a3a;
     background-color: #2c2c2c;
+    color: #e0e0e0;
     selection-background-color: #3498db;
     selection-color: white;
+    outline: none;
+}
+
+QComboBox QAbstractItemView::item {
+    background-color: #2c2c2c;
+    color: #e0e0e0;
+    padding: 4px;
+    border: none;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
 }
 
 /* 체크박스 스타일 */
@@ -352,4 +394,177 @@ QSplitter::handle:vertical {
 QLabel {
     color: #e0e0e0;
     background-color: transparent;
+}
+
+/* 트리거 빌더 전용 스타일 - 간소화된 버전 */
+QLabel#titleLabel, QLabel#statusLabel, QLabel#fallbackLabel, 
+QLabel#dataSourceFallback, QLabel#conditionBuilderFallback {
+    color: #e0e0e0;
+    padding: 8px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+QLabel#titleLabel {
+    font-size: 18px;
+    background-color: #3a3a3a;
+    margin: 5px;
+}
+
+QLabel#statusLabel {
+    font-size: 12px;
+    color: #4CAF50;
+    background-color: #2d4f2d;
+}
+
+QLabel#fallbackLabel, QLabel#dataSourceFallback, QLabel#conditionBuilderFallback {
+    background-color: #1a3d5c;
+    border: 1px solid #3498db;
+    color: #3498db;
+    font-size: 11px;
+}
+
+QFrame#separator {
+    color: #3a3a3a;
+}
+
+QLabel#simulationStatus {
+    background-color: #3a3a3a;
+    border: 2px solid #555555;
+    border-radius: 8px;
+    padding: 8px;
+    color: #e0e0e0;
+    font-weight: bold;
+}
+
+/* 그룹박스와 트리 위젯 - 간소화 */
+QGroupBox, QTreeWidget {
+    background-color: #2c2c2c;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    color: #e0e0e0;
+}
+
+QTreeWidget::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+/* 트리거 빌더 입력 위젯 스타일 */
+QLineEdit#triggerSearchInput,
+QTextEdit#triggerDetailText,
+QTextEdit#triggerLogText {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 5px;
+    color: #e0e0e0;
+    selection-background-color: #3498db;
+}
+
+/* 트리거 빌더 트리 위젯 스타일 */
+QTreeWidget#triggerListTree {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    color: #e0e0e0;
+    alternate-background-color: #2c2c2c;
+    selection-background-color: #3498db;
+}
+
+QTreeWidget#triggerListTree::item {
+    padding: 3px;
+}
+
+QTreeWidget#triggerListTree::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QTreeWidget#triggerListTree::item:hover {
+    background-color: #4a4a4a;
+}
+
+/* 리스트 위젯 스타일 */
+QListWidget {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    color: #e0e0e0;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+QListWidget::item {
+    padding: 5px;
+    border-bottom: 1px solid #2c2c2c;
+}
+
+QListWidget::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QListWidget::item:hover {
+    background-color: #4a4a4a;
+}
+
+/* 스핀박스 스타일 */
+QSpinBox, QDoubleSpinBox {
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #3498db;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 16px;
+    border-left: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 16px;
+    border-left: 1px solid #3a3a3a;
+    background-color: #3a3a3a;
+}
+
+/* 도움말 다이얼로그 라벨 스타일 */
+QLabel#helpDialogLabel {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 8px;
+    padding: 15px;
+    color: #e0e0e0;
+}
+
+/* 지원 현황 다이얼로그 라벨 스타일 */
+QLabel#infoDialogLabel {
+    background-color: #3a3a3a;
+    border: 1px solid #555555;
+    border-radius: 8px;
+    padding: 15px;
+    color: #e0e0e0;
+    font-family: 'Malgun Gothic';
+    line-height: 1.5;
+}
+
+/* 차트 위젯 스타일 */
+QWidget#chart_widget {
+    background-color: #2c2c2c;
+    border: none;
+}
+
+QWidget#chart_canvas {
+    background-color: #2c2c2c;
+    border: none;
 }

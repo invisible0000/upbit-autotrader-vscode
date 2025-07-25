@@ -154,22 +154,8 @@ class ConditionDialog(QWidget):
         help_btn.setMinimumWidth(30)
         help_btn.setFixedHeight(25)
         help_btn.setToolTip("선택한 변수의 상세 도움말")
-        help_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e9ecef;
-                border: 1px solid #ced4da;
-                border-radius: 4px;
-                color: #495057;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #dee2e6;
-            }
-            QPushButton:pressed {
-                background-color: #adb5bd;
-            }
-        """)
+        # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
+        help_btn.setObjectName("helpButton")  # CSS에서 스타일링 가능하도록
         help_btn.clicked.connect(self.show_variable_help)
         category_var_layout.addWidget(help_btn)
         
@@ -313,25 +299,8 @@ class ConditionDialog(QWidget):
         self.compatibility_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.compatibility_scroll_area.setMaximumHeight(90)  # 약 3줄 높이
         self.compatibility_scroll_area.setMinimumHeight(30)
-        self.compatibility_scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background: transparent;
-            }
-            QScrollBar:vertical {
-                background: #f0f0f0;
-                width: 8px;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background: #c0c0c0;
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #a0a0a0;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
+        self.compatibility_scroll_area.setObjectName("compatibilityScrollArea")
         
         # 호환성 상태 텍스트 위젯
         self.compatibility_status_label = QTextEdit()
@@ -339,17 +308,8 @@ class ConditionDialog(QWidget):
         # PyQt6 호환성을 위해 setWordWrapMode 제거하고 QTextEdit 기본 설정 사용
         self.compatibility_status_label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.compatibility_status_label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.compatibility_status_label.setStyleSheet("""
-            QTextEdit {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 12px;
-                background-color: #f8f9fa;
-                color: #333;
-                font-family: 'Malgun Gothic';
-            }
-        """)
+        # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
+        self.compatibility_status_label.setObjectName("compatibilityStatus")  # CSS에서 스타일링 가능하도록
         
         # QTextEdit의 문서 여백 설정으로 줄간격 조정
         document = self.compatibility_status_label.document()
@@ -406,16 +366,8 @@ class ConditionDialog(QWidget):
         group_layout.setSpacing(2)
         
         self.preview_label = QLabel("조건을 설정하면 미리보기가 표시됩니다.")
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                background-color: #f8f9fa;
-                padding: 6px;
-                border: 2px dashed #dee2e6;
-                border-radius: 6px;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 10px;
-            }
-        """)
+        # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
+        self.preview_label.setObjectName("conditionPreview")  # CSS에서 스타일링 가능하도록
         
         # QLabel 여백 설정으로 줄간격 조정
         self.preview_label.setContentsMargins(0, 0, 0, 0)
@@ -513,15 +465,7 @@ class ConditionDialog(QWidget):
         
         if is_external:
             self.target_input.setPlaceholderText("외부 변수 사용 중...")
-            self.target_input.setStyleSheet("""
-                QLineEdit {
-                    background-color: #f8f9fa;
-                    color: #6c757d;
-                    border: 1px solid #cccccc;
-                    border-radius: 4px;
-                    padding: 4px 8px;
-                }
-            """)
+            # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
             self.use_external_variable.setText("🔄 고정값 사용")
             self.update_external_variables()
             # 외부변수 모드로 전환 시 호환성 검증
@@ -1121,13 +1065,7 @@ class ConditionDialog(QWidget):
         info_text += "❓ 변수별 상세 도움말은 헬프 버튼(❓)을 클릭하세요."
         
         info_label = QLabel(info_text)
-        info_label.setStyleSheet("""
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: 'Malgun Gothic';
-            line-height: 1.5;
-        """)
+        info_label.setObjectName("infoDialogLabel")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
         
@@ -1222,13 +1160,8 @@ class ConditionDialog(QWidget):
         layout = QVBoxLayout()
         
         help_label = QLabel(full_help)
-        help_label.setStyleSheet("""
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            font-family: 'Malgun Gothic';
-            line-height: 1.5;
-        """)
+        help_label.setObjectName("helpDialogLabel")  # QSS 스타일링을 위한 objectName 설정
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         help_label.setWordWrap(True)
         layout.addWidget(help_label)
         

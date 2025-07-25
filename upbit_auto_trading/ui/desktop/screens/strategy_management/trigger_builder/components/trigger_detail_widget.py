@@ -25,9 +25,9 @@ class TriggerDetailWidget(QWidget):
     
     def setup_ui(self):
         """UI 구성 - integrated_condition_manager.py와 정확히 동일"""
-        # 메인 그룹박스 (원본과 정확히 동일한 스타일)
+        # 메인 그룹박스 (스타일은 애플리케이션 테마를 따름)
         self.group = QGroupBox("📊 트리거 상세정보")
-        self.group.setStyleSheet(self._get_original_group_style())
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -52,7 +52,7 @@ class TriggerDetailWidget(QWidget):
         if document:
             document.setDocumentMargin(3)
         
-        self.detail_text.setStyleSheet(self._get_original_text_style())
+        # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
         layout.addWidget(self.detail_text)
         
         # 액션 버튼들 (원본에는 없지만 유용한 기능)

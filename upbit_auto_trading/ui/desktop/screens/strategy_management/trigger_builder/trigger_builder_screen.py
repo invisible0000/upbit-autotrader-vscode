@@ -7,12 +7,20 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QPushButton, QLabel, QMessageBox, QTreeWidget, QTreeWidgetItem,
     QTextEdit, QSplitter, QFrame, QListWidget, QListWidgetItem,
-    QProgressBar, QLineEdit, QComboBox, QStyle
+    QProgressBar, QLineEdit, QComboBox, QStyle, QApplication
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QPixmap, QIcon
 import random
 from datetime import datetime, timedelta
+
+# 공통 스타일 시스템 import (메인 애플리케이션에서 상속받으므로 불필요)
+# try:
+#     from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
+#     STYLE_MANAGER_AVAILABLE = True
+# except ImportError:
+#     STYLE_MANAGER_AVAILABLE = False
+#     print("⚠️ 공통 스타일 시스템을 로드할 수 없습니다.")
 
 # 새로운 컴포넌트들 import - 기존 기능 정확 복제
 try:
@@ -49,6 +57,14 @@ try:
     import numpy as np
     import pandas as pd
     from datetime import datetime, timedelta
+    
+    # 테마 매니저 import
+    try:
+        from ..common.theme_manager import apply_matplotlib_theme, is_dark_theme, get_chart_colors
+        THEME_MANAGER_AVAILABLE = True
+    except ImportError:
+        THEME_MANAGER_AVAILABLE = False
+        print("⚠️ 테마 매니저를 찾을 수 없습니다. 기본 테마 감지를 사용합니다.")
     
     # 한글 폰트 설정
     import matplotlib.font_manager as fm
@@ -172,8 +188,8 @@ class TriggerBuilderScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🎯 트리거 빌더 v2.0 (완전 리팩토링)")
-        # 크기를 1600x1000 화면에 최적화 - 더 넓게 설정
-        self.setMinimumSize(1400, 900)
+        # 메인 윈도우에 맞춘 최소 크기 설정 (1280x720) - 반응형
+        self.setMinimumSize(1280, 720)
         self.resize(1600, 1000)  # 초기 크기 설정
         
         # 기존 컴포넌트 초기화
@@ -205,6 +221,54 @@ class TriggerBuilderScreen(QWidget):
         
         self.init_ui()
         self.load_trigger_list()
+        
+        # 메인 애플리케이션의 스타일을 상속받음 (부모에서 적용된 스타일 재적용)
+        self.ensure_style_inheritance()
+        print("✅ 트리거 빌더는 메인 애플리케이션의 스타일을 상속받습니다")
+    
+    def ensure_style_inheritance(self):
+        """메인 애플리케이션의 스타일 상속 보장"""
+        try:
+            # QApplication의 현재 스타일시트를 가져와서 적용
+            app = QApplication.instance()
+            if app:
+                current_style = app.styleSheet()
+                if current_style:
+                    # 현재 테마가 다크인지 확인 (background-color: #2c2c2c가 있으면 다크)
+                    is_dark_theme = '#2c2c2c' in current_style
+                    
+                    # 자신에게는 스타일을 적용하지 않고, 하위 위젯들이 스타일을 상속받도록 함
+                    self.update()  # 위젯 업데이트로 스타일 재적용 유도
+                    
+                    # 차트 배경색 업데이트 (필요시)
+                    if hasattr(self, 'figure') and self.figure:
+                        self.apply_chart_theme(is_dark_theme)
+                    
+                    print(f"✅ 애플리케이션 스타일 상속 완료 (다크 테마: {is_dark_theme})")
+                else:
+                    print("⚠️ 애플리케이션에 적용된 스타일시트가 없습니다")
+            else:
+                print("⚠️ QApplication 인스턴스를 찾을 수 없습니다")
+        except Exception as e:
+            print(f"⚠️ 스타일 상속 설정 실패: {e}")
+    
+    def apply_chart_theme(self, is_dark_theme):
+        """차트에 테마 적용"""
+        try:
+            if hasattr(self, 'figure') and self.figure:
+                if is_dark_theme:
+                    self.figure.patch.set_facecolor('#2c2c2c')
+                else:
+                    self.figure.patch.set_facecolor('white')
+                self.canvas.draw()
+        except Exception as e:
+            print(f"⚠️ 차트 테마 적용 실패: {e}")
+    
+    def showEvent(self, event):
+        """화면 표시 시 스타일 재적용"""
+        super().showEvent(event)
+        # 화면이 표시될 때마다 스타일 상속 보장
+        QTimer.singleShot(100, self.ensure_style_inheritance)
     
     def init_ui(self):
         """UI 초기화 - 3x2 그리드 레이아웃"""
@@ -264,31 +328,12 @@ class TriggerBuilderScreen(QWidget):
         
         # 타이틀
         title_label = QLabel("🎯 트리거 빌더 v2.0 (완전 리팩토링)")
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 18px;
-                font-weight: bold;
-                color: #2c3e50;
-                padding: 10px;
-                background-color: #ecf0f1;
-                border-radius: 8px;
-                margin: 5px;
-            }
-        """)
+        title_label.setObjectName("titleLabel")  # CSS 선택자용 이름 설정
         header_layout.addWidget(title_label)
         
         # 상태 표시
         status_label = QLabel("✅ 시스템 준비됨")
-        status_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: #27ae60;
-                padding: 5px 10px;
-                background-color: #d5f4e6;
-                border-radius: 6px;
-                margin: 5px;
-            }
-        """)
+        status_label.setObjectName("statusLabel")  # CSS 선택자용 이름 설정
         header_layout.addWidget(status_label)
         
         layout.addLayout(header_layout)
@@ -324,17 +369,7 @@ class TriggerBuilderScreen(QWidget):
         
         # 상태 표시
         status_label = QLabel("🔧 조건 빌더 로딩 중...")
-        status_label.setStyleSheet("""
-            QLabel {
-                color: #666;
-                font-style: italic;
-                padding: 20px;
-                text-align: center;
-                border: 2px dashed #ccc;
-                border-radius: 8px;
-                background-color: #f9f9f9;
-            }
-        """)
+        status_label.setObjectName("conditionBuilderFallback")  # CSS 선택자용 이름 설정
         fallback_layout.addWidget(status_label)
         
         # 새 조건 생성 버튼
@@ -457,32 +492,14 @@ class TriggerBuilderScreen(QWidget):
                     print(f"⚠️ 데이터 소스 선택기 초기화 실패: {e}")
                     # 대체 라벨
                     fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-                    fallback_label.setStyleSheet("""
-                        background-color: #e7f3ff;
-                        border: 1px solid #007bff;
-                        border-radius: 4px;
-                        padding: 8px;
-                        font-size: 11px;
-                        color: #007bff;
-                        text-align: center;
-                        font-weight: bold;
-                    """)
+                    fallback_label.setObjectName("dataSourceFallback")  # CSS 선택자용 이름 설정
                     fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     layout.addWidget(fallback_label)
             else:
                 print("⚠️ DataSourceSelectorWidget 클래스를 로드할 수 없음")
                 # 대체 라벨
                 fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-                fallback_label.setStyleSheet("""
-                    background-color: #e7f3ff;
-                    border: 1px solid #007bff;
-                    border-radius: 4px;
-                    padding: 8px;
-                    font-size: 11px;
-                    color: #007bff;
-                    text-align: center;
-                    font-weight: bold;
-                """)
+                fallback_label.setObjectName("fallbackLabel")  # CSS 선택자용 이름 설정
                 fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(fallback_label)
             
@@ -490,7 +507,7 @@ class TriggerBuilderScreen(QWidget):
             separator = QFrame()
             separator.setFrameShape(QFrame.Shape.HLine)
             separator.setFrameShadow(QFrame.Shadow.Sunken)
-            separator.setStyleSheet("color: #dee2e6; margin: 5px 0;")
+            separator.setObjectName("separator")  # CSS 선택자용 이름 설정
             layout.addWidget(separator)
             
             # 시뮬레이션 버튼들 - 원본과 동일
@@ -512,25 +529,8 @@ class TriggerBuilderScreen(QWidget):
                 btn.setToolTip(tooltip)
                 btn.setFixedHeight(35)  # 버튼 높이
                 btn.setMinimumWidth(120)  # 최소 너비
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {color};
-                        color: white;
-                        border: none;
-                        border-radius: 6px;
-                        padding: 6px 8px;
-                        font-size: 11px;
-                        font-weight: bold;
-                        margin: 1px;
-                        text-align: center;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {color}dd;
-                    }}
-                    QPushButton:pressed {{
-                        background-color: {color}aa;
-                    }}
-                """)
+                btn.setObjectName("simulationButton")  # CSS 선택자용 이름 설정
+                btn.setProperty("buttonColor", color)  # CSS에서 사용할 색상 속성
                 btn.clicked.connect(lambda checked, scenario=icon_text: self.run_simulation(scenario))
                 
                 # 3행 2열로 배치
@@ -545,16 +545,7 @@ class TriggerBuilderScreen(QWidget):
             
             # 시뮬레이션 상태 (원본과 동일)
             self.simulation_status = QLabel("Select a trigger and click a scenario")
-            self.simulation_status.setStyleSheet("""
-                background-color: #f8f9fa;
-                border: 2px solid #dee2e6;
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 10px;
-                color: #495057;
-                font-weight: bold;
-                text-align: center;
-            """)
+            self.simulation_status.setObjectName("simulationStatus")  # CSS 선택자용 이름 설정
             self.simulation_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.simulation_status)
             
@@ -707,17 +698,79 @@ class TriggerBuilderScreen(QWidget):
         
         try:
             self.figure.clear()
+            
+            # 더 확실한 테마 감지 방법
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            
+            # 애플리케이션의 배경색을 통해 테마 감지
+            bg_color_obj = app.palette().color(app.palette().ColorRole.Window)
+            is_dark_theme = bg_color_obj.lightness() < 128  # 밝기 기준
+            
+            # 또는 스타일시트 확인
+            if not is_dark_theme:
+                current_style = self.styleSheet() or ""
+                parent_widget = self.parent()
+                while parent_widget and not current_style:
+                    current_style = parent_widget.styleSheet() or ""
+                    parent_widget = parent_widget.parent()
+                
+                is_dark_theme = ('#2c2c2c' in current_style or 
+                               '#3a3a3a' in current_style or
+                               'dark' in current_style.lower())
+            
+            if is_dark_theme:
+                # 다크 테마 색상
+                bg_color = '#2c2c2c'
+                text_color = '#e0e0e0'
+                grid_color = '#555555'
+                line_color = '#3498db'
+                spine_color = '#555555'
+            else:
+                # 라이트 테마 색상
+                bg_color = 'white'
+                text_color = '#333333'
+                grid_color = '#cccccc'
+                line_color = '#3498db'
+                spine_color = '#cccccc'
+            
+            # matplotlib의 기본 텍스트 색상 설정 (더 완전하게)
+            import matplotlib.pyplot as plt
+            import matplotlib as mpl
+            
+            # 모든 텍스트 관련 설정
+            mpl.rcParams.update({
+                'text.color': text_color,
+                'axes.labelcolor': text_color,
+                'axes.edgecolor': spine_color,
+                'xtick.color': text_color,
+                'ytick.color': text_color,
+                'axes.titlecolor': text_color,
+                'figure.facecolor': bg_color,
+                'axes.facecolor': bg_color,
+                'savefig.facecolor': bg_color,
+                'grid.color': grid_color
+            })
+            
+            # 배경색 설정
+            self.figure.patch.set_facecolor(bg_color)
+            
             ax = self.figure.add_subplot(111)
+            ax.set_facecolor(bg_color)
             
             # 임시 데이터 생성
             dates = pd.date_range(start='2024-01-01', periods=30, freq='D')
             prices = np.random.randn(30).cumsum() + 100
             
-            ax.plot(dates, prices, 'b-', linewidth=1, label='가격')
-            ax.set_title('트리거 작동 마커', fontsize=10)
-            ax.set_ylabel('가격', fontsize=8)
-            ax.tick_params(axis='both', which='major', labelsize=7)
-            ax.grid(True, alpha=0.3)
+            ax.plot(dates, prices, line_color, linewidth=1, label='가격')
+            ax.set_title('트리거 작동 마커', fontsize=10, color=text_color)
+            ax.set_ylabel('가격', fontsize=8, color=text_color)
+            ax.tick_params(axis='both', which='major', labelsize=7, colors=text_color)
+            ax.grid(True, alpha=0.3, color=grid_color)
+            
+            # 축 테두리 색상 설정
+            for spine in ax.spines.values():
+                spine.set_color(spine_color)
             
             # 레이아웃 조정
             self.figure.tight_layout(pad=1.0)

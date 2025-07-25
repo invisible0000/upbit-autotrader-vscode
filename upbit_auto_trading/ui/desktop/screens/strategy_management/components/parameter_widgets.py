@@ -93,7 +93,7 @@ class ParameterWidgetFactory:
                 
         else:  # enum
             widget = QComboBox()
-            widget.setStyleSheet(self._get_combobox_style())
+            # 하드코딩된 스타일 제거 - QSS 테마를 따름
             
             for option in param_config.get('options', []):
                 widget.addItem(option)

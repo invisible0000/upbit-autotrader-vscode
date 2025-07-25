@@ -12,7 +12,6 @@ from datetime import datetime
 
 # 차트 라이브러리 import
 try:
-    import matplotlib.pyplot as plt
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.figure import Figure
     CHART_AVAILABLE = True
@@ -29,14 +28,40 @@ class SimulationResultWidget(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        # 마지막 시뮬레이션 결과 저장용 변수들
+        self._last_scenario = None
+        self._last_price_data = None
+        self._last_trigger_results = None
+        
         self.setup_ui()
         self.initialize_default_state()
+        
+        # 테마 변경 신호 연결
+        try:
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import get_theme_notifier
+            theme_notifier = get_theme_notifier()
+            theme_notifier.theme_changed.connect(self._on_theme_changed)
+        except Exception as e:
+            print(f"⚠️ 테마 변경 신호 연결 실패: {e}")
+    
+    def _on_theme_changed(self, is_dark: bool):
+        """테마 변경 시 호출되는 슬롯"""
+        # 현재 표시된 차트를 다시 그리기 (로그 메시지 제거)
+        if hasattr(self, 'figure') and CHART_AVAILABLE:
+            # 마지막 시뮬레이션 결과가 있으면 그것으로 업데이트, 없으면 플레이스홀더
+            if (self._last_scenario and self._last_price_data is not None and 
+                    self._last_trigger_results is not None):
+                self.update_simulation_chart(self._last_scenario, self._last_price_data, 
+                                             self._last_trigger_results)
+            else:
+                self.show_placeholder_chart()
     
     def setup_ui(self):
         """UI 구성 - 원본 create_test_result_area()와 정확히 동일"""
-        # 메인 그룹박스 (원본과 정확히 동일한 스타일)
+        # 메인 그룹박스 (스타일은 애플리케이션 테마를 따름)
         self.group = QGroupBox("테스트 결과 차트")
-        self.group.setStyleSheet(self._get_original_group_style())
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -58,46 +83,32 @@ class SimulationResultWidget(QWidget):
             chart_label = self.create_fallback_chart_label()
             layout.addWidget(chart_label)
         
-        # 작동 기록 리스트 (원본과 정확히 동일)
+        # 작동 기록 리스트 (애플리케이션 테마를 따름)
         self.test_history_list = QListWidget()
-        self.test_history_list.setStyleSheet("""
-            QListWidget {
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                background-color: white;
-                max-height: 280px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 10px;
-                border-bottom: 1px solid #f0f0f0;
-                margin: 2px;
-                border-radius: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #fff3cd;
-                color: #856404;
-                border: 1px solid #ffeaa7;
-            }
-            QListWidget::item:hover {
-                background-color: #f8f9fa;
-            }
-        """)
+        self.test_history_list.setMaximumHeight(280)  # 높이만 설정하고 스타일은 테마를 따름
+        # 하드코딩된 스타일 제거 - QSS 테마를 따름
         
         layout.addWidget(QLabel("🕐 작동 기록:"))
         layout.addWidget(self.test_history_list)
     
     def create_mini_chart_widget(self):
-        """미니 차트 위젯 생성 - 원본과 동일"""
+        """미니 차트 위젯 생성 - 테마 적용"""
         chart_widget = QWidget()
         layout = QVBoxLayout(chart_widget)
         layout.setContentsMargins(2, 2, 2, 2)
+        
+        # 차트 위젯 배경을 테마에 맞게 설정
+        chart_widget.setObjectName("chart_widget")  # QSS 선택자용
         
         if CHART_AVAILABLE:
             try:
                 self.figure = Figure(figsize=(4, 2), dpi=80)
                 self.canvas = FigureCanvas(self.figure)
                 self.canvas.setMaximumHeight(180)
+                
+                # Canvas 배경을 테마에 맞게 설정
+                self.canvas.setObjectName("chart_canvas")  # QSS 선택자용
+                
                 layout.addWidget(self.canvas)
                 
                 # 초기 차트 표시
@@ -105,7 +116,7 @@ class SimulationResultWidget(QWidget):
                 
             except Exception as e:
                 print(f"⚠️ 미니 차트 생성 실패: {e}")
-                text_label = QLabel("� 차트 영역\n시뮬레이션 결과가 표시됩니다.")
+                text_label = QLabel("📈 차트 영역\n시뮬레이션 결과가 표시됩니다.")
                 text_label.setMaximumHeight(180)
                 layout.addWidget(text_label)
         else:
@@ -133,11 +144,26 @@ class SimulationResultWidget(QWidget):
         return chart_label
     
     def show_placeholder_chart(self):
-        """플레이스홀더 차트 표시 - 원본과 동일"""
+        """플레이스홀더 차트 표시 - 전역 테마 신호 사용"""
         if not CHART_AVAILABLE or not hasattr(self, 'figure'):
             return
         
         try:
+            # 전역 테마 매니저 사용
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import apply_matplotlib_theme_simple, get_theme_notifier
+            apply_matplotlib_theme_simple()
+            
+            # 테마에 따른 색상 설정
+            theme_notifier = get_theme_notifier()
+            is_dark = theme_notifier.is_dark_theme()
+            line_color = '#60a5fa' if is_dark else '#3498db'  # 다크: 연한 파랑, 라이트: 진한 파랑
+            bg_color = '#2c2c2c' if is_dark else 'white'  # 배경색
+            
+            # Figure와 Canvas 배경색 명시적 설정
+            self.figure.patch.set_facecolor(bg_color)
+            if hasattr(self, 'canvas'):
+                self.canvas.setStyleSheet(f"background-color: {bg_color};")
+            
             self.figure.clear()
             ax = self.figure.add_subplot(111)
             
@@ -145,11 +171,14 @@ class SimulationResultWidget(QWidget):
             x = range(10)
             y = [0] * 10
             
-            ax.plot(x, y, 'b-', linewidth=1)
-            ax.set_title('차트 대기 중', fontsize=8)
-            ax.set_ylabel('가격', fontsize=7)
+            ax.plot(x, y, line_color, linewidth=1)
+            ax.set_title('Chart Ready', fontsize=8)
+            ax.set_ylabel('Price', fontsize=7)
             ax.tick_params(axis='both', which='major', labelsize=6)
             ax.grid(True, alpha=0.3)
+            
+            # subplot 배경색도 설정
+            ax.set_facecolor(bg_color)
             
             self.figure.tight_layout(pad=0.5)
             self.canvas.draw()
@@ -158,29 +187,53 @@ class SimulationResultWidget(QWidget):
             print(f"⚠️ 플레이스홀더 차트 표시 실패: {e}")
     
     def update_simulation_chart(self, scenario, price_data, trigger_results):
-        """시뮬레이션 결과로 차트 업데이트 - 원본과 동일"""
+        """시뮬레이션 결과로 차트 업데이트 - 전역 테마 신호 사용"""
         if not CHART_AVAILABLE or not hasattr(self, 'figure'):
             return
         
+        # 마지막 결과 저장 (테마 변경 시 재사용)
+        self._last_scenario = scenario
+        self._last_price_data = price_data
+        self._last_trigger_results = trigger_results
+        
         try:
+            # 전역 테마 매니저 사용
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import apply_matplotlib_theme_simple, get_theme_notifier
+            apply_matplotlib_theme_simple()
+            
+            # 테마에 따른 색상 설정
+            theme_notifier = get_theme_notifier()
+            is_dark = theme_notifier.is_dark_theme()
+            line_color = '#60a5fa' if is_dark else '#3498db'  # 다크: 연한 파랑, 라이트: 진한 파랑
+            trigger_color = '#f87171' if is_dark else '#ef4444'  # 다크: 연한 빨강, 라이트: 진한 빨강
+            bg_color = '#2c2c2c' if is_dark else 'white'  # 배경색
+            
+            # Figure와 Canvas 배경색 명시적 설정
+            self.figure.patch.set_facecolor(bg_color)
+            if hasattr(self, 'canvas'):
+                self.canvas.setStyleSheet(f"background-color: {bg_color};")
+            
             self.figure.clear()
             ax = self.figure.add_subplot(111)
             
             if price_data:
                 # 가격 데이터 플롯
                 x = range(len(price_data))
-                ax.plot(x, price_data, 'b-', linewidth=1, label='가격')
+                ax.plot(x, price_data, line_color, linewidth=1, label='Price')
                 
                 # 트리거 포인트 표시
                 if trigger_results:
                     for i, (triggered, _) in enumerate(trigger_results):
                         if triggered and i < len(price_data):
-                            ax.scatter(i, price_data[i], c='red', s=20, marker='^', zorder=5)
+                            ax.scatter(i, price_data[i], c=trigger_color, s=20, marker='^', zorder=5)
             
-            ax.set_title(f'{scenario} 결과', fontsize=8)
-            ax.set_ylabel('가격', fontsize=7)
+            ax.set_title(f'{scenario} Result', fontsize=8)
+            ax.set_ylabel('Price', fontsize=7)
             ax.tick_params(axis='both', which='major', labelsize=6)
             ax.grid(True, alpha=0.3)
+            
+            # subplot 배경색도 설정
+            ax.set_facecolor(bg_color)
             
             self.figure.tight_layout(pad=0.5)
             self.canvas.draw()
@@ -189,7 +242,7 @@ class SimulationResultWidget(QWidget):
             print(f"⚠️ 시뮬레이션 차트 업데이트 실패: {e}")
     
     def _get_original_group_style(self):
-        """원본 그룹박스 스타일"""
+        """원본 그룹박스 스타일 - 하드코딩된 배경색 제거"""
         return """
             QGroupBox {
                 font-weight: bold;
@@ -198,14 +251,12 @@ class SimulationResultWidget(QWidget):
                 border-radius: 8px;
                 margin-top: 1ex;
                 padding: 10px;
-                background-color: white;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 8px 0 8px;
                 color: #fd7e14;
-                background-color: white;
             }
         """
     

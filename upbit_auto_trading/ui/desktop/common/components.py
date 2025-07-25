@@ -170,23 +170,7 @@ class StyledLineEdit(QLineEdit):
         
         self.setPlaceholderText(placeholder)
         self.setMinimumHeight(30)
-        self.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                padding: 4px 8px;
-                background-color: white;
-            }
-            
-            QLineEdit:focus {
-                border: 1px solid #3498db;
-            }
-            
-            QLineEdit:disabled {
-                background-color: #f0f0f0;
-                color: #999999;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - QSS 테마를 따름
 
 
 class StyledComboBox(QComboBox):
@@ -206,32 +190,7 @@ class StyledComboBox(QComboBox):
             self.addItems(items)
         
         self.setMinimumHeight(30)
-        self.setStyleSheet("""
-            QComboBox {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                padding: 4px 8px;
-                background-color: white;
-            }
-            
-            QComboBox:focus {
-                border: 1px solid #3498db;
-            }
-            
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #cccccc;
-            }
-            
-            QComboBox QAbstractItemView {
-                border: 1px solid #cccccc;
-                background-color: white;
-                selection-background-color: #3498db;
-                selection-color: white;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - QSS 테마를 따름
 
 
 class StyledCheckBox(QCheckBox):
@@ -246,29 +205,7 @@ class StyledCheckBox(QCheckBox):
             parent (QWidget, optional): 부모 위젯
         """
         super().__init__(text, parent)
-        
-        self.setStyleSheet("""
-            QCheckBox {
-                spacing: 5px;
-            }
-            
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            
-            QCheckBox::indicator:unchecked {
-                border: 1px solid #cccccc;
-                background-color: white;
-                border-radius: 3px;
-            }
-            
-            QCheckBox::indicator:checked {
-                border: 1px solid #3498db;
-                background-color: #3498db;
-                border-radius: 3px;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - QSS 테마를 따름
 
 
 class StyledGroupBox(QGroupBox):
@@ -283,23 +220,7 @@ class StyledGroupBox(QGroupBox):
             parent (QWidget, optional): 부모 위젯
         """
         super().__init__(title, parent)
-        
-        self.setStyleSheet("""
-            QGroupBox {
-                border: 1px solid #cccccc;
-                border-radius: 6px;
-                margin-top: 12px;
-                font-weight: bold;
-                padding: 10px;
-            }
-            
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - QSS 테마를 따름
 
 
 class StyledTableWidget(QTableWidget):

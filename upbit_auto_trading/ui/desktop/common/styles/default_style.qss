@@ -168,12 +168,28 @@ QLineEdit:focus {
     border: 1px solid #3498db;
 }
 
+/* 텍스트 에디트 스타일 */
+QTextEdit {
+    border: 1px solid #cccccc;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: white;
+    color: #333333;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+QTextEdit:focus {
+    border: 1px solid #3498db;
+}
+
 /* 콤보박스 스타일 */
 QComboBox {
     border: 1px solid #cccccc;
     border-radius: 3px;
     padding: 4px;
     background-color: white;
+    color: #333333;
 }
 
 QComboBox::drop-down {
@@ -181,13 +197,40 @@ QComboBox::drop-down {
     subcontrol-position: top right;
     width: 20px;
     border-left: 1px solid #cccccc;
+    background-color: #f0f0f0;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border: none;
+    width: 0px;
+    height: 0px;
 }
 
 QComboBox QAbstractItemView {
     border: 1px solid #cccccc;
     background-color: white;
+    color: #333333;
     selection-background-color: #3498db;
     selection-color: white;
+    outline: none;
+}
+
+QComboBox QAbstractItemView::item {
+    background-color: white;
+    color: #333333;
+    padding: 4px;
+    border: none;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    background-color: #f0f0f0;
+    color: #333333;
 }
 
 /* 체크박스 스타일 */
@@ -349,4 +392,142 @@ QLabel {
     background-color: transparent;
 }
 
+/* 트리거 빌더 전용 스타일 - 간소화된 버전 */
+QLabel#titleLabel, QLabel#statusLabel, QLabel#fallbackLabel,
+QLabel#dataSourceFallback, QLabel#conditionBuilderFallback {
+    color: #2c3e50;
+    padding: 8px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+
+QLabel#titleLabel {
+    font-size: 18px;
+    background-color: #ecf0f1;
+    margin: 5px;
+}
+
+QLabel#statusLabel {
+    font-size: 12px;
+    color: #27ae60;
+    background-color: #d5f4e6;
+}
+
+QLabel#fallbackLabel, QLabel#dataSourceFallback, QLabel#conditionBuilderFallback {
+    background-color: #e7f3ff;
+    border: 1px solid #007bff;
+    color: #007bff;
+    font-size: 11px;
+}
+
+QFrame#separator {
+    color: #dee2e6;
+}
+
+QLabel#simulationStatus {
+    background-color: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px;
+    color: #495057;
+    font-weight: bold;
+}
+
+/* 그룹박스와 트리 위젯 - 간소화 */
+QGroupBox, QTreeWidget {
+    background-color: white;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    color: #333333;
+}
+
+QTreeWidget::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+/* 리스트 위젯 스타일 */
+QListWidget {
+    background-color: white;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    color: #333333;
+    selection-background-color: #3498db;
+    selection-color: white;
+}
+
+QListWidget::item {
+    padding: 5px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+QListWidget::item:selected {
+    background-color: #3498db;
+    color: white;
+}
+
+QListWidget::item:hover {
+    background-color: #f8f9fa;
+}
+
+/* 스핀박스 스타일 */
+QSpinBox, QDoubleSpinBox {
+    border: 1px solid #cccccc;
+    border-radius: 3px;
+    padding: 4px;
+    background-color: white;
+    color: #333333;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 1px solid #3498db;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 16px;
+    border-left: 1px solid #cccccc;
+    background-color: #f0f0f0;
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 16px;
+    border-left: 1px solid #cccccc;
+    background-color: #f0f0f0;
+}
+
+/* 도움말 다이얼로그 라벨 스타일 */
+QLabel#helpDialogLabel {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    color: #495057;
+}
+
+/* 지원 현황 다이얼로그 라벨 스타일 */
+QLabel#infoDialogLabel {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 15px;
+    color: #495057;
+    font-family: 'Malgun Gothic';
+    line-height: 1.5;
+}
+
 /* 다크 모드 스타일은 별도 파일로 분리 */
+
+/* 차트 위젯 스타일 */
+QWidget#chart_widget {
+    background-color: white;
+    border: none;
+}
+
+QWidget#chart_canvas {
+    background-color: white;
+    border: none;
+}

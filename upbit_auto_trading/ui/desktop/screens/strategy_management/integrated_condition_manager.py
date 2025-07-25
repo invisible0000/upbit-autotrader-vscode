@@ -13,6 +13,14 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QPixmap, QIcon
 import random
 
+# 공통 스타일 시스템 import
+try:
+    from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
+    STYLE_MANAGER_AVAILABLE = True
+except ImportError:
+    STYLE_MANAGER_AVAILABLE = False
+    print("⚠️ 공통 스타일 시스템을 로드할 수 없습니다.")
+
 # 새로운 컴포넌트들 import
 from .trigger_builder.components.chart_visualizer import ChartVisualizer
 from .trigger_builder.components.simulation_engines import get_embedded_simulation_engine  
@@ -141,8 +149,9 @@ class IntegratedConditionManager(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🎯 통합 조건 관리 시스템")
-        # 크기를 더욱 압축하여 1600x1000 화면에 최적화
-        self.setMinimumSize(600, 400)
+        # 메인 윈도우에 맞춘 최소 크기 설정 (1280x720)
+        self.setMinimumSize(1280, 720)
+        self.resize(1600, 1000)  # 초기 크기 설정
         
         # 기존 컴포넌트 초기화
         self.storage = ConditionStorage()
@@ -170,12 +179,23 @@ class IntegratedConditionManager(QWidget):
         
         self.init_ui()
         self.load_trigger_list()
+        
+        # 공통 스타일 시스템 적용
+        if STYLE_MANAGER_AVAILABLE:
+            try:
+                self.style_manager = StyleManager()
+                self.style_manager.apply_theme()
+                print("✅ 공통 스타일 시스템 적용 완료")
+            except Exception as e:
+                print(f"⚠️ 스타일 적용 실패: {e}")
+        else:
+            print("⚠️ 공통 스타일 시스템 사용 불가")
     
     def init_ui(self):
         """UI 초기화 - 3x2 그리드 레이아웃"""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(2, 2, 2, 2)  # 마진 더욱 줄이기
-        main_layout.setSpacing(2)  # 간격 더욱 줄이기
+        main_layout.setContentsMargins(5, 5, 5, 5)  # 원본과 동일한 마진
+        main_layout.setSpacing(5)  # 원본과 동일한 간격
         
         # 상단 제목 제거하여 공간 절약
         # self.create_header(main_layout)
@@ -183,8 +203,8 @@ class IntegratedConditionManager(QWidget):
         # 메인 그리드 레이아웃 (3x2)
         grid_widget = QWidget()
         grid_layout = QGridLayout(grid_widget)
-        grid_layout.setContentsMargins(1, 1, 1, 1)  # 그리드 마진 더욱 줄이기
-        grid_layout.setSpacing(2)  # 그리드 간격 더욱 줄이기
+        grid_layout.setContentsMargins(5, 5, 5, 5)  # 원본과 동일한 그리드 마진
+        grid_layout.setSpacing(8)  # 원본과 동일한 그리드 간격
         
         # 1+4: 조건 빌더 (좌측, 세로 합쳐짐)
         self.condition_builder_area = self.create_condition_builder_area()
@@ -196,8 +216,7 @@ class IntegratedConditionManager(QWidget):
         
         # 3: 케이스 시뮬레이션 버튼들 (우측 상단)
         self.simulation_area = self.create_simulation_area()
-        self.simulation_area.setMinimumWidth(360)  # 최소 너비 증가 (250 → 360)
-        self.simulation_area.setMaximumWidth(400)  # 최대 너비 증가 (280 → 400)
+        # 고정 너비 제한 제거로 반응형 레이아웃 구현
         grid_layout.addWidget(self.simulation_area, 0, 2, 1, 1)
         
         # 5: 선택한 트리거 상세 정보 (중앙 하단)
@@ -206,78 +225,41 @@ class IntegratedConditionManager(QWidget):
         
         # 6: 작동 마커 차트 + 작동 기록 (우측 하단)
         self.test_result_area = self.create_test_result_area()
-        self.test_result_area.setMinimumWidth(360)  # 최소 너비 증가 (250 → 360)
-        self.test_result_area.setMaximumWidth(400)  # 최대 너비 증가 (280 → 400)
+        # 고정 너비 제한 제거로 반응형 레이아웃 구현
         grid_layout.addWidget(self.test_result_area, 1, 2, 1, 1)
         
-        # 그리드 비율 설정 - 두 번째 첨부 이미지와 유사하게 (1:2:1)
-        grid_layout.setColumnStretch(0, 1)  # 조건 빌더 (좁게)
-        grid_layout.setColumnStretch(1, 2)  # 트리거 관리 (넓게)
-        grid_layout.setColumnStretch(2, 1)  # 시뮬레이션 (좁게)
+        # 그리드 비율 설정 - 원본 트리거 빌더와 동일 (17:30:20)
+        grid_layout.setColumnStretch(0, 17)  # 조건 빌더
+        grid_layout.setColumnStretch(1, 30)  # 트리거 관리 (가장 넓게)
+        grid_layout.setColumnStretch(2, 20)  # 시뮬레이션
         
-        # 행 비율 설정 (상단 영역도 증가: 3 → 5, 하단 영역: 4 → 6)
-        grid_layout.setRowStretch(0, 5)  # 상단 (케이스 시뮬레이션 포함)
-        grid_layout.setRowStretch(1, 6)  # 하단 (트리거 디테일 & 테스트 결과)
+        # 행 비율 설정 - 원본과 동일
+        grid_layout.setRowStretch(0, 1)  # 상단
+        grid_layout.setRowStretch(1, 1)  # 하단
         
         main_layout.addWidget(grid_widget)
         
         print("✅ 통합 조건 관리 시스템 UI 초기화 완료")
     
     def create_header(self, layout):
-        """상단 헤더 생성 - 기존 대시보드 스타일"""
+        """상단 헤더 생성 - 공통 스타일 시스템 사용"""
         header_widget = QWidget()
-        header_widget.setStyleSheet("""
-            QWidget {
-                background-color: #3498db;
-                border-radius: 6px;
-                padding: 8px;  /* 패딩 줄이기 */
-                margin: 2px;   /* 마진 줄이기 */
-            }
-        """)
+        # 하드코딩된 스타일 제거 - 공통 스타일 시스템에 의존
+        header_widget.setObjectName("headerWidget")  # CSS 선택자용 이름 설정
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(5, 5, 5, 5)  # 헤더 마진 줄이기
+        header_layout.setContentsMargins(5, 5, 5, 5)
         
         # 제목
         title_label = QLabel("🎯 통합 조건 관리 시스템")
-        title_label.setStyleSheet("""
-            font-size: 14px;  /* 폰트 크기 줄이기 */
-            font-weight: bold; 
-            color: white;
-            background: transparent;
-        """)
+        title_label.setObjectName("titleLabel")  # CSS 선택자용 이름 설정
+        # 하드코딩된 스타일 제거
         header_layout.addWidget(title_label)
-        
-        # 부제목 - 공간 절약을 위해 제거하거나 축소
-        # subtitle_label = QLabel("조건 생성 → 트리거 관리 → 미니 테스트 통합 워크플로우")
-        # subtitle_label.setStyleSheet("""
-        #     font-size: 11px; 
-        #     color: #ecf0f1;
-        #     background: transparent;
-        #     margin-left: 20px;
-        # """)
-        # header_layout.addWidget(subtitle_label)
         
         header_layout.addStretch()
         
-        # 전체 새로고침 버튼 - 기존 스타일 적용
+        # 전체 새로고침 버튼 - 공통 컴포넌트 사용
         refresh_btn = PrimaryButton("🔄 전체 새로고침")
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: white;
-                color: #3498db;
-                border: 1px solid white;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-weight: bold;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #ecf0f1;
-            }
-            QPushButton:pressed {
-                background-color: #d5dbdb;
-            }
-        """)
+        # 하드코딩된 스타일 제거 - 공통 스타일이 적용됨
         refresh_btn.clicked.connect(self.refresh_all)
         header_layout.addWidget(refresh_btn)
         
@@ -329,37 +311,19 @@ class IntegratedConditionManager(QWidget):
             
             # 대체 위젯
             error_label = QLabel(f"조건 빌더 로딩 실패: {e}")
-            error_label.setStyleSheet("color: #e74c3c; padding: 20px; font-size: 12px;")
+            error_label.setObjectName("errorLabel")  # CSS 선택자용 이름 설정
+            # 하드코딩된 스타일 제거
             layout.addWidget(error_label)
         
         return group
     
     def create_trigger_list_area(self):
-        """영역 2: 등록된 트리거 리스트 (중앙 상단) - 통일된 테두리 스타일"""
+        """영역 2: 등록된 트리거 리스트 (중앙 상단) - 공통 스타일 시스템 사용"""
         group = QGroupBox("📋 등록된 트리거 리스트")
-        group.setStyleSheet("""
-            QGroupBox {
-                background-color: white;
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                font-weight: bold;
-                padding-top: 12px;
-                margin: 2px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 8px 0 8px;
-                background-color: white;
-                color: #27ae60;
-                font-size: 11px;
-                font-weight: bold;
-                border-radius: 4px;
-                border: 1px solid #27ae60;
-            }
-        """)
+        group.setObjectName("triggerListGroup")  # CSS 선택자용 이름 설정
+        # 하드코딩된 스타일 제거 - 공통 스타일 시스템에 의존
         layout = QVBoxLayout(group)
-        layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
+        layout.setContentsMargins(8, 8, 8, 8)
         
         # 트리거 검색
         search_layout = QHBoxLayout()
@@ -371,9 +335,10 @@ class IntegratedConditionManager(QWidget):
         search_layout.addWidget(self.search_input)
         layout.addLayout(search_layout)
         
-        # 트리거 트리 위젯 - 대시보드 테이블 스타일 (외부변수 열 제거)
+        # 트리거 트리 위젯 - 공통 스타일 시스템 사용
         self.trigger_tree = QTreeWidget()
-        self.trigger_tree.setHeaderLabels(["트리거명", "변수", "조건"])  # 외부변수 열 제거
+        self.trigger_tree.setHeaderLabels(["트리거명", "변수", "조건"])
+        self.trigger_tree.setObjectName("triggerTree")  # CSS 선택자용 이름 설정
         
         # 트리 구조 제거로 텍스트 간격 문제 해결
         self.trigger_tree.setRootIsDecorated(False)  # 루트 노드 장식 제거
@@ -446,7 +411,6 @@ class IntegratedConditionManager(QWidget):
             QPushButton:disabled {
                 background-color: #6c757d;
                 color: #adb5bd;
-                cursor: not-allowed;
             }
         """)
         self.save_btn.clicked.connect(self.save_current_condition)

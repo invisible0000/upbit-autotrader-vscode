@@ -385,6 +385,14 @@ class MainWindow(QMainWindow):
         self.nav_bar.repaint()
         # 테마 상태 저장
         self._save_theme()
+        
+        # 전역 테마 변경 알림 발송
+        try:
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import get_theme_notifier
+            theme_notifier = get_theme_notifier()
+            theme_notifier.notify_theme_changed()
+        except Exception as e:
+            print(f"⚠️ 테마 변경 알림 실패: {e}")
     
     def _load_theme(self):
         """저장된 테마 로드"""

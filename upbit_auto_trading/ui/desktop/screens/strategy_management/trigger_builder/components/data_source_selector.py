@@ -105,12 +105,10 @@ class DataSourceSelectorWidget(QWidget):
             QFrame {
                 border: 1px solid #e0e0e0;
                 border-radius: 3px;
-                background-color: #fafafa;
                 margin: 0px;
                 padding: 2px;
             }
             QFrame:hover {
-                background-color: #f0f8ff;
                 border-color: #4a90e2;
             }
         """)
@@ -121,7 +119,7 @@ class DataSourceSelectorWidget(QWidget):
         
         # 라디오 버튼 (이름만, 폰트 크기 줄이기)
         radio_button = QRadioButton(source_info["name"])
-        radio_button.setStyleSheet("color: black; font-size: 10px; font-weight: bold;")
+        radio_button.setStyleSheet("font-size: 10px; font-weight: bold;")  # 하드코딩된 텍스트 색상 제거
         
         layout.addWidget(radio_button)
         

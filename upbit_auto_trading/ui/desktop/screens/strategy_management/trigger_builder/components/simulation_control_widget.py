@@ -42,7 +42,7 @@ class SimulationControlWidget(QWidget):
     def create_simulation_area(self):
         """영역 3: 케이스 시뮬레이션 버튼들 (우측 상단) - 원본 완전 복제"""
         group = QGroupBox("케이스 시뮬레이션")
-        group.setStyleSheet(self.get_groupbox_style("#6f42c1"))
+        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(3)
@@ -144,18 +144,9 @@ class SimulationControlWidget(QWidget):
         
         layout.addStretch()
         
-        # 시뮬레이션 상태 (원본과 동일)
+        # 시뮬레이션 상태 (애플리케이션 테마를 따름)
         self.simulation_status = QLabel("Select a trigger and click a scenario")
-        self.simulation_status.setStyleSheet("""
-            background-color: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 8px;
-            font-size: 10px;
-            color: #495057;
-            font-weight: bold;
-            text-align: center;
-        """)
+        self.simulation_status.setObjectName("simulationStatus")  # QSS에서 스타일링하도록 objectName 설정
         self.simulation_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.simulation_status)
         
