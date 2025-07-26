@@ -4,7 +4,7 @@
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QGroupBox, QLabel, 
+    QWidget, QVBoxLayout, QGroupBox, QLabel,
     QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -50,9 +50,9 @@ class SimulationResultWidget(QWidget):
         # 현재 표시된 차트를 다시 그리기 (로그 메시지 제거)
         if hasattr(self, 'figure') and CHART_AVAILABLE:
             # 마지막 시뮬레이션 결과가 있으면 그것으로 업데이트, 없으면 플레이스홀더
-            if (self._last_scenario and self._last_price_data is not None and 
+            if (self._last_scenario and self._last_price_data is not None and
                     self._last_trigger_results is not None):
-                self.update_simulation_chart(self._last_scenario, self._last_price_data, 
+                self.update_simulation_chart(self._last_scenario, self._last_price_data,
                                              self._last_trigger_results)
             else:
                 self.show_placeholder_chart()
@@ -155,6 +155,32 @@ class SimulationResultWidget(QWidget):
         chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         return chart_label
     
+    def _setup_common_chart_style(self, ax, bg_color):
+        """공통 차트 스타일 설정 - 두 플롯 함수에서 공유"""
+        # Y축 라벨 설정
+        ax.set_ylabel('Price', fontsize=10)
+        
+        # Y축 틱 라벨 포맷팅 (3자 이내)
+        def format_y_tick(value, pos):
+            if value >= 1000000:
+                return f"{value / 1000000:.1f}m"
+            elif value >= 1000:
+                return f"{value / 1000:.0f}k"
+            elif value >= 1:
+                return f"{value:.0f}"
+            else:
+                return f"{value:.1f}"
+        
+        from matplotlib.ticker import FuncFormatter
+        ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
+        
+        # 틱 라벨 크기 설정 (일관성 유지)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        
+        # 그리드 및 배경색 설정
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor(bg_color)
+
     def show_placeholder_chart(self):
         """플레이스홀더 차트 표시 - 전역 테마 신호 사용"""
         if not CHART_AVAILABLE or not hasattr(self, 'figure'):
@@ -184,34 +210,13 @@ class SimulationResultWidget(QWidget):
             y = [0] * 10
             
             ax.plot(x, y, line_color, linewidth=1)
-            # 차트 제목 제거하여 더 큰 차트 공간 확보
-            # ax.set_title('Chart Ready', fontsize=8)
-            ax.set_ylabel('Price', fontsize=10)  # Y축 라벨 크기 증가
             
-            # Y축 틱 라벨 포맷팅 (3자 이내)
-            def format_y_tick(value, pos):
-                if value >= 1000000:
-                    return f"{value / 1000000:.1f}m"
-                elif value >= 1000:
-                    return f"{value / 1000:.0f}k"
-                elif value >= 1:
-                    return f"{value:.0f}"
-                else:
-                    return f"{value:.1f}"
+            # 공통 차트 스타일 적용
+            self._setup_common_chart_style(ax, bg_color)
             
-            from matplotlib.ticker import FuncFormatter
-            ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
-            
-            ax.tick_params(axis='both', which='major', labelsize=12)  # 6에서 12로 2배 증가
-            
-            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시)
+            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시) - 플레이스홀더용
             ax.set_xticks(range(0, 10, 2))
             ax.set_xticklabels([str(i) for i in range(0, 10, 2)])
-            
-            ax.grid(True, alpha=0.3)
-            
-            # subplot 배경색도 설정
-            ax.set_facecolor(bg_color)
             
             # tight_layout 제거 - 틱 라벨 크기에 영향을 줄 수 있음 (플레이스홀더)
             # self.figure.tight_layout(pad=0.5)
@@ -266,41 +271,24 @@ class SimulationResultWidget(QWidget):
                             ax.scatter(i, price_data[i], c=trigger_color, s=20, marker='^', zorder=5)
                             trigger_count += 1
                             # 각 트리거 발생 지점을 작동 기록에 추가 (인덱스 번호 사용)
-                            self.add_test_history_item(f"[{i:03d}] 트리거 발동 #{trigger_count}: 가격 {price_data[i]:,.0f}", "success")
+                            price_val = price_data[i]
+                            self.add_test_history_item(
+                                f"[{i:03d}] 트리거 발동 #{trigger_count}: 가격 {price_val:,.0f}",
+                                "success"
+                            )
                     
                     if trigger_count > 0:
-                        ax.scatter([], [], c=trigger_color, s=20, marker='^', label=f'Triggers ({trigger_count})', zorder=5)
+                        ax.scatter([], [], c=trigger_color, s=20, marker='^',
+                                   label=f'Triggers ({trigger_count})', zorder=5)
             
-            # 차트 제목 제거하여 더 큰 차트 공간 확보
-            # ax.set_title(f'{scenario} Result', fontsize=8)
-            ax.set_ylabel('Price', fontsize=10)  # Y축 라벨 크기 증가
+            # 공통 차트 스타일 적용
+            self._setup_common_chart_style(ax, bg_color)
             
-            # Y축 틱 라벨 포맷팅 (3자 이내)
-            def format_y_tick(value, pos):
-                if value >= 1000000:
-                    return f"{value / 1000000:.1f}m"
-                elif value >= 1000:
-                    return f"{value / 1000:.0f}k"
-                elif value >= 1:
-                    return f"{value:.0f}"
-                else:
-                    return f"{value:.1f}"
-            
-            from matplotlib.ticker import FuncFormatter
-            ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
-            
-            ax.tick_params(axis='both', which='major', labelsize=12)  # 6에서 12로 2배 증가
-            
-            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시)
+            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시) - 시뮬레이션용
             if price_data and len(price_data) > 5:
                 x_tick_positions = range(0, len(price_data), max(1, len(price_data) // 5))
                 ax.set_xticks(x_tick_positions)
                 ax.set_xticklabels([str(i) for i in x_tick_positions])
-            
-            ax.grid(True, alpha=0.3)
-            
-            # subplot 배경색도 설정
-            ax.set_facecolor(bg_color)
             
             # tight_layout 제거 - 틱 라벨 크기에 영향을 줄 수 있음 (시뮬레이션)
             # self.figure.tight_layout(pad=0.5)
@@ -315,8 +303,6 @@ class SimulationResultWidget(QWidget):
             scenario = simulation_result_data.get('scenario', 'Unknown')
             price_data = simulation_result_data.get('price_data', [])
             trigger_points = simulation_result_data.get('trigger_points', [])
-            result_text = simulation_result_data.get('result_text', 'UNKNOWN')
-            condition_name = simulation_result_data.get('condition_name', 'Unknown')
             
             # 기존 작동 기록 클리어 (새 시뮬레이션 시작)
             self.test_history_list.clear()
@@ -326,7 +312,7 @@ class SimulationResultWidget(QWidget):
                 for idx, point_idx in enumerate(trigger_points):
                     if 0 <= point_idx < len(price_data):
                         price_value = price_data[point_idx]
-                        signal_detail = f"[{point_idx:03d}] 트리거 발동 #{idx+1}: 가격 {price_value:,.0f}"
+                        signal_detail = f"[{point_idx:03d}] 트리거 발동 #{idx + 1}: 가격 {price_value:,.0f}"
                         self.add_test_history_item(signal_detail, "success")
             else:
                 # 신호가 없을 때 메시지

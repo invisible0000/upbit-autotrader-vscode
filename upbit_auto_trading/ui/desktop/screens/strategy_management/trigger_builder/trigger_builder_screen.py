@@ -265,8 +265,7 @@ class TriggerBuilderScreen(QWidget):
         
         # 3: 케이스 시뮬레이션 버튼들 (우측 상단)
         self.simulation_area = self.create_simulation_area()
-        self.simulation_area.setMinimumWidth(400)  # 최소 너비 증가
-        self.simulation_area.setMaximumWidth(500)  # 최대 너비 증가
+        self.simulation_area.setMinimumWidth(300)
         grid_layout.addWidget(self.simulation_area, 0, 2, 1, 1)
         
         # 5: 선택한 트리거 상세 정보 (중앙 하단)
@@ -275,18 +274,17 @@ class TriggerBuilderScreen(QWidget):
         
         # 6: 작동 마커 차트 + 작동 기록 (우측 하단)
         self.test_result_area = self.create_test_result_area()
-        self.test_result_area.setMinimumWidth(400)  # 최소 너비 증가
-        self.test_result_area.setMaximumWidth(500)  # 최대 너비 증가
+        self.test_result_area.setMinimumWidth(300)
         grid_layout.addWidget(self.test_result_area, 1, 2, 1, 1)
         
-        # 그리드 비율 설정 - 조건 빌더 폭을 15% 증가 (2:3:2 → 23:27:20)
-        grid_layout.setColumnStretch(0, 25)  # 조건 빌더 (15% 증가)
-        grid_layout.setColumnStretch(1, 25)  # 트리거 관리 (조정)
-        grid_layout.setColumnStretch(2, 20)  # 시뮬레이션 (유지)
+        # 그리드 비율 설정 (30:40:30)
+        grid_layout.setColumnStretch(0, 35)  # 조건 빌더
+        grid_layout.setColumnStretch(1, 35)  # 트리거 관리
+        grid_layout.setColumnStretch(2, 30)  # 시뮬레이션
         
-        # 행 비율 설정 - 트리거 리스트와 상세 정보를 1:1 비율로 조정
-        grid_layout.setRowStretch(0, 1)  # 상단 (트리거 리스트)
-        grid_layout.setRowStretch(1, 1)  # 하단 (상세 정보) - 동일한 비율
+        # 행 비율 설정
+        grid_layout.setRowStretch(0, 1)  # 상단
+        grid_layout.setRowStretch(1, 1)  # 하단
         
         main_layout.addWidget(grid_widget)
         
@@ -323,9 +321,7 @@ class TriggerBuilderScreen(QWidget):
         try:
             # embedded 파라미터 없이 생성 시도
             self.condition_dialog = ConditionDialog()
-            # 임베디드 모드에서는 최대한 공간 절약
             self.condition_dialog.setMaximumHeight(800)
-            self.condition_dialog.setMaximumWidth(480)  # 최대 너비를 400에서 480으로 증가
             layout.addWidget(self.condition_dialog)
             print("✅ 조건 빌더 다이얼로그 생성 성공")
         except Exception as e:
@@ -335,7 +331,7 @@ class TriggerBuilderScreen(QWidget):
             layout.addWidget(fallback_widget)
         
         group.setLayout(layout)
-        group.setMaximumWidth(500)  # 조건 빌더 영역 최대 너비를 450에서 500으로 증가
+        group.setMinimumWidth(300)
         return group
     
     def create_condition_builder_fallback(self):
@@ -387,6 +383,7 @@ class TriggerBuilderScreen(QWidget):
         self.cancel_edit_btn = trigger_list_widget.cancel_edit_btn
         
         return trigger_list_widget
+
     def create_simulation_area(self):
         """3: 케이스 시뮬레이션 버튼들 영역 - Components 전용"""
         simulation_control_widget = SimulationControlWidget(self)
