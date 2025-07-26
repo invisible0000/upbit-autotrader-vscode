@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(__file__))
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
-from upbit_auto_trading.ui.desktop.screens.strategy_management.trigger_builder.components.condition_dialog import ConditionDialog
+from upbit_auto_trading.ui.desktop.screens.strategy_management.trigger_builder.components.core.condition_dialog import ConditionDialog
 
 class TestWindow(QMainWindow):
     def __init__(self):

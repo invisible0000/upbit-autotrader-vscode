@@ -42,13 +42,28 @@ from .condition_builder import ConditionBuilder
 from .condition_storage import ConditionStorage
 from .preview_components import PreviewGenerator
 
-# 변수 호환성 검증 import
+# 변수 호환성 검증 import (공유 컴포넌트에서)
 try:
-    from .chart_variable_service import get_chart_variable_service
+    from ..shared.compatibility_validator import check_compatibility
     COMPATIBILITY_SERVICE_AVAILABLE = True
+    print("✅ 새로운 호환성 검증 시스템 사용")
 except ImportError:
-    COMPATIBILITY_SERVICE_AVAILABLE = False
-    print("⚠️ 차트 변수 호환성 서비스를 사용할 수 없습니다.")
+    try:
+        from upbit_auto_trading.utils.trading_variables.compatibility_validator import check_compatibility
+        COMPATIBILITY_SERVICE_AVAILABLE = True
+        print("⚠️ 폴백: utils 호환성 검증 시스템 사용")
+    except ImportError:
+        try:
+            from .chart_variable_service import get_chart_variable_service
+            COMPATIBILITY_SERVICE_AVAILABLE = True
+            print("⚠️ 폴백: 구 버전 차트 변수 서비스 사용")
+        except ImportError:
+            COMPATIBILITY_SERVICE_AVAILABLE = False
+            print("⚠️ 차트 변수 호환성 서비스를 사용할 수 없습니다.")
+            
+            def check_compatibility(var1_id: str, var2_id: str):
+                """폴백 함수"""
+                return True, "호환성 검증 서비스 비활성화"
 
 class ConditionDialog(QWidget):
     """리팩토링된 조건 생성 위젯 (다이얼로그에서 위젯으로 변경)"""
@@ -67,11 +82,21 @@ class ConditionDialog(QWidget):
         self.storage = ConditionStorage()
         self.preview_generator = PreviewGenerator()
         
-        # 호환성 검증 서비스 초기화
+        # 호환성 검증 서비스 초기화 (새 시스템 우선)
         if COMPATIBILITY_SERVICE_AVAILABLE:
-            self.compatibility_service = get_chart_variable_service()
+            try:
+                # 새로운 호환성 검증 시스템 사용
+                self.compatibility_service = None  # 함수 기반이므로 서비스 객체 불필요
+                self.use_new_compatibility_system = True
+                print("✅ 새로운 호환성 검증 시스템 사용")
+            except:
+                # 폴백: 구 버전 서비스 사용
+                self.compatibility_service = get_chart_variable_service()
+                self.use_new_compatibility_system = False
+                print("⚠️ 구 버전 호환성 서비스 사용")
         else:
             self.compatibility_service = None
+            self.use_new_compatibility_system = False
         
         # UI 관련 속성
         self.current_condition = None
@@ -569,13 +594,19 @@ class ConditionDialog(QWidget):
             if condition_data.get('comparison_type') == 'external' and condition_data.get('external_variable'):
                 external_var_info = condition_data.get('external_variable')
                 
-                if base_var_id and external_var_info and self.compatibility_service:
+                if base_var_id and external_var_info:
                     external_var_id = external_var_info.get('variable_id')
                     if external_var_id:
                         try:
-                            is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                                base_var_id, external_var_id
-                            )
+                            # 새로운 호환성 검증 시스템 사용
+                            if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
+                                is_compatible, reason = check_compatibility(base_var_id, external_var_id)
+                            elif self.compatibility_service:
+                                is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
+                                    base_var_id, external_var_id
+                                )
+                            else:
+                                is_compatible, reason = False, "호환성 서비스 없음"
                             
                             # 호환성 정보를 미리보기에 추가
                             base_category = self._get_variable_category(base_var_id)
@@ -876,10 +907,16 @@ class ConditionDialog(QWidget):
                 base_variable_id = self.get_current_variable_id()
                 external_variable_id = self.external_variable_combo.currentData()
                 
-                if external_variable_id and self.compatibility_service:
-                    is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                        base_variable_id, external_variable_id
-                    )
+                if external_variable_id:
+                    # 새로운 호환성 검증 시스템 사용
+                    if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
+                        is_compatible, reason = check_compatibility(base_variable_id, external_variable_id)
+                    elif self.compatibility_service:
+                        is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
+                            base_variable_id, external_variable_id
+                        )
+                    else:
+                        is_compatible, reason = False, "호환성 서비스 없음"
                     
                     if not is_compatible:
                         # 사용자 친화적 오류 메시지 표시
@@ -1202,38 +1239,37 @@ class ConditionDialog(QWidget):
         help_dialog.exec()
     
     def check_variable_compatibility(self):
-        """변수 호환성 검증 및 UI 업데이트"""
-        if not self.compatibility_service:
+        """변수 호환성 검증 및 UI 업데이트 (새 시스템 사용)"""
+        if not COMPATIBILITY_SERVICE_AVAILABLE:
             self.compatibility_scroll_area.hide()
             return
-        
+
         # 기본 변수와 외부변수 ID 가져오기
         base_variable_id = self.get_current_variable_id()
         external_variable_id = self.external_variable_combo.currentData()
-        
+
         # 외부변수가 선택되지 않았으면 호환성 표시 숨김
         if not external_variable_id or not base_variable_id:
             self.compatibility_scroll_area.hide()
             return
-        
+
         # 외부변수 모드가 아니면 검증하지 않음
         if not self.use_external_variable.isChecked():
             self.compatibility_scroll_area.hide()
             return
-        
+
         try:
-            # 호환성 검증 수행
-            is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                base_variable_id, external_variable_id
-            )
-            
+            # 새로운 호환성 검증 시스템 직접 사용
+            is_compatible, reason = check_compatibility(base_variable_id, external_variable_id)
+            print(f"🔍 호환성 검증: {base_variable_id} ↔ {external_variable_id} = {is_compatible} ({reason})")
+
             # 변수명 가져오기 (사용자 친화적 표시용)
             base_var_name = self.variable_combo.currentText()
             external_var_name = self.external_variable_combo.currentText()
-            
+
             if is_compatible:
                 # 호환 가능한 경우
-                message = f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다."
+                message = f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다.\n📝 {reason}"
                 self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
@@ -1247,17 +1283,17 @@ class ConditionDialog(QWidget):
                         font-family: 'Malgun Gothic';
                     }
                 """)
-                
+
                 # 저장 버튼 활성화 (만약 비활성화되어 있었다면)
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(True)
-                    
+
             else:
                 # 호환되지 않는 경우
                 user_message = self._generate_user_friendly_compatibility_message(
                     base_variable_id, external_variable_id, base_var_name, external_var_name, reason
                 )
-                
+
                 self.compatibility_status_label.setPlainText(user_message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
@@ -1271,26 +1307,26 @@ class ConditionDialog(QWidget):
                         font-family: 'Malgun Gothic';
                     }
                 """)
-                
+
                 # 저장 버튼 비활성화 (호환되지 않는 조합 저장 방지)
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(False)
-            
+
             # 스크롤 영역 표시
             self.compatibility_scroll_area.show()
-            
+
             # 텍스트 높이에 따라 스크롤 영역 높이 조정
             text_height = self.compatibility_status_label.document().size().height()
             if text_height > 60:  # 3줄 이상이면 스크롤 영역 고정 높이
                 self.compatibility_scroll_area.setMaximumHeight(90)
             else:  # 3줄 이하면 내용에 맞춰 조정
                 self.compatibility_scroll_area.setMaximumHeight(int(text_height) + 20)
-            
+
             # 디버깅 로그
-            print(f"🔍 호환성 검증: {base_var_name} ↔ {external_var_name} = {is_compatible}")
+            print(f"🔍 호환성 검증 결과: {base_var_name} ↔ {external_var_name} = {is_compatible}")
             if not is_compatible:
                 print(f"   사유: {reason}")
-                
+
         except Exception as e:
             # 오류 발생 시
             error_message = f"⚠️ 호환성 검사 중 오류가 발생했습니다: {str(e)}"
@@ -1309,7 +1345,9 @@ class ConditionDialog(QWidget):
             """)
             self.compatibility_scroll_area.show()
             print(f"❌ 호환성 검증 오류: {e}")
-    
+            import traceback
+            traceback.print_exc()
+
     def _generate_user_friendly_compatibility_message(self, base_var_id: str, external_var_id: str, 
                                                     base_var_name: str, external_var_name: str, 
                                                     reason: str) -> str:
@@ -1376,7 +1414,14 @@ class ConditionDialog(QWidget):
                 for var in all_variables:
                     if var != var_id:
                         try:
-                            is_compatible, _ = self.compatibility_service.is_compatible_external_variable(var_id, var)
+                            # 새로운 호환성 검증 시스템 사용
+                            if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
+                                is_compatible, _ = check_compatibility(var_id, var)
+                            elif self.compatibility_service:
+                                is_compatible, _ = self.compatibility_service.is_compatible_external_variable(var_id, var)
+                            else:
+                                is_compatible, _ = False, "호환성 서비스 없음"
+                            
                             if is_compatible:
                                 # 변수 ID를 사용자 친화적 이름으로 변환
                                 friendly_names = {
@@ -1480,10 +1525,15 @@ class ConditionDialog(QWidget):
             return
         
         try:
-            # 호환성 검증
-            is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
-                base_var_id, external_var_id
-            )
+            # 새로운 호환성 검증 시스템 사용
+            if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
+                is_compatible, reason = check_compatibility(base_var_id, external_var_id)
+            elif self.compatibility_service:
+                is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
+                    base_var_id, external_var_id
+                )
+            else:
+                is_compatible, reason = False, "호환성 서비스 없음"
             
             # UI 업데이트
             self._update_compatibility_ui(

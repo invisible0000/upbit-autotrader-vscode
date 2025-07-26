@@ -21,15 +21,16 @@ except ImportError:
     STYLE_MANAGER_AVAILABLE = False
     print("⚠️ 공통 스타일 시스템을 로드할 수 없습니다.")
 
-# 새로운 컴포넌트들 import
-from .trigger_builder.components.chart_visualizer import ChartVisualizer
-from .trigger_builder.components.simulation_engines import get_embedded_simulation_engine  
-from .trigger_builder.components.trigger_calculator import TriggerCalculator
+# 공유 컴포넌트들 import
+from .trigger_builder.components.shared.chart_visualizer import ChartVisualizer
+from .trigger_builder.components.shared.simulation_engines import get_embedded_simulation_engine  
+from .trigger_builder.components.shared.trigger_calculator import TriggerCalculator
+from .trigger_builder.components.core.simulation_result_widget import SimulationResultWidget
 
 # 새로운 차트 변수 카테고리 시스템 import
 try:
-    from .trigger_builder.components.chart_variable_service import get_chart_variable_service
-    from .trigger_builder.components.variable_display_system import get_variable_registry
+    from .trigger_builder.components.shared.chart_variable_service import get_chart_variable_service
+    from .trigger_builder.components.shared.variable_display_system import get_variable_registry
     CHART_VARIABLE_SYSTEM_AVAILABLE = True
 except ImportError:
     CHART_VARIABLE_SYSTEM_AVAILABLE = False
@@ -114,7 +115,7 @@ def reload_condition_dialog():
 # 리로드 실행
 reload_condition_dialog()
 
-from .trigger_builder.components.condition_dialog import ConditionDialog
+from .trigger_builder.components.core.condition_dialog import ConditionDialog
 from .components.condition_storage import ConditionStorage
 from .components.condition_loader import ConditionLoader
 # DataSourceSelectorWidget는 이제 trigger_builder/components에 있음
@@ -159,7 +160,8 @@ class IntegratedConditionManager(QWidget):
         self.selected_condition = None
         
         # 새로운 컴포넌트 초기화
-        self.chart_visualizer = ChartVisualizer()
+        self.chart_visualizer = ChartVisualizer()  # 기존 호환성 유지
+        self.simulation_result_widget = SimulationResultWidget()  # 개선된 차트 시스템
         self.simulation_engine = get_embedded_simulation_engine()
         self.trigger_calculator = TriggerCalculator()
         
@@ -726,14 +728,14 @@ class IntegratedConditionManager(QWidget):
         return group
     
     def create_mini_chart_widget(self):
-        """미니 차트 위젯 생성 - 새로운 ChartVisualizer 사용"""
-        # 새로운 차트 컴포넌트 사용
-        chart_widget = self.chart_visualizer.create_chart_widget()
+        """미니 차트 위젯 생성 - 개선된 SimulationResultWidget 사용"""
+        # 개선된 차트 시스템 사용
+        chart_widget = self.simulation_result_widget
         
-        # chart_canvas 참조를 유지 (기존 코드 호환성)
-        if hasattr(self.chart_visualizer, 'chart_canvas'):
-            self.chart_canvas = self.chart_visualizer.chart_canvas
-            self.chart_figure = self.chart_visualizer.chart_figure
+        # 기존 호환성을 위해 chart_canvas, chart_figure 참조 유지
+        if hasattr(self.simulation_result_widget, 'canvas'):
+            self.chart_canvas = self.simulation_result_widget.canvas
+            self.chart_figure = self.simulation_result_widget.figure
         
         return chart_widget
     
@@ -755,12 +757,36 @@ class IntegratedConditionManager(QWidget):
         return chart_label
     
     def update_chart_with_sample_data(self):
-        """샘플 데이터로 차트 업데이트 - 새로운 ChartVisualizer 사용"""
-        self.chart_visualizer.update_chart_with_sample_data()
+        """샘플 데이터로 차트 업데이트 - 개선된 SimulationResultWidget 사용"""
+        if hasattr(self.simulation_result_widget, 'show_placeholder_chart'):
+            self.simulation_result_widget.show_placeholder_chart()
+        else:
+            # 폴백: 기존 ChartVisualizer 사용
+            self.chart_visualizer.update_chart_with_sample_data()
     
-    def update_chart_with_simulation_results(self, simulation_data, trigger_results):
-        """시뮬레이션 결과로 차트 업데이트 - 새로운 ChartVisualizer 사용"""
-        self.chart_visualizer.update_chart_with_simulation_results(simulation_data, trigger_results)
+    def update_chart_with_simulation_results(self, simulation_data, trigger_results, base_variable_data=None, external_variable_data=None, variable_info=None):
+        """시뮬레이션 결과로 차트 업데이트 - 개선된 SimulationResultWidget 사용"""
+        try:
+            # 개선된 차트 시스템 사용
+            scenario = simulation_data.get('scenario', 'Simulation')
+            price_data = simulation_data.get('price_data', [])
+            
+            # 개선된 update_simulation_chart 메서드 호출
+            self.simulation_result_widget.update_simulation_chart(
+                scenario=scenario,
+                price_data=price_data,
+                trigger_results=trigger_results,
+                base_variable_data=base_variable_data,
+                external_variable_data=external_variable_data,
+                variable_info=variable_info
+            )
+            
+            print(f"✅ 개선된 차트 시스템으로 업데이트 완료: {scenario}")
+            
+        except Exception as e:
+            print(f"⚠️ 개선된 차트 업데이트 실패, 폴백 사용: {e}")
+            # 폴백: 기존 ChartVisualizer 사용
+            self.chart_visualizer.update_chart_with_simulation_results(simulation_data, trigger_results)
     
     def create_search_input(self):
         """검색 입력 생성 - 기존 시스템 스타일 적용"""
@@ -1193,7 +1219,30 @@ class IntegratedConditionManager(QWidget):
             }
             
             print(f"📊 트리거 포인트 계산 완료: {len(trigger_points)}개 신호 발견")
-            self.update_chart_with_simulation_results(chart_simulation_data, trigger_results)
+            
+            # 개선된 차트 시스템에 추가 데이터 전달
+            # 기본 변수 데이터 생성
+            base_variable_data = None
+            if operator in ['>', '>=', '<', '<=', '~=', '!=']:
+                # 고정값 비교: 목표값을 수평선으로 표시하기 위한 데이터
+                base_variable_data = [target_num] * len(chart_simulation_data['price_data'])
+            
+            # 변수 정보 구성
+            variable_info = {
+                'variable_id': variable_name.upper(),
+                'variable_name': variable_name,
+                'category': self._get_variable_category_for_chart(variable_name),
+                'data_type': chart_simulation_data.get('data_type', 'price')
+            }
+            
+            # 개선된 차트 업데이트 호출 (추가 파라미터 포함)
+            self.update_chart_with_simulation_results(
+                chart_simulation_data, 
+                trigger_results,
+                base_variable_data=base_variable_data,
+                external_variable_data=None,
+                variable_info=variable_info
+            )
         
         # 상태 업데이트 (신호 개수 포함)
         self.simulation_status.setText(
@@ -1866,6 +1915,22 @@ class IntegratedConditionManager(QWidget):
             )
         except Exception as e:
             return False, f"호환성 검사 오류: {e}"
+    
+    def _get_variable_category_for_chart(self, variable_name):
+        """차트 시스템용 변수 카테고리 매핑"""
+        variable_name_lower = variable_name.lower()
+        
+        # 기본 카테고리 매핑
+        if any(keyword in variable_name_lower for keyword in ['rsi', 'stochastic', 'cci']):
+            return 'oscillator'
+        elif any(keyword in variable_name_lower for keyword in ['macd', 'momentum', 'roc']):
+            return 'momentum'
+        elif any(keyword in variable_name_lower for keyword in ['sma', 'ema', 'bb', 'bollinger', 'price', 'current']):
+            return 'price_overlay'
+        elif any(keyword in variable_name_lower for keyword in ['volume', 'vol']):
+            return 'volume'
+        else:
+            return 'price_overlay'  # 기본값
 
 
 if __name__ == "__main__":

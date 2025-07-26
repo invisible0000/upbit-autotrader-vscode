@@ -214,10 +214,10 @@ class TriggerDetailWidget(QWidget):
                     if var_id == variable_id:
                         return var_name
             
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️ 변수 정의 시스템 사용 실패: {e}")
         
-        # 하드코딩 폴백
+        # 하드코딩 폴백 (더 많은 변수 추가)
         name_mapping = {
             'SMA': '단순이동평균',
             'EMA': '지수이동평균',

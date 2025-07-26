@@ -30,19 +30,21 @@ except ImportError:
 #     STYLE_MANAGER_AVAILABLE = False
 #     print("⚠️ 공통 스타일 시스템을 로드할 수 없습니다.")
 
-# Components import
-from .components.condition_dialog import ConditionDialog
-from .components.trigger_list_widget import TriggerListWidget
-from .components.trigger_detail_widget import TriggerDetailWidget
-from .components.simulation_control_widget import SimulationControlWidget
-from .components.simulation_result_widget import SimulationResultWidget
-from .components.chart_visualizer import ChartVisualizer
-from .components.trigger_calculator import TriggerCalculator
+# TriggerBuilder Core Components import
+from .components.core.condition_dialog import ConditionDialog
+from .components.core.trigger_list_widget import TriggerListWidget
+from .components.core.trigger_detail_widget import TriggerDetailWidget
+from .components.core.simulation_control_widget import SimulationControlWidget
+from .components.core.simulation_result_widget import SimulationResultWidget
+
+# Shared Components import
+from .components.shared.chart_visualizer import ChartVisualizer
+from .components.shared.trigger_calculator import TriggerCalculator
 
 # Chart variable system import
 try:
-    from .components.chart_variable_service import get_chart_variable_service
-    from .components.variable_display_system import get_variable_registry
+    from .components.shared.chart_variable_service import get_chart_variable_service
+    from .components.shared.variable_display_system import get_variable_registry
     CHART_VARIABLE_SYSTEM_AVAILABLE = True
 except ImportError:
     CHART_VARIABLE_SYSTEM_AVAILABLE = False
@@ -175,7 +177,7 @@ class TriggerBuilderScreen(QWidget):
         self.trigger_calculator = TriggerCalculator()
         
         # 시뮬레이션 엔진 초기화
-        from .components.simulation_engines import get_embedded_simulation_engine
+        from .components.shared.simulation_engines import get_embedded_simulation_engine
         self.simulation_engine = get_embedded_simulation_engine()
         
         # 차트 변수 카테고리 시스템 초기화

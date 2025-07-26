@@ -100,9 +100,9 @@ class ParameterWidgetFactory:
                 }
                 QSpinBox::up-arrow {
                     image: none;
-                    border-left: 4px solid transparent;
-                    border-right: 4px solid transparent;
-                    border-bottom: 6px solid #495057;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-bottom: 5px solid #495057;
                     margin: 0px;
                 }
                 QSpinBox::down-button {
@@ -119,9 +119,9 @@ class ParameterWidgetFactory:
                 }
                 QSpinBox::down-arrow {
                     image: none;
-                    border-left: 4px solid transparent;
-                    border-right: 4px solid transparent;
-                    border-top: 6px solid #495057;
+                    border-left: 3px solid transparent;
+                    border-right: 3px solid transparent;
+                    border-top: 5px solid #495057;
                     margin: 0px;
                 }
             """)

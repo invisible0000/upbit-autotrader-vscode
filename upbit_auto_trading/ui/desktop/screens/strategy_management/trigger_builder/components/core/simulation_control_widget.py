@@ -118,6 +118,9 @@ class SimulationControlWidget(QWidget):
             from PyQt6.QtWidgets import QSizePolicy
             btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # 수평으로만 확장
             
+            # 최대 폭 설정 제거로 더 많이 확장 가능
+            btn.setMaximumWidth(16777215)  # Qt 최대값 설정
+            
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
