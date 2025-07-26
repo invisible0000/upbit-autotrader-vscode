@@ -41,7 +41,7 @@ class SimulationControlWidget(QWidget):
     
     def create_simulation_area(self):
         """영역 3: 케이스 시뮬레이션 버튼들 (우측 상단) - 원본 완전 복제"""
-        group = QGroupBox("케이스 시뮬레이션")
+        group = QGroupBox("🎮 시뮬레이션 컨트롤")
         # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -111,16 +111,17 @@ class SimulationControlWidget(QWidget):
         for i, (icon_text, tooltip, color) in enumerate(simulation_buttons):
             btn = QPushButton(icon_text)
             btn.setToolTip(tooltip)
-            btn.setFixedHeight(35)
-            btn.setMinimumWidth(120)
+            btn.setFixedHeight(40)  # 35에서 40으로 증가
+            btn.setMinimumWidth(130)  # 120에서 130으로 증가
+            btn.setSizePolicy(btn.sizePolicy().horizontalPolicy(), btn.sizePolicy().verticalPolicy())  # stretch 활성화
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
                     color: white;
                     border: none;
                     border-radius: 6px;
-                    padding: 6px 8px;
-                    font-size: 11px;
+                    padding: 8px 10px;
+                    font-size: 12px;
                     font-weight: bold;
                     margin: 1px;
                     text-align: center;
@@ -139,15 +140,19 @@ class SimulationControlWidget(QWidget):
             col = i % 2
             grid_layout.addWidget(btn, row, col)
         
+        # 그리드 컬럼에 stretch 적용
+        grid_layout.setColumnStretch(0, 1)
+        grid_layout.setColumnStretch(1, 1)
+        
         # 그리드 레이아웃을 메인 레이아웃에 추가
         layout.addLayout(grid_layout)
         
         layout.addStretch()
         
         # 시뮬레이션 상태 (애플리케이션 테마를 따름)
-        self.simulation_status = QLabel("Select a trigger and click a scenario")
+        self.simulation_status = QLabel("Status: 트리거를 선택하고 추세 버튼을 누르세요.")
         self.simulation_status.setObjectName("simulationStatus")  # QSS에서 스타일링하도록 objectName 설정
-        self.simulation_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.simulation_status.setAlignment(Qt.AlignmentFlag.AlignLeft)  # 왼쪽 정렬
         layout.addWidget(self.simulation_status)
         
         return group

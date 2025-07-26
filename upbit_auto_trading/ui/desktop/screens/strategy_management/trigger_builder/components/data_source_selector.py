@@ -30,7 +30,7 @@ class DataSourceSelectorWidget(QWidget):
         
         # 데이터 소스 선택 그룹 - 제목 간소화
         self.source_group = QGroupBox("데이터 소스")
-        self.source_group.setStyleSheet("font-size: 10px; font-weight: bold;")  # 폰트 크기 줄이기
+        self.source_group.setStyleSheet("font-size: 12px;")  # 10px에서 12px로 증가, font-weight: bold 제거  # 폰트 크기 줄이기
         source_layout = QVBoxLayout(self.source_group)
         source_layout.setSpacing(2)  # 그룹 내부 간격 줄이기
         source_layout.setContentsMargins(4, 8, 4, 4)  # 그룹 내부 마진 줄이기
@@ -119,7 +119,7 @@ class DataSourceSelectorWidget(QWidget):
         
         # 라디오 버튼 (이름만, 폰트 크기 줄이기)
         radio_button = QRadioButton(source_info["name"])
-        radio_button.setStyleSheet("font-size: 10px; font-weight: bold;")  # 하드코딩된 텍스트 색상 제거
+        radio_button.setStyleSheet("font-size: 12px;")  # 10px에서 12px로 증가, font-weight: bold 제거  # 하드코딩된 텍스트 색상 제거
         
         layout.addWidget(radio_button)
         

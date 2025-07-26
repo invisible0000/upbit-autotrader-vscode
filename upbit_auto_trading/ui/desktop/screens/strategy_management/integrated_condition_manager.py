@@ -1538,18 +1538,22 @@ class IntegratedConditionManager(QWidget):
             try:
                 if condition_id:
                     # 데이터베이스에서 삭제
-                    self.storage.delete_condition(condition_id)
+                    success, message = self.storage.delete_condition(condition_id)
                     
-                    # UI 업데이트
-                    self.load_trigger_list()
-                    self.trigger_detail_text.setPlainText("트리거를 선택하면 상세 정보가 표시됩니다.")
-                    self.selected_condition = None
-                    
-                    # 상태 업데이트
-                    self.simulation_status.setText(f"🗑️ '{condition_name}' 삭제 완료!")
-                    self.add_test_history_item(f"트리거 삭제: {condition_name}", "save")
-                    
-                    QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
+                    if success:
+                        # UI 업데이트
+                        self.load_trigger_list()
+                        self.trigger_detail_text.setPlainText("트리거를 선택하면 상세 정보가 표시됩니다.")
+                        self.selected_condition = None
+                        
+                        # 상태 업데이트
+                        self.simulation_status.setText(f"🗑️ '{condition_name}' 삭제 완료!")
+                        self.add_test_history_item(f"트리거 삭제: {condition_name}", "save")
+                        
+                        QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
+                    else:
+                        QMessageBox.critical(self, "❌ 삭제 실패", f"삭제 실패: {message}")
+                        print(f"❌ 트리거 삭제 실패: {message}")
                     
                 else:
                     QMessageBox.warning(self, "⚠️ 경고", "삭제할 수 없는 트리거입니다.")

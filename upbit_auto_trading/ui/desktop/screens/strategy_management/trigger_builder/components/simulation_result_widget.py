@@ -60,8 +60,9 @@ class SimulationResultWidget(QWidget):
     def setup_ui(self):
         """UI 구성 - 원본 create_test_result_area()와 정확히 동일"""
         # 메인 그룹박스 (스타일은 애플리케이션 테마를 따름)
-        self.group = QGroupBox("테스트 결과 차트")
-        # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
+        self.group = QGroupBox("📊 시뮬레이션 결과 & 미니차트")
+        # 기본 스타일 적용 (다른 위젯들과 통일)
+        # self.group.setStyleSheet(self._get_original_group_style())  # 기본 스타일 제거
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -85,10 +86,16 @@ class SimulationResultWidget(QWidget):
         
         # 작동 기록 리스트 (애플리케이션 테마를 따름)
         self.test_history_list = QListWidget()
-        self.test_history_list.setMaximumHeight(280)  # 높이만 설정하고 스타일은 테마를 따름
+        # 4줄 표시되도록 높이 설정 (대략 줄당 30px + 여백)
+        self.test_history_list.setMaximumHeight(130)
+        self.test_history_list.setMinimumHeight(130)
+        # 스크롤바 정책 설정 - 필요시 스크롤바 표시
+        from PyQt6.QtCore import Qt
+        self.test_history_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.test_history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         # 하드코딩된 스타일 제거 - QSS 테마를 따름
         
-        layout.addWidget(QLabel("🕐 작동 기록:"))
+        layout.addWidget(QLabel("📋 트리거 신호:"))  # 사용자에게 직관적이고 에이전트 기능 색인에 용이
         layout.addWidget(self.test_history_list)
     
     def create_mini_chart_widget(self):
@@ -102,9 +109,14 @@ class SimulationResultWidget(QWidget):
         
         if CHART_AVAILABLE:
             try:
-                self.figure = Figure(figsize=(4, 2), dpi=80)
+                # 차트 크기를 더 크게 설정하여 테스트 결과 박스 공간을 최대한 활용
+                self.figure = Figure(figsize=(6, 4), dpi=80)
                 self.canvas = FigureCanvas(self.figure)
-                self.canvas.setMaximumHeight(180)
+                # 최대 높이를 더 크게 설정
+                # 테스트: 고정 크기 제약 제거
+                # self.canvas.setMaximumHeight(300)
+                # self.canvas.setMinimumHeight(250)
+                self.canvas.setMinimumHeight(200)  # 최소 높이만 설정
                 
                 # Canvas 배경을 테마에 맞게 설정
                 self.canvas.setObjectName("chart_canvas")  # QSS 선택자용
@@ -172,15 +184,37 @@ class SimulationResultWidget(QWidget):
             y = [0] * 10
             
             ax.plot(x, y, line_color, linewidth=1)
-            ax.set_title('Chart Ready', fontsize=8)
-            ax.set_ylabel('Price', fontsize=7)
-            ax.tick_params(axis='both', which='major', labelsize=6)
+            # 차트 제목 제거하여 더 큰 차트 공간 확보
+            # ax.set_title('Chart Ready', fontsize=8)
+            ax.set_ylabel('Price', fontsize=10)  # Y축 라벨 크기 증가
+            
+            # Y축 틱 라벨 포맷팅 (3자 이내)
+            def format_y_tick(value, pos):
+                if value >= 1000000:
+                    return f"{value / 1000000:.1f}m"
+                elif value >= 1000:
+                    return f"{value / 1000:.0f}k"
+                elif value >= 1:
+                    return f"{value:.0f}"
+                else:
+                    return f"{value:.1f}"
+            
+            from matplotlib.ticker import FuncFormatter
+            ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
+            
+            ax.tick_params(axis='both', which='major', labelsize=12)  # 6에서 12로 2배 증가
+            
+            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시)
+            ax.set_xticks(range(0, 10, 2))
+            ax.set_xticklabels([str(i) for i in range(0, 10, 2)])
+            
             ax.grid(True, alpha=0.3)
             
             # subplot 배경색도 설정
             ax.set_facecolor(bg_color)
             
-            self.figure.tight_layout(pad=0.5)
+            # tight_layout 제거 - 틱 라벨 크기에 영향을 줄 수 있음 (플레이스홀더)
+            # self.figure.tight_layout(pad=0.5)
             self.canvas.draw()
             
         except Exception as e:
@@ -221,25 +255,88 @@ class SimulationResultWidget(QWidget):
                 x = range(len(price_data))
                 ax.plot(x, price_data, line_color, linewidth=1, label='Price')
                 
-                # 트리거 포인트 표시
+                # 트리거 포인트 표시 및 작동 기록 추가
                 if trigger_results:
+                    trigger_count = 0
+                    # 기존 작동 기록 클리어 (새 시뮬레이션 시작)
+                    self.test_history_list.clear()
+                    
                     for i, (triggered, _) in enumerate(trigger_results):
                         if triggered and i < len(price_data):
                             ax.scatter(i, price_data[i], c=trigger_color, s=20, marker='^', zorder=5)
+                            trigger_count += 1
+                            # 각 트리거 발생 지점을 작동 기록에 추가 (인덱스 번호 사용)
+                            self.add_test_history_item(f"[{i:03d}] 트리거 발동 #{trigger_count}: 가격 {price_data[i]:,.0f}", "success")
+                    
+                    if trigger_count > 0:
+                        ax.scatter([], [], c=trigger_color, s=20, marker='^', label=f'Triggers ({trigger_count})', zorder=5)
             
-            ax.set_title(f'{scenario} Result', fontsize=8)
-            ax.set_ylabel('Price', fontsize=7)
-            ax.tick_params(axis='both', which='major', labelsize=6)
+            # 차트 제목 제거하여 더 큰 차트 공간 확보
+            # ax.set_title(f'{scenario} Result', fontsize=8)
+            ax.set_ylabel('Price', fontsize=10)  # Y축 라벨 크기 증가
+            
+            # Y축 틱 라벨 포맷팅 (3자 이내)
+            def format_y_tick(value, pos):
+                if value >= 1000000:
+                    return f"{value / 1000000:.1f}m"
+                elif value >= 1000:
+                    return f"{value / 1000:.0f}k"
+                elif value >= 1:
+                    return f"{value:.0f}"
+                else:
+                    return f"{value:.1f}"
+            
+            from matplotlib.ticker import FuncFormatter
+            ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
+            
+            ax.tick_params(axis='both', which='major', labelsize=12)  # 6에서 12로 2배 증가
+            
+            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시)
+            if price_data and len(price_data) > 5:
+                x_tick_positions = range(0, len(price_data), max(1, len(price_data) // 5))
+                ax.set_xticks(x_tick_positions)
+                ax.set_xticklabels([str(i) for i in x_tick_positions])
+            
             ax.grid(True, alpha=0.3)
             
             # subplot 배경색도 설정
             ax.set_facecolor(bg_color)
             
-            self.figure.tight_layout(pad=0.5)
+            # tight_layout 제거 - 틱 라벨 크기에 영향을 줄 수 있음 (시뮬레이션)
+            # self.figure.tight_layout(pad=0.5)
             self.canvas.draw()
             
         except Exception as e:
             print(f"⚠️ 시뮬레이션 차트 업데이트 실패: {e}")
+    
+    def update_trigger_signals(self, simulation_result_data):
+        """트리거 신호들을 작동 기록에 업데이트"""
+        try:
+            scenario = simulation_result_data.get('scenario', 'Unknown')
+            price_data = simulation_result_data.get('price_data', [])
+            trigger_points = simulation_result_data.get('trigger_points', [])
+            result_text = simulation_result_data.get('result_text', 'UNKNOWN')
+            condition_name = simulation_result_data.get('condition_name', 'Unknown')
+            
+            # 기존 작동 기록 클리어 (새 시뮬레이션 시작)
+            self.test_history_list.clear()
+            
+            # 개별 트리거 신호들을 작동 기록에 추가
+            if trigger_points and len(trigger_points) > 0:
+                for idx, point_idx in enumerate(trigger_points):
+                    if 0 <= point_idx < len(price_data):
+                        price_value = price_data[point_idx]
+                        signal_detail = f"[{point_idx:03d}] 트리거 발동 #{idx+1}: 가격 {price_value:,.0f}"
+                        self.add_test_history_item(signal_detail, "success")
+            else:
+                # 신호가 없을 때 메시지
+                self.add_test_history_item(f"{scenario}: 검출된 신호 없음", "info")
+            
+            print(f"✅ 트리거 신호 업데이트 완료: {len(trigger_points)}개 신호")
+            
+        except Exception as e:
+            print(f"❌ 트리거 신호 업데이트 실패: {e}")
+            self.add_test_history_item(f"신호 업데이트 오류: {e}", "error")
     
     def _get_original_group_style(self):
         """원본 그룹박스 스타일 - 하드코딩된 배경색 제거"""
@@ -265,13 +362,11 @@ class SimulationResultWidget(QWidget):
         self.add_test_history_item("시스템 시작", "ready")
     
     def add_test_history_item(self, message: str, status: str = "info"):
-        """테스트 기록 추가 - 원본과 동일"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
+        """테스트 기록 추가 - 시간 대신 메시지에 이미 포함된 인덱스 사용"""
         # 상태별 아이콘 (원본과 동일)
         status_icons = {
             "ready": "✅",
-            "running": "🔄", 
+            "running": "🔄",
             "success": "✅",
             "error": "❌",
             "warning": "⚠️",
@@ -279,7 +374,13 @@ class SimulationResultWidget(QWidget):
         }
         
         icon = status_icons.get(status, "ℹ️")
-        item_text = f"{icon} [{timestamp}] {message}"
+        # 트리거 발동 메시지의 경우 이미 인덱스가 포함되어 있으므로 시간 제거
+        if "트리거 발동" in message and "[" in message:
+            item_text = f"{icon} {message}"
+        else:
+            # 일반 메시지는 시간 포함
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            item_text = f"{icon} [{timestamp}] {message}"
         
         item = QListWidgetItem(item_text)
         self.test_history_list.addItem(item)
@@ -300,25 +401,6 @@ class SimulationResultWidget(QWidget):
         
         message = f"{scenario}: 트리거 {trigger_count}회, 성공률 {success_rate:.1f}%, 수익률 {profit_loss:+.2f}%"
         self.add_test_history_item(message, "success" if profit_loss > 0 else "warning")
-        status_icons = {
-            "ready": "🟢",
-            "running": "🔄", 
-            "success": "✅",
-            "warning": "⚠️",
-            "error": "❌",
-            "info": "💡"
-        }
-        
-        icon = status_icons.get(status, "💡")
-        full_message = f"{icon} [{timestamp}] {message}"
-        
-        # 리스트에 추가 (최신이 위로)
-        item = QListWidgetItem(full_message)
-        self.test_history_list.insertItem(0, item)
-        
-        # 최대 50개까지만 유지
-        if self.test_history_list.count() > 50:
-            self.test_history_list.takeItem(self.test_history_list.count() - 1)
     
     def update_chart(self, scenario: str, price_data: list, trigger_results: list = None):
         """차트 업데이트 - 원본 인터페이스"""
@@ -333,22 +415,17 @@ class SimulationResultWidget(QWidget):
             trigger_name = trigger_data.get('name', 'Unknown') if trigger_data else 'Unknown'
             success = result.get('success', False)
             
+            # 이전 결과 모두 지우기 (최근 시뮬레이션 결과만 표시)
+            self.test_history_list.clear()
+            
             if success:
-                # 성공 케이스
+                # 성공 케이스 - 작동 기록에만 추가
                 self.add_test_history_item(f"{scenario} 시뮬레이션 완료: {trigger_name}", "success")
                 
-                # 상세 결과 텍스트 업데이트
-                result_text = self._format_success_result(scenario, trigger_data, result)
-                self.test_result_text.setText(result_text)
-                
             else:
-                # 실패 케이스
+                # 실패 케이스 - 작동 기록에만 추가
                 error_msg = result.get('error', 'Unknown error')
                 self.add_test_history_item(f"{scenario} 시뮬레이션 실패: {error_msg}", "error")
-                
-                # 에러 결과 텍스트 업데이트
-                error_text = self._format_error_result(scenario, trigger_data, result)
-                self.test_result_text.setText(error_text)
             
             # 결과 업데이트 시그널 발송
             self.result_updated.emit(result)
@@ -356,161 +433,47 @@ class SimulationResultWidget(QWidget):
         except Exception as e:
             self.add_test_history_item(f"결과 업데이트 오류: {e}", "error")
             print(f"❌ 시뮬레이션 결과 업데이트 실패: {e}")
-    
-    # 스타일 정의 - integrated_condition_manager.py에서 정확히 복사
-    def _get_original_group_style(self):
-        """원본 get_groupbox_style("#fd7e14")와 동일"""
-        return """
-            QGroupBox {
-                background-color: white;
-                border: 1px solid #fd7e14;
-                border-radius: 8px;
-                font-weight: bold;
-                padding-top: 15px;
-                margin: 3px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                background-color: white;
-                color: #fd7e14;
-                font-size: 12px;
-            }
-        """
-    
-    def _get_original_history_style(self):
-        """원본 작동 기록 리스트 스타일과 정확히 동일"""
-        return """
-            QListWidget {
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                background-color: white;
-                max-height: 120px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #f0f0f0;
-                margin: 2px;
-                border-radius: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #fff3cd;
-                color: #856404;
-                border: 1px solid #ffeaa7;
-            }
-            QListWidget::item:hover {
-                background-color: #f8f9fa;
-            }
-        """
-    
-    def _get_original_text_style(self):
-        """원본 상세 결과 텍스트 스타일과 정확히 동일"""
-        return """
-            QTextEdit {
-                border: 2px solid #ddd;
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 10px;
-                background-color: white;
-                max-height: 120px;
-            }
-        """
-    
-    def update_simulation_result(self, scenario: str, trigger_data: dict, result: dict):
-        """시뮬레이션 결과 업데이트"""
-        try:
-            trigger_name = trigger_data.get('name', 'Unknown') if trigger_data else 'Unknown'
-            success = result.get('success', False)
-            
-            if success:
-                # 성공 케이스
-                self.add_test_history_item(f"{scenario} 시뮬레이션 완료: {trigger_name}", "success")
-                
-                # 상세 결과 텍스트 업데이트
-                result_text = self._format_success_result(scenario, trigger_data, result)
-                self.test_result_text.setText(result_text)
-                
-            else:
-                # 실패 케이스
-                error_msg = result.get('error', 'Unknown error')
-                self.add_test_history_item(f"{scenario} 시뮬레이션 실패: {error_msg}", "error")
-                
-                # 에러 결과 텍스트 업데이트
-                error_text = self._format_error_result(scenario, trigger_data, result)
-                self.test_result_text.setText(error_text)
-            
-            # 결과 업데이트 시그널 발송
-            self.result_updated.emit(result)
-            
-        except Exception as e:
-            self.add_test_history_item(f"결과 업데이트 오류: {e}", "error")
-            print(f"❌ 시뮬레이션 결과 업데이트 실패: {e}")
-    
-    def _format_success_result(self, scenario: str, trigger_data: dict, result: dict) -> str:
-        """성공 결과 포맷팅"""
-        trigger_name = trigger_data.get('name', 'Unknown') if trigger_data else 'Unknown'
-        variable = trigger_data.get('variable', 'Unknown') if trigger_data else 'Unknown'
-        operator = trigger_data.get('operator', 'Unknown') if trigger_data else 'Unknown'
-        value = trigger_data.get('value', 'Unknown') if trigger_data else 'Unknown'
-        
-        # 시뮬레이션 데이터 추출
-        simulation_data = result.get('simulation_data', {})
-        triggered = result.get('triggered', False)
-        trigger_points = result.get('trigger_points', [])
-        
-        result_text = f"""🎯 {scenario} 시뮬레이션 결과
-        
-📋 트리거 정보:
-• 이름: {trigger_name}
-• 조건: {variable} {operator} {value}
 
-📊 시뮬레이션 데이터:
-• 시나리오: {scenario}
-• 데이터 포인트: {len(simulation_data.get('prices', []))}개
-• 트리거 발생: {'예' if triggered else '아니오'}
-• 발생 횟수: {len(trigger_points)}회
-
-🔥 트리거 발생 지점:
-{self._format_trigger_points(trigger_points)}
-
-⏰ 실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-        
-        return result_text.strip()
-    
-    def _format_error_result(self, scenario: str, trigger_data: dict, result: dict) -> str:
-        """에러 결과 포맷팅"""
-        trigger_name = trigger_data.get('name', 'Unknown') if trigger_data else 'Unknown'
-        error_msg = result.get('error', 'Unknown error')
-        
-        error_text = f"""❌ {scenario} 시뮬레이션 실패
-        
-📋 트리거 정보:
-• 이름: {trigger_name}
-
-🚨 오류 내용:
-{error_msg}
-
-⏰ 실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-💡 해결 방법:
-1. 트리거 설정을 확인해주세요
-2. 변수 파라미터가 올바른지 확인해주세요
-3. 시뮬레이션 엔진 상태를 확인해주세요
-"""
-        
-        return error_text.strip()
-    
     def export_results(self) -> dict:
         """결과 내보내기"""
         return {
             'history_count': self.test_history_list.count(),
-            'current_result': self.test_result_text.toPlainText(),
             'export_time': datetime.now().isoformat()
         }
     
+    def update_chart_with_simulation_results(self, chart_simulation_data, trigger_results):
+        """시뮬레이션 결과로 차트 및 기록 업데이트"""
+        try:
+            scenario = chart_simulation_data.get('scenario', 'Unknown')
+            price_data = chart_simulation_data.get('price_data', [])
+            trigger_points = trigger_results.get('trigger_points', [])
+            
+            # 차트 업데이트
+            if price_data:
+                # 트리거 결과를 (triggered, value) 튜플 리스트로 변환
+                trigger_results_for_chart = []
+                for i, value in enumerate(price_data):
+                    triggered = i in trigger_points
+                    trigger_results_for_chart.append((triggered, value))
+                
+                self.update_simulation_chart(scenario, price_data, trigger_results_for_chart)
+            
+            # 트리거 신호들을 작동 기록에 추가
+            simulation_result_data = {
+                'scenario': scenario,
+                'price_data': price_data,
+                'trigger_points': trigger_points,
+                'result_text': "✅ PASS" if len(trigger_points) > 0 else "❌ FAIL",
+                'condition_name': chart_simulation_data.get('condition_name', 'Unknown')
+            }
+            self.update_trigger_signals(simulation_result_data)
+            
+            print(f"✅ 차트 및 기록 업데이트 완료: {len(trigger_points)}개 신호")
+            
+        except Exception as e:
+            print(f"❌ 차트 및 기록 업데이트 실패: {e}")
+            self.add_test_history_item(f"차트 업데이트 오류: {e}", "error")
+
     def get_history_count(self) -> int:
         """기록 개수 반환"""
         return self.test_history_list.count()

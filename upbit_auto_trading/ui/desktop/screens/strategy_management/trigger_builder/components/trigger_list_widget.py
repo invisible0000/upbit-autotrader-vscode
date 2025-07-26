@@ -11,12 +11,37 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 # 조건 저장/로드 모듈
 try:
-    from upbit_auto_trading.data.condition_storage import ConditionStorage
-    from upbit_auto_trading.data.condition_loader import ConditionLoader
+    from .condition_storage import ConditionStorage
     STORAGE_AVAILABLE = True
-except ImportError:
-    print("⚠️ ConditionStorage, ConditionLoader를 찾을 수 없습니다.")
-    STORAGE_AVAILABLE = False
+    print("✅ ConditionStorage (로컬) 가져오기 성공")
+except ImportError as e:
+    print(f"⚠️ ConditionStorage (로컬)를 찾을 수 없습니다: {e}")
+    try:
+        # 상위 디렉터리에서 시도
+        import sys
+        import os
+        current_dir = os.path.dirname(__file__)
+        parent_dir = os.path.dirname(current_dir)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        from condition_storage import ConditionStorage
+        STORAGE_AVAILABLE = True
+        print("✅ ConditionStorage (상위 경로) 가져오기 성공")
+    except ImportError as e2:
+        print(f"⚠️ ConditionStorage (상위 경로)를 찾을 수 없습니다: {e2}")
+        try:
+            # components 디렉터리에서 시도
+            grandparent_dir = os.path.dirname(parent_dir)
+            components_dir = os.path.join(grandparent_dir, 'components')
+            if components_dir not in sys.path:
+                sys.path.insert(0, components_dir)
+            from condition_storage import ConditionStorage
+            STORAGE_AVAILABLE = True
+            print("✅ ConditionStorage (components) 가져오기 성공")
+        except ImportError as e3:
+            print(f"⚠️ ConditionStorage (components)를 찾을 수 없습니다: {e3}")
+            ConditionStorage = None
+            STORAGE_AVAILABLE = False
 
 
 class TriggerListWidget(QWidget):
@@ -34,13 +59,32 @@ class TriggerListWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_edit_mode = False  # 편집 모드 상태 추가
+        
+        # 임시 저장소 (데이터베이스 대신 메모리 사용)
+        self.temp_triggers = []
+        
+        # ConditionStorage 인스턴스 초기화 (데이터베이스 문제 우회)
+        global STORAGE_AVAILABLE
+        if STORAGE_AVAILABLE:
+            try:
+                self.condition_storage = ConditionStorage()
+                print("✅ ConditionStorage 초기화 성공")
+            except Exception as e:
+                print(f"⚠️ ConditionStorage 초기화 실패 (데이터베이스 미생성): {e}")
+                print("🔄 임시로 메모리 기반 저장으로 전환")
+                self.condition_storage = None
+                STORAGE_AVAILABLE = False  # 전역 변수 업데이트
+        else:
+            self.condition_storage = None
+            print("⚠️ ConditionStorage를 사용할 수 없습니다 - 임시 저장 모드")
+        
         self.setup_ui()
         self.load_trigger_list()
     
     def setup_ui(self):
         """UI 구성 - integrated_condition_manager.py와 정확히 동일"""
         # 메인 그룹박스 (스타일은 애플리케이션 테마를 따름)
-        self.group = QGroupBox("📋 등록된 트리거 리스트")
+        self.group = QGroupBox("📋 트리거 리스트")
         # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         
         main_layout = QVBoxLayout(self)
@@ -412,9 +456,72 @@ class TriggerListWidget(QWidget):
     # ==============================================
     
     def save_current_condition(self):
-        """트리거 저장 버튼 - 시그널로 요청 전달"""
-        print("💾 트리거 저장 버튼 클릭됨 - 시그널 발송")
-        self.trigger_save_requested.emit()  # 시그널 발송으로 메인 화면에 위임
+        """트리거 저장 버튼 - 직접 저장 시도 후 폴백"""
+        print("💾 트리거 저장 버튼 클릭됨 - 직접 저장 시도")
+        
+        # 1. 부모에서 조건 데이터 가져오기 시도
+        condition_data = None
+        
+        # 방법 1: 부모의 condition_dialog에서 가져오기
+        if hasattr(self.parent(), 'condition_dialog'):
+            condition_dialog = getattr(self.parent(), 'condition_dialog')
+            if hasattr(condition_dialog, 'collect_condition_data'):
+                try:
+                    condition_data = condition_dialog.collect_condition_data()
+                    print(f"✅ 부모의 condition_dialog에서 조건 데이터 획득: {condition_data.get('name', 'Unknown') if condition_data else 'None'}")
+                except Exception as e:
+                    print(f"⚠️ condition_dialog.collect_condition_data() 실패: {e}")
+            elif hasattr(condition_dialog, 'get_current_condition'):
+                try:
+                    condition_data = condition_dialog.get_current_condition()
+                    print(f"✅ 부모의 condition_dialog에서 현재 조건 획득: {condition_data.get('name', 'Unknown') if condition_data else 'None'}")
+                except Exception as e:
+                    print(f"⚠️ condition_dialog.get_current_condition() 실패: {e}")
+        
+        # 방법 2: 부모의 부모(할아버지)에서 시도
+        if not condition_data and hasattr(self.parent(), 'parent') and self.parent().parent():
+            grandparent = self.parent().parent()
+            if hasattr(grandparent, 'condition_dialog'):
+                condition_dialog = getattr(grandparent, 'condition_dialog')
+                if hasattr(condition_dialog, 'collect_condition_data'):
+                    try:
+                        condition_data = condition_dialog.collect_condition_data()
+                        print(f"✅ 할아버지의 condition_dialog에서 조건 데이터 획득: {condition_data.get('name', 'Unknown') if condition_data else 'None'}")
+                    except Exception as e:
+                        print(f"⚠️ 할아버지 condition_dialog.collect_condition_data() 실패: {e}")
+        
+        # 방법 3: 테스트 환경에서 Mock 조건 사용
+        if not condition_data and hasattr(self.parent(), 'get_current_condition_data'):
+            try:
+                condition_data = self.parent().get_current_condition_data()
+                print(f"✅ 테스트 환경에서 조건 데이터 획득: {condition_data.get('name', 'Unknown') if condition_data else 'None'}")
+            except Exception as e:
+                print(f"⚠️ 테스트 환경 조건 데이터 획득 실패: {e}")
+        
+        # 2. 직접 저장 시도
+        if condition_data:
+            try:
+                # condition_storage를 사용한 저장 시도
+                if hasattr(self, 'condition_storage') and self.condition_storage:
+                    success, message, condition_id = self.condition_storage.save_condition(condition_data)
+                    if success:
+                        print(f"✅ 직접 저장 성공: {message}")
+                        QMessageBox.information(self, "✅ 저장 완료", f"트리거가 저장되었습니다: {message}")
+                        self.refresh_list()  # 목록 새로고침
+                        return
+                    else:
+                        print(f"❌ 직접 저장 실패: {message}")
+                        QMessageBox.warning(self, "❌ 저장 실패", f"트리거 저장에 실패했습니다: {message}")
+                        return
+                else:
+                    print("⚠️ condition_storage가 없어서 직접 저장 불가")
+            except Exception as e:
+                print(f"❌ 직접 저장 중 예외 발생: {e}")
+        else:
+            print("📤 조건 데이터를 찾을 수 없어 시그널 발송으로 폴백")
+        
+        # 3. 폴백: 시그널 발송으로 메인 화면에 위임
+        self.trigger_save_requested.emit()
     
     def edit_selected_trigger(self):
         """선택한 트리거 편집 - 원본 기능 복제"""
@@ -619,19 +726,23 @@ class TriggerListWidget(QWidget):
     
     def delete_selected_trigger(self):
         """선택한 트리거 삭제 - 원본 기능 복제"""
+        print("🗑️ TriggerListWidget.delete_selected_trigger() 호출됨")
         current_item = self.trigger_tree.currentItem()
         if not current_item:
+            print("⚠️ 현재 선택된 아이템이 없음")
             QMessageBox.warning(self, "⚠️ 경고", "삭제할 트리거를 선택해주세요.")
             return
         
         # 조건 데이터 가져오기
         condition_data = current_item.data(0, Qt.ItemDataRole.UserRole)
         if not condition_data:
+            print("⚠️ 조건 데이터를 찾을 수 없음")
             QMessageBox.warning(self, "⚠️ 경고", "트리거 데이터를 찾을 수 없습니다.")
             return
         
         condition_name = condition_data.get('name', 'Unknown')
         condition_id = condition_data.get('id', None)
+        print(f"🗑️ 삭제 대상: ID={condition_id}, Name={condition_name}")
         
         # 삭제 확인 다이얼로그 (원본과 동일)
         reply = QMessageBox.question(
@@ -642,29 +753,42 @@ class TriggerListWidget(QWidget):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
+            print("✅ 사용자가 삭제를 확인함")
             try:
-                if STORAGE_AVAILABLE and condition_id:
+                if STORAGE_AVAILABLE and condition_id and ConditionStorage:
+                    print(f"🗑️ 데이터베이스에서 삭제 시도: ID={condition_id}")
                     # 실제 삭제
                     storage = ConditionStorage()
-                    storage.delete_condition(condition_id)
-                    storage.delete_condition(condition_id)
+                    success, message = storage.delete_condition(condition_id)
+                    print(f"🗑️ 삭제 결과: success={success}, message={message}")
                     
-                    QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
-                    print(f"✅ 트리거 삭제 완료: {condition_name}")
-                    
-                    # UI 업데이트
-                    self.load_trigger_list()
-                    
-                    # 삭제 시그널 발송
-                    self.trigger_deleted.emit()
+                    if success:
+                        QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
+                        print(f"✅ 트리거 삭제 완료: {condition_name}")
+                        
+                        # UI 업데이트
+                        print("🔄 트리거 목록 새로고침 시작...")
+                        self.load_trigger_list()
+                        
+                        # 삭제 완료 시그널만 발송 (중복 삭제 방지)
+                        print("📡 trigger_deleted 시그널 발송...")
+                        self.trigger_deleted.emit()
+                    else:
+                        QMessageBox.critical(self, "❌ 삭제 실패", f"삭제 실패: {message}")
+                        print(f"❌ 트리거 삭제 실패: {message}")
                 else:
+                    print(f"⚠️ STORAGE_AVAILABLE={STORAGE_AVAILABLE}, condition_id={condition_id}")
+                    print(f"⚠️ ConditionStorage={ConditionStorage}")
                     # 샘플 데이터에서 삭제 (실제로는 새로고침만)
                     self.load_trigger_list()
                     QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
+                    print(f"✅ 샘플 데이터에서 트리거 삭제 완료: {condition_name}")
                     
             except Exception as e:
-                print(f"❌ 트리거 삭제 실패: {e}")
+                print(f"❌ 삭제 중 예외 발생: {e}")
                 QMessageBox.critical(self, "❌ 오류", f"트리거 삭제 중 오류가 발생했습니다:\n{e}")
+        else:
+            print("❌ 사용자가 삭제를 취소함")
 
 
 if __name__ == "__main__":

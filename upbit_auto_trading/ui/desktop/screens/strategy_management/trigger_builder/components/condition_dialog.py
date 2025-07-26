@@ -34,13 +34,13 @@ except ImportError:
     FormRow = QWidget
     STYLED_COMPONENTS_AVAILABLE = False
 
-# 컴포넌트들을 절대 경로로 import
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.variable_definitions import VariableDefinitions
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.parameter_widgets import ParameterWidgetFactory
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_validator import ConditionValidator
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_builder import ConditionBuilder
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
-from upbit_auto_trading.ui.desktop.screens.strategy_management.components.preview_components import PreviewGenerator
+# 컴포넌트들을 로컬에서 import (원본 components에서 복사됨)
+from .variable_definitions import VariableDefinitions
+from .parameter_widgets import ParameterWidgetFactory
+from .condition_validator import ConditionValidator
+from .condition_builder import ConditionBuilder
+from .condition_storage import ConditionStorage
+from .preview_components import PreviewGenerator
 
 # 변수 호환성 검증 import
 try:
@@ -90,10 +90,11 @@ class ConditionDialog(QWidget):
     def init_ui(self):
         """UI 초기화"""
         self.setWindowTitle("🎯 조건 생성기 v4 (컴포넌트 기반)")
-        self.setMinimumSize(500, 400)  # 크기 대폭 줄이기
+        self.setMinimumSize(350, 300)  # 크기 더 줄이기 (500,400 → 350,300)
+        self.setMaximumWidth(500)     # 최대 너비를 450에서 500으로 증가
         layout = QVBoxLayout()
-        layout.setContentsMargins(3, 3, 3, 3)  # 마진 더 줄이기
-        layout.setSpacing(2)  # 간격 더 줄이기
+        layout.setContentsMargins(2, 2, 2, 2)  # 마진 더 줄이기
+        layout.setSpacing(1)  # 간격 더 줄이기
         
         # 1. 변수 선택
         self.create_variable_section(layout)
@@ -213,10 +214,10 @@ class ConditionDialog(QWidget):
         comparison_layout.addSpacing(15)
         
         # 외부값 사용 버튼
-        self.use_external_variable = SecondaryButton("🔄 외부값 사용")
+        self.use_external_variable = SecondaryButton("🔄 외부값")
         self.use_external_variable.setCheckable(True)
-        self.use_external_variable.setMaximumWidth(120)  # 외부값 사용 버튼 폭 늘리기
-        self.use_external_variable.setMinimumWidth(120)  # 최소 폭도 설정
+        self.use_external_variable.setMaximumWidth(100)  # 버튼 폭 확장으로 글자 잘림 방지 (108→120)
+        self.use_external_variable.setMinimumWidth(100)  # 최소 폭도 함께 조정
         self.use_external_variable.clicked.connect(self.toggle_comparison_mode)
         comparison_layout.addWidget(self.use_external_variable)
         comparison_layout.addStretch()
@@ -466,14 +467,14 @@ class ConditionDialog(QWidget):
         if is_external:
             self.target_input.setPlaceholderText("외부 변수 사용 중...")
             # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
-            self.use_external_variable.setText("🔄 고정값 사용")
+            self.use_external_variable.setText("🔄 고정값")
             self.update_external_variables()
             # 외부변수 모드로 전환 시 호환성 검증
             self.check_variable_compatibility()
         else:
             # 기본 스타일로 복원
             self.target_input.setStyleSheet("")
-            self.use_external_variable.setText("🔄 외부값 사용")
+            self.use_external_variable.setText("🔄 외부값")
             self.update_placeholders()
             # 고정값 모드로 전환 시 호환성 라벨 숨기기
             self.update_compatibility_for_fixed_mode()
@@ -813,11 +814,11 @@ class ConditionDialog(QWidget):
                 self.external_variable_widget.setEnabled(True)
                 self.target_input.setEnabled(False)
                 self.target_input.setPlaceholderText("외부 변수 사용 중...")
-                self.use_external_variable.setText("🔄 고정값 사용")
+                self.use_external_variable.setText("🔄 고정값")
             else:
                 self.external_variable_widget.setEnabled(False)
                 self.target_input.setEnabled(True)
-                self.use_external_variable.setText("🔄 외부값 사용")
+                self.use_external_variable.setText("🔄 외부값")
             
             self.update_preview()
             

@@ -4,7 +4,7 @@ integrated_condition_manager.py의 create_trigger_detail_area() 완전 복제
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QGroupBox, QTextEdit, QPushButton, QHBoxLayout
+    QWidget, QVBoxLayout, QGroupBox, QTextEdit, QPushButton, QHBoxLayout, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -15,7 +15,7 @@ class TriggerDetailWidget(QWidget):
     
     # 시그널 정의
     trigger_copied = pyqtSignal()
-    trigger_tested = pyqtSignal()
+    # trigger_tested = pyqtSignal()  # 테스트 버튼 제거로 시그널도 제거
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,14 +37,24 @@ class TriggerDetailWidget(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
         
+        # 그룹박스 크기 정책도 Expanding으로 설정
+        self.group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         # 상세 정보 표시 (원본과 정확히 동일)
         self.detail_text = QTextEdit()
         self.detail_text.setReadOnly(True)
-        self.detail_text.setMaximumHeight(200)
+        # setMaximumHeight 제거하여 텍스트 박스가 꽉 차게 함
+        # self.detail_text.setMaximumHeight(200)
+        
+        # 크기 정책을 Expanding으로 설정하여 최대한 확장
+        self.detail_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # 최소 높이 제한 제거하여 레이아웃 비율이 1:1이 되도록 함
+        # self.detail_text.setMinimumHeight(150)
         
         # 폰트 크기를 더 작게 설정 (원본과 동일)
         font = QFont()
-        font.setPointSize(8)
+        font.setPointSize(9)  # 8 → 9로 살짝 증가
         self.detail_text.setFont(font)
         
         # 문서 여백을 줄여서 줄간격 최소화 (원본과 동일)
@@ -53,7 +63,7 @@ class TriggerDetailWidget(QWidget):
             document.setDocumentMargin(3)
         
         # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
-        layout.addWidget(self.detail_text)
+        layout.addWidget(self.detail_text, 1)  # stretch=1 추가하여 남은 공간을 모두 차지
         
         # 액션 버튼들 (원본에는 없지만 유용한 기능)
         btn_layout = QHBoxLayout()
@@ -64,10 +74,11 @@ class TriggerDetailWidget(QWidget):
         self.copy_detail_btn.clicked.connect(self.copy_detail_to_clipboard)
         btn_layout.addWidget(self.copy_detail_btn)
         
-        self.test_trigger_btn = QPushButton("🧪 테스트")
-        self.test_trigger_btn.setMaximumHeight(25)
-        self.test_trigger_btn.clicked.connect(self.trigger_tested.emit)
-        btn_layout.addWidget(self.test_trigger_btn)
+        # "🧪 테스트" 버튼 제거 - 용도가 불분명한 버튼
+        # self.test_trigger_btn = QPushButton("🧪 테스트")
+        # self.test_trigger_btn.setMaximumHeight(25)
+        # self.test_trigger_btn.clicked.connect(self.trigger_tested.emit)
+        # btn_layout.addWidget(self.test_trigger_btn)
         
         layout.addLayout(btn_layout)
     
