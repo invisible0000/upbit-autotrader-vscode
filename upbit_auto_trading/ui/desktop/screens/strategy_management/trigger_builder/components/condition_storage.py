@@ -106,8 +106,13 @@ class ConditionStorage:
             conn.commit()
     
     def save_condition(self, condition_data: Dict[str, Any], overwrite: bool = False) -> Tuple[bool, str, Optional[int]]:
-        """조건 저장 (덮어쓰기 옵션 포함)"""
+        """조건 저장 (덮어쓰기 옵션 포함) - 차트 카테고리 자동 설정"""
         try:
+            # 차트 카테고리 자동 설정 (표준화 문서 기반)
+            from .variable_definitions import VariableDefinitions
+            chart_category = VariableDefinitions.get_chart_category(condition_data['variable_id'])
+            condition_data['chart_category'] = chart_category
+            
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
@@ -129,7 +134,7 @@ class ConditionStorage:
                                 name = ?, description = ?, variable_id = ?, variable_name = ?,
                                 variable_params = ?, operator = ?, comparison_type = ?,
                                 target_value = ?, external_variable = ?, trend_direction = ?, 
-                                category = ?, updated_at = CURRENT_TIMESTAMP
+                                category = ?, chart_category = ?, updated_at = CURRENT_TIMESTAMP
                             WHERE id = ?
                         """, (
                             condition_data['name'],
@@ -143,6 +148,7 @@ class ConditionStorage:
                             json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
                             condition_data.get('trend_direction', 'static'),
                             condition_data.get('category', 'custom'),
+                            condition_data.get('chart_category', 'subplot'),
                             condition_id
                         ))
                         
@@ -171,7 +177,7 @@ class ConditionStorage:
                                 description = ?, variable_id = ?, variable_name = ?,
                                 variable_params = ?, operator = ?, comparison_type = ?,
                                 target_value = ?, external_variable = ?, trend_direction = ?, 
-                                category = ?, updated_at = CURRENT_TIMESTAMP
+                                category = ?, chart_category = ?, updated_at = CURRENT_TIMESTAMP
                             WHERE id = ?
                         """, (
                             condition_data.get('description', ''),
@@ -184,6 +190,7 @@ class ConditionStorage:
                             json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
                             condition_data.get('trend_direction', 'static'),
                             condition_data.get('category', 'custom'),
+                            condition_data.get('chart_category', 'subplot'),
                             condition_id
                         ))
                         
@@ -196,8 +203,8 @@ class ConditionStorage:
                             INSERT INTO trading_conditions (
                                 name, description, variable_id, variable_name,
                                 variable_params, operator, comparison_type,
-                                target_value, external_variable, trend_direction, category
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                target_value, external_variable, trend_direction, category, chart_category
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             condition_data['name'],
                             condition_data.get('description', ''),
@@ -209,7 +216,8 @@ class ConditionStorage:
                             condition_data.get('target_value'),
                             json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
                             condition_data.get('trend_direction', 'static'),
-                            condition_data.get('category', 'custom')
+                            condition_data.get('category', 'custom'),
+                            condition_data.get('chart_category', 'subplot')
                         ))
                         
                         condition_id = cursor.lastrowid

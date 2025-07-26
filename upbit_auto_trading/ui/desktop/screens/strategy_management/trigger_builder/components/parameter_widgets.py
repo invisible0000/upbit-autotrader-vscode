@@ -77,6 +77,55 @@ class ParameterWidgetFactory:
             widget.setRange(param_config.get('min', 1), param_config.get('max', 100))
             widget.setValue(param_config.get('default', 14))
             widget.setSuffix(param_config.get('suffix', ''))
+            
+            # 전역 스타일 적용으로 증가/감소 버튼 문제 해결
+            widget.setStyleSheet("""
+                QSpinBox {
+                    padding: 3px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    background-color: white;
+                }
+                QSpinBox::up-button {
+                    subcontrol-origin: border;
+                    subcontrol-position: top right;
+                    width: 16px;
+                    border-left: 1px solid #ddd;
+                    border-bottom: 1px solid #ddd;
+                    border-top-right-radius: 3px;
+                    background-color: #f8f9fa;
+                }
+                QSpinBox::up-button:hover {
+                    background-color: #e9ecef;
+                }
+                QSpinBox::up-arrow {
+                    image: none;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-bottom: 6px solid #495057;
+                    margin: 0px;
+                }
+                QSpinBox::down-button {
+                    subcontrol-origin: border;
+                    subcontrol-position: bottom right;
+                    width: 16px;
+                    border-left: 1px solid #ddd;
+                    border-top: 1px solid #ddd;
+                    border-bottom-right-radius: 3px;
+                    background-color: #f8f9fa;
+                }
+                QSpinBox::down-button:hover {
+                    background-color: #e9ecef;
+                }
+                QSpinBox::down-arrow {
+                    image: none;
+                    border-left: 4px solid transparent;
+                    border-right: 4px solid transparent;
+                    border-top: 6px solid #495057;
+                    margin: 0px;
+                }
+            """)
+            
             if self.update_callback:
                 widget.valueChanged.connect(self.update_callback)
                 

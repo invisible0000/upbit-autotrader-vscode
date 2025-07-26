@@ -225,8 +225,8 @@ class SimulationResultWidget(QWidget):
         except Exception as e:
             print(f"⚠️ 플레이스홀더 차트 표시 실패: {e}")
     
-    def update_simulation_chart(self, scenario, price_data, trigger_results):
-        """시뮬레이션 결과로 차트 업데이트 - 전역 테마 신호 사용"""
+    def update_simulation_chart(self, scenario, price_data, trigger_results, base_variable_data=None, external_variable_data=None, variable_info=None):
+        """시뮬레이션 결과로 차트 업데이트 - 개선된 차트 카테고리 기반 플롯팅"""
         if not CHART_AVAILABLE or not hasattr(self, 'figure'):
             return
         
@@ -243,11 +243,13 @@ class SimulationResultWidget(QWidget):
             # 테마에 따른 색상 설정
             theme_notifier = get_theme_notifier()
             is_dark = theme_notifier.is_dark_theme()
-            line_color = '#60a5fa' if is_dark else '#3498db'  # 다크: 연한 파랑, 라이트: 진한 파랑
-            trigger_color = '#f87171' if is_dark else '#ef4444'  # 다크: 연한 빨강, 라이트: 진한 빨강
-            bg_color = '#2c2c2c' if is_dark else 'white'  # 배경색
+            price_color = '#60a5fa' if is_dark else '#3498db'  # 시장가 색상
+            base_var_color = '#10b981' if is_dark else '#059669'  # 기본 변수 색상 (녹색)
+            external_var_color = '#f59e0b' if is_dark else '#d97706'  # 외부 변수 색상 (주황색)
+            trigger_color = '#f87171' if is_dark else '#ef4444'  # 트리거 색상
+            bg_color = '#2c2c2c' if is_dark else 'white'
             
-            # Figure와 Canvas 배경색 명시적 설정
+            # Figure와 Canvas 배경색 설정
             self.figure.patch.set_facecolor(bg_color)
             if hasattr(self, 'canvas'):
                 self.canvas.setStyleSheet(f"background-color: {bg_color};")
@@ -256,46 +258,195 @@ class SimulationResultWidget(QWidget):
             ax = self.figure.add_subplot(111)
             
             if price_data:
-                # 가격 데이터 플롯
                 x = range(len(price_data))
-                ax.plot(x, price_data, line_color, linewidth=1, label='Price')
                 
-                # 트리거 포인트 표시 및 작동 기록 추가
+                # 📊 차트 카테고리 기반 플롯팅 로직
+                is_overlay = self._is_overlay_variable(variable_info)
+                
+                if is_overlay:
+                    # 🔗 오버레이: 시장가와 함께 플롯
+                    ax.plot(x, price_data, price_color, linewidth=1.5, label='시장가', alpha=0.8)
+                    
+                    # 기본 변수 데이터 플롯 (오버레이)
+                    if base_variable_data:
+                        if self._is_fixed_value(base_variable_data):
+                            # 고정값: 수평선으로 표시
+                            fixed_value = base_variable_data[0] if base_variable_data else 0
+                            ax.axhline(y=fixed_value, color=base_var_color, linewidth=1.2, 
+                                     linestyle='--', label=f'기본변수: {fixed_value:,.0f}', alpha=0.7)
+                        else:
+                            # 변수값: 라인으로 표시
+                            ax.plot(x, base_variable_data, base_var_color, linewidth=1.2, 
+                                   label='기본변수', alpha=0.8)
+                    
+                    # 외부 변수 데이터 플롯 (오버레이)
+                    if external_variable_data:
+                        if self._is_fixed_value(external_variable_data):
+                            # 고정값: 수평선으로 표시
+                            fixed_value = external_variable_data[0] if external_variable_data else 0
+                            ax.axhline(y=fixed_value, color=external_var_color, linewidth=1.2, 
+                                     linestyle=':', label=f'외부변수: {fixed_value:,.0f}', alpha=0.7)
+                        else:
+                            # 변수값: 라인으로 표시
+                            ax.plot(x, external_variable_data, external_var_color, linewidth=1.2, 
+                                   label='외부변수', alpha=0.8)
+                
+                else:
+                    # 📊 서브플롯: 베이스 지표와 함께 플롯 (시장가 없이)
+                    base_indicator_data = self._get_base_indicator_data(variable_info, len(price_data))
+                    
+                    if base_indicator_data:
+                        # 베이스 지표 (예: 거래량, RSI 기본값)
+                        ax.plot(x, base_indicator_data, price_color, linewidth=1.5, 
+                               label=self._get_base_indicator_name(variable_info), alpha=0.8)
+                    
+                    # 기본 변수 데이터 플롯 (서브플롯)
+                    if base_variable_data:
+                        if self._is_fixed_value(base_variable_data):
+                            # 고정값: 수평선으로 표시
+                            fixed_value = base_variable_data[0] if base_variable_data else 0
+                            ax.axhline(y=fixed_value, color=base_var_color, linewidth=1.2, 
+                                     linestyle='--', label=f'기본변수: {fixed_value:,.0f}', alpha=0.7)
+                        else:
+                            # 변수값: 라인으로 표시
+                            ax.plot(x, base_variable_data, base_var_color, linewidth=1.2, 
+                                   label='기본변수', alpha=0.8)
+                    
+                    # 외부 변수 데이터 플롯 (서브플롯)
+                    if external_variable_data:
+                        if self._is_fixed_value(external_variable_data):
+                            # 고정값: 수평선으로 표시
+                            fixed_value = external_variable_data[0] if external_variable_data else 0
+                            ax.axhline(y=fixed_value, color=external_var_color, linewidth=1.2, 
+                                     linestyle=':', label=f'외부변수: {fixed_value:,.0f}', alpha=0.7)
+                        else:
+                            # 변수값: 라인으로 표시
+                            ax.plot(x, external_variable_data, external_var_color, linewidth=1.2, 
+                                   label='외부변수', alpha=0.8)
+                
+                # 🚨 트리거 신호 표시
                 if trigger_results:
-                    trigger_count = 0
-                    # 기존 작동 기록 클리어 (새 시뮬레이션 시작)
-                    self.test_history_list.clear()
-                    
-                    for i, (triggered, _) in enumerate(trigger_results):
-                        if triggered and i < len(price_data):
-                            ax.scatter(i, price_data[i], c=trigger_color, s=20, marker='^', zorder=5)
-                            trigger_count += 1
-                            # 각 트리거 발생 지점을 작동 기록에 추가 (인덱스 번호 사용)
-                            price_val = price_data[i]
-                            self.add_test_history_item(
-                                f"[{i:03d}] 트리거 발동 #{trigger_count}: 가격 {price_val:,.0f}",
-                                "success"
-                            )
-                    
-                    if trigger_count > 0:
-                        ax.scatter([], [], c=trigger_color, s=20, marker='^',
-                                   label=f'Triggers ({trigger_count})', zorder=5)
+                    self._plot_trigger_signals(ax, trigger_results, price_data, base_variable_data, 
+                                             external_variable_data, is_overlay, trigger_color)
             
             # 공통 차트 스타일 적용
             self._setup_common_chart_style(ax, bg_color)
             
-            # X축 틱 라벨 포맷팅 (데이터 인덱스 표시) - 시뮬레이션용
+            # X축 틱 라벨 포맷팅
             if price_data and len(price_data) > 5:
                 x_tick_positions = range(0, len(price_data), max(1, len(price_data) // 5))
                 ax.set_xticks(x_tick_positions)
                 ax.set_xticklabels([str(i) for i in x_tick_positions])
             
-            # tight_layout 제거 - 틱 라벨 크기에 영향을 줄 수 있음 (시뮬레이션)
-            # self.figure.tight_layout(pad=0.5)
             self.canvas.draw()
             
         except Exception as e:
             print(f"⚠️ 시뮬레이션 차트 업데이트 실패: {e}")
+    
+    def _is_overlay_variable(self, variable_info):
+        """변수가 오버레이 타입인지 확인"""
+        if not variable_info or 'variable_id' not in variable_info:
+            return False
+        
+        try:
+            from .variable_definitions import VariableDefinitions
+            return VariableDefinitions.is_overlay_indicator(variable_info['variable_id'])
+        except:
+            # 알려진 오버레이 변수들 하드코딩 (폴백)
+            overlay_variables = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE']
+            return variable_info.get('variable_id', '') in overlay_variables
+    
+    def _is_fixed_value(self, data):
+        """데이터가 고정값인지 확인 (모든 값이 동일한 경우)"""
+        if not data or len(data) <= 1:
+            return True
+        return all(abs(x - data[0]) < 0.0001 for x in data)
+    
+    def _get_base_indicator_data(self, variable_info, data_length):
+        """서브플롯용 베이스 지표 데이터 생성 (예: 거래량, RSI 기본 범위)"""
+        if not variable_info:
+            return None
+        
+        variable_id = variable_info.get('variable_id', '')
+        
+        # 거래량 지표의 경우 가상 거래량 데이터 생성
+        if 'VOLUME' in variable_id:
+            import random
+            return [random.randint(1000000, 5000000) for _ in range(data_length)]
+        
+        # RSI 계열의 경우 0-100 범위의 가상 데이터
+        elif variable_id in ['RSI', 'STOCHASTIC']:
+            import random
+            return [random.uniform(20, 80) for _ in range(data_length)]
+        
+        # ATR 같은 변동성 지표의 경우
+        elif variable_id == 'ATR':
+            import random
+            return [random.uniform(1000, 5000) for _ in range(data_length)]
+        
+        # MACD의 경우
+        elif variable_id == 'MACD':
+            import random
+            return [random.uniform(-100, 100) for _ in range(data_length)]
+        
+        return None
+    
+    def _get_base_indicator_name(self, variable_info):
+        """베이스 지표 이름 반환"""
+        if not variable_info:
+            return "베이스 지표"
+        
+        variable_id = variable_info.get('variable_id', '')
+        
+        name_mapping = {
+            'VOLUME': '거래량',
+            'VOLUME_SMA': '거래량',
+            'RSI': 'RSI 기준선',
+            'STOCHASTIC': '스토캐스틱 기준선',
+            'ATR': 'ATR 기준선',
+            'MACD': 'MACD 기준선'
+        }
+        
+        return name_mapping.get(variable_id, '베이스 지표')
+    
+    def _plot_trigger_signals(self, ax, trigger_results, price_data, base_data, external_data, is_overlay, trigger_color):
+        """트리거 신호를 차트에 표시"""
+        if not trigger_results:
+            return
+        
+        trigger_count = 0
+        self.test_history_list.clear()
+        
+        for i, (triggered, _) in enumerate(trigger_results):
+            if triggered and i < len(price_data):
+                # 트리거 발생 위치의 Y값 결정
+                if is_overlay:
+                    # 오버레이: 시장가 기준
+                    y_value = price_data[i]
+                else:
+                    # 서브플롯: 기본 변수 또는 베이스 지표 기준
+                    if base_data and i < len(base_data):
+                        y_value = base_data[i]
+                    else:
+                        y_value = price_data[i] if i < len(price_data) else 0
+                
+                # 트리거 마크 표시
+                ax.scatter(i, y_value, c=trigger_color, s=30, marker='^', 
+                          zorder=5, edgecolors='white', linewidth=0.5)
+                
+                trigger_count += 1
+                
+                # 작동 기록 추가
+                self.add_test_history_item(
+                    f"[{i:03d}] 🚨 트리거 #{trigger_count}: {y_value:,.0f}",
+                    "success"
+                )
+        
+        # 범례에 트리거 개수 표시
+        if trigger_count > 0:
+            ax.scatter([], [], c=trigger_color, s=30, marker='^',
+                      label=f'🚨 트리거 ({trigger_count}회)', zorder=5,
+                      edgecolors='white', linewidth=0.5)
     
     def update_trigger_signals(self, simulation_result_data):
         """트리거 신호들을 작동 기록에 업데이트"""

@@ -105,7 +105,7 @@ class TriggerDetailWidget(QWidget):
             self.detail_text.setPlainText(f"상세정보 로드 중 오류 발생: {e}")
     
     def _format_trigger_detail(self, trigger_data):
-        """트리거 상세정보 포맷팅 - 원본 스타일"""
+        """트리거 상세정보 포맷팅 - 개선된 DB 스키마 지원"""
         name = trigger_data.get('name', 'Unknown')
         created_at = trigger_data.get('created_at', 'Unknown')
         active = trigger_data.get('active', False)
@@ -116,57 +116,176 @@ class TriggerDetailWidget(QWidget):
 
 🏷️ 이름: {name}
 📅 생성일: {created_at}
-🔄 상태: {'활성' if active else '비활성'}
+🔄 상태: {'✅ 활성' if active else '⏸️ 비활성'}
 
 """
         
-        # 조건 정보 (있는 경우)
-        if 'conditions' in trigger_data:
-            conditions = trigger_data['conditions']
-            detail_text += "🎯 트리거 조건:\n"
+        # 변수 정보 및 카테고리 정보 (개선된 DB 스키마 지원)
+        variable_id = trigger_data.get('variable_id', trigger_data.get('variable', 'Unknown'))
+        if variable_id != 'Unknown':
+            detail_text += "📊 기본 변수 정보:\n"
+            detail_text += f"  🔍 변수 ID: {variable_id}\n"
             
-            for i, condition in enumerate(conditions, 1):
-                variable = condition.get('variable', 'Unknown')
-                operator = condition.get('operator', 'Unknown')
-                value = condition.get('value', 'Unknown')
-                detail_text += f"  {i}. {variable} {operator} {value}\n"
+            # 변수 한글명 표시
+            variable_name = self._get_variable_display_name(variable_id)
+            detail_text += f"  📝 변수명: {variable_name}\n"
+            
+            # 카테고리 정보 표시 (3중 카테고리 시스템)
+            purpose_category = self._get_purpose_category(variable_id)
+            chart_category = self._get_chart_category(variable_id)
+            
+            detail_text += f"  📁 용도 카테고리: {purpose_category}\n"
+            detail_text += f"  📈 차트 카테고리: {chart_category}\n"
+            
+            # 변수 파라미터 정보
+            parameters = trigger_data.get('parameters', {})
+            if parameters:
+                detail_text += f"  ⚙️ 파라미터: {parameters}\n"
             
             detail_text += "\n"
         
-        # 단일 조건 정보 (레거시)
-        if 'variable' in trigger_data:
-            variable = trigger_data.get('variable', 'Unknown')
-            operator = trigger_data.get('operator', 'Unknown')
-            value = trigger_data.get('value', 'Unknown')
-            
-            detail_text += f"""🎯 조건:
-  변수: {variable}
-  연산자: {operator}
-  값: {value}
+        # 조건 정보
+        operator = trigger_data.get('operator', trigger_data.get('comparison_operator', 'Unknown'))
+        value = trigger_data.get('value', trigger_data.get('target_value', trigger_data.get('comparison_value', 'Unknown')))
+        
+        detail_text += f"""🎯 비교 조건:
+  📊 기본 변수: {variable_name if 'variable_name' in locals() else variable_id}
+  ⚖️ 연산자: {self._format_operator(operator)}
+  🎯 비교값: {value}
 
 """
         
-        # 외부 변수 정보 (있는 경우)
-        if 'external_variables' in trigger_data:
-            external_vars = trigger_data['external_variables']
-            if external_vars:
-                detail_text += "🔗 외부 변수:\n"
-                for var_name, var_info in external_vars.items():
-                    var_type = var_info.get('type', 'Unknown')
-                    var_value = var_info.get('value', 'Unknown')
-                    detail_text += f"  • {var_name}: {var_type} = {var_value}\n"
-                detail_text += "\n"
+        # 외부 변수 정보 (골든크로스 등)
+        external_variable_id = trigger_data.get('external_variable_id')
+        external_parameters = trigger_data.get('external_parameters', {})
         
-        # 메타데이터 (있는 경우)
-        if 'metadata' in trigger_data:
-            metadata = trigger_data['metadata']
-            detail_text += "📊 메타데이터:\n"
+        if external_variable_id:
+            detail_text += "🔗 외부 변수 정보:\n"
+            external_variable_name = self._get_variable_display_name(external_variable_id)
+            detail_text += f"  🔍 변수 ID: {external_variable_id}\n"
+            detail_text += f"  📝 변수명: {external_variable_name}\n"
             
-            for key, value in metadata.items():
-                if key not in ['name', 'created_at', 'active', 'conditions', 'variable', 'operator', 'value']:
-                    detail_text += f"  • {key}: {value}\n"
+            # 외부 변수 카테고리 정보
+            ext_purpose_category = self._get_purpose_category(external_variable_id)
+            ext_chart_category = self._get_chart_category(external_variable_id)
+            
+            detail_text += f"  📁 용도 카테고리: {ext_purpose_category}\n"
+            detail_text += f"  📈 차트 카테고리: {ext_chart_category}\n"
+            
+            if external_parameters:
+                detail_text += f"  ⚙️ 파라미터: {external_parameters}\n"
+            
+            detail_text += "\n"
+        
+        # 추세 방향성 정보
+        trend_direction = trigger_data.get('trend_direction', 'both')
+        trend_names = {
+            'rising': '📈 상승 추세',
+            'falling': '📉 하락 추세', 
+            'both': '📊 추세 무관'
+        }
+        detail_text += f"📈 추세 방향성: {trend_names.get(trend_direction, trend_direction)}\n\n"
+        
+        # 차트 카테고리 정보 (DB 스키마)
+        db_chart_category = trigger_data.get('chart_category', '자동감지')
+        detail_text += f"🎨 차트 표시: {self._format_chart_category(db_chart_category)}\n\n"
+        
+        # 메타데이터 및 기타 정보
+        description = trigger_data.get('description')
+        if description:
+            detail_text += f"📝 설명: {description}\n\n"
+        
+        # 호환성 정보 (있는 경우)
+        compatibility_score = trigger_data.get('compatibility_score')
+        if compatibility_score is not None:
+            detail_text += f"� 호환성 점수: {compatibility_score}%\n\n"
         
         return detail_text.strip()
+    
+    def _get_variable_display_name(self, variable_id):
+        """변수 ID의 한글 표시명 반환"""
+        try:
+            from .variable_definitions import VariableDefinitions
+            var_def = VariableDefinitions()
+            category_variables = var_def.get_category_variables()
+            
+            for category, variables in category_variables.items():
+                for var_id, var_name in variables:
+                    if var_id == variable_id:
+                        return var_name
+            
+        except:
+            pass
+        
+        # 하드코딩 폴백
+        name_mapping = {
+            'SMA': '단순이동평균',
+            'EMA': '지수이동평균',
+            'RSI': 'RSI 지표',
+            'STOCHASTIC': '스토캐스틱',
+            'MACD': 'MACD 지표',
+            'BOLLINGER_BAND': '볼린저밴드',
+            'CURRENT_PRICE': '현재가',
+            'VOLUME': '거래량',
+            'ATR': 'ATR 지표',
+            'VOLUME_SMA': '거래량 이동평균'
+        }
+        return name_mapping.get(variable_id, variable_id)
+    
+    def _get_purpose_category(self, variable_id):
+        """변수의 용도 카테고리 반환"""
+        try:
+            from .variable_definitions import VariableDefinitions
+            var_def = VariableDefinitions()
+            # 용도 카테고리 매핑 (추후 VariableDefinitions에서 가져올 수 있도록 개선)
+            category_mapping = {
+                'SMA': '📈 추세',
+                'EMA': '📈 추세', 
+                'BOLLINGER_BAND': '🔥 변동성',
+                'RSI': '⚡ 모멘텀',
+                'STOCHASTIC': '⚡ 모멘텀',
+                'MACD': '⚡ 모멘텀',
+                'ATR': '🔥 변동성',
+                'VOLUME': '📦 거래량',
+                'VOLUME_SMA': '📦 거래량',
+                'CURRENT_PRICE': '💰 시장가'
+            }
+            return category_mapping.get(variable_id, '📊 기타')
+        except:
+            return '📊 기타'
+    
+    def _get_chart_category(self, variable_id):
+        """변수의 차트 카테고리 반환"""
+        try:
+            from .variable_definitions import VariableDefinitions
+            chart_category = VariableDefinitions.get_chart_category(variable_id)
+            return '🔗 오버레이' if chart_category == 'overlay' else '📊 서브플롯'
+        except:
+            # 폴백
+            overlay_vars = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE']
+            return '🔗 오버레이' if variable_id in overlay_vars else '📊 서브플롯'
+    
+    def _format_operator(self, operator):
+        """연산자 포맷팅"""
+        operator_names = {
+            '>': '> (초과)',
+            '>=': '>= (이상)',
+            '<': '< (미만)',
+            '<=': '<= (이하)',
+            '==': '== (같음)',
+            '!=': '!= (다름)',
+            '~=': '~= (근사값)'
+        }
+        return operator_names.get(operator, operator)
+    
+    def _format_chart_category(self, chart_category):
+        """차트 카테고리 포맷팅"""
+        if chart_category == 'overlay':
+            return '🔗 오버레이 (메인 차트)'
+        elif chart_category == 'subplot':
+            return '📊 서브플롯 (별도 차트)'
+        else:
+            return f'🎯 {chart_category} (자동감지)'
     
     def copy_detail_to_clipboard(self):
         """상세정보를 클립보드에 복사"""

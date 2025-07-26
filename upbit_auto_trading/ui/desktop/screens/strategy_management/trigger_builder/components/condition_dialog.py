@@ -132,10 +132,14 @@ class ConditionDialog(QWidget):
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
-                "indicator": "지표",
-                "price": "시장가",
-                "capital": "자본",
-                "state": "상태"
+                "trend": "📈 추세",
+                "momentum": "⚡ 모멘텀",
+                "volatility": "🔥 변동성",
+                "volume": "📦 거래량",
+                "indicator": "📊 지표",
+                "price": "💰 시장가",
+                "capital": "💎 자본",
+                "state": "🏁 투자상태"
             }
             self.category_combo.addItem(category_names.get(category_id, category_id), category_id)
         
@@ -147,6 +151,7 @@ class ConditionDialog(QWidget):
         # 변수 선택
         category_var_layout.addWidget(QLabel("변수:"))
         self.variable_combo = StyledComboBox()
+        self.variable_combo.setMinimumWidth(int(self.variable_combo.minimumWidth() * 1.3))  # 30% 폭 증가
         category_var_layout.addWidget(self.variable_combo)
         
         # 변수별 헬프 버튼
@@ -160,8 +165,24 @@ class ConditionDialog(QWidget):
         help_btn.clicked.connect(self.show_variable_help)
         category_var_layout.addWidget(help_btn)
         
-        # 지원 현황 버튼
-        info_btn = PrimaryButton("📋 지원 현황")
+        # 지원 현황 버튼 - 이모티콘 없이 간단하게, 작은 크기
+        info_btn = SecondaryButton("지원됨")
+        info_btn.setMaximumWidth(60)  # 버튼 크기 축소
+        info_btn.setMaximumHeight(25)  # 높이도 축소
+        info_btn.setStyleSheet("""
+            QPushButton {
+                padding: 2px 8px;
+                font-size: 11px;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                background-color: #f8f9fa;
+                color: #495057;
+            }
+            QPushButton:hover {
+                background-color: #e9ecef;
+                border-color: #adb5bd;
+            }
+        """)
         info_btn.clicked.connect(self.show_variable_info)
         category_var_layout.addWidget(info_btn)
         
@@ -256,7 +277,11 @@ class ConditionDialog(QWidget):
     
     def create_external_variable_section(self, layout):
         """외부 변수 설정 섹션"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         self.external_variable_widget = StyledGroupBox("🔗 2-1단계: 외부 변수 설정 (골든크로스 등)")
+        # 스트레치를 이용해 남는 공간을 전부 차지하도록 설정
+        self.external_variable_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         group_layout = QVBoxLayout()
         group_layout.setContentsMargins(6, 6, 6, 6)
         group_layout.setSpacing(2)
@@ -271,10 +296,14 @@ class ConditionDialog(QWidget):
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
-                "indicator": "지표",
-                "price": "시장가",
-                "capital": "자본",
-                "state": "상태"
+                "trend": "📈 추세",
+                "momentum": "⚡ 모멘텀",
+                "volatility": "🔥 변동성",
+                "volume": "📦 거래량",
+                "indicator": "📊 지표",
+                "price": "💰 시장가",
+                "capital": "💎 자본",
+                "state": "🏁 투자상태"
             }
             self.external_category_combo.addItem(category_names.get(category_id, category_id), category_id)
         category_var_layout.addWidget(self.external_category_combo)
@@ -292,14 +321,13 @@ class ConditionDialog(QWidget):
         
         # 호환성 상태 표시 위젯 (스크롤 가능한 텍스트 영역)
         from PyQt6.QtWidgets import QScrollArea, QTextEdit
-        from PyQt6.QtCore import Qt
         
         self.compatibility_scroll_area = QScrollArea()
         self.compatibility_scroll_area.setWidgetResizable(True)
         self.compatibility_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.compatibility_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.compatibility_scroll_area.setMaximumHeight(90)  # 약 3줄 높이
-        self.compatibility_scroll_area.setMinimumHeight(30)
+        self.compatibility_scroll_area.setMaximumHeight(120)  # 높이 증가 (90→120)
+        self.compatibility_scroll_area.setMinimumHeight(60)   # 최소 높이도 증가 (30→60)
         # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         self.compatibility_scroll_area.setObjectName("compatibilityScrollArea")
         

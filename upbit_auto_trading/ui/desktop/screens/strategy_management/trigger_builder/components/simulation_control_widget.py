@@ -113,7 +113,11 @@ class SimulationControlWidget(QWidget):
             btn.setToolTip(tooltip)
             btn.setFixedHeight(40)  # 35에서 40으로 증가
             btn.setMinimumWidth(130)  # 120에서 130으로 증가
-            btn.setSizePolicy(btn.sizePolicy().horizontalPolicy(), btn.sizePolicy().verticalPolicy())  # stretch 활성화
+            
+            # 스트레치 속성 강화 - 빈 공간을 채워서 커지도록
+            from PyQt6.QtWidgets import QSizePolicy
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # 수평으로만 확장
+            
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {color};
