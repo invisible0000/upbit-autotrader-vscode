@@ -1,13 +1,40 @@
-# Upbit Auto T### 🎨 **스타일 가이드 (필수)**
-- **코딩 스타일**: `.vscode/STYLE_GUIDE.md` ⭐ **반드시 준수**
-  - UI/UX 테마 시스템 규칙
-  - PyQt6 스타일링 가이드라인
-  - matplotlib 차트 테마 적용 방법
-  - 금지사항 및 권장사항
-- **개발 체크리스트**: `.vscode/DEV_CHECKLIST.md` 📝 **커밋 전 확인** 프로젝트 - GitHub Copilot 지침
+# Upbit Auto Trading 프로젝트 - GitHub Copilot 지침
 
 > **⚡ 빠른 참조**: DB는 `.sqlite3`, `data/` 폴더, 테스트는 `python run_desktop_ui.py`
 
+## 🏠 개발 환경 (최우선 준수)
+- **OS**: Windows 10/11
+- **Shell**: PowerShell 5.1+ (기본)
+- **IDE**: VS Code
+- **Python**: 3.9+
+- **❗ 중요**: 모든 터미널 명령어는 PowerShell 구문으로 작성
+
+### Windows PowerShell 명령어 매핑 (필수 준수)
+| ❌ 금지 (Unix/Linux) | ✅ 사용 (PowerShell) | 설명 |
+|---------------------|---------------------|------|
+| `command1 && command2` | `command1; command2` | 명령어 연결 |
+| `cat file.txt` | `Get-Content file.txt` | 파일 내용 읽기 |
+| `ls -la` | `Get-ChildItem` | 디렉토리 목록 |
+| `ls *.py` | `Get-ChildItem *.py` | 파일 필터링 |
+| `grep pattern file` | `Select-String pattern file` | 텍스트 검색 |
+| `find . -name "*.py"` | `Get-ChildItem -Recurse -Filter "*.py"` | 파일 재귀 검색 |
+| `export VAR=value` | `$env:VAR = "value"` | 환경변수 설정 |
+| `which python` | `Get-Command python` | 명령어 경로 찾기 |
+
+### PowerShell 명령어 예시
+```powershell
+# ✅ 올바른 PowerShell 구문
+cd "d:\projects\upbit-autotrader-vscode"; python run_desktop_ui.py
+Get-ChildItem -Path "upbit_auto_trading" -Recurse -Filter "*.py"
+Get-Content "config.json" | Select-String "database"
+
+# ❌ 금지된 Unix/Linux 구문  
+cd /path/to/project && python run_desktop_ui.py
+find upbit_auto_trading -name "*.py"
+cat config.json | grep database
+```
+
+## 🎯 프로젝트 개요
 ## 🎯 프로젝트 개요
 **upbit-autotrader-vscode**는 업비트 거래소를 위한 자동매매 시스템입니다.
 - **언어**: Python 3.9+
@@ -18,14 +45,13 @@
 ## 📚 상세 가이드 참조
 개발 전 반드시 아래 문서들을 확인하세요:
 
-### � **스타일 가이드 (필수)**
+### 🎨 **스타일 가이드 (필수)**
 - **코딩 스타일**: `.vscode/STYLE_GUIDE.md` ⭐ **반드시 준수**
   - UI/UX 테마 시스템 규칙
   - PyQt6 스타일링 가이드라인
   - matplotlib 차트 테마 적용 방법
   - 금지사항 및 권장사항
-
-### �🏗️ 핵심 설계 문서
+- **개발 체크리스트**: `.vscode/DEV_CHECKLIST.md` 📝 **커밋 전 확인**
 - **프로젝트 명세**: `.vscode/project-specs.md` (243줄 - 비즈니스 로직)
 - **README**: `.vscode/README.md` (프로젝트 개요)
 
@@ -34,10 +60,18 @@
 - **관리 전략**: `.vscode/strategy/management-strategies.md` (관리 전략 구현)
 - **조합 규칙**: `.vscode/strategy/combination-rules.md` (전략 조합 로직)
 
+### 🔧 트리거 빌더 시스템 (핵심 ⭐⭐⭐)
+- **트리거 빌더 가이드**: `.vscode/guides/trigger-builder-system.md` (전체 시스템 개요)
+  - 3중 카테고리 시스템 (purpose, chart, comparison)
+  - 새로운 DB 스키마 구조 (trading_variables, variable_parameters)
+  - 동적 파라미터 관리 시스템
+  - 통합 호환성 검증 시스템
+- **변수 호환성**: `.vscode/guides/variable-compatibility.md` (호환성 규칙 상세)
+
 ### 🏛️ 아키텍처 & 기술 가이드
 - **전체 아키텍처**: `.vscode/guides/architecture.md` (시스템 구조)
 - **컴포넌트 설계**: `.vscode/architecture/component-design.md` (컴포넌트 패턴)
-- **DB 설계**: `.vscode/guides/database.md` (데이터베이스 구조)
+- **DB 설계**: `.vscode/guides/database.md` (데이터베이스 구조 + 트리거 빌더 DB)
 
 ### 🎨 UI/UX 가이드
 - **디자인 시스템**: `.vscode/ui/design-system.md` (560줄 - 컴포넌트, 색상, 레이아웃)
@@ -141,8 +175,20 @@ class MyWidget(QWidget):
 
 ### 필수 테스트
 모든 코드 변경 후에는 반드시:
-```bash
+```powershell
+# PowerShell 구문 사용
 python run_desktop_ui.py
+```
+
+### 터미널 명령어 작성 시 주의사항 ⚠️
+```powershell
+# ✅ 올바른 PowerShell 예시
+cd "d:\projects\upbit-autotrader-vscode"; python -c "import sys; print(sys.version)"
+Get-ChildItem "upbit_auto_trading" -Recurse -Filter "*.py" | Measure-Object
+
+# ❌ 절대 사용 금지 (Unix/Linux 구문)
+cd /path/to/project && python -c "import sys; print(sys.version)"
+find upbit_auto_trading -name "*.py" | wc -l
 ```
 
 ### 복잡한 버그 추적 방법론 (권장)
@@ -197,8 +243,8 @@ def on_trigger_selected(self, item, column):
 ```
 
 #### 5. 검증 및 테스트
-```python
-# 각 수정 사항을 즉시 테스트
+```powershell
+# 각 수정 사항을 즉시 테스트 (PowerShell 구문)
 python run_desktop_ui.py
 # → 조건 생성 → 저장 → 로드 → 표시 확인
 ```
@@ -251,27 +297,24 @@ if debug_mode:
 ## 🚨 중요 고려사항
 
 ### 변수 호환성 규칙 (핵심 시스템 ⭐⭐⭐)
-- **필수 문서**: `.vscode/guides/variable-compatibility.md` 참조
+- **필수 문서**: `.vscode/guides/variable-compatibility.md` 및 `.vscode/guides/trigger-builder-system.md` 참조
 - **핵심 원칙**: 의미있는 변수 조합만 허용, 논리적으로 맞지 않는 비교 방지
+- **3중 카테고리 시스템**:
+  1. **Purpose Category**: trend, momentum, volatility, volume, price
+  2. **Chart Category**: overlay, subplot  
+  3. **Comparison Group**: price_comparable, percentage_comparable, volume_comparable 등
 - **구현 우선순위**:
   1. **최우선**: UI 레벨 실시간 검증 (사용자가 호환되지 않는 변수 선택 시 즉시 차단)
   2. **필수**: 백엔드 검증 (조건 저장 전 최종 호환성 재검증)
   3. **권장**: DB 제약 조건 및 성능 최적화
 - **예시 호환성**:
-  - ✅ RSI ↔ 스토캐스틱 (같은 오실레이터, 0-100 스케일)
+  - ✅ RSI ↔ 스토캐스틱 (같은 momentum/percentage_comparable)
+  - ✅ 현재가 ↔ 이동평균 (같은 price/price_comparable)
+  - ❌ RSI ↔ MACD (다른 comparison_group)
+  - ❌ 현재가 ↔ 거래량 (완전히 다른 단위와 의미)
   - ✅ 현재가 ↔ 이동평균 (같은 가격 단위)
   - ❌ RSI ↔ MACD (다른 카테고리, 스케일 불일치)
   - ❌ 현재가 ↔ 거래량 (완전히 다른 단위와 의미)
-
-### 터미널 환경 및 명령어
-- **운영체제**: Windows
-- **기본 셸**: PowerShell (powershell.exe v5.1)
-- **명령어 생성 시 주의사항**:
-  - Windows PowerShell 명령어 구문 사용
-  - Linux/macOS 명령어(cat, ls, grep 등) 대신 PowerShell 명령어 사용
-  - 명령어 연결 시 `;` 사용 (&&가 아닌)
-  - 파일 경로는 백슬래시(`\`) 사용
-  - PowerShell 특유의 명령어 구문 활용 (Get-ChildItem, Select-String 등)
 
 ### 보안
 - API 키 하드코딩 금지

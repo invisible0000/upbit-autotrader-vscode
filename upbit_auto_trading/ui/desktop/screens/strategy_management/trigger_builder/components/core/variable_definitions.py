@@ -1,49 +1,29 @@
 #!/usr/bin/env python3
 """
 변수 정의 모듈 - 모든 트레이딩 변수의 파라미터 정의
-통합된 하이브리드 지표 시스템 지원
+통합 호환성 검증기 기반 시스템
 """
 
 from typing import Dict, Any
-import sys
-import os
 
-# 호환성 검증기 import (같은 폴더)
+# 호환성 검증기 import (shared 폴더)
 try:
-    from .compatibility_validator import CompatibilityValidator
+    from ..shared.compatibility_validator import CompatibilityValidator
     COMPATIBILITY_VALIDATOR_AVAILABLE = True
     print("✅ 통합 호환성 검증기 로드 성공 (trigger_builder/components)")
 except ImportError as e:
     print(f"⚠️ 통합 호환성 검증기 로드 실패: {e}")
     COMPATIBILITY_VALIDATOR_AVAILABLE = False
 
-# IntegratedVariableManager 임포트
-try:
-    # 상대 경로로 trading_variables 모듈 찾기
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    trading_variables_path = os.path.join(current_dir, '..', '..', '..', '..', '..', 'utils', 'trading_variables')
-    if trading_variables_path not in sys.path:
-        sys.path.insert(0, trading_variables_path)
-    
-    from integrated_variable_manager import IntegratedVariableManager, HybridCompatibilityValidator
-    HYBRID_SYSTEM_AVAILABLE = True
-    print("✅ 하이브리드 지표 시스템 연동 성공")
-except ImportError as e:
-    print(f"⚠️ 하이브리드 지표 시스템을 찾을 수 없습니다: {e}")
-    HYBRID_SYSTEM_AVAILABLE = False
 
 class VariableDefinitions:
-    """트레이딩 변수들의 파라미터 정의를 관리하는 클래스 (하이브리드 지표 시스템 통합)"""
-    
-    # 클래스 변수로 통합 관리자 초기화
-    _integrated_manager = None
-    _compatibility_validator = None
+    """트레이딩 변수들의 파라미터 정의를 관리하는 클래스"""
     
     # 📊 표준화 문서 기반 차트 카테고리 매핑 (이중 카테고리 시스템)
     CHART_CATEGORIES = {
         # 오버레이 (메인 차트에 표시)
         "SMA": "overlay",
-        "EMA": "overlay", 
+        "EMA": "overlay",
         "BOLLINGER_BAND": "overlay",
         "CURRENT_PRICE": "overlay",
         "OPEN_PRICE": "overlay",
@@ -60,7 +40,7 @@ class VariableDefinitions:
         
         # 재무 정보 (별도 영역)
         "CASH_BALANCE": "subplot",
-        "COIN_BALANCE": "subplot", 
+        "COIN_BALANCE": "subplot",
         "TOTAL_BALANCE": "subplot",
         "PROFIT_PERCENT": "subplot",
         "PROFIT_AMOUNT": "subplot",
@@ -78,45 +58,9 @@ class VariableDefinitions:
         """오버레이 지표인지 확인"""
         return cls.get_chart_category(variable_id) == "overlay"
     
-    @classmethod
-    def _get_integrated_manager(cls):
-        """통합 변수 관리자 싱글톤 반환"""
-        if cls._integrated_manager is None and HYBRID_SYSTEM_AVAILABLE:
-            try:
-                cls._integrated_manager = IntegratedVariableManager()
-                print("✅ IntegratedVariableManager 초기화 성공")
-            except Exception as e:
-                print(f"⚠️ IntegratedVariableManager 초기화 실패: {e}")
-                cls._integrated_manager = None
-        return cls._integrated_manager
-    
-    @classmethod
-    def _get_compatibility_validator(cls):
-        """호환성 검증기 싱글톤 반환"""
-        if cls._compatibility_validator is None and HYBRID_SYSTEM_AVAILABLE:
-            try:
-                cls._compatibility_validator = HybridCompatibilityValidator()
-                print("✅ HybridCompatibilityValidator 초기화 성공")
-            except Exception as e:
-                print(f"⚠️ HybridCompatibilityValidator 초기화 실패: {e}")
-                cls._compatibility_validator = None
-        return cls._compatibility_validator
-    
     @staticmethod
     def get_variable_parameters(var_id: str) -> Dict[str, Any]:
-        """변수별 파라미터 정의 반환 (하이브리드 시스템 통합)"""
-        # 하이브리드 시스템에서 먼저 찾기
-        integrated_manager = VariableDefinitions._get_integrated_manager()
-        if integrated_manager:
-            try:
-                hybrid_params = integrated_manager.get_variable_parameters(var_id)
-                if hybrid_params:
-                    print(f"✅ 하이브리드 지표 파라미터 로딩: {var_id}")
-                    return hybrid_params
-            except Exception as e:
-                print(f"⚠️ 하이브리드 파라미터 로딩 실패: {var_id}, {e}")
-        
-        # 기존 하드코딩된 파라미터 (폴백)
+        """변수별 파라미터 정의 반환"""
         params = {
             "RSI": {
                 "period": {
@@ -539,17 +483,7 @@ class VariableDefinitions:
     
     @staticmethod
     def get_category_variables() -> Dict[str, list]:
-        """카테고리별 변수 목록 반환 (하이브리드 시스템 통합)"""
-        # 하이브리드 시스템이 사용 가능한 경우 통합된 목록 반환
-        integrated_manager = VariableDefinitions._get_integrated_manager()
-        if integrated_manager:
-            try:
-                integrated_vars = integrated_manager.get_category_variables()
-                print(f"✅ 통합 변수 목록 로딩: {len(integrated_vars)} 카테고리")
-                return integrated_vars
-            except Exception as e:
-                print(f"⚠️ 통합 변수 목록 로딩 실패, 기존 방식 사용: {e}")
-        
+        """카테고리별 변수 목록 반환"""
         # 표준화 문서 기반 용도별 카테고리 (이중 카테고리 시스템)
         return {
             "trend": [
@@ -590,18 +524,7 @@ class VariableDefinitions:
     
     @staticmethod
     def get_variable_category(variable_id: str) -> str:
-        """변수 ID로부터 카테고리 찾기 (하이브리드 시스템 통합)"""
-        # 하이브리드 시스템에서 먼저 찾기
-        integrated_manager = VariableDefinitions._get_integrated_manager()
-        if integrated_manager and integrated_manager.is_hybrid_indicator(variable_id):
-            try:
-                # 새 지표의 카테고리를 어댑터에서 가져오기
-                category = integrated_manager.adapter._get_indicator_category(variable_id)
-                print(f"✅ 하이브리드 지표 카테고리: {variable_id} → {category}")
-                return category
-            except Exception as e:
-                print(f"⚠️ 하이브리드 카테고리 조회 실패: {variable_id}, {e}")
-        
+        """변수 ID로부터 카테고리 찾기"""
         # 기존 방식으로 찾기
         category_variables = VariableDefinitions.get_category_variables()
         
@@ -618,7 +541,6 @@ class VariableDefinitions:
         try:
             # 로컬 통합 호환성 검증기 사용
             if COMPATIBILITY_VALIDATOR_AVAILABLE:
-                from .compatibility_validator import CompatibilityValidator
                 validator = CompatibilityValidator()
                 is_compatible, score, reason = validator.validate_compatibility(var1_id, var2_id)
                 # reason이 dict인 경우 문자열로 변환
@@ -626,18 +548,14 @@ class VariableDefinitions:
                 print(f"✅ 통합 호환성 검증: {var1_id} ↔ {var2_id} = {is_compatible} ({score}%) - {reason_str}")
                 return is_compatible, reason_str
             else:
-                # 폴백: 기존 방식 시도
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                compatibility_validator_path = os.path.join(
-                    current_dir, '..', '..', '..', '..', '..', 'utils', 'trading_variables'
-                )
-                if compatibility_validator_path not in sys.path:
-                    sys.path.insert(0, compatibility_validator_path)
+                # 폴백: 기본 카테고리 기반 검증
+                cat1 = VariableDefinitions.get_variable_category(var1_id)
+                cat2 = VariableDefinitions.get_variable_category(var2_id)
                 
-                from compatibility_validator import check_compatibility
-                is_compatible, reason = check_compatibility(var1_id, var2_id)
-                print(f"✅ 백업 호환성 검증: {var1_id} ↔ {var2_id} = {is_compatible} ({reason})")
-                return is_compatible, reason
+                if cat1 == cat2:
+                    return True, f"같은 카테고리: {cat1}"
+                else:
+                    return False, f"다른 카테고리: {cat1} vs {cat2}"
             
         except Exception as e:
             print(f"⚠️ 호환성 검증 실패, 기본 방식 사용: {e}")
@@ -653,14 +571,12 @@ class VariableDefinitions:
     
     @staticmethod
     def get_available_indicators() -> Dict[str, Any]:
-        """사용 가능한 모든 지표 목록 반환 (하이브리드 시스템 전용)"""
-        integrated_manager = VariableDefinitions._get_integrated_manager()
-        if integrated_manager:
-            try:
-                indicators = integrated_manager.adapter.indicator_calculator.get_available_indicators()
-                print(f"✅ 하이브리드 지표 목록: {len(indicators.get('core', []))} 핵심 + {len(indicators.get('custom', []))} 사용자정의")
-                return indicators
-            except Exception as e:
-                print(f"⚠️ 하이브리드 지표 목록 조회 실패: {e}")
-        
-        return {"core": [], "custom": []}
+        """사용 가능한 모든 지표 목록 반환"""
+        # 기본 제공 지표 목록 반환
+        return {
+            "core": [
+                "SMA", "EMA", "BOLLINGER_BAND", "RSI", "STOCHASTIC", 
+                "MACD", "ATR", "VOLUME_SMA", "CURRENT_PRICE", "PROFIT_PERCENT"
+            ], 
+            "custom": []
+        }

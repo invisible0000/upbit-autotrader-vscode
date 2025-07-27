@@ -42,28 +42,19 @@ from .condition_builder import ConditionBuilder
 from .condition_storage import ConditionStorage
 from .preview_components import PreviewGenerator
 
-# 변수 호환성 검증 import (공유 컴포넌트에서)
+# 변수 호환성 검증 import (통합 호환성 검증기 사용)
 try:
     from ..shared.compatibility_validator import check_compatibility
     COMPATIBILITY_SERVICE_AVAILABLE = True
-    print("✅ 새로운 호환성 검증 시스템 사용")
+    print("✅ 통합 호환성 검증 시스템 활성화")
 except ImportError:
-    try:
-        from upbit_auto_trading.utils.trading_variables.compatibility_validator import check_compatibility
-        COMPATIBILITY_SERVICE_AVAILABLE = True
-        print("⚠️ 폴백: utils 호환성 검증 시스템 사용")
-    except ImportError:
-        try:
-            from .chart_variable_service import get_chart_variable_service
-            COMPATIBILITY_SERVICE_AVAILABLE = True
-            print("⚠️ 폴백: 구 버전 차트 변수 서비스 사용")
-        except ImportError:
-            COMPATIBILITY_SERVICE_AVAILABLE = False
-            print("⚠️ 차트 변수 호환성 서비스를 사용할 수 없습니다.")
-            
-            def check_compatibility(var1_id: str, var2_id: str):
-                """폴백 함수"""
-                return True, "호환성 검증 서비스 비활성화"
+    COMPATIBILITY_SERVICE_AVAILABLE = False
+    print("⚠️ 통합 호환성 검증 시스템 로드 실패 - 기본 호환성 검증 사용")
+    
+    def check_compatibility(var1_id: str, var2_id: str):
+        """폴백 함수: 기본 호환성 검증"""
+        return True, "기본 호환성 검증 사용 (모든 변수 호환)"
+
 
 class ConditionDialog(QWidget):
     """리팩토링된 조건 생성 위젯 (다이얼로그에서 위젯으로 변경)"""

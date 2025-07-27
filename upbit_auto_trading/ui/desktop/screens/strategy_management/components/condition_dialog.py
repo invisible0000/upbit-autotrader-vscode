@@ -41,13 +41,18 @@ from .condition_builder import ConditionBuilder
 from .condition_storage import ConditionStorage
 from .preview_components import PreviewGenerator
 
-# 변수 호환성 검증 import
+# 변수 호환성 검증 import (통합 호환성 검증기 사용)
 try:
-    from ..trigger_builder.components.chart_variable_service import get_chart_variable_service
+    from ..trigger_builder.components.shared.compatibility_validator import check_compatibility
     COMPATIBILITY_SERVICE_AVAILABLE = True
+    print("✅ 통합 호환성 검증 시스템 연결 성공 (strategy_management)")
 except ImportError:
     COMPATIBILITY_SERVICE_AVAILABLE = False
-    print("⚠️ 차트 변수 호환성 서비스를 사용할 수 없습니다.")
+    print("⚠️ 통합 호환성 검증 시스템 로드 실패 - 기본 호환성 검증 사용")
+    
+    def check_compatibility(var1_id: str, var2_id: str):
+        """폴백 함수: 기본 호환성 검증"""
+        return True, "기본 호환성 검증 사용"
 
 class ConditionDialog(QWidget):
     """리팩토링된 조건 생성 위젯 (다이얼로그에서 위젯으로 변경)"""
@@ -66,11 +71,8 @@ class ConditionDialog(QWidget):
         self.storage = ConditionStorage()
         self.preview_generator = PreviewGenerator()
         
-        # 호환성 검증 서비스 초기화
-        if COMPATIBILITY_SERVICE_AVAILABLE:
-            self.compatibility_service = get_chart_variable_service()
-        else:
-            self.compatibility_service = None
+        # 호환성 검증 서비스 초기화 (통합 호환성 검증기 사용)
+        self.compatibility_service = None  # 레거시 서비스 제거, 직접 check_compatibility 함수 사용
         
         # UI 관련 속성
         self.current_condition = None

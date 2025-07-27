@@ -707,7 +707,29 @@ class TriggerBuilderScreen(QWidget):
         
         # 조건 평가
         try:
-            current_value = simulation_data['current_value']
+            # 변수 타입에 따른 current_value 계산
+            variable_id = self._map_ui_text_to_variable_id(variable_name)
+            
+            # 오실레이터/모멘텀 변수의 경우 계산된 지표 값 사용
+            if variable_id in ['RSI', 'STOCHASTIC', 'MACD']:
+                price_data = simulation_data.get('price_data', [])
+                if variable_id == 'RSI':
+                    calculated_values = self._calculate_rsi(price_data)
+                    current_value = calculated_values[-1] if calculated_values else 50
+                    print(f"📊 RSI 계산값 사용: {current_value:.2f}")
+                elif variable_id == 'STOCHASTIC':
+                    calculated_values = self._calculate_stochastic(price_data)
+                    current_value = calculated_values[-1] if calculated_values else 50
+                    print(f"📊 스토캐스틱 계산값 사용: {current_value:.2f}")
+                elif variable_id == 'MACD':
+                    calculated_values = self._calculate_macd(price_data)
+                    current_value = calculated_values[-1] if calculated_values else 0
+                    print(f"📊 MACD 계산값 사용: {current_value:.2f}")
+                else:
+                    current_value = simulation_data['current_value']
+            else:
+                # 가격/볼륨 관련 변수는 기존대로
+                current_value = simulation_data['current_value']
             
             # 외부변수 사용 여부에 따른 계산
             if comparison_type == 'external' and external_variable:
@@ -761,49 +783,71 @@ class TriggerBuilderScreen(QWidget):
         print(f"   상태: {status_text}")
         print(f"   데이터 소스: {simulation_data.get('data_source', 'unknown')}")
         
-        # 차트 업데이트 (실제 트리거 포인트 계산) - 원본과 동일한 로직
+        # 차트 업데이트 (차트 변수 카테고리 시스템 연동) - 개선된 로직
         trigger_points = []
         if hasattr(self, 'simulation_result_widget'):
             # 차트용 목표값 설정 (외부변수 고려)
             chart_target_value = target_num  # 계산된 실제 목표값 사용
             
-            # 변수 타입에 따른 적절한 데이터 생성
-            if 'rsi' in variable_name.lower():
-                # RSI용 데이터 (0-100 범위)
-                data_for_chart = self.generate_rsi_data_for_chart(scenario, 50)
-                trigger_points = self.calculate_trigger_points(data_for_chart, operator, target_num)
-                
-                chart_simulation_data = {
-                    'scenario': scenario,
-                    'price_data': data_for_chart,  # RSI 값들
-                    'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
-                    'data_type': 'rsi'
-                }
-            elif 'macd' in variable_name.lower():
-                # MACD용 데이터 (-2 ~ 2 범위)
-                data_for_chart = self.generate_macd_data_for_chart(scenario, 50)
-                trigger_points = self.calculate_trigger_points(data_for_chart, operator, target_num)
-                
-                chart_simulation_data = {
-                    'scenario': scenario,
-                    'price_data': data_for_chart,  # MACD 값들
-                    'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
-                    'data_type': 'macd'
-                }
+            # 🎯 차트 변수 카테고리 시스템을 통한 변수 정보 가져오기
+            variable_info = self._get_variable_chart_info(variable_name)
+            external_variable_info = self._get_variable_chart_info(
+                external_variable.get('variable_name') if external_variable else None
+            )
+            
+            # 변수 카테고리에 따른 적절한 데이터 생성
+            chart_category = variable_info.get('category', 'price_overlay')
+            display_type = variable_info.get('display_type', 'line')
+            
+            print(f"📊 변수 차트 정보: {variable_name} -> 카테고리: {chart_category}, 표시: {display_type}")
+            
+            # 실제 시장 데이터 기반으로 변수값 계산
+            market_prices = simulation_data.get('price_data', [])
+            
+            # 기본 변수 계산 (예: SMA)
+            base_variable_data = self._calculate_variable_data(variable_name, market_prices)
+            print(f"🔍 계산된 기본변수 데이터: {type(base_variable_data)}, 길이: {len(base_variable_data) if base_variable_data else 'None'}")
+            if base_variable_data and len(base_variable_data) > 0:
+                print(f"🔍 기본변수 첫 5개 값: {base_variable_data[:5]}")
+                print(f"🔍 기본변수 범위: {min(base_variable_data):.2f} ~ {max(base_variable_data):.2f}")
+            
+            # 외부 변수 계산 (예: EMA) - 파라미터 포함
+            external_variable_data = None
+            if external_variable and external_variable.get('variable_name'):
+                # 외부변수의 파라미터 추출
+                external_parameters = external_variable.get('parameters', {})
+                external_variable_data = self._calculate_variable_data(
+                    external_variable['variable_name'], market_prices, external_parameters
+                )
+                print(f"🔍 계산된 외부변수 데이터: {type(external_variable_data)}, 길이: {len(external_variable_data) if external_variable_data else 'None'}")
+                if external_variable_data and len(external_variable_data) > 0:
+                    print(f"🔍 외부변수 첫 5개 값: {external_variable_data[:5]}")
+                    print(f"🔍 외부변수 범위: {min(external_variable_data):.2f} ~ {max(external_variable_data):.2f}")
+                    print(f"🔍 외부변수 파라미터: {external_parameters}")
+            
+            # 트리거 포인트 계산 (기본 변수 vs 외부 변수 비교)
+            if external_variable_data:
+                # 외부 변수와 비교 - TriggerCalculator의 크로스오버 계산 사용
+                trigger_points = self.trigger_calculator.calculate_cross_trigger_points(
+                    base_variable_data, external_variable_data, operator
+                )
             else:
-                # 가격용 데이터 (기존 로직)
-                price_data = self.generate_price_data_for_chart(scenario, 50)
-                trigger_points = self.calculate_trigger_points(price_data, operator, target_num)
-                
-                chart_simulation_data = {
-                    'scenario': scenario,
-                    'price_data': price_data,
-                    'current_value': current_value,
-                    'target_value': chart_target_value,  # 수정된 목표값
-                    'data_type': 'price'
-                }
+                # 고정값과 비교 - TriggerCalculator 사용
+                trigger_points = self.trigger_calculator.calculate_trigger_points(
+                    base_variable_data, operator, target_num
+                )
+            
+            chart_simulation_data = {
+                'scenario': scenario,
+                'price_data': market_prices,  # 시장가 데이터
+                'base_variable_data': base_variable_data,  # 기본 변수 (SMA)
+                'external_variable_data': external_variable_data,  # 외부 변수 (EMA)
+                'current_value': current_value,
+                'target_value': chart_target_value,
+                'variable_info': variable_info,
+                'external_variable_info': external_variable_info,
+                'condition_name': condition_name
+            }
             
             trigger_results = {
                 'trigger_points': trigger_points,
@@ -812,7 +856,7 @@ class TriggerBuilderScreen(QWidget):
             }
             
             print(f"📊 트리거 포인트 계산 완료: {len(trigger_points)}개 신호 발견")
-            # 차트 위젯에 시뮬레이션 결과 업데이트
+            # 차트 위젯에 시뮬레이션 결과 업데이트 (변수 정보 포함)
             self.simulation_result_widget.update_chart_with_simulation_results(chart_simulation_data, trigger_results)
         
         # 트리거 포인트 기반으로 최종 결과 재계산 (차트의 신호와 일치시킴)
@@ -852,22 +896,500 @@ class TriggerBuilderScreen(QWidget):
         # 시그널 발생 (트리거 개수 기반 결과 사용)
         self.condition_tested.emit(self.selected_condition, final_result)
         
-        # 차트 업데이트 - 실제 시뮬레이션 데이터 사용
-        if CHART_AVAILABLE:
-            price_data = simulation_data.get('price_data', [])
-            # 트리거 포인트 계산
-            trigger_points = self.calculate_trigger_points(price_data, operator, target_num)
-            
-            self.update_chart_with_scenario(scenario, {
-                'result': result_text,
-                'target_value': target_num,
-                'current_value': current_value,
-                'price_data': price_data,
-                'trigger_points': trigger_points
-            })
+        # 레거시 차트 업데이트 비활성화 - 새로운 차트 시스템 사용
+        # if CHART_AVAILABLE:
+        #     price_data = simulation_data.get('price_data', [])
+        #     # 트리거 포인트 계산
+        #     trigger_points = self.calculate_trigger_points(price_data, operator, target_num)
+        #     
+        #     self.update_chart_with_scenario(scenario, {
+        #         'result': result_text,
+        #         'target_value': target_num,
+        #         'current_value': current_value,
+        #         'price_data': price_data,
+        #         'trigger_points': trigger_points
+        #     })
         
         print(f"Simulation: {scenario} -> {result} (value: {current_value})")
     
+    def _get_variable_chart_info(self, variable_name):
+        """차트 변수 카테고리 시스템을 통한 변수 정보 가져오기 - 올바른 ID 매핑"""
+        if not variable_name:
+            return {}
+            
+        try:
+            # 먼저 이모지 포함 UI 텍스트를 실제 변수 ID로 변환
+            actual_variable_id = self._map_ui_text_to_variable_id(variable_name)
+            
+            if hasattr(self, 'chart_variable_service') and self.chart_variable_service:
+                # 실제 변수 ID로 검색
+                config = self.chart_variable_service.get_variable_config(actual_variable_id)
+                if not config and actual_variable_id != variable_name:
+                    # ID로 찾지 못하면 이름으로 재시도
+                    config = self.chart_variable_service.get_variable_by_name(actual_variable_id)
+                
+                if config:
+                    return {
+                        'variable_id': config.variable_id,
+                        'variable_name': config.variable_name,
+                        'category': config.category,
+                        'display_type': config.display_type,
+                        'scale_min': config.scale_min,
+                        'scale_max': config.scale_max,
+                        'unit': config.unit,
+                        'default_color': config.default_color
+                    }
+            
+            # 폴백: 하드코딩된 변수 정보 (올바른 ID 사용)
+            fallback_mapping = {
+                'RSI': {'variable_id': 'RSI', 'category': 'oscillator', 'display_type': 'line', 'scale_min': 0, 'scale_max': 100},
+                'MACD': {'variable_id': 'MACD', 'category': 'momentum', 'display_type': 'line', 'scale_min': -10, 'scale_max': 10},
+                'VOLUME': {'variable_id': 'VOLUME', 'category': 'volume', 'display_type': 'histogram', 'scale_min': 0, 'scale_max': None},
+                'PRICE': {'variable_id': 'PRICE', 'category': 'price_overlay', 'display_type': 'line', 'scale_min': None, 'scale_max': None},
+                'SMA': {'variable_id': 'SMA', 'category': 'price_overlay', 'display_type': 'line', 'scale_min': None, 'scale_max': None},
+                'EMA': {'variable_id': 'EMA', 'category': 'price_overlay', 'display_type': 'line', 'scale_min': None, 'scale_max': None},
+                'BOLLINGER': {'variable_id': 'BOLLINGER', 'category': 'price_overlay', 'display_type': 'band', 'scale_min': None, 'scale_max': None},
+                'STOCHASTIC': {'variable_id': 'STOCHASTIC', 'category': 'oscillator', 'display_type': 'line', 'scale_min': 0, 'scale_max': 100}
+            }
+            
+            # 실제 변수 ID로 매핑 확인
+            if actual_variable_id in fallback_mapping:
+                info = fallback_mapping[actual_variable_id].copy()
+                info['variable_name'] = variable_name  # UI에 표시된 이름 유지
+                print(f"📊 변수 매핑: '{variable_name}' → ID: '{actual_variable_id}' → 카테고리: {info.get('category', 'unknown')}")
+                return info
+            
+            # 기본값 반환
+            print(f"⚠️ 알 수 없는 변수: '{variable_name}' → ID: '{actual_variable_id}', 기본 price_overlay 사용")
+            return {
+                'variable_id': actual_variable_id,
+                'variable_name': variable_name,
+                'category': 'price_overlay',
+                'display_type': 'line',
+                'scale_min': None,
+                'scale_max': None
+            }
+            
+        except Exception as e:
+            print(f"⚠️ 변수 정보 가져오기 실패: {e}")
+            return {
+                'variable_id': variable_name.upper().replace(' ', '_'),
+                'variable_name': variable_name,
+                'category': 'price_overlay',
+                'display_type': 'line'
+            }
+    
+    def _map_ui_text_to_variable_id(self, ui_text):
+        """UI 텍스트(이모지 포함)를 실제 변수 ID로 매핑"""
+        if not ui_text:
+            return ''
+        
+        # UI 텍스트 → 변수 ID 매핑 테이블
+        ui_to_id_mapping = {
+            # 이모지 포함된 UI 텍스트 → 실제 변수 ID
+            '🔹 RSI 지표': 'RSI',
+            '🔸 RSI 지표': 'RSI',
+            '🔺 RSI 지표': 'RSI',
+            'RSI 지표': 'RSI',
+            'RSI': 'RSI',
+            
+            '🔹 MACD 지표': 'MACD',
+            '🔸 MACD 지표': 'MACD', 
+            '🔺 MACD 지표': 'MACD',
+            'MACD 지표': 'MACD',
+            'MACD': 'MACD',
+            
+            '🔹 단순이동평균': 'SMA',
+            '🔸 단순이동평균': 'SMA',
+            '🔺 단순이동평균': 'SMA',
+            '단순이동평균': 'SMA',
+            'SMA': 'SMA',
+            
+            '🔹 지수이동평균': 'EMA',
+            '🔸 지수이동평균': 'EMA',
+            '🔺 지수이동평균': 'EMA',
+            '지수이동평균': 'EMA',
+            'EMA': 'EMA',
+            
+            '🔹 거래량': 'VOLUME',
+            '🔸 거래량': 'VOLUME',
+            '🔺 거래량': 'VOLUME',
+            '거래량': 'VOLUME',
+            'VOLUME': 'VOLUME',
+            
+            '🔹 현재가': 'PRICE',
+            '🔸 현재가': 'PRICE',
+            '🔺 현재가': 'PRICE',
+            '현재가': 'PRICE',
+            'PRICE': 'PRICE',
+            
+            '🔹 볼린저밴드': 'BOLLINGER',
+            '🔸 볼린저밴드': 'BOLLINGER',
+            '🔺 볼린저밴드': 'BOLLINGER',
+            '볼린저밴드': 'BOLLINGER',
+            'BOLLINGER': 'BOLLINGER',
+            
+            '🔹 스토캐스틱': 'STOCHASTIC',
+            '🔸 스토캐스틱': 'STOCHASTIC',
+            '🔺 스토캐스틱': 'STOCHASTIC',
+            '스토캐스틱': 'STOCHASTIC',
+            'STOCHASTIC': 'STOCHASTIC'
+        }
+        
+        # 정확한 매칭 우선
+        if ui_text in ui_to_id_mapping:
+            mapped_id = ui_to_id_mapping[ui_text]
+            print(f"🎯 UI 텍스트 매핑: '{ui_text}' → '{mapped_id}'")
+            return mapped_id
+        
+        # 부분 매칭 시도 (이모지 제거 후)
+        clean_text = ui_text.replace('🔹 ', '').replace('🔸 ', '').replace('🔺 ', '').strip()
+        if clean_text in ui_to_id_mapping:
+            mapped_id = ui_to_id_mapping[clean_text]
+            print(f"🎯 정리된 텍스트 매핑: '{ui_text}' → '{clean_text}' → '{mapped_id}'")
+            return mapped_id
+        
+        # 키워드 기반 매핑
+        clean_upper = clean_text.upper()
+        if 'RSI' in clean_upper:
+            return 'RSI'
+        elif 'MACD' in clean_upper:
+            return 'MACD'
+        elif '단순이동평균' in clean_text or 'SMA' in clean_upper:
+            return 'SMA'
+        elif '지수이동평균' in clean_text or 'EMA' in clean_upper:
+            return 'EMA'
+        elif '거래량' in clean_text or 'VOLUME' in clean_upper:
+            return 'VOLUME'
+        elif '현재가' in clean_text or 'PRICE' in clean_upper:
+            return 'PRICE'
+        elif '볼린저' in clean_text or 'BOLLINGER' in clean_upper:
+            return 'BOLLINGER'
+        elif '스토캐스틱' in clean_text or 'STOCHASTIC' in clean_upper:
+            return 'STOCHASTIC'
+        
+        # 매핑되지 않은 경우 기본 처리
+        fallback_id = clean_text.upper().replace(' ', '_')
+        print(f"⚠️ 매핑되지 않은 변수: '{ui_text}' → '{fallback_id}' (fallback)")
+        return fallback_id
+    
+    def _calculate_variable_data(self, variable_name, price_data, custom_parameters=None):
+        """변수명에 따라 실제 계산된 데이터 반환 - 올바른 변수 ID 기반 + 커스텀 파라미터 지원"""
+        if not variable_name or not price_data:
+            return None
+        
+        # UI 텍스트를 실제 변수 ID로 변환
+        variable_id = self._map_ui_text_to_variable_id(variable_name)
+        
+        try:
+            if variable_id == 'SMA':
+                # SMA 계산 (커스텀 파라미터 우선 사용)
+                period = self._extract_period_from_parameters(custom_parameters, variable_name, default=20)
+                print(f"   🔹 SMA 계산: period={period} (커스텀 파라미터: {custom_parameters})")
+                return self.trigger_calculator.calculate_sma(price_data, period)
+            
+            elif variable_id == 'EMA':
+                # EMA 계산 (커스텀 파라미터 우선 사용)
+                period = self._extract_period_from_parameters(custom_parameters, variable_name, default=12)
+                print(f"   🔸 EMA 계산: period={period} (커스텀 파라미터: {custom_parameters})")
+                return self.trigger_calculator.calculate_ema(price_data, period)
+            
+            elif variable_id == 'RSI':
+                # RSI 계산 (커스텀 파라미터 우선 사용)
+                period = self._extract_period_from_parameters(custom_parameters, variable_name, default=14)
+                print(f"   🔺 RSI 계산: period={period} (커스텀 파라미터: {custom_parameters})")
+                return self.trigger_calculator.calculate_rsi(price_data, period)
+            
+            elif variable_id == 'MACD':
+                # MACD 계산 (TriggerCalculator 사용)
+                return self.trigger_calculator.calculate_macd(price_data)
+            
+            elif variable_id == 'VOLUME':
+                # 거래량 데이터는 별도 처리 필요
+                return self._generate_volume_data(len(price_data))
+                
+            elif variable_id == 'PRICE':
+                # 현재가는 가격 데이터 그대로
+                return price_data
+            
+            else:
+                # 알 수 없는 변수는 가격 데이터 그대로 반환
+                print(f"⚠️ 알 수 없는 변수 ID: {variable_id} (원본: {variable_name}), 가격 데이터 사용")
+                return price_data
+        
+        except Exception as e:
+            print(f"⚠️ 변수 계산 실패 ({variable_name} → {variable_id}): {e}")
+            return price_data  # 폴백으로 가격 데이터 반환
+    
+    def _extract_period_from_parameters(self, custom_parameters, variable_name, default):
+        """커스텀 파라미터 또는 변수명에서 기간 추출"""
+        # 1. 커스텀 파라미터에서 우선 추출
+        if custom_parameters and isinstance(custom_parameters, dict):
+            if 'period' in custom_parameters:
+                period = custom_parameters['period']
+                print(f"   📋 커스텀 파라미터에서 period 추출: {period}")
+                return int(period)
+        
+        # 2. 변수명에서 추출 (폴백)
+        period = self._extract_period_from_name(variable_name, default)
+        print(f"   📋 변수명에서 period 추출: {period} (기본값: {default})")
+        return period
+    
+    def _extract_period_from_name(self, variable_name, default=20):
+        """변수명에서 기간 추출 (예: SMA(20) -> 20)"""
+        import re
+        match = re.search(r'\((\d+)\)', variable_name)
+        if match:
+            return int(match.group(1))
+        return default
+    
+    def _calculate_sma(self, prices, period):
+        """단순이동평균 계산"""
+        if len(prices) < period:
+            return [prices[0]] * len(prices)  # 데이터 부족시 첫 번째 값으로 채움
+        
+        sma_values = []
+        for i in range(len(prices)):
+            if i < period - 1:
+                # 초기값: 지금까지의 평균
+                sma_values.append(sum(prices[:i+1]) / (i+1))
+            else:
+                # 정상 SMA 계산
+                sma_values.append(sum(prices[i-period+1:i+1]) / period)
+        
+        return sma_values
+    
+    def _calculate_ema(self, prices, period):
+        """지수이동평균 계산"""
+        if not prices:
+            return []
+        
+        alpha = 2 / (period + 1)
+        ema_values = [prices[0]]  # 첫 번째 값은 그대로
+        
+        for i in range(1, len(prices)):
+            ema = alpha * prices[i] + (1 - alpha) * ema_values[-1]
+            ema_values.append(ema)
+        
+        return ema_values
+    
+    def _calculate_rsi(self, prices, period=14):
+        """RSI 계산 (개선된 버전)"""
+        if len(prices) < period + 1:
+            return [50] * len(prices)  # 데이터 부족시 중간값 반환
+        
+        # 가격 변화 계산
+        deltas = []
+        for i in range(1, len(prices)):
+            deltas.append(prices[i] - prices[i-1])
+        
+        # 상승과 하락 분리
+        gains = [max(delta, 0) for delta in deltas]
+        losses = [max(-delta, 0) for delta in deltas]
+        
+        rsi_values = []
+        
+        # 초기 period 구간의 평균 계산
+        if len(gains) >= period:
+            avg_gain = sum(gains[:period]) / period
+            avg_loss = sum(losses[:period]) / period
+            
+            # 첫 번째 RSI 값 계산
+            if avg_loss == 0:
+                first_rsi = 100
+            else:
+                rs = avg_gain / avg_loss
+                first_rsi = 100 - (100 / (1 + rs))
+            
+            # 초기값들을 첫 번째 RSI로 채움
+            rsi_values = [first_rsi] * period
+            
+            # 나머지 RSI 계산
+            for i in range(period, len(gains)):
+                # 평활화된 평균 계산 (Wilder's smoothing)
+                avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+                avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+                
+                if avg_loss == 0:
+                    rsi = 100
+                else:
+                    rs = avg_gain / avg_loss
+                    rsi = 100 - (100 / (1 + rs))
+                
+                rsi_values.append(rsi)
+            
+            # 첫 번째 가격에 대한 RSI 추가 (delta 계산 전이므로)
+            rsi_values.insert(0, first_rsi)
+        else:
+            # 데이터가 충분하지 않은 경우
+            rsi_values = [50] * len(prices)
+        
+        # 길이 조정
+        while len(rsi_values) < len(prices):
+            rsi_values.append(50)
+        while len(rsi_values) > len(prices):
+            rsi_values.pop()
+        
+        return rsi_values
+    
+    def _calculate_macd(self, prices):
+        """MACD 계산 (12일 EMA - 26일 EMA)"""
+        ema12 = self._calculate_ema(prices, 12)
+        ema26 = self._calculate_ema(prices, 26)
+        
+        macd = [ema12[i] - ema26[i] for i in range(len(prices))]
+        return macd
+    
+    def _generate_volume_data(self, length):
+        """가상 거래량 데이터 생성"""
+        import random
+        base_volume = 2000000
+        return [base_volume + random.randint(-500000, 1000000) for _ in range(length)]
+    
+    def _calculate_cross_trigger_points(self, base_data, external_data, operator):
+        """두 변수간 크로스 트리거 포인트 계산 - TriggerCalculator 활용"""
+        if not base_data or not external_data:
+            return []
+        
+        trigger_points = []
+        min_length = min(len(base_data), len(external_data))
+        
+        for i in range(1, min_length):  # 이전값과 비교하므로 1부터 시작
+            prev_base = base_data[i-1]
+            curr_base = base_data[i]
+            prev_external = external_data[i-1]
+            curr_external = external_data[i]
+            
+            # 크로스 감지
+            if operator == '>':
+                # 골든 크로스: 기본 변수가 외부 변수를 위로 돌파
+                if prev_base <= prev_external and curr_base > curr_external:
+                    trigger_points.append(i)
+            elif operator == '<':
+                # 데드 크로스: 기본 변수가 외부 변수를 아래로 돌파
+                if prev_base >= prev_external and curr_base < curr_external:
+                    trigger_points.append(i)
+            elif operator == '>=':
+                if prev_base < prev_external and curr_base >= curr_external:
+                    trigger_points.append(i)
+            elif operator == '<=':
+                if prev_base > prev_external and curr_base <= curr_external:
+                    trigger_points.append(i)
+        
+        return trigger_points
+    
+    def generate_oscillator_data_for_chart(self, scenario, length=50, scale_min=0, scale_max=100):
+        """오실레이터 데이터 생성 (RSI, 스토캐스틱 등)"""
+        try:
+            # 시뮬레이션 엔진 사용
+            market_data = self.simulation_engine.load_market_data(length)
+            if market_data is not None and 'rsi' in market_data.columns:
+                # 실제 RSI 데이터가 있으면 사용
+                rsi_data = market_data['rsi'].tolist()
+                # 스케일 조정
+                if scale_min != 0 or scale_max != 100:
+                    adjusted_data = []
+                    for value in rsi_data:
+                        # 0-100을 scale_min-scale_max로 변환
+                        adjusted_value = scale_min + (value / 100.0) * (scale_max - scale_min)
+                        adjusted_data.append(adjusted_value)
+                    return adjusted_data
+                return rsi_data
+        except Exception as e:
+            print(f"⚠️ 실제 오실레이터 데이터 로드 실패: {e}")
+        
+        # 폴백: 가상 데이터 생성
+        import random
+        data = []
+        mid_value = (scale_min + scale_max) / 2
+        range_size = scale_max - scale_min
+        
+        for i in range(length):
+            # 시나리오별 경향성 반영
+            if scenario in ['상승 추세', '급등']:
+                base_value = mid_value + random.uniform(0.1, 0.4) * range_size
+            elif scenario in ['하락 추세', '급락']:
+                base_value = mid_value - random.uniform(0.1, 0.4) * range_size
+            else:  # 횡보
+                base_value = mid_value + random.uniform(-0.2, 0.2) * range_size
+            
+            # 노이즈 추가
+            noise = random.uniform(-0.1, 0.1) * range_size
+            final_value = max(scale_min, min(scale_max, base_value + noise))
+            data.append(final_value)
+        
+        return data
+    
+    def generate_momentum_data_for_chart(self, scenario, length=50, scale_min=-10, scale_max=10):
+        """모멘텀 데이터 생성 (MACD 등)"""
+        try:
+            # 시뮬레이션 엔진 사용
+            market_data = self.simulation_engine.load_market_data(length)
+            if market_data is not None and 'macd' in market_data.columns:
+                # 실제 MACD 데이터가 있으면 사용
+                macd_data = market_data['macd'].tolist()
+                # 스케일 조정 (필요시)
+                if scale_min != -10 or scale_max != 10:
+                    adjusted_data = []
+                    for value in macd_data:
+                        # -10~10을 scale_min~scale_max로 변환
+                        ratio = (value + 10) / 20.0  # 0~1로 정규화
+                        adjusted_value = scale_min + ratio * (scale_max - scale_min)
+                        adjusted_data.append(adjusted_value)
+                    return adjusted_data
+                return macd_data
+        except Exception as e:
+            print(f"⚠️ 실제 모멘텀 데이터 로드 실패: {e}")
+        
+        # 폴백: 가상 데이터 생성
+        import random
+        data = []
+        range_size = scale_max - scale_min
+        
+        for i in range(length):
+            # 시나리오별 경향성 반영
+            if scenario in ['상승 추세', '급등']:
+                base_value = random.uniform(0.2, 0.8) * scale_max
+            elif scenario in ['하락 추세', '급락']:
+                base_value = random.uniform(0.2, 0.8) * scale_min
+            else:  # 횡보
+                base_value = random.uniform(-0.3, 0.3) * range_size
+            
+            # 노이즈 추가
+            noise = random.uniform(-0.1, 0.1) * range_size
+            final_value = max(scale_min, min(scale_max, base_value + noise))
+            data.append(final_value)
+        
+        return data
+    
+    def generate_volume_data_for_chart(self, scenario, length=50):
+        """거래량 데이터 생성"""
+        try:
+            # 시뮬레이션 엔진 사용
+            market_data = self.simulation_engine.load_market_data(length)
+            if market_data is not None and 'volume' in market_data.columns:
+                return market_data['volume'].tolist()
+        except Exception as e:
+            print(f"⚠️ 실제 거래량 데이터 로드 실패: {e}")
+        
+        # 폴백: 가상 데이터 생성
+        import random
+        data = []
+        base_volume = 2000000  # 200만
+        
+        for i in range(length):
+            # 시나리오별 거래량 패턴
+            if scenario in ['급등', '급락']:
+                volume = base_volume * random.uniform(2, 5)  # 급변동시 거래량 증가
+            elif scenario in ['상승 추세', '하락 추세']:
+                volume = base_volume * random.uniform(1.2, 2.5)
+            else:  # 횡보
+                volume = base_volume * random.uniform(0.5, 1.5)
+            
+            data.append(int(volume))
+        
+        return data
+
     def generate_simulation_data(self, scenario, variable_name):
         """시뮬레이션 데이터 생성 - 시뮬레이션 엔진 사용"""
         # 한국어 시나리오를 영어로 매핑

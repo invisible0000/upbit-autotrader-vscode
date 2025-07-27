@@ -11,39 +11,48 @@ class TriggerCalculator:
         """초기화"""
         pass
     
-    def calculate_trigger_points(self, price_data, operator, target_value):
-        """실제 가격 데이터를 기반으로 트리거 포인트 계산 - 개선된 버전"""
+    def calculate_trigger_points(self, variable_data, operator, target_value):
+        """변수 데이터(가격, RSI, SMA 등)를 기반으로 트리거 포인트 계산 - 개선된 버전"""
         trigger_points = []
         
         try:
-            if not price_data or len(price_data) == 0:
-                print("❌ 가격 데이터가 없습니다")
+            if not variable_data or len(variable_data) == 0:
+                print("❌ 변수 데이터가 없습니다")
                 return []
             
             target_float = float(target_value)
             
+            # 데이터 범위 로깅 (디버깅용)
+            data_min = min(variable_data)
+            data_max = max(variable_data)
+            print(f"🎯 트리거 포인트 계산:")
+            print(f"   연산자: {operator}, 대상값: {target_float}")
+            print(f"   가격 범위: {data_min:.0f} ~ {data_max:.0f}")
+            
             # 연산자별 조건 확인
-            for i, price in enumerate(price_data):
+            for i, value in enumerate(variable_data):
                 triggered = False
                 
-                if operator == '>' and price > target_float:
+                if operator == '>' and value > target_float:
                     triggered = True
-                elif operator == '>=' and price >= target_float:
+                elif operator == '>=' and value >= target_float:
                     triggered = True
-                elif operator == '<' and price < target_float:
+                elif operator == '<' and value < target_float:
                     triggered = True
-                elif operator == '<=' and price <= target_float:
+                elif operator == '<=' and value <= target_float:
                     triggered = True
                 elif operator == '~=' and target_float != 0:
                     # 근사값 (±1%)
-                    diff_percent = abs(price - target_float) / abs(target_float) * 100
+                    diff_percent = abs(value - target_float) / abs(target_float) * 100
                     if diff_percent <= 1.0:
                         triggered = True
-                elif operator == '!=' and price != target_float:
+                elif operator == '!=' and value != target_float:
                     triggered = True
                 
                 if triggered:
                     trigger_points.append(i)
+            
+            print(f"   조건 충족 포인트: {len(trigger_points)}개")
             
             # 연속된 트리거 포인트 필터링 조건 완화
             # 가격 기반 조건(>, >=, <, <=)의 경우 필터링 최소화
@@ -56,10 +65,6 @@ class TriggerCalculator:
                 trigger_points = filtered_points
             # >, >=, <, <= 조건에서는 연속된 신호를 모두 유지
             
-            print("🎯 트리거 포인트 계산:")
-            print(f"   연산자: {operator}, 대상값: {target_float}")
-            print(f"   가격 범위: {min(price_data):.0f} ~ {max(price_data):.0f}")
-            print(f"   조건 충족 포인트: {len([p for i, p in enumerate(price_data) if self._check_condition(p, operator, target_float)])}개")
             print(f"   필터링 후 신호: {len(trigger_points)}개")
             print(f"   포인트 위치: {trigger_points[:10]}{'...' if len(trigger_points) > 10 else ''}")
             
@@ -192,3 +197,115 @@ class TriggerCalculator:
         except Exception as e:
             print(f"❌ {data_type} 트리거 포인트 계산 오류: {e}")
             return []
+    
+    def calculate_sma(self, prices, period):
+        """단순이동평균 계산"""
+        if len(prices) < period:
+            return [prices[0]] * len(prices)  # 데이터 부족시 첫 번째 값으로 채움
+        
+        sma_values = []
+        for i in range(len(prices)):
+            if i < period - 1:
+                # 초기값: 지금까지의 평균
+                sma_values.append(sum(prices[:i + 1]) / (i + 1))
+            else:
+                # 정상 SMA 계산
+                sma_values.append(sum(prices[i - period + 1:i + 1]) / period)
+        
+        return sma_values
+    
+    def calculate_ema(self, prices, period):
+        """지수이동평균 계산"""
+        if not prices:
+            return []
+        
+        alpha = 2 / (period + 1)
+        ema_values = [prices[0]]  # 첫 번째 값은 그대로
+        
+        for i in range(1, len(prices)):
+            ema = alpha * prices[i] + (1 - alpha) * ema_values[-1]
+            ema_values.append(ema)
+        
+        return ema_values
+    
+    def calculate_rsi(self, prices, period=14):
+        """RSI 계산"""
+        if len(prices) < period + 1:
+            return [50] * len(prices)  # 데이터 부족시 중간값 반환
+        
+        # 가격 변화 계산
+        deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+        
+        # 상승과 하락 분리
+        gains = [delta if delta > 0 else 0 for delta in deltas]
+        losses = [-delta if delta < 0 else 0 for delta in deltas]
+        
+        # 초기 평균
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        
+        rsi_values = [50]  # 첫 번째 값
+        
+        # RSI 계산
+        for i in range(period, len(deltas)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+            
+            if avg_loss == 0:
+                rsi = 100
+            else:
+                rs = avg_gain / avg_loss
+                rsi = 100 - (100 / (1 + rs))
+            
+            rsi_values.append(rsi)
+        
+        # 부족한 초기값들 채움
+        while len(rsi_values) < len(prices):
+            rsi_values.insert(0, 50)
+        
+        return rsi_values
+    
+    def calculate_macd(self, prices):
+        """MACD 계산 (12일 EMA - 26일 EMA)"""
+        ema12 = self.calculate_ema(prices, 12)
+        ema26 = self.calculate_ema(prices, 26)
+        
+        macd = [ema12[i] - ema26[i] for i in range(len(prices))]
+        return macd
+    
+    def calculate_cross_trigger_points(self, base_data, external_data, operator):
+        """두 변수간 크로스 트리거 포인트 계산"""
+        if not base_data or not external_data:
+            return []
+        
+        trigger_points = []
+        min_length = min(len(base_data), len(external_data))
+        
+        for i in range(1, min_length):  # 이전값과 비교하므로 1부터 시작
+            prev_base = base_data[i - 1]
+            curr_base = base_data[i]
+            prev_external = external_data[i - 1]
+            curr_external = external_data[i]
+            
+            # 크로스 감지
+            if operator == '>':
+                # 골든 크로스: 기본 변수가 외부 변수를 위로 돌파
+                if prev_base <= prev_external and curr_base > curr_external:
+                    trigger_points.append(i)
+            elif operator == '<':
+                # 데드 크로스: 기본 변수가 외부 변수를 아래로 돌파
+                if prev_base >= prev_external and curr_base < curr_external:
+                    trigger_points.append(i)
+            elif operator == '>=':
+                if prev_base < prev_external and curr_base >= curr_external:
+                    trigger_points.append(i)
+            elif operator == '<=':
+                if prev_base > prev_external and curr_base <= curr_external:
+                    trigger_points.append(i)
+        
+        print(f"🎯 크로스 트리거 포인트 계산: {operator}")
+        print(f"   기본 변수 범위: {min(base_data):.2f} ~ {max(base_data):.2f}")
+        print(f"   외부 변수 범위: {min(external_data):.2f} ~ {max(external_data):.2f}")
+        print(f"   크로스 신호: {len(trigger_points)}개")
+        
+        return trigger_points

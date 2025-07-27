@@ -9,7 +9,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 # DataSourceSelectorWidget import
 try:
-    from .data_source_selector import DataSourceSelectorWidget
+    from ..data_source_selector import DataSourceSelectorWidget
     DATA_SOURCE_AVAILABLE = True
 except ImportError:
     DataSourceSelectorWidget = None

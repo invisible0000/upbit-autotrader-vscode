@@ -1,6 +1,7 @@
 """
 시뮬레이션 결과 위젯
 원본: integrated_condition_manager.py의 create_test_result_area() 완전 복제
+미니차트 변수 서비스 통합 버전
 """
 
 from PyQt6.QtWidgets import (
@@ -9,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from datetime import datetime
+import traceback
 
 # 차트 라이브러리 import
 try:
@@ -18,6 +20,15 @@ try:
 except ImportError:
     CHART_AVAILABLE = False
     print("⚠️ matplotlib를 찾을 수 없습니다.")
+
+# 미니차트 변수 서비스 import
+try:
+    from ..shared.minichart_variable_service import get_minichart_variable_service
+    MINICHART_SERVICE_AVAILABLE = True
+    print("✅ 미니차트 변수 서비스 로드 성공")
+except ImportError as e:
+    MINICHART_SERVICE_AVAILABLE = False
+    print(f"⚠️ 미니차트 변수 서비스 로드 실패: {e}")
 
 
 class SimulationResultWidget(QWidget):
@@ -225,8 +236,8 @@ class SimulationResultWidget(QWidget):
         except Exception as e:
             print(f"⚠️ 플레이스홀더 차트 표시 실패: {e}")
     
-    def update_simulation_chart(self, scenario, price_data, trigger_results, base_variable_data=None, external_variable_data=None, variable_info=None):
-        """시뮬레이션 결과로 차트 업데이트 - 개선된 차트 카테고리 기반 플롯팅"""
+    def update_simulation_chart(self, scenario, price_data, trigger_results, base_variable_data=None, external_variable_data=None, variable_info=None, comparison_value=None):
+        """시뮬레이션 결과로 차트 업데이트 - 차트 카테고리 시스템 기반 플롯팅"""
         if not CHART_AVAILABLE or not hasattr(self, 'figure'):
             return
         
@@ -234,6 +245,9 @@ class SimulationResultWidget(QWidget):
         self._last_scenario = scenario
         self._last_price_data = price_data
         self._last_trigger_results = trigger_results
+        
+        # 고정값 비교 정보 저장 (RSI > 70 등)
+        self._comparison_value = comparison_value
         
         try:
             # 전역 테마 매니저 사용
@@ -243,16 +257,21 @@ class SimulationResultWidget(QWidget):
             # 테마에 따른 색상 설정
             theme_notifier = get_theme_notifier()
             is_dark = theme_notifier.is_dark_theme()
-            price_color = '#60a5fa' if is_dark else '#3498db'  # 시장가 색상
-            base_var_color = '#10b981' if is_dark else '#059669'  # 기본 변수 색상 (녹색)
-            external_var_color = '#f59e0b' if is_dark else '#d97706'  # 외부 변수 색상 (주황색)
-            trigger_color = '#f87171' if is_dark else '#ef4444'  # 트리거 색상
-            bg_color = '#2c2c2c' if is_dark else 'white'
+            
+            # 색상 팔레트 (더 다양하게)
+            colors = {
+                'primary': '#60a5fa' if is_dark else '#3498db',      # 기본 데이터 (파랑)
+                'base_var': '#10b981' if is_dark else '#059669',     # 기본 변수 (녹색)
+                'external_var': '#f59e0b' if is_dark else '#d97706', # 외부 변수 (주황)
+                'trigger': '#f87171' if is_dark else '#ef4444',      # 트리거 (빨강)
+                'reference': '#8b5cf6' if is_dark else '#7c3aed',    # 기준선 (보라)
+                'background': '#2c2c2c' if is_dark else 'white'
+            }
             
             # Figure와 Canvas 배경색 설정
-            self.figure.patch.set_facecolor(bg_color)
+            self.figure.patch.set_facecolor(colors['background'])
             if hasattr(self, 'canvas'):
-                self.canvas.setStyleSheet(f"background-color: {bg_color};")
+                self.canvas.setStyleSheet(f"background-color: {colors['background']};")
             
             self.figure.clear()
             ax = self.figure.add_subplot(111)
@@ -260,77 +279,28 @@ class SimulationResultWidget(QWidget):
             if price_data:
                 x = range(len(price_data))
                 
-                # 📊 차트 카테고리 기반 플롯팅 로직
-                is_overlay = self._is_overlay_variable(variable_info)
+                # 📊 단순화된 차트 분류: price_overlay 또는 volume만 사용
+                chart_category = self._get_chart_category(variable_info)
                 
-                if is_overlay:
-                    # 🔗 오버레이: 시장가와 함께 플롯
-                    ax.plot(x, price_data, price_color, linewidth=1.5, label='시장가', alpha=0.8)
-                    
-                    # 기본 변수 데이터 플롯 (오버레이)
-                    if base_variable_data:
-                        if self._is_fixed_value(base_variable_data):
-                            # 고정값: 수평선으로 표시
-                            fixed_value = base_variable_data[0] if base_variable_data else 0
-                            ax.axhline(y=fixed_value, color=base_var_color, linewidth=1.2, 
-                                     linestyle='--', label=f'기본변수: {fixed_value:,.0f}', alpha=0.7)
-                        else:
-                            # 변수값: 라인으로 표시
-                            ax.plot(x, base_variable_data, base_var_color, linewidth=1.2, 
-                                   label='기본변수', alpha=0.8)
-                    
-                    # 외부 변수 데이터 플롯 (오버레이)
-                    if external_variable_data:
-                        if self._is_fixed_value(external_variable_data):
-                            # 고정값: 수평선으로 표시
-                            fixed_value = external_variable_data[0] if external_variable_data else 0
-                            ax.axhline(y=fixed_value, color=external_var_color, linewidth=1.2, 
-                                     linestyle=':', label=f'외부변수: {fixed_value:,.0f}', alpha=0.7)
-                        else:
-                            # 변수값: 라인으로 표시
-                            ax.plot(x, external_variable_data, external_var_color, linewidth=1.2, 
-                                   label='외부변수', alpha=0.8)
+                print(f"📊 단순화된 차트 플롯팅: 카테고리={chart_category}")
                 
+                if chart_category in ['volume', 'volume_category']:
+                    # 볼륨 차트는 히스토그램으로 표시 (subplot)
+                    self._plot_volume_chart(ax, x, price_data, base_variable_data, 
+                                           external_variable_data, variable_info, colors)
                 else:
-                    # 📊 서브플롯: 베이스 지표와 함께 플롯 (시장가 없이)
-                    base_indicator_data = self._get_base_indicator_data(variable_info, len(price_data))
-                    
-                    if base_indicator_data:
-                        # 베이스 지표 (예: 거래량, RSI 기본값)
-                        ax.plot(x, base_indicator_data, price_color, linewidth=1.5, 
-                               label=self._get_base_indicator_name(variable_info), alpha=0.8)
-                    
-                    # 기본 변수 데이터 플롯 (서브플롯)
-                    if base_variable_data:
-                        if self._is_fixed_value(base_variable_data):
-                            # 고정값: 수평선으로 표시
-                            fixed_value = base_variable_data[0] if base_variable_data else 0
-                            ax.axhline(y=fixed_value, color=base_var_color, linewidth=1.2, 
-                                     linestyle='--', label=f'기본변수: {fixed_value:,.0f}', alpha=0.7)
-                        else:
-                            # 변수값: 라인으로 표시
-                            ax.plot(x, base_variable_data, base_var_color, linewidth=1.2, 
-                                   label='기본변수', alpha=0.8)
-                    
-                    # 외부 변수 데이터 플롯 (서브플롯)
-                    if external_variable_data:
-                        if self._is_fixed_value(external_variable_data):
-                            # 고정값: 수평선으로 표시
-                            fixed_value = external_variable_data[0] if external_variable_data else 0
-                            ax.axhline(y=fixed_value, color=external_var_color, linewidth=1.2, 
-                                     linestyle=':', label=f'외부변수: {fixed_value:,.0f}', alpha=0.7)
-                        else:
-                            # 변수값: 라인으로 표시
-                            ax.plot(x, external_variable_data, external_var_color, linewidth=1.2, 
-                                   label='외부변수', alpha=0.8)
+                    # 나머지는 모두 price_overlay로 통일 (price, oscillator, momentum 등)
+                    self._plot_price_overlay_chart(ax, x, price_data, base_variable_data, 
+                                                  external_variable_data, variable_info, colors)
                 
-                # 🚨 트리거 신호 표시
+                # 트리거 신호 표시
                 if trigger_results:
-                    self._plot_trigger_signals(ax, trigger_results, price_data, base_variable_data, 
-                                             external_variable_data, is_overlay, trigger_color)
+                    self._plot_trigger_signals_enhanced(ax, trigger_results, price_data, 
+                                                      base_variable_data, external_variable_data, 
+                                                      chart_category, colors['trigger'])
             
             # 공통 차트 스타일 적용
-            self._setup_common_chart_style(ax, bg_color)
+            self._setup_enhanced_chart_style(ax, colors['background'], variable_info)
             
             # X축 틱 라벨 포맷팅
             if price_data and len(price_data) > 5:
@@ -338,23 +308,348 @@ class SimulationResultWidget(QWidget):
                 ax.set_xticks(x_tick_positions)
                 ax.set_xticklabels([str(i) for i in x_tick_positions])
             
+            # 범례가 잘리지 않도록 레이아웃 조정
+            try:
+                self.figure.tight_layout(pad=2.0)  # 여백 증가
+            except Exception as e:
+                print(f"⚠️ tight_layout 실패: {e}")
+            
             self.canvas.draw()
             
         except Exception as e:
             print(f"⚠️ 시뮬레이션 차트 업데이트 실패: {e}")
+            import traceback
+            traceback.print_exc()
     
-    def _is_overlay_variable(self, variable_info):
-        """변수가 오버레이 타입인지 확인"""
-        if not variable_info or 'variable_id' not in variable_info:
-            return False
+    def _get_chart_category(self, variable_info):
+        """변수 정보에서 차트 카테고리 추출"""
+        if not variable_info:
+            return 'price_overlay'
+        return variable_info.get('category', 'price_overlay')
+    
+    def _get_display_type(self, variable_info):
+        """변수 정보에서 표시 타입 추출"""
+        if not variable_info:
+            return 'line'
+        return variable_info.get('display_type', 'line')
+    
+    def _get_english_label(self, variable_name):
+        """한글 변수명을 영문 약어로 변환 - 단순화된 4요소 버전"""
+        if not variable_name:
+            return 'iVal'
         
-        try:
-            from .variable_definitions import VariableDefinitions
-            return VariableDefinitions.is_overlay_indicator(variable_info['variable_id'])
-        except:
-            # 알려진 오버레이 변수들 하드코딩 (폴백)
-            overlay_variables = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE']
-            return variable_info.get('variable_id', '') in overlay_variables
+        # 이모지 제거
+        clean_name = variable_name.replace('🔹 ', '').replace('🔸 ', '').replace('🔺 ', '').strip()
+        
+        # 단순화된 4가지 요소만 사용
+        if '기본변수' in clean_name or 'SMA' in clean_name.upper() or 'RSI' in clean_name.upper() or 'MACD' in clean_name.upper():
+            return 'iVal'
+        elif '외부변수' in clean_name or 'EMA' in clean_name.upper():
+            return 'eVal' 
+        elif '고정값' in clean_name:
+            return 'fVal'
+        elif 'Volume' in clean_name or '거래량' in clean_name:
+            return 'Volume'
+        else:
+            return 'iVal'  # 기본값
+    
+    def _plot_price_overlay_chart(self, ax, x, price_data, base_data, external_data, variable_info, colors):
+        """단순화된 가격 오버레이 차트 - 4가지 요소 통일 (Price/iVal + fVal/eVal + Trg)"""
+        print("🎨 단순화된 price_overlay 차트 플롯 시작")
+        
+        # 차트 카테고리 확인 (oscillator인지 price_overlay인지)
+        chart_category = variable_info.get('category', 'price_overlay') if variable_info else 'price_overlay'
+        
+        if chart_category == 'oscillator':
+            # 1. oscillator 데이터 (RSI 등) - base_data 사용 (계산된 RSI 값)
+            if base_data and len(base_data) > 0:
+                ax.plot(x, base_data, colors['base_var'], linewidth=1.8, label='iVal', alpha=0.9)
+                print(f"   🟢 iVal(오실레이터) 데이터: {len(base_data)}개 포인트")
+            
+            # 2. 고정값 비교를 위한 fVal 라인 추가 (외부 데이터가 없을 때)
+            if not external_data and hasattr(self, '_comparison_value'):
+                fixed_value = self._comparison_value
+                ax.axhline(y=fixed_value, color=colors['external_var'], linewidth=1.5,
+                           linestyle='--', label='fVal', alpha=0.8)
+                print(f"   🟡 fVal(고정값): {fixed_value}")
+                
+        else:
+            # 1. Price 데이터 (파란색) - 일반적인 price_overlay
+            ax.plot(x, price_data, colors['primary'], linewidth=1.5, label='Price', alpha=0.8)
+            print(f"   📈 Price 데이터: {len(price_data)}개 포인트")
+            
+            # 2. iVal - 기본변수 (녹색 라인)
+            if base_data and len(base_data) > 0:
+                ax.plot(x, base_data, colors['base_var'], linewidth=1.8, 
+                       label='iVal', alpha=0.9)
+                print(f"   🟢 iVal 데이터: {len(base_data)}개 포인트")
+        
+        # 3. fVal/eVal - 비교값/외부변수 (주황색)
+        if external_data and len(external_data) > 0:
+            # 고정값인지 확인
+            is_fixed = len(set(external_data)) == 1
+            
+            if is_fixed:
+                fixed_value = external_data[0]
+                ax.axhline(y=fixed_value, color=colors['external_var'], linewidth=1.5,
+                           linestyle='--', label='fVal', alpha=0.8)
+                print(f"   🟡 fVal(고정값): {fixed_value}")
+            else:
+                ax.plot(x, external_data, colors['external_var'], linewidth=1.8,
+                        label='eVal', alpha=0.9)
+                print(f"   🟡 eVal 데이터: {len(external_data)}개 포인트")
+        
+        # 4. Trg - 트리거 마커는 _plot_trigger_signals_enhanced()에서 처리
+        
+        # 5. 범례 추가
+        legend_handles, legend_labels = ax.get_legend_handles_labels()
+        print(f"   📋 범례 요소: {len(legend_handles)}개, 라벨: {legend_labels}")
+        
+        if legend_handles:
+            ax.legend(loc='upper right', fontsize=8, framealpha=0.9, 
+                     bbox_to_anchor=(1.0, 1.0), ncol=1)
+            print("   ✅ 범례 표시 완료")
+        else:
+            print("   ⚠️ 표시할 범례 요소가 없음")
+        
+        print("✅ price_overlay 차트 플롯 완료")
+    
+    def _plot_oscillator_chart(self, ax, x, price_data, base_data, external_data, variable_info, colors):
+        """오실레이터 차트 플롯 (RSI, 스토캐스틱 등)"""
+        # 오실레이터 데이터 (price_data가 실제로는 오실레이터 값)
+        variable_name = variable_info.get('variable_name', '오실레이터') if variable_info else '오실레이터'
+        ax.plot(x, price_data, colors['primary'], linewidth=1.5, label=variable_name, alpha=0.8)
+        
+        # 기준선 추가 (RSI의 경우 30, 70)
+        scale_min = variable_info.get('scale_min', 0) if variable_info else 0
+        scale_max = variable_info.get('scale_max', 100) if variable_info else 100
+        
+        # 오버바이/오버셀 라인
+        if scale_min == 0 and scale_max == 100:
+            ax.axhline(y=70, color=colors['reference'], linewidth=1, linestyle='--', 
+                      label='OB(70)', alpha=0.6)
+            ax.axhline(y=30, color=colors['reference'], linewidth=1, linestyle='--', 
+                      label='OS(30)', alpha=0.6)
+        
+        # 중앙선
+        mid_value = (scale_min + scale_max) / 2
+        ax.axhline(y=mid_value, color=colors['reference'], linewidth=0.8, linestyle='-', 
+                  alpha=0.4)
+        
+        # 기본/외부 변수 처리
+        self._plot_variable_data(ax, x, base_data, external_data, colors)
+        
+        # Y축 범위 설정
+        ax.set_ylim(scale_min - 5, scale_max + 5)
+        
+        # 범례 추가
+        ax.legend(loc='upper right', fontsize=8, framealpha=0.9, 
+                 bbox_to_anchor=(1.0, 1.0), ncol=1)
+    
+    def _plot_momentum_chart(self, ax, x, price_data, base_data, external_data, variable_info, colors):
+        """모멘텀 차트 플롯 (MACD 등)"""
+        # 모멘텀 데이터
+        variable_name = variable_info.get('variable_name', '모멘텀') if variable_info else '모멘텀'
+        ax.plot(x, price_data, colors['primary'], linewidth=1.5, label=variable_name, alpha=0.8)
+        
+        # 중앙선 (0선)
+        ax.axhline(y=0, color=colors['reference'], linewidth=1, linestyle='-', 
+                  label='Zero Line', alpha=0.6)
+        
+        # 기본/외부 변수 처리
+        self._plot_variable_data(ax, x, base_data, external_data, colors)
+        
+        # 범례 추가
+        ax.legend(loc='upper right', fontsize=8, framealpha=0.9, 
+                 bbox_to_anchor=(1.0, 1.0), ncol=1)
+    
+    def _plot_volume_chart(self, ax, x, price_data, base_data, external_data, variable_info, colors):
+        """단순화된 볼륨 차트 - 4가지 요소 통일 (Volume + iVal + fVal/eVal + Trg)"""
+        print("🎨 단순화된 volume 차트 플롯 시작")
+        
+        # 1. Volume 데이터 (파란색 히스토그램)
+        ax.bar(x, price_data, color=colors['primary'], alpha=0.6, label='Volume', width=0.8)
+        print(f"   📊 Volume 데이터: {len(price_data)}개 포인트")
+        
+        # 2. iVal - 기본변수 (녹색 라인)
+        if base_data and len(base_data) > 0:
+            ax.plot(x, base_data, colors['base_var'], linewidth=1.8, 
+                   label='iVal', alpha=0.9)
+            print(f"   🟢 iVal 데이터: {len(base_data)}개 포인트")
+        
+        # 3. fVal/eVal - 비교값/외부변수 (주황색)
+        if external_data and len(external_data) > 0:
+            # 고정값인지 확인
+            is_fixed = len(set(external_data)) == 1
+            
+            if is_fixed:
+                fixed_value = external_data[0]
+                ax.axhline(y=fixed_value, color=colors['external_var'], linewidth=1.5,
+                           linestyle='--', label='fVal', alpha=0.8)
+                print(f"   🟡 fVal(고정값): {fixed_value}")
+            else:
+                ax.plot(x, external_data, colors['external_var'], linewidth=1.8,
+                        label='eVal', alpha=0.9)
+                print(f"   🟡 eVal 데이터: {len(external_data)}개 포인트")
+        
+        # 4. Trg - 트리거 마커는 _plot_trigger_signals_enhanced()에서 처리
+        
+        # 5. 범례 추가
+        legend_handles, legend_labels = ax.get_legend_handles_labels()
+        print(f"   📋 범례 요소: {len(legend_handles)}개, 라벨: {legend_labels}")
+        
+        if legend_handles:
+            ax.legend(loc='upper right', fontsize=8, framealpha=0.9, 
+                     bbox_to_anchor=(1.0, 1.0), ncol=1)
+            print("   ✅ 범례 표시 완료")
+        else:
+            print("   ⚠️ 표시할 범례 요소가 없음")
+        
+        print("✅ volume 차트 플롯 완료")
+    
+    def _plot_variable_data(self, ax, x, base_data, external_data, colors):
+        """기본/외부 변수 데이터 플롯 (공통 로직)"""
+        if base_data:
+            if self._is_fixed_value(base_data):
+                fixed_value = base_data[0] if base_data else 0
+                ax.axhline(y=fixed_value, color=colors['base_var'], linewidth=1.2, 
+                         linestyle='--', label=f'기본변수: {fixed_value:.1f}', alpha=0.7)
+            else:
+                ax.plot(x, base_data, colors['base_var'], linewidth=1.2, 
+                       label='기본변수', alpha=0.8)
+        
+        if external_data:
+            if self._is_fixed_value(external_data):
+                fixed_value = external_data[0] if external_data else 0
+                ax.axhline(y=fixed_value, color=colors['external_var'], linewidth=1.2, 
+                         linestyle=':', label=f'외부변수: {fixed_value:.1f}', alpha=0.7)
+            else:
+                ax.plot(x, external_data, colors['external_var'], linewidth=1.2, 
+                       label='외부변수', alpha=0.8)
+    
+    def _setup_enhanced_chart_style(self, ax, bg_color, variable_info):
+        """향상된 차트 스타일 설정"""
+        # Y축 라벨 설정 (변수 정보 기반)
+        if variable_info:
+            unit = variable_info.get('unit', '')
+            y_label = f"Value{' (' + unit + ')' if unit else ''}"
+        else:
+            y_label = 'Value'
+        
+        ax.set_ylabel(y_label, fontsize=10)
+        
+        # Y축 틱 라벨 포맷팅 (카테고리별 최적화)
+        chart_category = self._get_chart_category(variable_info)
+        
+        if chart_category == 'volume':
+            # 거래량: 간략 표기 (1M, 1K 등)
+            def format_volume_tick(value, pos):
+                if value >= 1000000:
+                    return f"{value / 1000000:.1f}M"
+                elif value >= 1000:
+                    return f"{value / 1000:.0f}K"
+                else:
+                    return f"{value:.0f}"
+            
+            from matplotlib.ticker import FuncFormatter
+            ax.yaxis.set_major_formatter(FuncFormatter(format_volume_tick))
+            
+        elif chart_category in ['oscillator', 'momentum']:
+            # 오실레이터/모멘텀: 소수점 1자리
+            def format_indicator_tick(value, pos):
+                return f"{value:.1f}"
+            
+            from matplotlib.ticker import FuncFormatter
+            ax.yaxis.set_major_formatter(FuncFormatter(format_indicator_tick))
+            
+        else:
+            # 가격: 기존 로직
+            def format_price_tick(value, pos):
+                if value >= 1000000:
+                    return f"{value / 1000000:.1f}m"
+                elif value >= 1000:
+                    return f"{value / 1000:.0f}k"
+                elif value >= 1:
+                    return f"{value:.0f}"
+                else:
+                    return f"{value:.1f}"
+            
+            from matplotlib.ticker import FuncFormatter
+            ax.yaxis.set_major_formatter(FuncFormatter(format_price_tick))
+        
+        # 틱 라벨 크기 설정
+        ax.tick_params(axis='both', which='major', labelsize=10)
+        
+        # 그리드 및 배경색 설정
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor(bg_color)
+        
+        # 범례 설정 (최대 4개만 표시)
+        legend = ax.legend(loc='upper left', fontsize=8, ncol=1)
+        if legend and len(legend.get_texts()) > 4:
+            # 범례가 너무 많으면 숨김
+            legend.set_visible(False)
+    
+    def _plot_trigger_signals_enhanced(self, ax, trigger_results, price_data, base_data, 
+                                     external_data, chart_category, trigger_color):
+        """간소화된 트리거 신호 표시 - iVal 기준 상단 10% 위치 통일"""
+        if not trigger_results:
+            return
+        
+        # 미니차트 변수 서비스 활용
+        if MINICHART_SERVICE_AVAILABLE:
+            try:
+                minichart_service = get_minichart_variable_service()
+                color_scheme = minichart_service.get_color_scheme()
+                trigger_color = color_scheme.get('trigger', trigger_color)
+            except Exception:
+                pass
+        
+        self.test_history_list.clear()
+        trigger_positions = []
+        
+        for i, (triggered, _) in enumerate(trigger_results):
+            if triggered and i < len(price_data):
+                # iVal(base_data) 기준 상단 10% 위치에 마커 배치 (모든 지표 통일)
+                if base_data and i < len(base_data) and base_data[i] is not None:
+                    # 전체 base_data 범위의 10% 오프셋 적용
+                    valid_base = [val for val in base_data if val is not None]
+                    if valid_base:
+                        base_range = max(valid_base) - min(valid_base)
+                        offset = base_range * 0.1  # 10% 오프셋으로 증가
+                        y_value = base_data[i] + offset
+                    else:
+                        y_value = base_data[i] + 5.0  # 기본 오프셋
+                else:
+                    # base_data가 없으면 price_data 기준 (fallback)
+                    y_value = price_data[i] * 1.05
+                
+                # 통일된 마커 스타일: 빨간 역삼각형
+                ax.scatter(i, y_value, c=trigger_color, s=40, marker='v',
+                           zorder=5, edgecolors='white', linewidth=1.0, alpha=0.9)
+                
+                trigger_positions.append(i)
+                
+                # 작동 기록 추가 (iVal 값 기준)
+                base_value = base_data[i] if base_data and i < len(base_data) else price_data[i]
+                if isinstance(base_value, (int, float)):
+                    if base_value >= 1000:
+                        value_str = f"{base_value:,.0f}"
+                    else:
+                        value_str = f"{base_value:.2f}"
+                else:
+                    value_str = str(base_value)
+                
+                self.add_test_history_item(
+                    f"[{i:03d}] Trigger: {value_str}",
+                    "success"
+                )
+        
+        # 범례에 간단한 트리거 라벨만 표시 (카운트 제거)
+        if trigger_positions:
+            ax.scatter([], [], c=trigger_color, s=40, marker='v',
+                       label='Trg', zorder=5, edgecolors='white',
+                       linewidth=1.0, alpha=0.9)
     
     def _is_fixed_value(self, data):
         """데이터가 고정값인지 확인 (모든 값이 동일한 경우)"""
@@ -410,7 +705,10 @@ class SimulationResultWidget(QWidget):
         return name_mapping.get(variable_id, '베이스 지표')
     
     def _plot_trigger_signals(self, ax, trigger_results, price_data, base_data, external_data, is_overlay, trigger_color):
-        """트리거 신호를 차트에 표시"""
+        """트리거 신호를 차트에 표시 - DEPRECATED: _plot_trigger_signals_enhanced() 사용"""
+        # 이 함수는 더 이상 사용하지 않음 - _plot_trigger_signals_enhanced()로 통합됨
+        print("⚠️ _plot_trigger_signals() 는 deprecated됨. _plot_trigger_signals_enhanced() 사용")
+        return
         if not trigger_results:
             return
         
@@ -438,15 +736,15 @@ class SimulationResultWidget(QWidget):
                 
                 # 작동 기록 추가
                 self.add_test_history_item(
-                    f"[{i:03d}] 🚨 트리거 #{trigger_count}: {y_value:,.0f}",
+                    f"[{i:03d}] 트리거 #{trigger_count}: {y_value:.2f}",
                     "success"
                 )
         
         # 범례에 트리거 개수 표시
         if trigger_count > 0:
             ax.scatter([], [], c=trigger_color, s=30, marker='^',
-                      label=f'🚨 트리거 ({trigger_count}회)', zorder=5,
-                      edgecolors='white', linewidth=0.5)
+                       label=f'Trigger ({trigger_count})', zorder=5,
+                       edgecolors='white', linewidth=0.5)
     
     def update_trigger_signals(self, simulation_result_data):
         """트리거 신호들을 작동 기록에 업데이트"""
@@ -579,13 +877,30 @@ class SimulationResultWidget(QWidget):
         }
     
     def update_chart_with_simulation_results(self, chart_simulation_data, trigger_results):
-        """시뮬레이션 결과로 차트 및 기록 업데이트"""
+        """시뮬레이션 결과로 차트 및 기록 업데이트 - 변수 정보 포함"""
         try:
             scenario = chart_simulation_data.get('scenario', 'Unknown')
             price_data = chart_simulation_data.get('price_data', [])
             trigger_points = trigger_results.get('trigger_points', [])
             
-            # 차트 업데이트
+            # 변수 정보 및 실제 계산된 데이터 추출
+            variable_info = chart_simulation_data.get('variable_info', {})
+            external_variable_info = chart_simulation_data.get('external_variable_info', {})
+            
+            # 외부 변수 정보를 인스턴스 변수로 저장 (차트 플롯팅에서 사용)
+            self._external_variable_info = external_variable_info
+            
+            # 실제 계산된 변수 데이터 우선 사용
+            base_variable_data = chart_simulation_data.get('base_variable_data', None)
+            external_variable_data = chart_simulation_data.get('external_variable_data', None)
+            
+            print(f"📊 차트 업데이트 - 변수정보: {variable_info.get('variable_name', 'Unknown')}, "
+                  f"카테고리: {variable_info.get('category', 'Unknown')}")
+            print(f"📊 외부변수정보: {external_variable_info.get('variable_name', 'Unknown')}")
+            print(f"🔍 실제 계산된 base_variable_data: {base_variable_data is not None and len(base_variable_data) if base_variable_data else 'None'}")
+            print(f"🔍 실제 계산된 external_variable_data: {external_variable_data is not None and len(external_variable_data) if external_variable_data else 'None'}")
+            
+            # 차트 업데이트 (변수 정보 포함)
             if price_data:
                 # 트리거 결과를 (triggered, value) 튜플 리스트로 변환
                 trigger_results_for_chart = []
@@ -593,7 +908,32 @@ class SimulationResultWidget(QWidget):
                     triggered = i in trigger_points
                     trigger_results_for_chart.append((triggered, value))
                 
-                self.update_simulation_chart(scenario, price_data, trigger_results_for_chart)
+                # 실제 계산된 데이터가 없는 경우에만 폴백 생성
+                if base_variable_data is None and variable_info:
+                    print("⚠️ 실제 계산된 기본 변수 데이터가 없음, 폴백 데이터 생성")
+                    base_variable_data = self._generate_variable_simulation_data(
+                        variable_info, len(price_data), chart_simulation_data.get('target_value')
+                    )
+                
+                if external_variable_data is None and external_variable_info:
+                    print("⚠️ 실제 계산된 외부 변수 데이터가 없음, 폴백 데이터 생성")
+                    external_variable_data = self._generate_variable_simulation_data(
+                        external_variable_info, len(price_data), chart_simulation_data.get('target_value')
+                    )
+                
+                # 차트 업데이트 (새로운 파라미터 포함)
+                # 고정값 비교 정보 추출 (target_value 사용)
+                comparison_value = chart_simulation_data.get('target_value')
+                
+                self.update_simulation_chart(
+                    scenario, 
+                    price_data, 
+                    trigger_results_for_chart,
+                    base_variable_data=base_variable_data,
+                    external_variable_data=external_variable_data,
+                    variable_info=variable_info,
+                    comparison_value=comparison_value
+                )
             
             # 트리거 신호들을 작동 기록에 추가
             simulation_result_data = {
@@ -610,6 +950,48 @@ class SimulationResultWidget(QWidget):
         except Exception as e:
             print(f"❌ 차트 및 기록 업데이트 실패: {e}")
             self.add_test_history_item(f"차트 업데이트 오류: {e}", "error")
+            import traceback
+            traceback.print_exc()
+    
+    def _generate_variable_simulation_data(self, variable_info, data_length, target_value=None):
+        """변수 시뮬레이션 데이터 생성"""
+        if not variable_info:
+            return None
+        
+        try:
+            category = variable_info.get('category', 'price_overlay')
+            scale_min = variable_info.get('scale_min')
+            scale_max = variable_info.get('scale_max')
+            
+            # 고정값인 경우
+            if target_value is not None:
+                return [target_value] * data_length
+            
+            # 카테고리별 시뮬레이션 데이터 생성
+            import random
+            
+            if category == 'oscillator' and scale_min is not None and scale_max is not None:
+                # 오실레이터: 스케일 범위 내 랜덤
+                return [random.uniform(scale_min, scale_max) for _ in range(data_length)]
+            
+            elif category == 'momentum':
+                # 모멘텀: -10 ~ 10 범위
+                min_val = scale_min if scale_min is not None else -10
+                max_val = scale_max if scale_max is not None else 10
+                return [random.uniform(min_val, max_val) for _ in range(data_length)]
+            
+            elif category == 'volume':
+                # 거래량: 큰 숫자
+                return [random.randint(1000000, 5000000) for _ in range(data_length)]
+            
+            else:
+                # 가격 계열: 큰 숫자
+                base_price = 50000000
+                return [base_price + random.uniform(-5000000, 5000000) for _ in range(data_length)]
+        
+        except Exception as e:
+            print(f"⚠️ 변수 시뮬레이션 데이터 생성 실패: {e}")
+            return None
 
     def get_history_count(self) -> int:
         """기록 개수 반환"""
