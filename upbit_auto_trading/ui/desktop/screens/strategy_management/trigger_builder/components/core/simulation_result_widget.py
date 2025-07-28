@@ -896,7 +896,10 @@ class SimulationResultWidget(QWidget):
             
             print(f"📊 차트 업데이트 - 변수정보: {variable_info.get('variable_name', 'Unknown')}, "
                   f"카테고리: {variable_info.get('category', 'Unknown')}")
-            print(f"📊 외부변수정보: {external_variable_info.get('variable_name', 'Unknown')}")
+            if external_variable_info:
+                print(f"📊 외부변수정보: {external_variable_info.get('variable_name', 'Unknown')}")
+            else:
+                print("📊 외부변수정보: 없음 (단일 변수 조건)")
             print(f"🔍 실제 계산된 base_variable_data: {base_variable_data is not None and len(base_variable_data) if base_variable_data else 'None'}")
             print(f"🔍 실제 계산된 external_variable_data: {external_variable_data is not None and len(external_variable_data) if external_variable_data else 'None'}")
             

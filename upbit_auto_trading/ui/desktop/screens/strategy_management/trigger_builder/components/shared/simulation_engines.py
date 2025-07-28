@@ -11,12 +11,24 @@ import logging
 import os
 import sqlite3
 
+# TriggerCalculator import 추가
+try:
+    from .trigger_calculator import TriggerCalculator
+except ImportError:
+    print("⚠️ TriggerCalculator import 실패 - 폴백 사용")
+    TriggerCalculator = None
+
 
 class BaseSimulationEngine:
     """시뮬레이션 엔진 베이스 클래스"""
     
     def __init__(self):
         self.name = "Base"
+        # TriggerCalculator 인스턴스 생성
+        if TriggerCalculator:
+            self.trigger_calculator = TriggerCalculator()
+        else:
+            self.trigger_calculator = None
         
     def load_market_data(self, limit: int = 100) -> Optional[pd.DataFrame]:
         """시장 데이터 로드"""
@@ -43,7 +55,23 @@ class BaseSimulationEngine:
         return data
         
     def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> pd.Series:
-        """RSI 계산"""
+        """RSI 계산 - TriggerCalculator로 위임"""
+        if self.trigger_calculator and len(prices) > 0:
+            try:
+                # pandas Series를 리스트로 변환
+                price_list = prices.dropna().tolist()
+                if len(price_list) < period:
+                    return pd.Series([50] * len(prices), index=prices.index)
+                
+                # TriggerCalculator로 계산
+                rsi_values = self.trigger_calculator.calculate_rsi(price_list, period)
+                
+                # 결과를 pandas Series로 변환
+                return pd.Series(rsi_values, index=prices.index[:len(rsi_values)])
+            except Exception as e:
+                print(f"⚠️ TriggerCalculator RSI 계산 실패, 폴백 사용: {e}")
+        
+        # 폴백: 기존 pandas 구현
         delta = prices.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
@@ -52,7 +80,23 @@ class BaseSimulationEngine:
         return rsi.fillna(50)  # NaN 값을 50으로 채움
         
     def _calculate_macd(self, prices: pd.Series) -> pd.Series:
-        """MACD 계산"""
+        """MACD 계산 - TriggerCalculator로 위임"""
+        if self.trigger_calculator and len(prices) > 0:
+            try:
+                # pandas Series를 리스트로 변환
+                price_list = prices.dropna().tolist()
+                if len(price_list) < 26:  # MACD는 최소 26개 데이터 필요
+                    return pd.Series([0] * len(prices), index=prices.index)
+                
+                # TriggerCalculator로 계산
+                macd_values = self.trigger_calculator.calculate_macd(price_list)
+                
+                # 결과를 pandas Series로 변환
+                return pd.Series(macd_values, index=prices.index[:len(macd_values)])
+            except Exception as e:
+                print(f"⚠️ TriggerCalculator MACD 계산 실패, 폴백 사용: {e}")
+        
+        # 폴백: 기존 pandas 구현
         ema12 = prices.ewm(span=12).mean()
         ema26 = prices.ewm(span=26).mean()
         macd = ema12 - ema26

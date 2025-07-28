@@ -40,6 +40,7 @@ from .components.core.simulation_result_widget import SimulationResultWidget
 # Shared Components import
 from .components.shared.chart_visualizer import ChartVisualizer
 from .components.shared.trigger_calculator import TriggerCalculator
+# 기존 서비스는 제거 - trigger_simulation_service_clean 사용
 
 # Chart variable system import
 try:
@@ -675,242 +676,81 @@ class TriggerBuilderScreen(QWidget):
             print(f"❌ 트리거 복사 실패: {e}")
     
     def run_simulation(self, scenario):
-        """시뮬레이션 실행 - 실제 시장 데이터 사용, 원래처럼 차트와 로그에 바로 출력"""
+        """시뮬레이션 실행 - 새로운 서비스 기반"""
         if not self.selected_condition:
             self.simulation_status.setText("Status: 트리거를 선택해 주세요.")
             print("⚠️ 트리거를 선택하세요.")
             return
         
-        condition_name = self.selected_condition.get('name', 'Unknown')
-        variable_name = self.selected_condition.get('variable_name', 'Unknown')
-        operator = self.selected_condition.get('operator', '>')
-        target_value = self.selected_condition.get('target_value', '0')
-        comparison_type = self.selected_condition.get('comparison_type', 'fixed')
-        external_variable = self.selected_condition.get('external_variable')
-        
-        # 상세 트리거 정보 로깅
-        print(f"\n🎯 실제 데이터 시뮬레이션 시작: {scenario}")
-        print(f"   조건명: {condition_name}")
-        print(f"   변수: {variable_name} {operator} {target_value}")
-        
-        # target_value 검증 및 기본값 설정
-        if target_value is None or target_value == '':
-            target_value = '0'
-        
-        # 시뮬레이션 상태 업데이트
-        self.simulation_status.setText(f"Status: 🧮 계산 중 - {scenario} 시나리오...")
-        
-        # 시나리오별 가상 데이터 생성
-        simulation_data = self.generate_simulation_data(scenario, variable_name)
-        
-        print(f"📊 시뮬레이션 데이터: {simulation_data}")
-        
-        # 조건 평가
         try:
-            # 변수 타입에 따른 current_value 계산
-            variable_id = self._map_ui_text_to_variable_id(variable_name)
-            
-            # 오실레이터/모멘텀 변수의 경우 계산된 지표 값 사용
-            if variable_id in ['RSI', 'STOCHASTIC', 'MACD']:
-                price_data = simulation_data.get('price_data', [])
-                if variable_id == 'RSI':
-                    calculated_values = self._calculate_rsi(price_data)
-                    current_value = calculated_values[-1] if calculated_values else 50
-                    print(f"📊 RSI 계산값 사용: {current_value:.2f}")
-                elif variable_id == 'STOCHASTIC':
-                    calculated_values = self._calculate_stochastic(price_data)
-                    current_value = calculated_values[-1] if calculated_values else 50
-                    print(f"📊 스토캐스틱 계산값 사용: {current_value:.2f}")
-                elif variable_id == 'MACD':
-                    calculated_values = self._calculate_macd(price_data)
-                    current_value = calculated_values[-1] if calculated_values else 0
-                    print(f"📊 MACD 계산값 사용: {current_value:.2f}")
-                else:
-                    current_value = simulation_data['current_value']
-            else:
-                # 가격/볼륨 관련 변수는 기존대로
-                current_value = simulation_data['current_value']
-            
-            # 외부변수 사용 여부에 따른 계산
-            if comparison_type == 'external' and external_variable:
-                # 외부변수와 비교하는 경우
-                print("🔗 외부변수 비교 모드")
-                # 외부변수도 같은 시나리오로 시뮬레이션
-                ext_var_name = external_variable.get('variable_name', 'unknown')
-                external_simulation = self.generate_simulation_data(scenario, ext_var_name)
-                target_num = external_simulation['current_value']
-                print(f"   외부변수 값: {target_num}")
-            else:
-                # 고정값과 비교하는 경우
-                print("📌 고정값 비교 모드")
-                target_num = float(str(target_value))
-            
-            print(f"⚖️ 비교: {current_value:.4f} {operator} {target_num:.4f}")
-            
-            # 연산자에 따른 결과 계산
-            if operator == '>':
-                result = current_value > target_num
-            elif operator == '>=':
-                result = current_value >= target_num
-            elif operator == '<':
-                result = current_value < target_num
-            elif operator == '<=':
-                result = current_value <= target_num
-            elif operator == '~=':  # 근사값 (±1%)
-                if target_num != 0:
-                    diff_percent = abs(current_value - target_num) / abs(target_num) * 100
-                    result = diff_percent <= 1.0
-                    print(f"   근사값 차이: {diff_percent:.2f}%")
-                else:
-                    result = abs(current_value) <= 0.01
-            elif operator == '!=':
-                result = current_value != target_num
-            else:
-                result = False
-                print(f"❓ 알 수 없는 연산자: {operator}")
-                
-        except (ValueError, ZeroDivisionError) as e:
-            result = False
-            current_value = 0
-            target_num = 0
-            print(f"❌ 계산 오류: {e}")
-        
-        # 결과 로깅
-        result_text = "✅ PASS" if result else "❌ FAIL"
-        status_text = "조건 충족" if result else "조건 불충족"
-        
-        print(f"� 최종 결과: {result_text}")
-        print(f"   상태: {status_text}")
-        print(f"   데이터 소스: {simulation_data.get('data_source', 'unknown')}")
-        
-        # 차트 업데이트 (차트 변수 카테고리 시스템 연동) - 개선된 로직
-        trigger_points = []
-        if hasattr(self, 'simulation_result_widget'):
-            # 차트용 목표값 설정 (외부변수 고려)
-            chart_target_value = target_num  # 계산된 실제 목표값 사용
-            
-            # 🎯 차트 변수 카테고리 시스템을 통한 변수 정보 가져오기
-            variable_info = self._get_variable_chart_info(variable_name)
-            external_variable_info = self._get_variable_chart_info(
-                external_variable.get('variable_name') if external_variable else None
+            # 새로운 서비스 사용
+            from .components.shared.trigger_simulation_service import (
+                get_trigger_simulation_service, 
+                TriggerSimulationRequest
             )
             
-            # 변수 카테고리에 따른 적절한 데이터 생성
-            chart_category = variable_info.get('category', 'price_overlay')
-            display_type = variable_info.get('display_type', 'line')
+            # 요청 데이터 구성
+            request = TriggerSimulationRequest(
+                condition=self.selected_condition,
+                scenario=scenario,
+                data_source="virtual",
+                data_limit=100
+            )
             
-            print(f"📊 변수 차트 정보: {variable_name} -> 카테고리: {chart_category}, 표시: {display_type}")
+            # 서비스 실행
+            service = get_trigger_simulation_service()
+            result = service.run_simulation(request)
             
-            # 실제 시장 데이터 기반으로 변수값 계산
-            market_prices = simulation_data.get('price_data', [])
+            # 결과 처리
+            self._process_simulation_result(result, scenario)
             
-            # 기본 변수 계산 (예: SMA)
-            base_variable_data = self._calculate_variable_data(variable_name, market_prices)
-            print(f"🔍 계산된 기본변수 데이터: {type(base_variable_data)}, 길이: {len(base_variable_data) if base_variable_data else 'None'}")
-            if base_variable_data and len(base_variable_data) > 0:
-                print(f"🔍 기본변수 첫 5개 값: {base_variable_data[:5]}")
-                print(f"🔍 기본변수 범위: {min(base_variable_data):.2f} ~ {max(base_variable_data):.2f}")
-            
-            # 외부 변수 계산 (예: EMA) - 파라미터 포함
-            external_variable_data = None
-            if external_variable and external_variable.get('variable_name'):
-                # 외부변수의 파라미터 추출
-                external_parameters = external_variable.get('parameters', {})
-                external_variable_data = self._calculate_variable_data(
-                    external_variable['variable_name'], market_prices, external_parameters
-                )
-                print(f"🔍 계산된 외부변수 데이터: {type(external_variable_data)}, 길이: {len(external_variable_data) if external_variable_data else 'None'}")
-                if external_variable_data and len(external_variable_data) > 0:
-                    print(f"🔍 외부변수 첫 5개 값: {external_variable_data[:5]}")
-                    print(f"🔍 외부변수 범위: {min(external_variable_data):.2f} ~ {max(external_variable_data):.2f}")
-                    print(f"🔍 외부변수 파라미터: {external_parameters}")
-            
-            # 트리거 포인트 계산 (기본 변수 vs 외부 변수 비교)
-            if external_variable_data:
-                # 외부 변수와 비교 - TriggerCalculator의 크로스오버 계산 사용
-                trigger_points = self.trigger_calculator.calculate_cross_trigger_points(
-                    base_variable_data, external_variable_data, operator
-                )
-            else:
-                # 고정값과 비교 - TriggerCalculator 사용
-                trigger_points = self.trigger_calculator.calculate_trigger_points(
-                    base_variable_data, operator, target_num
-                )
-            
-            chart_simulation_data = {
-                'scenario': scenario,
-                'price_data': market_prices,  # 시장가 데이터
-                'base_variable_data': base_variable_data,  # 기본 변수 (SMA)
-                'external_variable_data': external_variable_data,  # 외부 변수 (EMA)
-                'current_value': current_value,
-                'target_value': chart_target_value,
-                'variable_info': variable_info,
-                'external_variable_info': external_variable_info,
-                'condition_name': condition_name
+        except Exception as e:
+            print(f"❌ 시뮬레이션 실행 오류: {e}")
+            self.simulation_status.setText(f"Status: ❌ 시뮬레이션 실패 - {e}")
+    
+    def _process_simulation_result(self, result, scenario):
+        """시뮬레이션 결과 처리 - 깔끔한 분리"""
+        if not result.success:
+            self.simulation_status.setText(f"Status: ❌ {result.error_message}")
+            return
+        
+        # 상태 업데이트
+        trigger_count = len(result.trigger_points)
+        status_text = "✅ PASS" if trigger_count > 0 else "❌ FAIL"
+        self.simulation_status.setText(
+            f"Status: {status_text} - {result.condition_name}, 신호: {trigger_count}개"
+        )
+        
+        # 차트 업데이트
+        if hasattr(self, 'simulation_result_widget'):
+            chart_data = {
+                'scenario': result.scenario,
+                'price_data': result.price_data,
+                'base_variable_data': result.base_variable_data,
+                'external_variable_data': result.external_variable_data,
+                'current_value': result.current_value,
+                'target_value': result.target_value,
+                'variable_info': result.variable_info,
+                'external_variable_info': result.external_variable_info,
+                'condition_name': result.condition_name
             }
             
             trigger_results = {
-                'trigger_points': trigger_points,
-                'trigger_activated': result,
-                'total_signals': len(trigger_points)
+                'trigger_points': result.trigger_points,
+                'trigger_activated': trigger_count > 0,
+                'total_signals': trigger_count
             }
             
-            print(f"📊 트리거 포인트 계산 완료: {len(trigger_points)}개 신호 발견")
-            # 차트 위젯에 시뮬레이션 결과 업데이트 (변수 정보 포함)
-            self.simulation_result_widget.update_chart_with_simulation_results(chart_simulation_data, trigger_results)
+            self.simulation_result_widget.update_chart_with_simulation_results(chart_data, trigger_results)
         
-        # 트리거 포인트 기반으로 최종 결과 재계산 (차트의 신호와 일치시킴)
-        if len(trigger_points) > 0:
-            final_result = True
-            final_result_text = "✅ PASS"
-            final_status_text = "조건 충족"
-        else:
-            final_result = False
-            final_result_text = "❌ FAIL"
-            final_status_text = "조건 불충족"
+        # 로그 추가
+        self.add_test_history_item(result.result_text, "test")
         
-        # 상태 업데이트 (트리거 신호 개수 기반)
-        if len(trigger_points) > 0:
-            self.simulation_status.setText(f"Status: ✅ PASS - 조건 충족, 신호: {len(trigger_points)}개")
-        else:
-            self.simulation_status.setText("Status: ❌ FAIL - 조건 충족 없음")
+        # 시그널 발생
+        self.condition_tested.emit(self.selected_condition, trigger_count > 0)
         
-        # 테스트 기록에 상세 정보 추가 (신호 개수 기반으로 수정)
-        detail_info = f"{final_result_text} {scenario} - {condition_name} ({final_status_text}, {len(trigger_points)}신호)"
-        self.add_test_history_item(detail_info, "test")
-        
-        # SimulationResultWidget에서 개별 트리거 신호들을 처리하도록 위임
-        if hasattr(self, 'simulation_result_widget'):
-            # 시뮬레이션 데이터와 트리거 포인트를 위젯에 전달
-            simulation_result_data = {
-                'scenario': scenario,
-                'price_data': simulation_data.get('price_data', []),
-                'trigger_points': trigger_points,
-                'result_text': final_result_text,
-                'condition_name': condition_name
-            }
-            # SimulationResultWidget의 메서드 호출
-            if hasattr(self.simulation_result_widget, 'update_trigger_signals'):
-                self.simulation_result_widget.update_trigger_signals(simulation_result_data)
-        
-        # 시그널 발생 (트리거 개수 기반 결과 사용)
-        self.condition_tested.emit(self.selected_condition, final_result)
-        
-        # 레거시 차트 업데이트 비활성화 - 새로운 차트 시스템 사용
-        # if CHART_AVAILABLE:
-        #     price_data = simulation_data.get('price_data', [])
-        #     # 트리거 포인트 계산
-        #     trigger_points = self.calculate_trigger_points(price_data, operator, target_num)
-        #     
-        #     self.update_chart_with_scenario(scenario, {
-        #         'result': result_text,
-        #         'target_value': target_num,
-        #         'current_value': current_value,
-        #         'price_data': price_data,
-        #         'trigger_points': trigger_points
-        #     })
-        
-        print(f"Simulation: {scenario} -> {result} (value: {current_value})")
+        print(f"✅ 시뮬레이션 완료: {result.result_text}")
+    
     
     def _get_variable_chart_info(self, variable_name):
         """차트 변수 카테고리 시스템을 통한 변수 정보 가져오기 - 올바른 ID 매핑"""
@@ -1144,101 +984,20 @@ class TriggerBuilderScreen(QWidget):
         return default
     
     def _calculate_sma(self, prices, period):
-        """단순이동평균 계산"""
-        if len(prices) < period:
-            return [prices[0]] * len(prices)  # 데이터 부족시 첫 번째 값으로 채움
-        
-        sma_values = []
-        for i in range(len(prices)):
-            if i < period - 1:
-                # 초기값: 지금까지의 평균
-                sma_values.append(sum(prices[:i+1]) / (i+1))
-            else:
-                # 정상 SMA 계산
-                sma_values.append(sum(prices[i-period+1:i+1]) / period)
-        
-        return sma_values
+        """단순이동평균 계산 - TriggerCalculator로 위임"""
+        return self.trigger_calculator.calculate_sma(prices, period)
     
     def _calculate_ema(self, prices, period):
-        """지수이동평균 계산"""
-        if not prices:
-            return []
-        
-        alpha = 2 / (period + 1)
-        ema_values = [prices[0]]  # 첫 번째 값은 그대로
-        
-        for i in range(1, len(prices)):
-            ema = alpha * prices[i] + (1 - alpha) * ema_values[-1]
-            ema_values.append(ema)
-        
-        return ema_values
+        """지수이동평균 계산 - TriggerCalculator로 위임"""
+        return self.trigger_calculator.calculate_ema(prices, period)
     
     def _calculate_rsi(self, prices, period=14):
-        """RSI 계산 (개선된 버전)"""
-        if len(prices) < period + 1:
-            return [50] * len(prices)  # 데이터 부족시 중간값 반환
-        
-        # 가격 변화 계산
-        deltas = []
-        for i in range(1, len(prices)):
-            deltas.append(prices[i] - prices[i-1])
-        
-        # 상승과 하락 분리
-        gains = [max(delta, 0) for delta in deltas]
-        losses = [max(-delta, 0) for delta in deltas]
-        
-        rsi_values = []
-        
-        # 초기 period 구간의 평균 계산
-        if len(gains) >= period:
-            avg_gain = sum(gains[:period]) / period
-            avg_loss = sum(losses[:period]) / period
-            
-            # 첫 번째 RSI 값 계산
-            if avg_loss == 0:
-                first_rsi = 100
-            else:
-                rs = avg_gain / avg_loss
-                first_rsi = 100 - (100 / (1 + rs))
-            
-            # 초기값들을 첫 번째 RSI로 채움
-            rsi_values = [first_rsi] * period
-            
-            # 나머지 RSI 계산
-            for i in range(period, len(gains)):
-                # 평활화된 평균 계산 (Wilder's smoothing)
-                avg_gain = (avg_gain * (period - 1) + gains[i]) / period
-                avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-                
-                if avg_loss == 0:
-                    rsi = 100
-                else:
-                    rs = avg_gain / avg_loss
-                    rsi = 100 - (100 / (1 + rs))
-                
-                rsi_values.append(rsi)
-            
-            # 첫 번째 가격에 대한 RSI 추가 (delta 계산 전이므로)
-            rsi_values.insert(0, first_rsi)
-        else:
-            # 데이터가 충분하지 않은 경우
-            rsi_values = [50] * len(prices)
-        
-        # 길이 조정
-        while len(rsi_values) < len(prices):
-            rsi_values.append(50)
-        while len(rsi_values) > len(prices):
-            rsi_values.pop()
-        
-        return rsi_values
+        """RSI 계산 - TriggerCalculator로 위임"""
+        return self.trigger_calculator.calculate_rsi(prices, period)
     
     def _calculate_macd(self, prices):
-        """MACD 계산 (12일 EMA - 26일 EMA)"""
-        ema12 = self._calculate_ema(prices, 12)
-        ema26 = self._calculate_ema(prices, 26)
-        
-        macd = [ema12[i] - ema26[i] for i in range(len(prices))]
-        return macd
+        """MACD 계산 - TriggerCalculator로 위임"""
+        return self.trigger_calculator.calculate_macd(prices)
     
     def _generate_volume_data(self, length):
         """가상 거래량 데이터 생성"""
