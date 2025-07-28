@@ -631,7 +631,7 @@ class TriggerBuilderScreen(QWidget):
             request = TriggerSimulationRequest(
                 condition=self.selected_condition,
                 scenario=scenario,
-                data_source="virtual",
+                data_source="real_db",
                 data_limit=100
             )
             

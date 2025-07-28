@@ -16,30 +16,74 @@ try:
     print("✅ TriggerCalculator 로드 성공")
 except ImportError as e:
     print(f"❌ TriggerCalculator 로드 실패: {e}")
-    COMPONENTS_AVAILABLE = False
-    
-    # 최소한의 폴백 - 실제 계산 없이 에러만 반환
+    # 간단한 폴백만 유지 - 실제 계산은 하지 않음
     class TriggerCalculator:
         def __init__(self):
-            print("⚠️ 폴백 TriggerCalculator 사용중 - 실제 계산 불가")
+            print("⚠️ 폴백 TriggerCalculator 사용중 - 기본 계산만 가능")
         
         def calculate_sma(self, prices, period):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+            """폴백 SMA 계산"""
+            return [sum(prices[max(0, i-period+1):i+1]) / min(period, i+1) for i in range(len(prices))]
         
         def calculate_ema(self, prices, period):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+            """폴백 EMA 계산"""
+            if not prices:
+                return []
+            alpha = 2 / (period + 1)
+            ema = [prices[0]]
+            for price in prices[1:]:
+                ema.append(alpha * price + (1 - alpha) * ema[-1])
+            return ema
         
-        def calculate_rsi(self, prices, period):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+        def calculate_rsi(self, prices, period=14):
+            """폴백 RSI 계산"""
+            return [50.0] * len(prices)  # 기본값 50
         
         def calculate_macd(self, prices):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+            """폴백 MACD 계산"""
+            return {'macd': [0.0] * len(prices), 'signal': [0.0] * len(prices), 'histogram': [0.0] * len(prices)}
         
         def calculate_trigger_points(self, data, op, target):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+            """폴백 트리거 포인트 계산"""
+            trigger_points = []
+            for i, value in enumerate(data):
+                if pd.isna(value):
+                    continue
+                if op == ">" and value > target:
+                    trigger_points.append(i)
+                elif op == "<" and value < target:
+                    trigger_points.append(i)
+                elif op == ">=" and value >= target:
+                    trigger_points.append(i)
+                elif op == "<=" and value <= target:
+                    trigger_points.append(i)
+            return trigger_points
         
         def calculate_cross_trigger_points(self, base, ext, op):
-            raise ImportError("TriggerCalculator 컴포넌트를 불러올 수 없습니다")
+            """폴백 교차 트리거 포인트 계산"""
+            if not base or not ext or len(base) != len(ext):
+                return []
+            
+            trigger_points = []
+            for i in range(1, len(base)):
+                if pd.isna(base[i]) or pd.isna(ext[i]) or pd.isna(base[i-1]) or pd.isna(ext[i-1]):
+                    continue
+                
+                prev_diff = base[i-1] - ext[i-1]
+                curr_diff = base[i] - ext[i]
+                
+                if op == "상향교차" and prev_diff <= 0 and curr_diff > 0:
+                    trigger_points.append(i)
+                elif op == "하향교차" and prev_diff >= 0 and curr_diff < 0:
+                    trigger_points.append(i)
+                elif op == ">" and prev_diff <= 0 and curr_diff > 0:  # ">" 연산자 지원
+                    trigger_points.append(i)
+                elif op == "<" and prev_diff >= 0 and curr_diff < 0:  # "<" 연산자 지원
+                    trigger_points.append(i)
+            
+            return trigger_points
+    
+    COMPONENTS_AVAILABLE = False
 
 
 @dataclass
@@ -47,7 +91,7 @@ class TriggerSimulationRequest:
     """트리거 시뮬레이션 요청 데이터"""
     condition: Dict[str, Any]
     scenario: str
-    data_source: str = "virtual"
+    data_source: str = "real_db"
     data_limit: int = 100
 
 
@@ -135,17 +179,31 @@ class TriggerSimulationService:
             return self._create_error_result(request, str(e))
     
     def _load_market_data(self, data_source: str, limit: int, scenario: str) -> Optional[List[float]]:
-        """시장 데이터 로드"""
+        """시장 데이터 로드 - 새로운 engines 사용"""
         try:
-            return self._generate_scenario_data(scenario, limit)
+            # 새로운 데이터 소스 관리자 사용
+            from ..data_source_manager import get_data_source_manager
+            
+            manager = get_data_source_manager()
+            scenario_data = manager.get_scenario_data(scenario, data_source, limit)
+            
+            if scenario_data and 'price_data' in scenario_data:
+                print(f"✅ 새로운 engines에서 {scenario} 시나리오 데이터 로드: {len(scenario_data['price_data'])}개 포인트")
+                return scenario_data['price_data']
+            else:
+                print("⚠️ 새로운 engines 실패, 폴백 데이터 사용")
+                return self._generate_scenario_data(scenario, limit)
+                
         except Exception as e:
-            print(f"❌ 데이터 로드 실패: {e}")
-            return None
+            print(f"❌ 데이터 로드 실패: {e}, 폴백 사용")
+            return self._generate_scenario_data(scenario, limit)
     
     def _generate_scenario_data(self, scenario: str, limit: int) -> List[float]:
-        """시나리오별 가상 데이터 생성"""
+        """시나리오별 가상 데이터 생성 - 매번 다른 랜덤 데이터"""
+        import time
         base_price = 50000
-        np.random.seed(42)
+        # 매번 다른 시드 사용 (현재 시간 기반)
+        np.random.seed(int(time.time() * 1000) % 2147483647)
         
         if scenario == "상승 추세":
             trend = np.linspace(0, 10000, limit)

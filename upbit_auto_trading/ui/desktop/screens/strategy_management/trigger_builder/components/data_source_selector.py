@@ -50,8 +50,8 @@ class DataSourceSelectorWidget(QWidget):
     def load_available_sources(self):
         """사용 가능한 데이터 소스 로드"""
         try:
-            # 2단계 상위 디렉터리의 data_source_manager 임포트
-            from ...data_source_manager import get_data_source_manager
+            # 같은 폴더의 data_source_manager 사용으로 변경
+            from .data_source_manager import get_data_source_manager
             self.manager = get_data_source_manager()
             
             # 기존 버튼들 제거
@@ -69,25 +69,28 @@ class DataSourceSelectorWidget(QWidget):
                 return
             
             # 각 소스별 라디오 버튼 생성
-            for source_key, source_info in available_sources.items():
+            for source_key in available_sources:
+                # 소스 정보를 동적으로 생성
+                source_info = {
+                    'name': self._get_source_display_name(source_key),
+                    'description': self._get_source_description(source_key),
+                    'available': True
+                }
                 self.create_source_button(source_key, source_info)
             
             # 현재 사용자 선호도 표시
-            current_preference = self.manager.get_user_preference()
+            current_preference = getattr(self.manager, '_user_preference', None)
+            if current_preference and hasattr(current_preference, 'value'):
+                current_preference = current_preference.value
             if current_preference and current_preference in self.source_buttons:
                 self.source_buttons[current_preference].setChecked(True)
                 self.current_source = current_preference
             elif available_sources:
-                # 기본값으로 추천 소스 선택
-                recommended = None
-                for key, info in available_sources.items():
-                    if info.get("recommended", False):
-                        recommended = key
-                        break
-                
-                if recommended:
-                    self.source_buttons[recommended].setChecked(True)
-                    self.current_source = recommended
+                # 첫 번째 사용 가능한 소스를 기본값으로 설정
+                first_source = available_sources[0]
+                if first_source in self.source_buttons:
+                    self.source_buttons[first_source].setChecked(True)
+                    self.current_source = first_source
             
             logging.info(f"데이터 소스 로드 완료: {len(available_sources)}개")
             
@@ -96,6 +99,26 @@ class DataSourceSelectorWidget(QWidget):
             error_label = QLabel(f"❌ 데이터 소스 로드 실패: {e}")
             error_label.setStyleSheet("color: red;")
             self.buttons_layout.addWidget(error_label)
+    
+    def _get_source_display_name(self, source_key: str) -> str:
+        """소스 키에 대한 표시 이름 반환"""
+        display_names = {
+            'embedded': '내장 최적화',
+            'real_db': '실제 DB',
+            'synthetic': '합성 현실적',
+            'fallback': '단순 폴백'
+        }
+        return display_names.get(source_key, source_key.title())
+    
+    def _get_source_description(self, source_key: str) -> str:
+        """소스 키에 대한 설명 반환"""
+        descriptions = {
+            'embedded': '시나리오별 최적화된 내장 데이터셋',
+            'real_db': '실제 시장 데이터 (시나리오별 세그먼테이션)',
+            'synthetic': '합성된 현실적 시장 데이터',
+            'fallback': '단순 생성된 폴백 데이터'
+        }
+        return descriptions.get(source_key, f'{source_key} 데이터 소스')
     
     def create_source_button(self, source_key: str, source_info: dict):
         """개별 소스용 라디오 버튼 생성 - 매우 컴팩트한 버전"""

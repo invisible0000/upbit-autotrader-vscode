@@ -25,30 +25,40 @@ MANIFEST
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # 로그 파일
 logs/
 *.log
 
-# 데이터베이스 파일
+# 데이터베이스 파일 (중요 데이터 보호)
 *.db
 *.sqlite
 *.sqlite3
-data/
+data/*.sqlite3
+data/backups/
 
-# 환경 변수 파일
+# 환경 변수 파일 (보안)
 .env
 .env.*
+.env.local
+.env.development
+.env.production
 
-# API 키 파일
+# API 키 파일 (보안)
 *_key.txt
 *_keys.txt
 *_api_key.txt
 *_api_keys.txt
+api_keys.json
+credentials.json
+secrets.yaml
 
 # IDE 관련
 .idea/
-.vscode/
+.vscode/settings.json
+.vscode/launch.json
 *.swp
 *.swo
 .DS_Store
@@ -58,10 +68,52 @@ data/
 htmlcov/
 .pytest_cache/
 .tox/
+.nox/
 nosetests.xml
 coverage.xml
 *.cover
+.hypothesis/
+
+# 개발 임시 파일
+scratch/
+temp_*
+test_*
+debug_*
+*.tmp
+*.temp
+.temp/
+.tmp/
+
+# 백업 파일
+*.bak
+*.backup
+*.orig
+
+# 사용자 개인 데이터
+user_settings.json
+personal_config.yaml
+trading_history/
+portfolio_data/
+personal_strategies/
+
+# 차트 캐시
+chart_cache/
+*.cache
+
+# OS 관련
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # 기타
-.DS_Store
-Thumbs.db
+*.pid
+*.lock
+.ipynb_checkpoints
+.python-version
+.mypy_cache/
+.dmypy.json
+dmypy.json

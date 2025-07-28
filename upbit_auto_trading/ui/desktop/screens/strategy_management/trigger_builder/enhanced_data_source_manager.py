@@ -1,19 +1,11 @@
 """
-시뮬레이션 데이터 소스 관리자
+향상된 시뮬레이션 데이터 소스 관리자
 시나리오별 고품질 데이터 제공 및 미니차트 최적화
 """
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Optional, Any
 from enum import Enum
-
-# 디버그 로거 import
-try:
-    from upbit_auto_trading.utils.debug_logger import get_logger
-    logger = get_logger("DataSourceManager")
-except ImportError:
-    # 폴백: 기본 logging 사용
-    logger = logging.getLogger("DataSourceManager")
 
 
 class DataSourceType(Enum):
@@ -24,8 +16,8 @@ class DataSourceType(Enum):
     SIMPLE_FALLBACK = "fallback"   # 단순 폴백 데이터
 
 
-class SimulationDataSourceManager:
-    """시뮬레이션 데이터 소스 관리자"""
+class EnhancedSimulationDataSourceManager:
+    """향상된 시뮬레이션 데이터 소스 관리자"""
     
     def __init__(self):
         """데이터 소스 관리자 초기화"""
@@ -44,30 +36,30 @@ class SimulationDataSourceManager:
             self._engines[DataSourceType.EMBEDDED] = get_embedded_simulation_engine
             self._availability[DataSourceType.EMBEDDED] = True
             logging.info("✅ 내장 최적화 데이터셋 사용 가능 (시나리오별)")
-            logger.debug("내장 최적화 데이터셋 사용 가능 - EMBEDDED 등록됨")
+            print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 내장 최적화 데이터셋 사용 가능 - EMBEDDED 등록됨")
         except ImportError as e:
             self._availability[DataSourceType.EMBEDDED] = False
             logging.warning(f"❌ 내장 데이터셋 불가: {e}")
-            logger.warning(f"내장 데이터셋 불가: {e}")
+            print(f"❌❌❌ ENHANCED_DATA_SOURCE_MANAGER: 내장 데이터셋 불가: {e}")
         
         # 2. 실제 DB 확인 (시나리오별 세그먼테이션)
         try:
             import os
-            # 실제 샘플 데이터셋 경로 (engines/data 폴더)
-            db_path = os.path.join(os.path.dirname(__file__), "..", "engines", "data", "sampled_market_data.sqlite3")
-            logger.debug(f"DB 경로 확인: {db_path}")
-            logger.debug(f"DB 파일 존재: {os.path.exists(db_path)}")
+            # 샘플 데이터셋 경로
+            db_path = os.path.join(os.path.dirname(__file__), "..", "components", "data", "sampled_market_data.sqlite3")
+            print(f"🔍🔍🔍 ENHANCED_DATA_SOURCE_MANAGER DB 경로 확인: {db_path}")
+            print(f"🔍🔍🔍 ENHANCED_DATA_SOURCE_MANAGER DB 파일 존재: {os.path.exists(db_path)}")
             
             if os.path.exists(db_path):
                 from ..engines.real_data_simulation import RealDataSimulationEngine
                 self._engines[DataSourceType.REAL_DB] = lambda: RealDataSimulationEngine()
                 self._availability[DataSourceType.REAL_DB] = True
                 logging.info("✅ 실제 DB 데이터 사용 가능 (시나리오별 세그먼테이션)")
-                logger.debug("실제 DB 데이터 사용 가능 - REAL_DB 등록됨")
+                print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 실제 DB 데이터 사용 가능 - REAL_DB 등록됨")
             else:
                 self._availability[DataSourceType.REAL_DB] = False
                 logging.warning("❌ 실제 DB 파일 없음")
-                logger.warning("실제 DB 파일 없음")
+                print("❌❌❌ ENHANCED_DATA_SOURCE_MANAGER: 실제 DB 파일 없음")
         except ImportError as e:
             self._availability[DataSourceType.REAL_DB] = False
             logging.warning(f"❌ 실제 DB 엔진 불가: {e}")
@@ -78,47 +70,44 @@ class SimulationDataSourceManager:
             self._engines[DataSourceType.SYNTHETIC] = lambda: RobustSimulationEngine()
             self._availability[DataSourceType.SYNTHETIC] = True
             logging.info("✅ 합성 현실적 데이터 사용 가능")
-            logger.debug("합성 현실적 데이터 사용 가능 - SYNTHETIC 등록됨")
+            print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 합성 현실적 데이터 사용 가능 - SYNTHETIC 등록됨")
         except ImportError as e:
             self._availability[DataSourceType.SYNTHETIC] = False
             logging.warning(f"❌ 합성 데이터 엔진 불가: {e}")
-            logger.warning(f"합성 데이터 엔진 불가: {e}")
+            print(f"❌❌❌ ENHANCED_DATA_SOURCE_MANAGER: 합성 데이터 엔진 불가: {e}")
         
         # 4. 단순 폴백 (항상 가능)
         self._availability[DataSourceType.SIMPLE_FALLBACK] = True
-        logger.debug("단순 폴백 데이터 항상 사용 가능 - SIMPLE_FALLBACK 등록됨")
+        print("✅ 단순 폴백 데이터 항상 사용 가능 - SIMPLE_FALLBACK 등록됨")
         
-        logger.debug(f"최종 데이터 소스 가용성: {self._availability}")
-        logger.debug(f"사용 가능한 데이터 소스 개수: {sum(self._availability.values())}/{len(self._availability)}")
+        print(f"🔍 최종 데이터 소스 가용성: {self._availability}")
+        print(f"🔍 사용 가능한 데이터 소스 개수: {sum(self._availability.values())}/{len(self._availability)}")
         
     def get_available_sources(self) -> List[str]:
         """사용 가능한 데이터 소스 목록 반환"""
         available = []
-        logger.debug(f"get_available_sources 호출됨 - 가용성: {self._availability}")
+        print(f"🔍 get_available_sources 호출됨 - 가용성: {self._availability}")
         
         for source_type, available_flag in self._availability.items():
             if available_flag:
                 available.append(source_type.value)
-                logger.verbose(f"{source_type.value} 소스 추가됨")
+                print(f"📝 {source_type.value} 소스 추가됨")
         
-        logger.debug(f"반환할 소스 목록: {available} (총 {len(available)}개)")
+        print(f"🔍 반환할 소스 목록: {available} (총 {len(available)}개)")
         return available
     
-    def set_user_preference(self, source_type: str) -> bool:
+    def set_user_preference(self, source_type: str):
         """사용자 선호 데이터 소스 설정"""
         try:
             source_enum = DataSourceType(source_type)
             if self._availability.get(source_enum, False):
                 self._user_preference = source_enum
                 logging.info(f"사용자 선호 데이터 소스 설정: {source_type}")
-                logger.debug(f"사용자 선호 데이터 소스 설정: {source_type}")
-                return True
+                print(f"🎯 사용자 선호 데이터 소스 설정: {source_type}")
             else:
                 logging.warning(f"사용할 수 없는 데이터 소스: {source_type}")
-                return False
         except ValueError:
             logging.error(f"잘못된 데이터 소스 타입: {source_type}")
-            return False
     
     def get_engine(self, source_type: str = None):
         """지정된 타입의 시뮬레이션 엔진 반환"""
@@ -259,11 +248,11 @@ class SimulationDataSourceManager:
 
 
 # 전역 인스턴스
-_data_source_manager = None
+_enhanced_manager = None
 
-def get_data_source_manager():
-    """데이터 소스 관리자 싱글톤 반환"""
-    global _data_source_manager
-    if _data_source_manager is None:
-        _data_source_manager = SimulationDataSourceManager()
-    return _data_source_manager
+def get_enhanced_data_source_manager():
+    """향상된 데이터 소스 관리자 싱글톤 반환"""
+    global _enhanced_manager
+    if _enhanced_manager is None:
+        _enhanced_manager = EnhancedSimulationDataSourceManager()
+    return _enhanced_manager

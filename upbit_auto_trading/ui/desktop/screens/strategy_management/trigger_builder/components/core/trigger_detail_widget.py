@@ -113,11 +113,9 @@ class TriggerDetailWidget(QWidget):
         active = trigger_data.get('is_active', trigger_data.get('active', False))
         
         # 기본 정보
-        detail_text = f"""📋 트리거 상세정보
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+        detail_text = f"""
 🏷️ 이름: {name}
-� 생성일: {created_at}
+📅 생성일: {created_at}
 🔄 상태: {'✅ 활성' if active else '⏸️ 비활성'}
 
 """
@@ -166,9 +164,18 @@ class TriggerDetailWidget(QWidget):
                 trigger_data.get('comparison_value') or
                 'Unknown')
         
+        # 추세 방향성 정보 준비
+        trend_direction = trigger_data.get('trend_direction', 'both')
+        trend_names = {
+            'rising': '📈 상승 추세',
+            'falling': '📉 하락 추세', 
+            'both': '📊 추세 무관'
+        }
+        
         detail_text += f"""🎯 비교 조건:
   📊 기본 변수: {variable_name if 'variable_name' in locals() else variable_id}
   ⚖️ 연산자: {self._format_operator(operator)}
+  📈 추세 방향성: {trend_names.get(trend_direction, trend_direction)}
   🎯 비교값: {value}
 
 """
@@ -196,15 +203,6 @@ class TriggerDetailWidget(QWidget):
                 detail_text += f"  ⚙️ 파라미터: {external_parameters}\n"
             
             detail_text += "\n"
-        
-        # 추세 방향성 정보
-        trend_direction = trigger_data.get('trend_direction', 'both')
-        trend_names = {
-            'rising': '📈 상승 추세',
-            'falling': '📉 하락 추세', 
-            'both': '📊 추세 무관'
-        }
-        detail_text += f"📈 추세 방향성: {trend_names.get(trend_direction, trend_direction)}\n\n"
         
         # 차트 카테고리 정보 (DB 스키마)
         db_chart_category = trigger_data.get('chart_category', '자동감지')

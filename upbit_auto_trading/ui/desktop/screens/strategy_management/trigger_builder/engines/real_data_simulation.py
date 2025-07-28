@@ -11,10 +11,12 @@ from typing import Dict, List, Tuple, Optional, Any
 import logging
 import os
 
-# 전역 DB 매니저 임포트
+# 전역 DB 매니저 임포트 - 비활성화
 try:
-    from upbit_auto_trading.utils.global_db_manager import get_db_connection
-    USE_GLOBAL_MANAGER = True
+    # from upbit_auto_trading.utils.global_db_manager import get_db_connection
+    # USE_GLOBAL_MANAGER = True
+    USE_GLOBAL_MANAGER = False  # 강제로 비활성화
+    print("⚠️ 전역 DB 매니저 비활성화 - 직접 SQLite 연결 사용")
 except ImportError:
     print("⚠️ 전역 DB 매니저를 사용할 수 없습니다. 기존 방식을 사용합니다.")
     USE_GLOBAL_MANAGER = False
@@ -22,27 +24,29 @@ except ImportError:
 class RealDataSimulationEngine:
     """UI용 실제 데이터 기반 시뮬레이션 엔진"""
     
-    def __init__(self, data_db_path: str = "data/market_data.sqlite3"):
+    def __init__(self, data_db_path: str = "data/sampled_market_data.sqlite3"):
         """
         실제 데이터 기반 시뮬레이션 엔진 초기화
         
         Args:
             data_db_path: 시장 데이터 DB 경로 (전역 매니저 사용시 무시됨)
         """
-        self.data_db_path = data_db_path  # 레거시 호환성
+        # 트리거 빌더 전용 샘플 데이터 경로 (같은 engines/data 폴더)
+        self.data_db_path = os.path.join(os.path.dirname(__file__), "data", "sampled_market_data.sqlite3")
         self.use_global_manager = USE_GLOBAL_MANAGER
         self.cache_data = None
         self.cache_indicators = None
         
+        # 시나리오별 데이터 세그먼트 정의
+        self.scenario_segments = self._define_scenario_segments()
+        
     def _get_connection(self):
-        """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
-        if self.use_global_manager:
-            return get_db_connection('market_data')
-        else:
-            return sqlite3.connect(self.data_db_path)
+        """DB 연결 반환 - 직접 SQLite 연결만 사용"""
+        return sqlite3.connect(self.data_db_path)
         
     def load_market_data(self, limit: int = 500) -> Optional[pd.DataFrame]:
         """실제 KRW-BTC 시장 데이터 로드"""
+        conn = None
         try:
             if not self.use_global_manager and not os.path.exists(self.data_db_path):
                 logging.warning(f"Market data DB not found: {self.data_db_path}")
@@ -66,7 +70,6 @@ class RealDataSimulationEngine:
             """
             
             df = pd.read_sql(query, conn, params=(limit,))
-            conn.close()
             
             if df.empty:
                 logging.warning("No market data found")
@@ -91,6 +94,107 @@ class RealDataSimulationEngine:
         except Exception as e:
             logging.error(f"Failed to load market data: {e}")
             return None
+        finally:
+            # 데이터베이스 연결 안전하게 닫기
+            if conn is not None:
+                try:
+                    conn.close()
+                except:
+                    pass  # 이미 닫혔거나 에러 무시
+    
+    def _define_scenario_segments(self) -> Dict[str, Dict[str, Any]]:
+        """시나리오별 데이터 세그먼트 정의"""
+        return {
+            '상승 추세': {
+                'date_range': ('2024-01-01', '2024-03-31'),
+                'description': '꾸준한 상승 추세 구간',
+                'data_offset': 0
+            },
+            '하락 추세': {
+                'date_range': ('2024-04-01', '2024-06-30'),
+                'description': '하락 추세 구간',
+                'data_offset': 90
+            },
+            '급등': {
+                'date_range': ('2024-07-01', '2024-08-15'),
+                'description': '급등 구간',
+                'data_offset': 180
+            },
+            '급락': {
+                'date_range': ('2024-08-16', '2024-09-30'),
+                'description': '급락 구간',
+                'data_offset': 225
+            },
+            '횡보': {
+                'date_range': ('2024-10-01', '2024-12-31'),
+                'description': '횡보 구간',
+                'data_offset': 270
+            }
+        }
+    
+    def load_scenario_data(self, scenario: str, limit: int = 100) -> Optional[pd.DataFrame]:
+        """시나리오별 데이터 로드"""
+        conn = None
+        try:
+            if scenario not in self.scenario_segments:
+                logging.warning(f"Unknown scenario: {scenario}, using default data")
+                return self.load_market_data(limit)
+            
+            segment_info = self.scenario_segments[scenario]
+            
+            conn = self._get_connection()
+            
+            # 시나리오별 데이터 쿼리
+            query = """
+            SELECT 
+                timestamp,
+                open,
+                high, 
+                low,
+                close,
+                volume
+            FROM market_data 
+            WHERE symbol = 'KRW-BTC' AND timeframe = '1d'
+            ORDER BY timestamp DESC 
+            LIMIT ? OFFSET ?
+            """
+            
+            df = pd.read_sql_query(query, conn, params=[limit, segment_info['data_offset']])
+            
+            if df.empty:
+                logging.warning(f"No data found for scenario: {scenario}")
+                return self.load_market_data(limit)
+            
+            # 데이터 전처리
+            df = df.sort_values('timestamp').reset_index(drop=True)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df = df.set_index('timestamp')
+            
+            # 숫자형 변환
+            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+            for col in numeric_cols:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # 기술적 지표 계산
+            df = self.calculate_technical_indicators(df)
+            
+            logging.info(f"Scenario data loaded: {scenario} ({len(df)} records)")
+            return df
+            
+        except Exception as e:
+            logging.error(f"Failed to load scenario data for {scenario}: {e}")
+            return self.load_market_data(limit)
+        finally:
+            # 데이터베이스 연결 안전하게 닫기
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass  # 이미 닫혔거나 에러 무시
+    
+    def get_available_scenarios(self) -> List[str]:
+        """사용 가능한 시나리오 목록 반환"""
+        return list(self.scenario_segments.keys())
     
     def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """기술적 지표 계산"""

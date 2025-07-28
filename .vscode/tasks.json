@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Component-Based Architecture Implementation",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"🚀 컴포넌트 기반 아키텍처 구현 시작"
+			],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Dynamic Position Sizing System Implementation",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"💰 매매량 동적 조절 시스템 구현 시작",
+				"\n📋 Phase 1: 기본 매매량 설정 UI 구현",
+				"📋 Phase 2: 심플 등록 시스템 (변수→파라미터→연산→연동)",
+				"📋 Phase 3: 고급 등록 시스템 (내부연산기 포함)",
+				"📋 Phase 4: 전문가 모드 (수식 기반 매매량 계산)",
+				"\n🎯 목표: 고정→차등→동적→수식 기반 매매량 지원",
+				"🎯 대상: strategy_maker.py의 매수/매도 탭 확장"
+			],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

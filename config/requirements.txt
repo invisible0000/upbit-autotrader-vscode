@@ -7,3 +7,6 @@ pyjwt
 PyQt6
 pyqtgraph
 matplotlib>=3.5.0
+numpy
+plotly
+scipy
