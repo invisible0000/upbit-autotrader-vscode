@@ -9,72 +9,115 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import os
 
+# 전역 DB 매니저 임포트
+try:
+    from upbit_auto_trading.utils.global_db_manager import get_db_connection
+    USE_GLOBAL_MANAGER = True
+except ImportError:
+    print("⚠️ 전역 DB 매니저를 사용할 수 없습니다. 기존 방식을 사용합니다.")
+    USE_GLOBAL_MANAGER = False
+
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
     def __init__(self, db_path: str = "data/app_settings.sqlite3"):
-        self.db_path = db_path
-        self._ensure_database_exists()
+        if USE_GLOBAL_MANAGER:
+            # 전역 매니저 사용 - db_path는 호환성을 위해 유지하지만 실제로는 사용하지 않음
+            self.db_path = db_path  # 레거시 호환성
+            self.use_global_manager = True
+        else:
+            # 기존 방식 사용
+            self.db_path = db_path
+            self.use_global_manager = False
+            self._ensure_database_exists()
+        
         self._verify_unified_schema()
     
+    def _get_connection(self):
+        """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
+        if self.use_global_manager:
+            return get_db_connection('trading_conditions')
+        else:
+            return sqlite3.connect(self.db_path)
+    
     def _ensure_database_exists(self):
-        """데이터베이스 디렉토리 및 파일 생성"""
-        db_dir = os.path.dirname(self.db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
+        """데이터베이스 디렉토리 및 파일 생성 (기존 방식용)"""
+        if not self.use_global_manager:
+            db_dir = os.path.dirname(self.db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
     
     def _verify_unified_schema(self):
-        """통합 데이터베이스 스키마 확인"""
-        with sqlite3.connect(self.db_path) as conn:
+        """통합 데이터베이스 스키마 확인 및 테이블 생성"""
+        if self.use_global_manager:
+            conn = self._get_connection()
+        else:
+            conn = self._get_connection()
+            
+        with conn:
             cursor = conn.cursor()
             
             # 필수 테이블 존재 확인
-            required_tables = ['trading_conditions', 'strategies', 'system_settings']
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             existing_tables = [row[0] for row in cursor.fetchall()]
             
-            for table in required_tables:
-                if table not in existing_tables:
-                    raise Exception(f"통합 데이터베이스에 필수 테이블 '{table}'이 없습니다. 마이그레이션을 먼저 실행하세요.")
+            # trading_conditions 테이블이 없으면 생성
+            if 'trading_conditions' not in existing_tables:
+                print("📊 trading_conditions 테이블 생성 중...")
+                self._create_trading_conditions_table(cursor)
+                print("✅ trading_conditions 테이블 생성 완료")
             
-            # 데이터베이스 버전 확인
-            try:
-                cursor.execute("SELECT value FROM system_settings WHERE key = 'db_version'")
-                db_version = cursor.fetchone()
-                if not db_version:
-                    print("⚠️ 데이터베이스 버전 정보가 없습니다.")
-                else:
-                    print(f"✅ 통합 데이터베이스 연결됨 (버전: {db_version[0]})")
-            except:
-                print("⚠️ 시스템 설정 테이블에 접근할 수 없습니다.")
+            # strategies 테이블 확인 (선택적)
+            if 'strategies' not in existing_tables:
+                print("📊 strategies 테이블이 없지만 조건 저장에는 영향 없음")
+            
+            print(f"✅ 조건 저장소 초기화 완료 (전역 매니저: {self.use_global_manager})")
+    
+    def _create_trading_conditions_table(self, cursor):
+        """trading_conditions 테이블만 생성"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trading_conditions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                condition_type TEXT NOT NULL,
+                parameters TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                category TEXT DEFAULT 'manual',
+                description TEXT,
+                usage_count INTEGER DEFAULT 0,
+                success_rate REAL DEFAULT 0.0,
+                variable_id TEXT,
+                variable_name TEXT,
+                variable_params TEXT,
+                operator TEXT,
+                comparison_type TEXT DEFAULT 'fixed',
+                target_value TEXT,
+                external_variable TEXT,
+                trend_direction TEXT DEFAULT 'static',
+                chart_category TEXT DEFAULT 'subplot'
+            )
+        """)
+        
+        # 인덱스 생성
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_name ON trading_conditions(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_active ON trading_conditions(is_active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_category ON trading_conditions(category)")
     
     def _create_tables(self):
-        """조건 저장을 위한 테이블 생성"""
-        with sqlite3.connect(self.db_path) as conn:
+        """조건 저장을 위한 모든 테이블 생성 (레거시 호환용)"""
+        if self.use_global_manager:
+            conn = self._get_connection()
+        else:
+            conn = self._get_connection()
+            
+        with conn:
             cursor = conn.cursor()
             
-            # 조건 테이블
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS trading_conditions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL UNIQUE,
-                    description TEXT,
-                    variable_id TEXT NOT NULL,
-                    variable_name TEXT NOT NULL,
-                    variable_params TEXT,  -- JSON
-                    operator TEXT NOT NULL,
-                    comparison_type TEXT DEFAULT 'fixed',
-                    target_value TEXT,
-                    external_variable TEXT,  -- JSON
-                    trend_direction TEXT DEFAULT 'static',
-                    is_active BOOLEAN DEFAULT 1,
-                    category TEXT DEFAULT 'custom',
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    usage_count INTEGER DEFAULT 0,
-                    success_rate REAL DEFAULT 0.0
-                )
-            """)
+            # 메인 조건 테이블
+            self._create_trading_conditions_table(cursor)
             
             # 조건 사용 이력 테이블
             cursor.execute("""
@@ -82,10 +125,10 @@ class ConditionStorage:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     condition_id INTEGER,
                     strategy_name TEXT,
-                    action_type TEXT,  -- 'buy', 'sell'
+                    action_type TEXT,
                     execution_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    market_data TEXT,  -- JSON
-                    result_type TEXT,  -- 'success', 'failure', 'pending'
+                    market_data TEXT,
+                    result_type TEXT,
                     profit_loss REAL,
                     notes TEXT,
                     FOREIGN KEY (condition_id) REFERENCES trading_conditions (id)
@@ -109,11 +152,15 @@ class ConditionStorage:
         """조건 저장 (덮어쓰기 옵션 포함) - 차트 카테고리 자동 설정"""
         try:
             # 차트 카테고리 자동 설정 (표준화 문서 기반)
-            from .variable_definitions import VariableDefinitions
-            chart_category = VariableDefinitions.get_chart_category(condition_data['variable_id'])
-            condition_data['chart_category'] = chart_category
+            try:
+                from .variable_definitions import VariableDefinitions
+                chart_category = VariableDefinitions.get_chart_category(condition_data['variable_id'])
+                condition_data['chart_category'] = chart_category
+            except ImportError:
+                condition_data['chart_category'] = 'subplot'  # 기본값
             
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 
                 # ID가 있는 경우 (편집 모드)
@@ -232,8 +279,10 @@ class ConditionStorage:
     def get_condition_by_id(self, condition_id: int) -> Optional[Dict[str, Any]]:
         """ID로 조건 조회"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            
+            with conn:
                 cursor = conn.cursor()
                 
                 cursor.execute(
@@ -253,7 +302,8 @@ class ConditionStorage:
     def get_condition_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """이름으로 조건 조회"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -274,7 +324,8 @@ class ConditionStorage:
     def get_all_conditions(self, active_only: bool = True) -> List[Dict[str, Any]]:
         """모든 조건 조회"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -295,7 +346,8 @@ class ConditionStorage:
     def get_conditions_by_category(self, category: str) -> List[Dict[str, Any]]:
         """카테고리별 조건 조회"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -314,7 +366,8 @@ class ConditionStorage:
     def update_condition(self, condition_id: int, updates: Dict[str, Any]) -> Tuple[bool, str]:
         """조건 업데이트"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 
                 # 업데이트할 필드들 구성
@@ -355,7 +408,8 @@ class ConditionStorage:
     def delete_condition(self, condition_id: int) -> Tuple[bool, str]:
         """조건 삭제 (하드 삭제 - 완전 제거)"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 
                 # 먼저 존재하는지 확인
@@ -384,7 +438,8 @@ class ConditionStorage:
     def search_conditions(self, keyword: str) -> List[Dict[str, Any]]:
         """조건 검색"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -408,7 +463,8 @@ class ConditionStorage:
     def get_condition_statistics(self) -> Dict[str, Any]:
         """조건 통계 정보"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            conn = self._get_connection()
+            with conn:
                 cursor = conn.cursor()
                 
                 # 전체 조건 수

@@ -8,45 +8,108 @@ import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import os
+import sys
+from pathlib import Path
+
+# 전역 DB 매니저 임포트
+try:
+    from upbit_auto_trading.utils.global_db_manager import get_db_connection
+    USE_GLOBAL_MANAGER = True
+except ImportError:
+    print("⚠️ 전역 DB 매니저를 사용할 수 없습니다. 기존 방식을 사용합니다.")
+    USE_GLOBAL_MANAGER = False
 
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "data/app_settings.sqlite3"):
-        self.db_path = db_path
-        self._ensure_database_exists()
+    def __init__(self, db_path: str = None):
+        if USE_GLOBAL_MANAGER:
+            # 전역 매니저 사용 - db_path는 호환성을 위해 유지하지만 실제로는 사용하지 않음
+            self.db_path = db_path or "data/app_settings.sqlite3"  # 레거시 호환성
+            self.use_global_manager = True
+            print(f"🔗 ConditionStorage: 전역 DB 매니저 사용")
+        else:
+            # 기존 방식 사용
+            if db_path is None:
+                self.db_path = "data/app_settings.sqlite3"  # 레거시 경로
+                print(f"⚠️ ConditionStorage: 레거시 DB 경로 사용 - {self.db_path}")
+            else:
+                self.db_path = db_path  # 사용자 지정 경로
+                print(f"📂 ConditionStorage: 사용자 지정 DB 경로 - {self.db_path}")
+            self.use_global_manager = False
+            self._ensure_database_exists()
+        
+        self._verify_unified_schema()
+    
+    def _get_connection(self):
+        """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
+        if self.use_global_manager:
+            return get_db_connection('trading_conditions')
+        else:
+            return sqlite3.connect(self.db_path)
         self._verify_unified_schema()
     
     def _ensure_database_exists(self):
-        """데이터베이스 디렉토리 및 파일 생성"""
-        db_dir = os.path.dirname(self.db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
+        """데이터베이스 디렉토리 및 파일 생성 (기존 방식용)"""
+        if not self.use_global_manager:
+            db_dir = os.path.dirname(self.db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
     
     def _verify_unified_schema(self):
-        """통합 데이터베이스 스키마 확인"""
-        with sqlite3.connect(self.db_path) as conn:
+        """통합 데이터베이스 스키마 확인 및 테이블 생성"""
+        conn = self._get_connection()
+        with conn:
             cursor = conn.cursor()
             
             # 필수 테이블 존재 확인
-            required_tables = ['trading_conditions', 'strategies', 'system_settings']
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             existing_tables = [row[0] for row in cursor.fetchall()]
             
-            for table in required_tables:
-                if table not in existing_tables:
-                    raise Exception(f"통합 데이터베이스에 필수 테이블 '{table}'이 없습니다. 마이그레이션을 먼저 실행하세요.")
+            # trading_conditions 테이블이 없으면 생성
+            if 'trading_conditions' not in existing_tables:
+                print("📊 trading_conditions 테이블 생성 중...")
+                self._create_trading_conditions_table(cursor)
+                print("✅ trading_conditions 테이블 생성 완료")
             
-            # 데이터베이스 버전 확인
-            try:
-                cursor.execute("SELECT value FROM system_settings WHERE key = 'db_version'")
-                db_version = cursor.fetchone()
-                if not db_version:
-                    print("⚠️ 데이터베이스 버전 정보가 없습니다.")
-                else:
-                    print(f"✅ 통합 데이터베이스 연결됨 (버전: {db_version[0]})")
-            except:
-                print("⚠️ 시스템 설정 테이블에 접근할 수 없습니다.")
+            # strategies 테이블 확인 (선택적)
+            if 'strategies' not in existing_tables:
+                print("📊 strategies 테이블이 없지만 조건 저장에는 영향 없음")
+            
+            print(f"✅ 조건 저장소 초기화 완료 (전역 매니저: {self.use_global_manager})")
+    
+    def _create_trading_conditions_table(self, cursor):
+        """trading_conditions 테이블만 생성"""
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS trading_conditions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                condition_type TEXT NOT NULL,
+                parameters TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                category TEXT DEFAULT 'manual',
+                description TEXT,
+                usage_count INTEGER DEFAULT 0,
+                success_rate REAL DEFAULT 0.0,
+                variable_id TEXT,
+                variable_name TEXT,
+                variable_params TEXT,
+                operator TEXT,
+                comparison_type TEXT DEFAULT 'fixed',
+                target_value TEXT,
+                external_variable TEXT,
+                trend_direction TEXT DEFAULT 'static',
+                chart_category TEXT DEFAULT 'subplot'
+            )
+        """)
+        
+        # 인덱스 생성
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_name ON trading_conditions(name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_active ON trading_conditions(is_active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_trading_conditions_category ON trading_conditions(category)")
     
     def _create_tables(self):
         """조건 저장을 위한 테이블 생성"""

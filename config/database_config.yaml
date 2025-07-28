@@ -1,0 +1,5 @@
+"user_defined":
+  "active": !!bool "true"
+  "market_data_db": "D:/projects/upbit-autotrader-vscode/upbit_auto_trading/data/market_data.sqlite3"
+  "settings_db": "D:/projects/upbit-autotrader-vscode/upbit_auto_trading/data/settings.sqlite3"
+  "strategies_db": "D:/projects/upbit-autotrader-vscode/upbit_auto_trading/data/strategies.sqlite3"

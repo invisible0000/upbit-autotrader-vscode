@@ -36,6 +36,11 @@ sys.excepthook = exception_handler
 if __name__ == "__main__":
     print("=== 데스크톱 UI 시작 ===")
     
+    # 작업 디렉토리를 프로젝트 루트로 설정 (YAML 파일 경로 문제 해결)
+    project_root = os.path.abspath(os.path.dirname(__file__))
+    os.chdir(project_root)
+    print(f"📁 작업 디렉토리 설정: {os.getcwd()}")
+    
     # QApplication 생성
     print("QApplication 생성 중...")
     app = QApplication(sys.argv)

@@ -11,6 +11,14 @@ from typing import Dict, List, Tuple, Optional, Any
 import logging
 import os
 
+# 전역 DB 매니저 임포트
+try:
+    from upbit_auto_trading.utils.global_db_manager import get_db_connection
+    USE_GLOBAL_MANAGER = True
+except ImportError:
+    print("⚠️ 전역 DB 매니저를 사용할 수 없습니다. 기존 방식을 사용합니다.")
+    USE_GLOBAL_MANAGER = False
+
 class RealDataSimulationEngine:
     """UI용 실제 데이터 기반 시뮬레이션 엔진"""
     
@@ -19,20 +27,28 @@ class RealDataSimulationEngine:
         실제 데이터 기반 시뮬레이션 엔진 초기화
         
         Args:
-            data_db_path: 시장 데이터 DB 경로
+            data_db_path: 시장 데이터 DB 경로 (전역 매니저 사용시 무시됨)
         """
-        self.data_db_path = data_db_path
+        self.data_db_path = data_db_path  # 레거시 호환성
+        self.use_global_manager = USE_GLOBAL_MANAGER
         self.cache_data = None
         self.cache_indicators = None
+        
+    def _get_connection(self):
+        """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
+        if self.use_global_manager:
+            return get_db_connection('market_data')
+        else:
+            return sqlite3.connect(self.data_db_path)
         
     def load_market_data(self, limit: int = 500) -> Optional[pd.DataFrame]:
         """실제 KRW-BTC 시장 데이터 로드"""
         try:
-            if not os.path.exists(self.data_db_path):
+            if not self.use_global_manager and not os.path.exists(self.data_db_path):
                 logging.warning(f"Market data DB not found: {self.data_db_path}")
                 return None
                 
-            conn = sqlite3.connect(self.data_db_path)
+            conn = self._get_connection()
             
             # 일봉 데이터 로드 (기본 500일, 필요시 확장 가능)
             query = """

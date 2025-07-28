@@ -8,14 +8,36 @@ import sqlite3
 import json
 import shutil
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
+
+# 새로운 통합 DB 경로 시스템 import
+sys.path.append(str(Path(__file__).parent.parent))
+try:
+    from database_paths import APP_SETTINGS_DB_PATH
+    USE_NEW_DB_PATHS = True
+except ImportError:
+    # 백업: 새 경로 시스템을 찾을 수 없으면 기존 방식 사용
+    USE_NEW_DB_PATHS = False
+    APP_SETTINGS_DB_PATH = "data/app_settings.sqlite3"
+
 
 class TriggerManager:
     """트리거 관리 통합 클래스"""
     
-    def __init__(self, db_path="data/app_settings.sqlite3"):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.db_path = APP_SETTINGS_DB_PATH  # settings.sqlite3로 매핑됨
+                print(f"🔗 TriggerManager: 새로운 통합 DB 사용 - {self.db_path}")
+            else:
+                self.db_path = "data/app_settings.sqlite3"  # 레거시 경로
+                print(f"⚠️ TriggerManager: 레거시 DB 경로 사용 - {self.db_path}")
+        else:
+            self.db_path = db_path
+            print(f"📂 TriggerManager: 사용자 지정 DB 경로 - {self.db_path}")
         
     def backup_database(self):
         """데이터베이스 백업"""

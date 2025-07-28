@@ -24,10 +24,20 @@ import argparse
 import sys
 import os
 from pathlib import Path
+from typing import Optional
 
 # 프로젝트 루트를 Python 경로에 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+# 새로운 통합 DB 경로 시스템 import
+try:
+    from database_paths import APP_SETTINGS_DB_PATH, TableMappings
+    USE_NEW_DB_PATHS = True
+except ImportError:
+    # 백업: 새 경로 시스템을 찾을 수 없으면 기존 방식 사용
+    USE_NEW_DB_PATHS = False
+    APP_SETTINGS_DB_PATH = "trading_variables.db"
 
 try:
     from upbit_auto_trading.utils.trading_variables.variable_manager import SimpleVariableManager
@@ -41,8 +51,19 @@ except ImportError as e:
 class TradingVariablesCLI:
     """트레이딩 지표 변수 관리 CLI"""
     
-    def __init__(self, db_path: str = 'trading_variables.db'):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.db_path = APP_SETTINGS_DB_PATH  # settings.sqlite3로 매핑됨
+                print(f"🔗 TradingVariablesCLI: 새로운 통합 DB 사용 - {self.db_path}")
+                print(f"📋 테이블 매핑: tv_trading_variables, tv_comparison_groups, tv_schema_version")
+            else:
+                self.db_path = "trading_variables.db"  # 레거시 경로
+                print(f"⚠️ TradingVariablesCLI: 레거시 DB 경로 사용 - {self.db_path}")
+        else:
+            self.db_path = db_path
+            print(f"📂 TradingVariablesCLI: 사용자 지정 DB 경로 - {self.db_path}")
         self.vm = None
         self.classifier = SmartIndicatorClassifier()
     
@@ -283,8 +304,8 @@ def main():
         epilog=__doc__
     )
     
-    parser.add_argument('--db', default='trading_variables.db',
-                       help='SQLite DB 파일 경로 (기본값: trading_variables.db)')
+    parser.add_argument('--db', default=None,
+                       help='SQLite DB 파일 경로 (기본값: 통합 settings.sqlite3)')
     
     subparsers = parser.add_subparsers(dest='command', help='사용 가능한 명령어')
     

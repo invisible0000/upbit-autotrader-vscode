@@ -17,6 +17,14 @@ import os
 from typing import List, Dict, Tuple, Optional
 import logging
 
+# 전역 DB 매니저 임포트
+try:
+    from upbit_auto_trading.utils.global_db_manager import get_db_connection
+    USE_GLOBAL_MANAGER = True
+except ImportError:
+    print("⚠️ 전역 DB 매니저를 사용할 수 없습니다. 기존 방식을 사용합니다.")
+    USE_GLOBAL_MANAGER = False
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,22 +38,33 @@ class SimpleVariableManager:
         초기화
         
         Args:
-            db_path: SQLite DB 파일 경로
+            db_path: SQLite DB 파일 경로 (전역 매니저 사용시 무시됨)
         """
-        self.db_path = db_path
+        self.db_path = db_path  # 레거시 호환성
         self.conn = None
-        self._connect()
+        self.use_global_manager = USE_GLOBAL_MANAGER
+        
+        if not self.use_global_manager:
+            self._connect()
         self._init_schema()
     
+    def _get_connection(self):
+        """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
+        if self.use_global_manager:
+            return get_db_connection('tv_trading_variables')
+        else:
+            return self.conn
+    
     def _connect(self):
-        """DB 연결"""
-        try:
-            self.conn = sqlite3.connect(self.db_path)
-            self.conn.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
-            logger.info(f"DB 연결 성공: {self.db_path}")
-        except Exception as e:
-            logger.error(f"DB 연결 실패: {e}")
-            raise
+        """DB 연결 (기존 방식용)"""
+        if not self.use_global_manager:
+            try:
+                self.conn = sqlite3.connect(self.db_path)
+                self.conn.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
+                logger.info(f"DB 연결 성공: {self.db_path}")
+            except Exception as e:
+                logger.error(f"DB 연결 실패: {e}")
+                raise
     
     def _init_schema(self):
         """스키마 자동 초기화"""
@@ -59,6 +78,18 @@ class SimpleVariableManager:
                 
                 # SQL 문을 세미콜론으로 분할하여 실행
                 statements = [stmt.strip() for stmt in schema_sql.split(';') if stmt.strip()]
+                
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                
+                for statement in statements:
+                    try:
+                        cursor.execute(statement)
+                    except sqlite3.Error as e:
+                        logger.warning(f"스키마 실행 중 오류 (무시됨): {e}")
+                
+                if not self.use_global_manager:
+                    conn.commit()  # 전역 매니저 사용시에는 자동 관리됨
                 
                 for statement in statements:
                     if statement:

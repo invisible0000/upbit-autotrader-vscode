@@ -8,12 +8,35 @@ import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import os
+import sys
+from pathlib import Path
+
+# 새로운 통합 DB 경로 시스템 import
+sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent.parent))
+try:
+    from database_paths import APP_SETTINGS_DB_PATH
+    USE_NEW_DB_PATHS = True
+except ImportError:
+    # 백업: 새 경로 시스템을 찾을 수 없으면 기존 방식 사용
+    USE_NEW_DB_PATHS = False
+    APP_SETTINGS_DB_PATH = "data/app_settings.sqlite3"
 
 class StrategyStorage:
     """완성된 전략을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "data/app_settings.sqlite3"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.db_path = APP_SETTINGS_DB_PATH  # settings.sqlite3로 매핑됨
+                print(f"🔗 StrategyStorage: 새로운 통합 DB 사용 - {self.db_path}")
+            else:
+                self.db_path = "data/app_settings.sqlite3"  # 레거시 경로
+                print(f"⚠️ StrategyStorage: 레거시 DB 경로 사용 - {self.db_path}")
+        else:
+            self.db_path = db_path
+            print(f"📂 StrategyStorage: 사용자 지정 DB 경로 - {self.db_path}")
+        
         self._ensure_database_exists()
         self._ensure_strategy_tables()
     

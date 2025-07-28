@@ -10,6 +10,18 @@ from typing import Dict, List, Optional, Any
 import logging
 import os
 import sqlite3
+import sys
+from pathlib import Path
+
+# 새로운 통합 DB 경로 시스템 import
+sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent.parent.parent.parent))
+try:
+    from database_paths import MARKET_DATA_DB_PATH
+    USE_NEW_DB_PATHS = True
+except ImportError:
+    # 백업: 새 경로 시스템을 찾을 수 없으면 기존 방식 사용
+    USE_NEW_DB_PATHS = False
+    MARKET_DATA_DB_PATH = "data/market_data.sqlite3"
 
 # TriggerCalculator import 추가
 try:
@@ -106,10 +118,22 @@ class BaseSimulationEngine:
 class RealDataSimulationEngine(BaseSimulationEngine):
     """실제 데이터 기반 시뮬레이션 엔진 - 검증된 버전"""
     
-    def __init__(self, data_db_path: str = "data/market_data.sqlite3"):
+    def __init__(self, data_db_path: str = None):
         super().__init__()
         self.name = "RealData"
-        self.data_db_path = data_db_path
+        
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if data_db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.data_db_path = MARKET_DATA_DB_PATH  # market_data.sqlite3로 매핑됨
+                print(f"🔗 RealDataSimulationEngine: 새로운 통합 DB 사용 - {self.data_db_path}")
+            else:
+                self.data_db_path = "data/market_data.sqlite3"  # 레거시 경로
+                print(f"⚠️ RealDataSimulationEngine: 레거시 DB 경로 사용 - {self.data_db_path}")
+        else:
+            self.data_db_path = data_db_path
+            print(f"📂 RealDataSimulationEngine: 사용자 지정 DB 경로 - {self.data_db_path}")
+        
         self.cache_data = None
         self.cache_indicators = None
         
@@ -213,10 +237,22 @@ class RealDataSimulationEngine(BaseSimulationEngine):
 class RobustSimulationEngine(BaseSimulationEngine):
     """견고한 합성 데이터 시뮬레이션 엔진 - 검증된 버전"""
     
-    def __init__(self, data_db_path: str = "data/market_data.sqlite3"):
+    def __init__(self, data_db_path: str = None):
         super().__init__()
         self.name = "Robust"
-        self.data_db_path = data_db_path
+        
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if data_db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.data_db_path = MARKET_DATA_DB_PATH  # market_data.sqlite3로 매핑됨
+                print(f"🔗 RobustSimulationEngine: 새로운 통합 DB 사용 - {self.data_db_path}")
+            else:
+                self.data_db_path = "data/market_data.sqlite3"  # 레거시 경로
+                print(f"⚠️ RobustSimulationEngine: 레거시 DB 경로 사용 - {self.data_db_path}")
+        else:
+            self.data_db_path = data_db_path
+            print(f"📂 RobustSimulationEngine: 사용자 지정 DB 경로 - {self.data_db_path}")
+        
         self.cache_data = None
         self.cache_indicators = None
         
@@ -329,9 +365,21 @@ class RobustSimulationEngine(BaseSimulationEngine):
 class EmbeddedSimulationEngine(BaseSimulationEngine):
     """내장 최적화 시뮬레이션 엔진 - 검증된 버전"""
     
-    def __init__(self, data_db_path: str = "data/market_data.sqlite3"):
+    def __init__(self, data_db_path: str = None):
         super().__init__()
         self.name = "Embedded"
+        
+        # 새로운 통합 DB 경로 시스템 사용 (하위 호환성 유지)
+        if data_db_path is None:
+            if USE_NEW_DB_PATHS:
+                self.data_db_path = MARKET_DATA_DB_PATH  # market_data.sqlite3로 매핑됨
+                print(f"🔗 EmbeddedSimulationEngine: 새로운 통합 DB 사용 - {self.data_db_path}")
+            else:
+                self.data_db_path = "data/market_data.sqlite3"  # 레거시 경로
+                print(f"⚠️ EmbeddedSimulationEngine: 레거시 DB 경로 사용 - {self.data_db_path}")
+        else:
+            self.data_db_path = data_db_path
+            print(f"📂 EmbeddedSimulationEngine: 사용자 지정 DB 경로 - {self.data_db_path}")
         self.data_db_path = data_db_path
         self.cache_data = None
         self.cache_indicators = None
