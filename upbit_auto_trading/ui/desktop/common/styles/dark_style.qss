@@ -149,6 +149,7 @@ QGroupBox {
     border-radius: 5px;
     margin-top: 10px;
     font-weight: bold;
+    padding: 3px;  /* 기본 내부 패딩 줄이기 (6px→3px) */
 }
 
 QGroupBox::title {

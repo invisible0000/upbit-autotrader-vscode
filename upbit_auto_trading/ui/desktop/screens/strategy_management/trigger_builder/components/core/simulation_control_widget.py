@@ -44,8 +44,8 @@ class SimulationControlWidget(QWidget):
         group = QGroupBox("🎮 시뮬레이션 컨트롤")
         # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         layout = QVBoxLayout(group)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(3)
+        layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진
+        layout.setSpacing(4)  # 표준 간격
         
         # 데이터 소스 선택 위젯 추가 (원본과 동일)
         if DATA_SOURCE_AVAILABLE and DataSourceSelectorWidget is not None:
@@ -108,18 +108,26 @@ class SimulationControlWidget(QWidget):
         grid_layout = QGridLayout()
         grid_layout.setSpacing(3)
         
+        # 그리드의 행과 열 비율을 균등하게 설정
+        grid_layout.setRowStretch(0, 1)  # 첫 번째 행 비율
+        grid_layout.setRowStretch(1, 1)  # 두 번째 행 비율
+        grid_layout.setRowStretch(2, 1)  # 세 번째 행 비율
+        grid_layout.setColumnStretch(0, 1)  # 첫 번째 열 비율
+        grid_layout.setColumnStretch(1, 1)  # 두 번째 열 비율
+        
         for i, (icon_text, tooltip, color) in enumerate(simulation_buttons):
             btn = QPushButton(icon_text)
             btn.setToolTip(tooltip)
-            btn.setFixedHeight(40)  # 35에서 40으로 증가
-            btn.setMinimumWidth(130)  # 120에서 130으로 증가
             
-            # 스트레치 속성 강화 - 빈 공간을 채워서 커지도록
+            # 고정 높이 제거하고 최소/최대 높이로 변경
+            btn.setMinimumHeight(40)  # 최소 높이 증가
+            btn.setMaximumHeight(80)  # 최대 높이 증가 (더 많은 공간 차지)
+            
+            # 버튼이 그리드 셀을 완전히 채우도록 설정 (세로도 확장 가능)
             from PyQt6.QtWidgets import QSizePolicy
-            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # 수평으로만 확장
-            
-            # 최대 폭 설정 제거로 더 많이 확장 가능
-            btn.setMaximumWidth(16777215)  # Qt 최대값 설정
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)  # 세로도 확장
+            btn.setMinimumWidth(100)  # 최소 너비 설정
+            btn.setMaximumWidth(16777215)  # 최대 너비 제한 없음
             
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -147,20 +155,17 @@ class SimulationControlWidget(QWidget):
             col = i % 2
             grid_layout.addWidget(btn, row, col)
         
-        # 그리드 컬럼에 stretch 적용
-        grid_layout.setColumnStretch(0, 1)
-        grid_layout.setColumnStretch(1, 1)
-        
         # 그리드 레이아웃을 메인 레이아웃에 추가
-        layout.addLayout(grid_layout)
-        
-        layout.addStretch()
+        layout.addLayout(grid_layout, 1)  # stretch factor 1로 설정하여 주요 공간 차지
         
         # 시뮬레이션 상태 (애플리케이션 테마를 따름)
         self.simulation_status = QLabel("Status: 트리거를 선택하고 추세 버튼을 누르세요.")
         self.simulation_status.setObjectName("simulationStatus")  # QSS에서 스타일링하도록 objectName 설정
         self.simulation_status.setAlignment(Qt.AlignmentFlag.AlignLeft)  # 왼쪽 정렬
-        layout.addWidget(self.simulation_status)
+        self.simulation_status.setMaximumHeight(60)  # 상태 라벨 높이 제한
+        from PyQt6.QtWidgets import QSizePolicy
+        self.simulation_status.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        layout.addWidget(self.simulation_status, 0)  # stretch factor 0으로 최소 공간만 차지
         
         return group
     

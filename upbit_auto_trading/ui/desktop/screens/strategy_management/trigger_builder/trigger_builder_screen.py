@@ -40,7 +40,6 @@ from .components.core.simulation_result_widget import SimulationResultWidget
 # Shared Components import
 from .components.shared.chart_visualizer import ChartVisualizer
 from .components.shared.trigger_calculator import TriggerCalculator
-# 기존 서비스는 제거 - trigger_simulation_service_clean 사용
 
 # Chart variable system import
 try:
@@ -280,11 +279,11 @@ class TriggerBuilderScreen(QWidget):
         self.test_result_area.setMinimumWidth(300)
         grid_layout.addWidget(self.test_result_area, 1, 2, 1, 1)
         
-        # 그리드 비율 설정 (30:40:30)
-        grid_layout.setColumnStretch(0, 35)  # 조건 빌더
-        grid_layout.setColumnStretch(1, 35)  # 트리거 관리
-        grid_layout.setColumnStretch(2, 30)  # 시뮬레이션
-        
+        # 그리드 비율 설정 (35:40:25) - 트리거 관리 영역을 더 크게
+        grid_layout.setColumnStretch(0, 35)  # 조건 빌더 (40→35)
+        grid_layout.setColumnStretch(1, 35)  # 트리거 관리 (35→40)
+        grid_layout.setColumnStretch(2, 30)  # 시뮬레이션 (30→25)
+
         # 행 비율 설정
         grid_layout.setRowStretch(0, 1)  # 상단
         grid_layout.setRowStretch(1, 1)  # 하단
@@ -324,7 +323,8 @@ class TriggerBuilderScreen(QWidget):
         try:
             # embedded 파라미터 없이 생성 시도
             self.condition_dialog = ConditionDialog()
-            self.condition_dialog.setMaximumHeight(800)
+            # 최대 높이 제한 제거하여 화면 크기에 맞춰 확장 가능하도록 함
+            # self.condition_dialog.setMaximumHeight(800)  # 주석 처리
             layout.addWidget(self.condition_dialog)
             print("✅ 조건 빌더 다이얼로그 생성 성공")
         except Exception as e:
@@ -334,7 +334,7 @@ class TriggerBuilderScreen(QWidget):
             layout.addWidget(fallback_widget)
         
         group.setLayout(layout)
-        group.setMinimumWidth(300)
+        group.setMinimumWidth(400)  # 최소 너비 증가 (300→400)
         return group
     
     def create_condition_builder_fallback(self):
@@ -404,6 +404,9 @@ class TriggerBuilderScreen(QWidget):
         """5: 선택한 트리거 상세 정보 영역 - Components 전용"""
         trigger_detail_widget = TriggerDetailWidget(self)
         
+        # 위젯 참조 저장
+        self.trigger_detail_widget = trigger_detail_widget
+        
         # 기존 위젯 참조 유지 (호환성)
         self.detail_text = trigger_detail_widget.detail_text
         
@@ -449,90 +452,25 @@ class TriggerBuilderScreen(QWidget):
             print(f"❌ 트리거 선택 처리 실패: {e}")
     
     def update_trigger_detail(self, condition):
-        """트리거 상세정보 업데이트 - 원본 형식 정확 복제"""
+        """트리거 상세정보 업데이트 - 위젯 메소드 호출"""
         try:
-            if not condition:
-                self.detail_text.setPlainText("Select a trigger to view details.")
-                return
-            
-            # 조건명에 ID 표시 추가 (원본과 동일)
-            condition_id = condition.get('id', 'Unknown')
-            condition_name_with_id = f"{condition.get('name', 'Unknown')} [ID:{condition_id}]"
-            
-            # 외부변수 정보 추출 (원본과 동일한 방식)
-            external_variable_info = condition.get('external_variable', None)
-            variable_params = condition.get('variable_params', {})
-            comparison_type = condition.get('comparison_type', 'Unknown')
-            target_value = condition.get('target_value', 'Unknown')
-            
-            # 외부변수 사용 여부 판정
-            use_external = comparison_type == 'external' and external_variable_info is not None
-            
-            # 추세 방향성 정보
-            trend_direction = condition.get('trend_direction', 'both')  # 기본값 변경
-            trend_names = {
-                'static': '추세 무관',  # 호환성을 위해 유지
-                'rising': '상승 추세',
-                'falling': '하락 추세',
-                'both': '추세 무관'
-            }
-            trend_text = trend_names.get(trend_direction, trend_direction)
-            
-            # 연산자에 추세 방향성 포함 (모든 방향성 표시)
-            operator = condition.get('operator', 'Unknown')
-            operator_with_trend = f"{operator} ({trend_text})"
-            
-            # 비교 설정 정보 상세화 (원본과 동일)
-            if comparison_type == 'external' and use_external:
-                if external_variable_info and isinstance(external_variable_info, dict):
-                    ext_var_name = external_variable_info.get('variable_name', '알 수 없음')
-                    ext_var_id = external_variable_info.get('variable_id', '알 수 없음')
-                    
-                    # 외부변수 파라미터는 condition_dialog에서 다시 로드할 때만 확인 가능
-                    # 데이터베이스에서는 external_variable 객체에 parameters가 있을 수 있음
-                    ext_param_values = {}
-                    if 'parameters' in external_variable_info:
-                        ext_param_values = external_variable_info.get('parameters', {})
-                    elif 'variable_params' in external_variable_info:
-                        ext_param_values = external_variable_info.get('variable_params', {})
-                    
-                    if ext_param_values:
-                        comparison_info = (f"  • 연산자: {operator_with_trend}\n"
-                                          f"  • 비교 타입: 외부변수 비교\n"
-                                          f"  • 외부변수: {ext_var_name}\n"
-                                          f"  • 외부변수 파라미터: {ext_param_values}")
-                    else:
-                        comparison_info = (f"  • 연산자: {operator_with_trend}\n"
-                                          f"  • 비교 타입: 외부변수 비교\n"
-                                          f"  • 외부변수: {ext_var_name}\n"
-                                          f"  • 외부변수 파라미터: 저장되지 않음")
-                else:
-                    comparison_info = (f"  • 연산자: {operator_with_trend}\n"
-                                      f"  • 비교 타입: 외부변수 비교 (설정 오류)\n"
-                                      f"  • 대상값: {target_value}")
+            # 트리거 디테일 위젯의 메소드 호출
+            if hasattr(self, 'trigger_detail_widget'):
+                self.trigger_detail_widget.update_trigger_detail(condition)
             else:
-                comparison_info = (f"  • 연산자: {operator_with_trend}\n"
-                                  f"  • 비교 타입: 고정값 비교\n"
-                                  f"  • 대상값: {target_value}")
-            
-            # 상세 정보 표시 (원본과 동일한 형식)
-            detail_text = f"""🎯 조건명: {condition_name_with_id}
-📝 설명: {condition.get('description', 'No description')}
-
-📊 변수 정보:
-  • 기본 변수: {condition.get('variable_name', 'Unknown')}
-  • 기본 변수 파라미터: {variable_params}
-
-⚖️ 비교 설정:
-{comparison_info}
-
-� 생성일: {condition.get('created_at', 'Unknown')}"""
-            
-            self.detail_text.setPlainText(detail_text)
-            
+                # 폴백: 기존 방식 (완전한 폴백 코드)
+                if not condition:
+                    self.detail_text.setPlainText("Select a trigger to view details.")
+                    return
+                
+                # 기본 정보만 표시
+                condition_id = condition.get('id', 'Unknown')
+                condition_name = condition.get('name', 'Unknown')
+                detail_text = f"ID: {condition_id}\n이름: {condition_name}\n"
         except Exception as e:
             print(f"❌ 트리거 상세정보 업데이트 실패: {e}")
-            self.detail_text.setPlainText(f"❌ 상세정보 로드 실패: {str(e)}")
+            if hasattr(self, 'detail_text'):
+                self.detail_text.setPlainText(f"❌ 상세정보 로드 실패: {str(e)}")
     
     def load_condition_for_edit(self, condition_data):
         """편집을 위한 조건 로드 - 원본 기능 복제"""

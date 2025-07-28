@@ -15,7 +15,6 @@ class TriggerDetailWidget(QWidget):
     
     # 시그널 정의
     trigger_copied = pyqtSignal()
-    # trigger_tested = pyqtSignal()  # 테스트 버튼 제거로 시그널도 제거
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -34,8 +33,8 @@ class TriggerDetailWidget(QWidget):
         main_layout.addWidget(self.group)
         
         layout = QVBoxLayout(self.group)
-        layout.setContentsMargins(5, 8, 5, 5)
-        layout.setSpacing(3)
+        layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진
+        layout.setSpacing(4)  # 표준 간격
         
         # 그룹박스 크기 정책도 Expanding으로 설정
         self.group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -74,11 +73,13 @@ class TriggerDetailWidget(QWidget):
         self.copy_detail_btn.clicked.connect(self.copy_detail_to_clipboard)
         btn_layout.addWidget(self.copy_detail_btn)
         
-        # "🧪 테스트" 버튼 제거 - 용도가 불분명한 버튼
-        # self.test_trigger_btn = QPushButton("🧪 테스트")
-        # self.test_trigger_btn.setMaximumHeight(25)
-        # self.test_trigger_btn.clicked.connect(self.trigger_tested.emit)
-        # btn_layout.addWidget(self.test_trigger_btn)
+        # JSON 형태로 보기 버튼 추가
+        self.json_view_btn = QPushButton("📋 JSON")
+        self.json_view_btn.setMaximumHeight(25)
+        self.json_view_btn.clicked.connect(self.show_json_popup)
+        btn_layout.addWidget(self.json_view_btn)
+        
+        btn_layout.addStretch()  # 버튼들을 왼쪽으로 정렬
         
         layout.addLayout(btn_layout)
     
@@ -108,20 +109,26 @@ class TriggerDetailWidget(QWidget):
         """트리거 상세정보 포맷팅 - 개선된 DB 스키마 지원"""
         name = trigger_data.get('name', 'Unknown')
         created_at = trigger_data.get('created_at', 'Unknown')
-        active = trigger_data.get('active', False)
+        # 실제 DB 스키마에서는 is_active 키를 사용함
+        active = trigger_data.get('is_active', trigger_data.get('active', False))
         
         # 기본 정보
         detail_text = f"""📋 트리거 상세정보
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🏷️ 이름: {name}
-📅 생성일: {created_at}
+� 생성일: {created_at}
 🔄 상태: {'✅ 활성' if active else '⏸️ 비활성'}
 
 """
         
         # 변수 정보 및 카테고리 정보 (개선된 DB 스키마 지원)
-        variable_id = trigger_data.get('variable_id', trigger_data.get('variable', 'Unknown'))
+        # 다양한 가능한 키 확인
+        variable_id = (trigger_data.get('variable_id') or
+                       trigger_data.get('variable') or
+                       trigger_data.get('base_variable') or
+                       'Unknown')
+        
         if variable_id != 'Unknown':
             detail_text += "📊 기본 변수 정보:\n"
             detail_text += f"  🔍 변수 ID: {variable_id}\n"
@@ -130,23 +137,34 @@ class TriggerDetailWidget(QWidget):
             variable_name = self._get_variable_display_name(variable_id)
             detail_text += f"  📝 변수명: {variable_name}\n"
             
-            # 카테고리 정보 표시 (3중 카테고리 시스템)
+            # 카테고리 정보 표시 (3중 카테고리 시스템) - 더 상세하게
             purpose_category = self._get_purpose_category(variable_id)
             chart_category = self._get_chart_category(variable_id)
             
-            detail_text += f"  📁 용도 카테고리: {purpose_category}\n"
-            detail_text += f"  📈 차트 카테고리: {chart_category}\n"
+            detail_text += "📂 카테고리 정보:\n"
+            detail_text += f"  📁 용도: {purpose_category}\n"
+            detail_text += f"  📈 차트: {chart_category}\n"
             
-            # 변수 파라미터 정보
-            parameters = trigger_data.get('parameters', {})
+            # DB에서 가져온 카테고리 정보도 표시 (있는 경우)
+            db_category = trigger_data.get('category', trigger_data.get('chart_category'))
+            if db_category and db_category != '자동감지':
+                detail_text += f"  🏷️ DB 카테고리: {db_category}\n"
+            
+            # 변수 파라미터 정보 (실제 DB 스키마에 맞게)
+            parameters = (trigger_data.get('variable_params') or
+                         trigger_data.get('parameters') or
+                         trigger_data.get('params') or {})
             if parameters:
                 detail_text += f"  ⚙️ 파라미터: {parameters}\n"
             
             detail_text += "\n"
         
-        # 조건 정보
-        operator = trigger_data.get('operator', trigger_data.get('comparison_operator', 'Unknown'))
-        value = trigger_data.get('value', trigger_data.get('target_value', trigger_data.get('comparison_value', 'Unknown')))
+        # 조건 정보 (실제 DB 스키마에 맞게)
+        operator = trigger_data.get('operator', 'Unknown')
+        value = (trigger_data.get('target_value') or
+                trigger_data.get('value') or
+                trigger_data.get('comparison_value') or
+                'Unknown')
         
         detail_text += f"""🎯 비교 조건:
   📊 기본 변수: {variable_name if 'variable_name' in locals() else variable_id}
@@ -155,13 +173,13 @@ class TriggerDetailWidget(QWidget):
 
 """
         
-        # 외부 변수 정보 (골든크로스 등)
-        external_variable_id = trigger_data.get('external_variable_id')
-        external_parameters = trigger_data.get('external_parameters', {})
+        # 외부 변수 정보 (골든크로스 등) - 실제 DB 구조에 맞게
+        external_variable = trigger_data.get('external_variable')
         
-        if external_variable_id:
+        if external_variable and isinstance(external_variable, dict):
             detail_text += "🔗 외부 변수 정보:\n"
-            external_variable_name = self._get_variable_display_name(external_variable_id)
+            external_variable_id = external_variable.get('variable_id', 'Unknown')
+            external_variable_name = external_variable.get('variable_name', self._get_variable_display_name(external_variable_id))
             detail_text += f"  🔍 변수 ID: {external_variable_id}\n"
             detail_text += f"  📝 변수명: {external_variable_name}\n"
             
@@ -172,6 +190,8 @@ class TriggerDetailWidget(QWidget):
             detail_text += f"  📁 용도 카테고리: {ext_purpose_category}\n"
             detail_text += f"  📈 차트 카테고리: {ext_chart_category}\n"
             
+            # 외부 변수 파라미터
+            external_parameters = external_variable.get('variable_params', external_variable.get('parameters', {}))
             if external_parameters:
                 detail_text += f"  ⚙️ 파라미터: {external_parameters}\n"
             
@@ -260,9 +280,10 @@ class TriggerDetailWidget(QWidget):
             from .variable_definitions import VariableDefinitions
             chart_category = VariableDefinitions.get_chart_category(variable_id)
             return '🔗 오버레이' if chart_category == 'overlay' else '📊 서브플롯'
-        except:
+        except Exception as e:
+            print(f"⚠️ 차트 카테고리 확인 실패: {e}")
             # 폴백
-            overlay_vars = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE']
+            overlay_vars = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE']
             return '🔗 오버레이' if variable_id in overlay_vars else '📊 서브플롯'
     
     def _format_operator(self, operator):
@@ -344,6 +365,71 @@ class TriggerDetailWidget(QWidget):
                 font-family: 'Consolas', 'Monaco', monospace;
             }
         """
+    
+    def show_json_popup(self):
+        """JSON 형태의 트리거 데이터를 팝업으로 표시"""
+        if not self.current_trigger:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "ℹ️ 알림", "표시할 트리거가 선택되지 않았습니다.")
+            return
+        
+        try:
+            import json
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout
+            
+            # JSON 팝업 다이얼로그 생성
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"📋 JSON 데이터 - {self.current_trigger.get('name', 'Unknown')}")
+            dialog.setMinimumSize(600, 500)
+            dialog.resize(800, 600)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # JSON 데이터 표시용 텍스트 에디터
+            json_text = QTextEdit()
+            json_text.setReadOnly(True)
+            json_text.setFont(QFont("Consolas", 10))
+            
+            # JSON 데이터 포맷팅 (들여쓰기 추가)
+            json_str = json.dumps(self.current_trigger, ensure_ascii=False, indent=2, sort_keys=True)
+            json_text.setPlainText(json_str)
+            
+            layout.addWidget(json_text)
+            
+            # 버튼 레이아웃
+            btn_layout = QHBoxLayout()
+            
+            # JSON 복사 버튼
+            copy_json_btn = QPushButton("📋 JSON 복사")
+            copy_json_btn.clicked.connect(lambda: self._copy_json_to_clipboard(json_str))
+            btn_layout.addWidget(copy_json_btn)
+            
+            btn_layout.addStretch()
+            
+            # 닫기 버튼
+            close_btn = QPushButton("❌ 닫기")
+            close_btn.clicked.connect(dialog.accept)
+            btn_layout.addWidget(close_btn)
+            
+            layout.addLayout(btn_layout)
+            
+            # 다이얼로그 표시
+            dialog.exec()
+            
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "❌ 오류", f"JSON 팝업 생성 중 오류가 발생했습니다:\n{e}")
+    
+    def _copy_json_to_clipboard(self, json_str):
+        """JSON 문자열을 클립보드에 복사"""
+        try:
+            from PyQt6.QtWidgets import QApplication, QMessageBox
+            clipboard = QApplication.clipboard()
+            clipboard.setText(json_str)
+            QMessageBox.information(self, "✅ 복사 완료", "JSON 데이터가 클립보드에 복사되었습니다.")
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "⚠️ 경고", f"클립보드 복사 실패: {e}")
 
 
 if __name__ == "__main__":

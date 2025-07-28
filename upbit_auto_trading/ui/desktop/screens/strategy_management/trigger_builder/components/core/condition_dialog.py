@@ -104,13 +104,13 @@ class ConditionDialog(QWidget):
         self.init_ui()
     
     def init_ui(self):
-        """UI 초기화"""
+        """UI 초기화 - 반응형 레이아웃"""
         self.setWindowTitle("🎯 조건 생성기 v4 (컴포넌트 기반)")
-        self.setMinimumSize(350, 300)  # 크기 더 줄이기 (500,400 → 350,300)
-        self.setMaximumWidth(500)     # 최대 너비를 450에서 500으로 증가
+        self.setMinimumSize(400, 350)  # 최소 크기 확대 (350,300 → 400,350)
+        # 최대 너비 제한 제거하여 화면 크기에 맞춰 확장 가능하도록 함
         layout = QVBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)  # 마진 더 줄이기
-        layout.setSpacing(1)  # 간격 더 줄이기
+        layout.setContentsMargins(4, 4, 4, 4)  # 마진 줄이기 (6→4)
+        layout.setSpacing(4)  # 표준 간격
         
         # 1. 변수 선택
         self.create_variable_section(layout)
@@ -133,10 +133,14 @@ class ConditionDialog(QWidget):
     
     def create_variable_section(self, layout):
         """변수 선택 섹션"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         group = StyledGroupBox("📊 1단계: 변수 선택")
+        # 그룹박스가 화면 크기에 맞춰 확장되도록 설정
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(6, 6, 6, 6)
-        group_layout.setSpacing(2)
+        group_layout.setContentsMargins(4, 4, 4, 4)  # 마진 줄이기 (6→4)
+        group_layout.setSpacing(4)  # 표준 간격
         
         # 범주 + 변수 선택을 한 줄로 합치기
         category_var_layout = QHBoxLayout()
@@ -145,6 +149,8 @@ class ConditionDialog(QWidget):
         category_var_layout.addWidget(QLabel("범주:"))
         
         self.category_combo = StyledComboBox()
+        self.category_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능하도록
+        self.category_combo.setFixedHeight(28)  # 표준 높이 설정
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
@@ -159,7 +165,7 @@ class ConditionDialog(QWidget):
             }
             self.category_combo.addItem(category_names.get(category_id, category_id), category_id)
         
-        category_var_layout.addWidget(self.category_combo)
+        category_var_layout.addWidget(self.category_combo, 1)  # 스트레치 팩터 1
         
         # 간격 추가
         category_var_layout.addSpacing(20)
@@ -167,8 +173,9 @@ class ConditionDialog(QWidget):
         # 변수 선택
         category_var_layout.addWidget(QLabel("변수:"))
         self.variable_combo = StyledComboBox()
-        self.variable_combo.setMinimumWidth(int(self.variable_combo.minimumWidth() * 1.3))  # 30% 폭 증가
-        category_var_layout.addWidget(self.variable_combo)
+        self.variable_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능하도록
+        self.variable_combo.setFixedHeight(28)  # 표준 높이 설정
+        category_var_layout.addWidget(self.variable_combo, 2)  # 스트레치 팩터 2 (더 많은 공간)
         
         # 변수별 헬프 버튼
         help_btn = QPushButton("?")
@@ -204,19 +211,23 @@ class ConditionDialog(QWidget):
         
         group_layout.addLayout(category_var_layout)
         
-        # 파라미터 영역 (스크롤 가능)
+        # 파라미터 영역 (스크롤 가능) - 확장 가능하도록
         self.param_scroll, self.param_layout = self.parameter_factory.create_scrollable_parameter_area()
+        self.param_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)  # 확장 가능
         group_layout.addWidget(self.param_scroll)
         
         group.setLayout(group_layout)
-        layout.addWidget(group)
+        layout.addWidget(group, 1)  # 스트레치 팩터 1
     
     def create_comparison_section(self, layout):
         """비교 설정 섹션"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         group = StyledGroupBox("⚖️ 2단계: 비교 설정")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능하도록
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(6, 6, 6, 6)
-        group_layout.setSpacing(2)
+        group_layout.setContentsMargins(4, 4, 4, 4)  # 마진 줄이기 (6→4)
+        group_layout.setSpacing(4)  # 표준 간격
         
         # 비교값, 연산자, 외부값 사용 버튼을 한 줄로 배치
         comparison_layout = QHBoxLayout()
@@ -224,8 +235,9 @@ class ConditionDialog(QWidget):
         # 비교값
         comparison_layout.addWidget(QLabel("비교값:"))
         self.target_input = StyledLineEdit("예: 70, 30, 0.5")
-        self.target_input.setMinimumWidth(100)  # 비교값 입력 박스 폭 확장
-        comparison_layout.addWidget(self.target_input)
+        self.target_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+        self.target_input.setFixedHeight(28)  # 콤보박스와 동일한 높이 설정
+        comparison_layout.addWidget(self.target_input, 1)  # 스트레치 팩터 1
         
         # 간격 추가
         comparison_layout.addSpacing(15)
@@ -234,7 +246,8 @@ class ConditionDialog(QWidget):
         comparison_layout.addWidget(QLabel("연산자:"))
         
         self.operator_combo = StyledComboBox()
-        self.operator_combo.setMaximumWidth(130)  # 연산자 콤보박스 폭 제한
+        self.operator_combo.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        self.operator_combo.setFixedHeight(28)  # 표준 높이 설정
         operators = [
             (">", "초과 (크다)"),
             (">=", "이상 (크거나 같다)"),
@@ -257,7 +270,6 @@ class ConditionDialog(QWidget):
         self.use_external_variable.setMinimumWidth(100)  # 최소 폭도 함께 조정
         self.use_external_variable.clicked.connect(self.toggle_comparison_mode)
         comparison_layout.addWidget(self.use_external_variable)
-        comparison_layout.addStretch()
         group_layout.addLayout(comparison_layout)
         
         # 추세 방향성을 한 줄로 배치
@@ -299,8 +311,8 @@ class ConditionDialog(QWidget):
         # 스트레치를 이용해 남는 공간을 전부 차지하도록 설정
         self.external_variable_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(6, 6, 6, 6)
-        group_layout.setSpacing(2)
+        group_layout.setContentsMargins(4, 4, 4, 4)  # 마진 줄이기 (6→4)
+        group_layout.setSpacing(4)  # 표준 간격
         
         # 범주와 변수 선택을 한 줄로 배치
         category_var_layout = QHBoxLayout()
@@ -309,6 +321,8 @@ class ConditionDialog(QWidget):
         category_var_layout.addWidget(QLabel("범주:"))
         
         self.external_category_combo = StyledComboBox()
+        self.external_category_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+        self.external_category_combo.setFixedHeight(28)  # 다른 콤보박스와 동일한 높이 설정
         category_variables = self.variable_definitions.get_category_variables()
         for category_id, variables in category_variables.items():
             category_names = {
@@ -322,7 +336,7 @@ class ConditionDialog(QWidget):
                 "state": "🏁 투자상태"
             }
             self.external_category_combo.addItem(category_names.get(category_id, category_id), category_id)
-        category_var_layout.addWidget(self.external_category_combo)
+        category_var_layout.addWidget(self.external_category_combo, 1)  # 스트레치 팩터 1
         
         # 간격 추가
         category_var_layout.addSpacing(20)
@@ -330,27 +344,34 @@ class ConditionDialog(QWidget):
         # 변수 선택
         category_var_layout.addWidget(QLabel("변수:"))
         self.external_variable_combo = StyledComboBox()
-        self.external_variable_combo.setMinimumWidth(250)  # 2.5배 폭 확장
-        category_var_layout.addWidget(self.external_variable_combo)
-        category_var_layout.addStretch()
+        self.external_variable_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+        self.external_variable_combo.setFixedHeight(28)  # 다른 콤보박스와 동일한 높이 설정
+        category_var_layout.addWidget(self.external_variable_combo, 2)  # 스트레치 팩터 2 (더 많은 공간)
         group_layout.addLayout(category_var_layout)
         
         # 호환성 상태 표시 위젯 (스크롤 가능한 텍스트 영역)
         from PyQt6.QtWidgets import QScrollArea, QTextEdit
+        from PyQt6.QtGui import QFontMetrics
         
         self.compatibility_scroll_area = QScrollArea()
         self.compatibility_scroll_area.setWidgetResizable(True)
         self.compatibility_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.compatibility_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.compatibility_scroll_area.setMaximumHeight(120)  # 높이 증가 (90→120)
-        self.compatibility_scroll_area.setMinimumHeight(60)   # 최소 높이도 증가 (30→60)
+        self.compatibility_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)  # 필요시에만 표시
+        
+        # 기본 3줄 높이 계산 (폰트 크기 기반) - 더 정확한 계산
+        font_metrics = QFontMetrics(self.font())
+        line_height = font_metrics.lineSpacing()
+        three_line_height = line_height * 3 + 6  # 3줄 + 최소 여백 (10→6으로 줄임)
+        
+        self.compatibility_scroll_area.setFixedHeight(three_line_height)  # 고정 높이로 3줄만 표시
+        self.compatibility_scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)  # 높이 고정
         # 하드코딩된 스타일 제거 - 애플리케이션 테마를 따름
         self.compatibility_scroll_area.setObjectName("compatibilityScrollArea")
         
         # 호환성 상태 텍스트 위젯
         self.compatibility_status_label = QTextEdit()
         self.compatibility_status_label.setReadOnly(True)
-        # PyQt6 호환성을 위해 setWordWrapMode 제거하고 QTextEdit 기본 설정 사용
+        # 스크롤바를 QScrollArea에서 관리하므로 QTextEdit의 스크롤바는 비활성화
         self.compatibility_status_label.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.compatibility_status_label.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
@@ -369,6 +390,7 @@ class ConditionDialog(QWidget):
         self.external_param_scroll, self.external_param_layout = (
             self.parameter_factory.create_scrollable_parameter_area(80, 120)
         )
+        self.external_param_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)  # 확장 가능
         group_layout.addWidget(self.external_param_scroll)
         
         # 초기에는 비활성화
@@ -376,19 +398,24 @@ class ConditionDialog(QWidget):
         self.external_variable_widget.setStyleSheet("QGroupBox { color: #999; }")
         
         self.external_variable_widget.setLayout(group_layout)
-        layout.addWidget(self.external_variable_widget)
+        layout.addWidget(self.external_variable_widget, 1)  # 스트레치 팩터 줄이기 (2→1)
     
     def create_info_section(self, layout):
         """조건 정보 섹션"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         group = StyledGroupBox("📝 3단계: 조건 정보")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능하도록
         group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(4, 4, 4, 4)
-        group_layout.setSpacing(2)
+        group_layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진 (8→6)
+        group_layout.setSpacing(4)  # 표준 간격
         
         # 조건 이름
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("이름:"))
         self.condition_name = StyledLineEdit("예: RSI 과매수 진입")
+        self.condition_name.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+        self.condition_name.setFixedHeight(28)  # 콤보박스와 동일한 높이 설정
         name_layout.addWidget(self.condition_name)
         group_layout.addLayout(name_layout)
         
@@ -397,6 +424,8 @@ class ConditionDialog(QWidget):
         desc_layout.addWidget(QLabel("설명:"))
         self.condition_description = StyledLineEdit()
         self.condition_description.setPlaceholderText("이 조건이 언제 발생하는지 설명해주세요.")
+        self.condition_description.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+        self.condition_description.setFixedHeight(28)  # 콤보박스와 동일한 높이 설정
         desc_layout.addWidget(self.condition_description)
         group_layout.addLayout(desc_layout)
         
@@ -405,22 +434,39 @@ class ConditionDialog(QWidget):
     
     def create_preview_section(self, layout):
         """미리보기 섹션"""
-        group = StyledGroupBox("👀 미리보기")
-        group_layout = QVBoxLayout()
-        group_layout.setContentsMargins(4, 4, 4, 4)
-        group_layout.setSpacing(2)
+        from PyQt6.QtWidgets import QSizePolicy, QScrollArea  # QScrollArea 추가 임포트
         
+        group = StyledGroupBox("👀 미리보기")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)  # 확장 가능하도록
+        group_layout = QVBoxLayout()
+        group_layout.setContentsMargins(4, 4, 4, 4)  # 마진 줄이기 (6→4)
+        group_layout.setSpacing(4)  # 표준 간격
+        
+        # 스크롤 영역 생성
+        self.preview_scroll_area = QScrollArea()
+        self.preview_scroll_area.setWidgetResizable(True)
+        self.preview_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.preview_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.preview_scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.preview_scroll_area.setObjectName("previewScrollArea")  # CSS 스타일링용
+        
+        # 미리보기 라벨
         self.preview_label = QLabel("조건을 설정하면 미리보기가 표시됩니다.")
         # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
         self.preview_label.setObjectName("conditionPreview")  # CSS에서 스타일링 가능하도록
         
         # QLabel 여백 설정으로 줄간격 조정
-        self.preview_label.setContentsMargins(0, 0, 0, 0)
+        self.preview_label.setContentsMargins(4, 4, 4, 4)  # 마진 증가 (0→4)
         self.preview_label.setWordWrap(True)
-        group_layout.addWidget(self.preview_label)
+        self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignTop)  # 상단 정렬
+        
+        # 스크롤 영역에 미리보기 라벨 설정
+        self.preview_scroll_area.setWidget(self.preview_label)
+        group_layout.addWidget(self.preview_scroll_area)
         
         group.setLayout(group_layout)
-        layout.addWidget(group)
+        layout.addWidget(group, 2)  # 스트레치 팩터 늘리기 (1→2)
     
     def connect_events(self):
         """이벤트 연결"""
@@ -481,8 +527,7 @@ class ConditionDialog(QWidget):
             self.parameter_factory.create_parameter_widgets(var_id, params, self.param_layout)
     
     def update_variable_description(self):
-        """변수 설명 업데이트 - 설명 박스가 제거됨"""
-        # 변수 설명 박스가 제거되어서 더 이상 사용하지 않음
+        """변수 설명 업데이트 - 현재 사용되지 않음"""
         pass
     
     def update_placeholders(self):
@@ -512,6 +557,14 @@ class ConditionDialog(QWidget):
             self.target_input.setPlaceholderText("외부 변수 사용 중...")
             # 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
             self.use_external_variable.setText("🔄 고정값")
+            
+            # 외부 변수 설정 섹션의 사이즈 정책을 확장 가능하도록 복원
+            from PyQt6.QtWidgets import QSizePolicy
+            if hasattr(self, 'external_variable_widget'):
+                self.external_variable_widget.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                )
+            
             self.update_external_variables()
             # 외부변수 모드로 전환 시 호환성 검증
             self.check_variable_compatibility()
@@ -1259,8 +1312,8 @@ class ConditionDialog(QWidget):
             external_var_name = self.external_variable_combo.currentText()
 
             if is_compatible:
-                # 호환 가능한 경우
-                message = f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다.\n📝 {reason}"
+                # 호환 가능한 경우 - 간결한 메시지
+                message = "✅ 호환됩니다"
                 self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
@@ -1280,12 +1333,9 @@ class ConditionDialog(QWidget):
                     self.save_btn.setEnabled(True)
 
             else:
-                # 호환되지 않는 경우
-                user_message = self._generate_user_friendly_compatibility_message(
-                    base_variable_id, external_variable_id, base_var_name, external_var_name, reason
-                )
-
-                self.compatibility_status_label.setPlainText(user_message)
+                # 호환되지 않는 경우 - 전체 메시지 표시 (스크롤 가능)
+                message = f"❌ 호환되지 않음\n{reason}"  # 전체 내용 표시
+                self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
                         border: 1px solid #f5c6cb;
@@ -1303,7 +1353,8 @@ class ConditionDialog(QWidget):
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(False)
 
-            # 스크롤 영역 표시
+            # 호환성 라벨과 스크롤 영역 모두 표시 (숨겨진 상태 복원)
+            self.compatibility_status_label.show()  # 라벨 표시 복원
             self.compatibility_scroll_area.show()
 
             # 텍스트 높이에 따라 스크롤 영역 높이 조정
@@ -1488,8 +1539,16 @@ class ConditionDialog(QWidget):
     
     def update_compatibility_for_fixed_mode(self):
         """고정값 비교 모드에서 호환성 라벨 숨기기"""
+        from PyQt6.QtWidgets import QSizePolicy  # 임포트 추가
+        
         if hasattr(self, 'compatibility_scroll_area'):
             self.compatibility_scroll_area.hide()
+            
+            # 외부 변수 설정 섹션의 사이즈 정책을 더 작게 조정
+            if hasattr(self, 'external_variable_widget'):
+                self.external_variable_widget.setSizePolicy(
+                    QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+                )
             
             # 저장 버튼 다시 활성화 (고정값 모드에서는 호환성 제약 없음)
             if hasattr(self, 'save_btn'):

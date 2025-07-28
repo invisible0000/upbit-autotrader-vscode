@@ -113,7 +113,8 @@ class SimulationResultWidget(QWidget):
         """미니 차트 위젯 생성 - 테마 적용"""
         chart_widget = QWidget()
         layout = QVBoxLayout(chart_widget)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진
+        layout.setSpacing(4)  # 표준 간격 추가
         
         # 차트 위젯 배경을 테마에 맞게 설정
         chart_widget.setObjectName("chart_widget")  # QSS 선택자용
@@ -703,48 +704,6 @@ class SimulationResultWidget(QWidget):
         }
         
         return name_mapping.get(variable_id, '베이스 지표')
-    
-    def _plot_trigger_signals(self, ax, trigger_results, price_data, base_data, external_data, is_overlay, trigger_color):
-        """트리거 신호를 차트에 표시 - DEPRECATED: _plot_trigger_signals_enhanced() 사용"""
-        # 이 함수는 더 이상 사용하지 않음 - _plot_trigger_signals_enhanced()로 통합됨
-        print("⚠️ _plot_trigger_signals() 는 deprecated됨. _plot_trigger_signals_enhanced() 사용")
-        return
-        if not trigger_results:
-            return
-        
-        trigger_count = 0
-        self.test_history_list.clear()
-        
-        for i, (triggered, _) in enumerate(trigger_results):
-            if triggered and i < len(price_data):
-                # 트리거 발생 위치의 Y값 결정
-                if is_overlay:
-                    # 오버레이: 시장가 기준
-                    y_value = price_data[i]
-                else:
-                    # 서브플롯: 기본 변수 또는 베이스 지표 기준
-                    if base_data and i < len(base_data):
-                        y_value = base_data[i]
-                    else:
-                        y_value = price_data[i] if i < len(price_data) else 0
-                
-                # 트리거 마크 표시
-                ax.scatter(i, y_value, c=trigger_color, s=30, marker='^', 
-                          zorder=5, edgecolors='white', linewidth=0.5)
-                
-                trigger_count += 1
-                
-                # 작동 기록 추가
-                self.add_test_history_item(
-                    f"[{i:03d}] 트리거 #{trigger_count}: {y_value:.2f}",
-                    "success"
-                )
-        
-        # 범례에 트리거 개수 표시
-        if trigger_count > 0:
-            ax.scatter([], [], c=trigger_color, s=30, marker='^',
-                       label=f'Trigger ({trigger_count})', zorder=5,
-                       edgecolors='white', linewidth=0.5)
     
     def update_trigger_signals(self, simulation_result_data):
         """트리거 신호들을 작동 기록에 업데이트"""

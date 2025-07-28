@@ -92,7 +92,8 @@ class TriggerListWidget(QWidget):
         main_layout.addWidget(self.group)
         
         layout = QVBoxLayout(self.group)
-        layout.setContentsMargins(8, 8, 8, 8)  # 패딩 줄이기
+        layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진 (8→6)
+        layout.setSpacing(4)  # 표준 간격 추가
         
         # 트리거 검색 (원본 순서대로 상단에 배치)
         search_layout = QHBoxLayout()
@@ -112,10 +113,23 @@ class TriggerListWidget(QWidget):
         self.trigger_tree.setRootIsDecorated(False)  # 루트 노드 장식 제거
         self.trigger_tree.setIndentation(0)  # 들여쓰기 완전 제거
         
-        # 열 폭 설정 (원본과 동일)
-        self.trigger_tree.setColumnWidth(0, 180)  # 트리거명 폭
-        self.trigger_tree.setColumnWidth(1, 120)  # 변수 폭
-        self.trigger_tree.setColumnWidth(2, 140)  # 조건 폭
+        # 열 폭을 비율 기반으로 설정 (윈도우 크기에 맞춰 동적 변경)
+        from PyQt6.QtWidgets import QHeaderView
+        header = self.trigger_tree.header()
+        
+        # 모든 열을 비율로 설정: 트리거명(50%) : 변수(25%) : 조건(25%)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # 트리거명: 남은 공간 차지
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)  # 변수: 사용자 조정 가능
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)  # 조건: 사용자 조정 가능
+        
+        # 초기 비율 설정 (전체 폭의 비율로 계산)
+        # 트리거명: 50%, 변수: 25%, 조건: 25%
+        header.setStretchLastSection(False)  # 마지막 열 자동 늘리기 비활성화
+        
+        # 최소 너비 설정 (너무 작아지지 않도록)
+        self.trigger_tree.setColumnWidth(0, 150)  # 트리거명 최소 폭
+        self.trigger_tree.setColumnWidth(1, 100)  # 변수 최소 폭
+        self.trigger_tree.setColumnWidth(2, 120)  # 조건 최소 폭
         
         # 트리거 트리 스타일은 애플리케이션 테마를 따름 (하드코딩 제거)
         
@@ -789,6 +803,31 @@ class TriggerListWidget(QWidget):
                 QMessageBox.critical(self, "❌ 오류", f"트리거 삭제 중 오류가 발생했습니다:\n{e}")
         else:
             print("❌ 사용자가 삭제를 취소함")
+    
+    def resizeEvent(self, a0):
+        """위젯 크기 변경 시 열 폭 비율 조정"""
+        super().resizeEvent(a0)
+        
+        # 트리거 트리가 초기화된 후에만 실행
+        if hasattr(self, 'trigger_tree') and self.trigger_tree:
+            # 새로운 전체 너비 계산
+            total_width = self.trigger_tree.width() - 40  # 스크롤바 및 여백 고려
+            
+            if total_width > 200:  # 최소 크기 체크
+                # 비율 계산: 트리거명(40%) : 변수(30%) : 조건(30%)
+                name_width = int(total_width * 0.34)
+                variable_width = int(total_width * 0.3)
+                condition_width = int(total_width * 0.36)
+                
+                # 최소 너비 보장
+                name_width = max(name_width, 120)
+                variable_width = max(variable_width, 80)
+                condition_width = max(condition_width, 100)
+                
+                # 열 폭 설정
+                self.trigger_tree.setColumnWidth(0, name_width)
+                self.trigger_tree.setColumnWidth(1, variable_width)
+                self.trigger_tree.setColumnWidth(2, condition_width)
 
 
 if __name__ == "__main__":

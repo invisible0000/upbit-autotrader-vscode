@@ -19,7 +19,9 @@ class ParameterWidgetFactory:
     
     def create_parameter_widgets(self, var_id: str, params: Dict[str, Any], 
                                 layout: QVBoxLayout) -> Dict[str, QWidget]:
-        """변수별 파라미터 위젯 생성"""
+        """변수별 파라미터 위젯 생성 - 반응형"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         if not params:
             return {}
         
@@ -41,7 +43,8 @@ class ParameterWidgetFactory:
             # 위젯 타입별 생성
             widget = self._create_widget_by_type(param_config)
             widget.setMinimumWidth(100)  # 입력 위젯 최소 폭 설정
-            param_row.addWidget(widget)
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)  # 확장 가능
+            param_row.addWidget(widget, 1)  # 스트레치 팩터 1
             
             # 범위 표시 추가 (콤팩트하게)
             range_label = self._create_range_label(param_config)
@@ -293,17 +296,23 @@ class ParameterWidgetFactory:
             """)
     
     def create_scrollable_parameter_area(self, min_height: int = 120, 
-                                       max_height: int = 200) -> tuple:
-        """스크롤 가능한 파라미터 영역 생성"""
+                                       max_height: int = 300) -> tuple:  # 최대 높이 증가 (200→300)
+        """스크롤 가능한 파라미터 영역 생성 - 반응형"""
+        from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
+        
         param_scroll = QScrollArea()
         param_scroll.setMinimumHeight(min_height)
         param_scroll.setMaximumHeight(max_height)
         param_scroll.setWidgetResizable(True)
         param_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         param_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # 확장 가능하도록 설정
+        param_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         param_widget = QWidget()
         param_layout = QVBoxLayout(param_widget)
+        param_layout.setContentsMargins(4, 4, 4, 4)  # 마진 설정
+        param_layout.setSpacing(2)  # 간격 설정
         param_scroll.setWidget(param_widget)
         
         return param_scroll, param_layout
