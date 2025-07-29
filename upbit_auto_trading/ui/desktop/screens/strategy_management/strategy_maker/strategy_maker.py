@@ -18,9 +18,9 @@ from upbit_auto_trading.ui.desktop.common.components import (
 )
 from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager
 
-# 공통 컴포넌트 사용 (새로운 아키텍처)
-from ..components.condition_storage import ConditionStorage
-from ..components.strategy_storage import StrategyStorage
+# 전략 메이커 전용 컴포넌트 사용
+from .components.condition_storage import ConditionStorage
+from .components.strategy_storage import StrategyStorage
 # 공통 시뮬레이션 시스템 사용
 try:
     from ..shared_simulation import (
