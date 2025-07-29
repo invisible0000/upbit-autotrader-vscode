@@ -58,7 +58,7 @@ class SimulationControlWidget(QWidget):
                 self.data_source_selector = DataSourceSelectorWidget()
                 self.data_source_selector.source_changed.connect(self.on_data_source_changed)
                 layout.addWidget(self.data_source_selector)
-                logger.silent_success("DataSourceSelectorWidget 생성 성공")
+                logger.debug("DataSourceSelectorWidget 생성 성공")
             except Exception as e:
                 logger.warning(f"데이터 소스 선택기 초기화 실패: {e}")
                 # 대체 라벨

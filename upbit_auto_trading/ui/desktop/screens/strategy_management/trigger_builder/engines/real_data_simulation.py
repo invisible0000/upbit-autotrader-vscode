@@ -103,32 +103,32 @@ class RealDataSimulationEngine:
                     pass  # 이미 닫혔거나 에러 무시
     
     def _define_scenario_segments(self) -> Dict[str, Dict[str, Any]]:
-        """시나리오별 데이터 세그먼트 정의"""
+        """시나리오별 데이터 세그먼트 정의 - 실제 시장 패턴 기반"""
         return {
-            '상승 추세': {
-                'date_range': ('2024-01-01', '2024-03-31'),
-                'description': '꾸준한 상승 추세 구간',
-                'data_offset': 0
-            },
-            '하락 추세': {
-                'date_range': ('2024-04-01', '2024-06-30'),
-                'description': '하락 추세 구간',
-                'data_offset': 90
-            },
             '급등': {
-                'date_range': ('2024-07-01', '2024-08-15'),
-                'description': '급등 구간',
-                'data_offset': 180
+                'date_range': ('2025-04-16', '2025-07-21'),
+                'description': '급등 구간 (+31.39%, 121M→160M)',
+                'data_offset': 2760
             },
-            '급락': {
-                'date_range': ('2024-08-16', '2024-09-30'),
-                'description': '급락 구간',
-                'data_offset': 225
+            '상승 추세': {
+                'date_range': ('2023-07-16', '2023-10-23'),
+                'description': '상승 추세 구간 (+13.47%, 39M→44M)',
+                'data_offset': 2120
             },
             '횡보': {
-                'date_range': ('2024-10-01', '2024-12-31'),
-                'description': '횡보 구간',
-                'data_offset': 270
+                'date_range': ('2023-04-27', '2023-08-04'),
+                'description': '횡보 구간 (-1.95%, 39M→38M)',
+                'data_offset': 2040
+            },
+            '하락 추세': {
+                'date_range': ('2023-07-06', '2023-10-13'),
+                'description': '하락 추세 구간 (-7.26%, 40M→37M)',
+                'data_offset': 2110
+            },
+            '급락': {
+                'date_range': ('2018-08-01', '2018-11-08'),
+                'description': '급락 구간 (-16.55%, 8.7M→7.3M)',
+                'data_offset': 310
             }
         }
     
@@ -144,7 +144,9 @@ class RealDataSimulationEngine:
             
             conn = self._get_connection()
             
-            # 시나리오별 데이터 쿼리
+            # 시나리오별 날짜 범위 기반 데이터 쿼리 (더 정확함)
+            start_date, end_date = segment_info['date_range']
+            
             query = """
             SELECT 
                 timestamp,
@@ -155,11 +157,12 @@ class RealDataSimulationEngine:
                 volume
             FROM market_data 
             WHERE symbol = 'KRW-BTC' AND timeframe = '1d'
-            ORDER BY timestamp DESC 
-            LIMIT ? OFFSET ?
+            AND timestamp >= ? AND timestamp <= ?
+            ORDER BY timestamp ASC 
+            LIMIT ?
             """
             
-            df = pd.read_sql_query(query, conn, params=[limit, segment_info['data_offset']])
+            df = pd.read_sql_query(query, conn, params=[start_date, end_date, limit])
             
             if df.empty:
                 logging.warning(f"No data found for scenario: {scenario}")

@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 
 try:
-    from .minichart_variable_models import (
+    from upbit_auto_trading.data_layer.minichart_variable_models import (
         MINICHART_INITIAL_VARIABLES, MINICHART_SCALE_GROUPS
     )
     MINICHART_MODELS_AVAILABLE = True

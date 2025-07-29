@@ -99,7 +99,7 @@ class SimulationDataSourceManager:
         for source_type, available_flag in self._availability.items():
             if available_flag:
                 available.append(source_type.value)
-                logger.verbose(f"{source_type.value} 소스 추가됨")
+                logger.debug(f"{source_type.value} 소스 추가됨")
         
         logger.debug(f"반환할 소스 목록: {available} (총 {len(available)}개)")
         return available

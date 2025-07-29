@@ -317,7 +317,7 @@ class TriggerDetailWidget(QWidget):
             from PyQt6.QtWidgets import QApplication
             clipboard = QApplication.clipboard()
             clipboard.setText(self.detail_text.toPlainText())
-            logger.silent_success("트리거 상세정보가 클립보드에 복사되었습니다.")
+            logger.debug("트리거 상세정보가 클립보드에 복사되었습니다.")
         except Exception as e:
             logger.error(f"클립보드 복사 실패: {e}")
     

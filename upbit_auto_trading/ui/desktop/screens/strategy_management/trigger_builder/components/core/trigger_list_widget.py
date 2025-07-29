@@ -1,4 +1,4 @@
-"""
+﻿"""
 트리거 리스트 위젯 - 기존 기능 정확 복제
 integrated_condition_manager.py의 create_trigger_list_area() 완전 복제
 """
@@ -18,7 +18,7 @@ logger = get_logger("TriggerList")
 try:
     from .condition_storage import ConditionStorage
     STORAGE_AVAILABLE = True
-    logger.silent_success("조건 저장소 (로컬) 가져오기 완료")
+    logger.debug("조건 저장소 (로컬) 가져오기 완료")
 except ImportError as e:
     logger.warning(f"조건 저장소 (로컬)를 찾을 수 없습니다: {e}")
     try:
@@ -31,7 +31,7 @@ except ImportError as e:
             sys.path.insert(0, parent_dir)
         from condition_storage import ConditionStorage
         STORAGE_AVAILABLE = True
-        logger.silent_success("조건 저장소 (상위 경로) 가져오기 완료")
+        logger.debug("조건 저장소 (상위 경로) 가져오기 완료")
     except ImportError as e2:
         logger.warning(f"조건 저장소 (상위 경로)를 찾을 수 없습니다: {e2}")
         try:
@@ -42,7 +42,7 @@ except ImportError as e:
                 sys.path.insert(0, components_dir)
             from condition_storage import ConditionStorage
             STORAGE_AVAILABLE = True
-            logger.silent_success("조건 저장소 (components) 가져오기 완료")
+            logger.debug("조건 저장소 (components) 가져오기 완료")
         except ImportError as e3:
             logger.warning(f"조건 저장소 (components)를 찾을 수 없습니다: {e3}")
             ConditionStorage = None
@@ -73,7 +73,7 @@ class TriggerListWidget(QWidget):
         if STORAGE_AVAILABLE:
             try:
                 self.condition_storage = ConditionStorage()
-                logger.silent_success("조건 저장소 초기화 완료")
+                logger.debug("조건 저장소 초기화 완료")
             except Exception as e:
                 logger.warning(f"조건 저장소 초기화 실패 (데이터베이스 미생성): {e}")
                 logger.debug("임시로 메모리 기반 저장으로 전환")
@@ -312,7 +312,7 @@ class TriggerListWidget(QWidget):
                 item.setData(0, Qt.ItemDataRole.UserRole, condition)  # 조건 데이터 저장
                 self.trigger_tree.addTopLevelItem(item)
             
-            logger.silent_success(f"{len(conditions)}개 트리거 로드 완료")
+            logger.debug(f"{len(conditions)}개 트리거 로드 완료")
                 
         except Exception as e:
             logger.error(f"트리거 목록 로드 실패: {e}")
@@ -654,7 +654,7 @@ class TriggerListWidget(QWidget):
         self.is_edit_mode = False
         self.update_edit_button_state(False)
         
-        logger.silent_success("편집 저장 완료")
+        logger.debug("편집 저장 완료")
 
     def cancel_edit_trigger(self):
         """편집 취소 - 원본 기능 복제"""
@@ -670,7 +670,7 @@ class TriggerListWidget(QWidget):
                 self.parent().parent().cancel_edit_mode()
             
             QMessageBox.information(self, "❌ 편집 취소", "편집이 취소되었습니다.")
-            logger.silent_success("편집 취소 완료")
+            logger.debug("편집 취소 완료")
             
         except Exception as e:
             logger.error(f"편집 취소 실패: {e}")
@@ -805,7 +805,7 @@ class TriggerListWidget(QWidget):
                     # 샘플 데이터에서 삭제 (실제로는 새로고침만)
                     self.load_trigger_list()
                     QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
-                    logger.silent_success(f"샘플 데이터에서 트리거 삭제 완료: {condition_name}")
+                    logger.debug(f"샘플 데이터에서 트리거 삭제 완료: {condition_name}")
                     
             except Exception as e:
                 logger.error(f"삭제 중 예외 발생: {e}")
