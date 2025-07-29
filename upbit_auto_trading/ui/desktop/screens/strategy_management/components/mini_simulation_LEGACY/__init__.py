@@ -19,6 +19,7 @@ TriggerBuilder뿐만 아니라 StrategyMaker, Backtest 등 다른 탭에서도 �
 - services/: 비즈니스 로직 서비스들
 """
 
+# 엔진 팩토리
 from .engines.simulation_engine_factory import (
     get_simulation_engine,
     get_embedded_simulation_engine,
@@ -27,7 +28,9 @@ from .engines.simulation_engine_factory import (
     DataSourceType
 )
 
+# 서비스
 from .services.data_source_manager import SimulationDataSourceManager
+from .services.mini_simulation_service import MiniSimulationService
 
 __version__ = "1.0.0"
 __author__ = "Upbit Auto Trading System"
@@ -45,6 +48,7 @@ __all__ = [
     'SimulationDataSourceManager',
     'MiniSimulationService',
 ]
+
 
 def get_mini_simulation_info():
     """미니 시뮬레이션 시스템 정보 반환"""

@@ -5,8 +5,8 @@
 
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
-from .condition_storage import ConditionStorage
-from .variable_definitions import VariableDefinitions
+from .core.condition_storage import ConditionStorage
+from .core.variable_definitions import VariableDefinitions
 
 class ConditionLoader:
     """저장된 조건을 불러와서 사용하는 클래스"""

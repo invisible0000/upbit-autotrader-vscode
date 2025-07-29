@@ -95,48 +95,18 @@ except ImportError:
 except Exception:
     pass  # 폰트 설정 실패해도 건너뛰기
 
-# ConditionStorage와 ConditionLoader import
-try:
-    # 먼저 trigger_builder/components에서 로드 시도 (최신 버전)
-    from .components.condition_storage import ConditionStorage
-    from .components.condition_loader import ConditionLoader
-except ImportError:
-    try:
-        # 폴백: strategy_management/components에서 로드
-        from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
-        from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_loader import ConditionLoader
-    except ImportError:
-        # 간단한 폴백 클래스 생성
-        class ConditionStorage:
-            def get_all_conditions(self):
-                return []
-            def delete_condition(self, condition_id):
-                return False, f"Mock storage - 삭제 불가: {condition_id}"
-        
-        class ConditionLoader:
-            def __init__(self, storage):
-                self.storage = storage
+# ConditionStorage와 ConditionLoader import - 정확한 경로 사용
+from .components.core.condition_storage import ConditionStorage
+from .components.condition_loader import ConditionLoader
 
-# DataSourceSelectorWidget는 이제 trigger_builder/components에 있음
-try:
-    from .components import DataSourceSelectorWidget
-except ImportError:
-    DataSourceSelectorWidget = None
+# DataSourceSelectorWidget - 폴백 제거, 정확한 경로 필요
+from .components import DataSourceSelectorWidget
 
-# 기존 UI 컴포넌트 임포트 (스타일 통일을 위해)
-try:
-    from upbit_auto_trading.ui.desktop.common.components import (
-        CardWidget, StyledTableWidget, PrimaryButton, SecondaryButton, 
-        StyledLineEdit, StyledComboBox
-    )
-except ImportError:
-    # 컴포넌트가 없을 경우 기본 위젯 사용
-    CardWidget = QGroupBox
-    StyledTableWidget = QTreeWidget
-    PrimaryButton = QPushButton
-    SecondaryButton = QPushButton
-    StyledLineEdit = QLineEdit
-    StyledComboBox = QComboBox
+# 기존 UI 컴포넌트 임포트 - 폴백 제거, 정확한 경로 필요
+from upbit_auto_trading.ui.desktop.common.components import (
+    CardWidget, StyledTableWidget, PrimaryButton, SecondaryButton,
+    StyledLineEdit, StyledComboBox
+)
 
 class TriggerBuilderScreen(QWidget):
     """트리거 빌더 메인 화면 - 기존 기능 완전 복원"""
@@ -305,50 +275,14 @@ class TriggerBuilderScreen(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
         
-        # 조건 빌더 다이얼로그를 임베디드 형태로 포함
-        try:
-            # embedded 파라미터 없이 생성 시도
-            self.condition_dialog = ConditionDialog()
-            # 최대 높이 제한 제거하여 화면 크기에 맞춰 확장 가능하도록 함
-            # self.condition_dialog.setMaximumHeight(800)  # 주석 처리
-            layout.addWidget(self.condition_dialog)
-            self.logger.debug("조건 빌더 다이얼로그 생성 성공")
-        except Exception as e:
-            self.logger.error(f"조건 빌더 다이얼로그 생성 실패: {e}")
-            # 폴백: 간단한 인터페이스
-            fallback_widget = self.create_condition_builder_fallback()
-            layout.addWidget(fallback_widget)
+        # 조건 빌더 다이얼로그를 임베디드 형태로 포함 - 폴백 제거
+        self.condition_dialog = ConditionDialog()
+        layout.addWidget(self.condition_dialog)
+        self.logger.debug("조건 빌더 다이얼로그 생성 성공")
         
         group.setLayout(layout)
         group.setMinimumWidth(400)  # 최소 너비 증가 (300→400)
         return group
-    
-    def create_condition_builder_fallback(self):
-        """조건 빌더 폴백 위젯"""
-        fallback_widget = QWidget()
-        fallback_layout = QVBoxLayout(fallback_widget)
-        
-        # 상태 표시
-        status_label = QLabel("🔧 조건 빌더 로딩 중...")
-        status_label.setObjectName("conditionBuilderFallback")  # CSS 선택자용 이름 설정
-        fallback_layout.addWidget(status_label)
-        
-        # 새 조건 생성 버튼
-        new_condition_btn = QPushButton("➕ 새 조건 생성")
-        new_condition_btn.clicked.connect(self.open_condition_dialog)
-        fallback_layout.addWidget(new_condition_btn)
-        
-        return fallback_widget
-    
-    def open_condition_dialog(self):
-        """조건 다이얼로그를 별도 창으로 열기"""
-        try:
-            dialog = ConditionDialog()
-            dialog.setWindowTitle("조건 생성/편집")
-            dialog.setModal(True)
-            dialog.exec()
-        except Exception as e:
-            QMessageBox.warning(self, "⚠️ 경고", f"조건 다이얼로그를 열 수 없습니다: {e}")
     
     def create_trigger_list_area(self):
         """2: 등록된 트리거 리스트 영역 - Components 전용"""
@@ -438,25 +372,9 @@ class TriggerBuilderScreen(QWidget):
             print(f"❌ 트리거 선택 처리 실패: {e}")
     
     def update_trigger_detail(self, condition):
-        """트리거 상세정보 업데이트 - 위젯 메소드 호출"""
-        try:
-            # 트리거 디테일 위젯의 메소드 호출
-            if hasattr(self, 'trigger_detail_widget'):
-                self.trigger_detail_widget.update_trigger_detail(condition)
-            else:
-                # 폴백: 기존 방식 (완전한 폴백 코드)
-                if not condition:
-                    self.detail_text.setPlainText("Select a trigger to view details.")
-                    return
-                
-                # 기본 정보만 표시
-                condition_id = condition.get('id', 'Unknown')
-                condition_name = condition.get('name', 'Unknown')
-                detail_text = f"ID: {condition_id}\n이름: {condition_name}\n"
-        except Exception as e:
-            print(f"❌ 트리거 상세정보 업데이트 실패: {e}")
-            if hasattr(self, 'detail_text'):
-                self.detail_text.setPlainText(f"❌ 상세정보 로드 실패: {str(e)}")
+        """트리거 상세정보 업데이트 - 위젯 메소드 호출, 폴백 제거"""
+        # 트리거 디테일 위젯의 메소드 호출 - 실패시 에러 발생
+        self.trigger_detail_widget.update_trigger_detail(condition)
     
     def load_condition_for_edit(self, condition_data):
         """편집을 위한 조건 로드 - 원본 기능 복제"""
@@ -600,42 +518,138 @@ class TriggerBuilderScreen(QWidget):
             print(f"❌ 트리거 복사 실패: {e}")
     
     def run_simulation(self, scenario):
-        """시뮬레이션 실행 - 새로운 서비스 기반"""
+        """시뮬레이션 실행 - 실제 트리거 계산 로직 사용 (NEW)"""
         if not self.selected_condition:
             self.simulation_status.setText("Status: 트리거를 선택해 주세요.")
             print("⚠️ 트리거를 선택하세요.")
             return
         
         try:
-            # 새로운 서비스 사용 (NEW shared_simulation)
-            from ..shared_simulation.engines.simulation_engines import (
-                get_robust_engine, 
-                get_realdata_engine
+            print(f"🚀 실제 트리거 시뮬레이션 시작: {scenario}")
+            
+            # 실제 트리거 시뮬레이션 서비스 사용 (NEW)
+            from .components.shared.trigger_simulation_service import (
+                TriggerSimulationService, TriggerSimulationRequest
             )
             
-            # 시나리오에 따른 엔진 선택
-            if scenario in ["bull", "bear", "volatile"]:
-                engine = get_realdata_engine()
-            else:
-                engine = get_robust_engine()
+            # 시뮬레이션 요청 생성
+            request = TriggerSimulationRequest(
+                condition=self.selected_condition,
+                scenario=scenario,
+                data_source="real_db",
+                data_limit=100  # 100개 데이터 포인트
+            )
             
-            # 시뮬레이션 실행 (NEW 임시 단순화)
-            result = {
-                'success': True,
-                'data': f"✅ {scenario} 시나리오 시뮬레이션 완료",
-                'records': 30,
-                'engine': engine.__class__.__name__
-            }
+            # 시뮬레이션 실행
+            simulation_service = TriggerSimulationService()
+            result = simulation_service.run_simulation(request)
             
             # 결과 처리
             self._process_simulation_result(result, scenario)
             
         except Exception as e:
-            print(f"❌ 시뮬레이션 실행 오류: {e}")
-            self.simulation_status.setText(f"Status: ❌ 시뮬레이션 실패 - {e}")
+            # 폴백 제거 - 에러가 발생하면 명확히 표시
+            print(f"❌ 시뮬레이션 실행 완전 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # 사용자에게 명확한 에러 표시
+            self.simulation_status.setText(f"Status: ❌ 시뮬레이션 실패 - {str(e)}")
+            
+            # 차트에 에러 메시지 표시 (클리어하지 않고)
+            if hasattr(self, 'simulation_result_widget'):
+                self.simulation_result_widget.test_history_list.clear()
+                # 에러 메시지 추가
+                self.add_test_history_item(f"❌ 시뮬레이션 실패: {str(e)}", "error")
+                
+                # 차트에 에러 표시 (클리어 대신)
+                if hasattr(self.simulation_result_widget, 'figure'):
+                    self.simulation_result_widget.figure.clear()
+                    ax = self.simulation_result_widget.figure.add_subplot(111)
+                    ax.text(0.5, 0.5, f"❌ 시뮬레이션 실패\n\n{str(e)[:100]}...", 
+                           horizontalalignment='center', verticalalignment='center',
+                           transform=ax.transAxes, fontsize=12, color='red',
+                           bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor="red"))
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    self.simulation_result_widget.canvas.draw()
+            
+            # 에러를 다시 발생시켜 디버깅 가능하도록
+            raise
     
     def _process_simulation_result(self, result, scenario):
-        """시뮬레이션 결과 처리 - 깔끔한 분리"""
+        """시뮬레이션 결과 처리 - 깔끔한 분리 (NEW dict 지원)"""
+        # Dict 형태 결과 처리
+        if isinstance(result, dict):
+            if not result.get('success', False):
+                error_msg = result.get('error', '알 수 없는 오류')
+                self.simulation_status.setText(f"Status: ❌ {error_msg}")
+                return
+            
+            # 상태 업데이트 (dict 형태)
+            records = result.get('records', 0)
+            engine_name = result.get('engine', 'Unknown')
+            status_text = "✅ PASS" if records > 0 else "❌ FAIL"
+            self.simulation_status.setText(
+                f"Status: {status_text} - {scenario} 시나리오, 엔진: {engine_name}, 데이터: {records}개"
+            )
+            
+            # Dict 형태 결과 처리 - 실제 시뮬레이션 데이터만 사용, 폴백 제거
+            price_data = result.get('price_data', [])
+            trigger_points = result.get('trigger_points', [])
+            
+            # 데이터가 없으면 에러 발생 (폴백 제거)
+            if not price_data:
+                raise ValueError(f"시뮬레이션 결과에 price_data가 없습니다: {result}")
+            
+            # 실제 외부 변수 데이터만 사용
+            external_data = result.get('external_variable_data')
+            base_variable_data = result.get('base_variable_data')
+            
+            # 트리거 포인트가 없으면 실제 계산
+            if not trigger_points and base_variable_data and external_data:
+                # 교차 지점 찾기 (SMA_20 > SMA_60)
+                for i in range(1, min(len(base_variable_data), len(external_data))):
+                    prev_base = base_variable_data[i-1]
+                    curr_base = base_variable_data[i]
+                    prev_ext = external_data[i-1]
+                    curr_ext = external_data[i]
+                    
+                    if prev_base <= prev_ext and curr_base > curr_ext:  # 골든 크로스
+                        trigger_points.append(i)
+            
+            if hasattr(self, 'simulation_result_widget'):
+                chart_data = {
+                    'scenario': scenario,
+                    'price_data': price_data,
+                    'base_variable_data': base_variable_data,
+                    'external_variable_data': external_data,
+                    'current_value': price_data[-1] if price_data else 93000000,
+                    'target_value': external_data[-1] if external_data else 93000000,
+                    'variable_info': {'variable_name': self.selected_condition.get('variable_name', 'SMA_20') if self.selected_condition else 'SMA_20'},
+                    'external_variable_info': {'variable_name': self.selected_condition.get('external_variable', {}).get('variable_name', 'SMA_60') if self.selected_condition else 'SMA_60'},
+                    'condition_name': self.selected_condition.get('name', 'Unknown') if self.selected_condition else 'Unknown'
+                }
+                
+                trigger_results = {
+                    'trigger_points': trigger_points,
+                    'trigger_activated': len(trigger_points) > 0,
+                    'total_signals': len(trigger_points)
+                }
+                
+                self.simulation_result_widget.update_chart_with_simulation_results(chart_data, trigger_results)
+            
+            # 로그 추가 (dict 형태도 지원)
+            result_text = f"{scenario} 시뮬레이션 - {status_text}, {records}개 데이터"
+            self.add_test_history_item(result_text, "test")
+            
+            # 시그널 발생 (dict 형태도 지원)
+            self.condition_tested.emit(self.selected_condition or {}, records > 0)
+            
+            print(f"✅ Dict 형태 시뮬레이션 완료: {result_text}")
+            return
+            
+        # 기존 객체 형태 결과 처리
         if not result.success:
             self.simulation_status.setText(f"Status: ❌ {result.error_message}")
             return
@@ -647,27 +661,23 @@ class TriggerBuilderScreen(QWidget):
             f"Status: {status_text} - {result.condition_name}, 신호: {trigger_count}개"
         )
         
-        # 차트 업데이트
-        if hasattr(self, 'simulation_result_widget'):
-            chart_data = {
-                'scenario': result.scenario,
-                'price_data': result.price_data,
-                'base_variable_data': result.base_variable_data,
-                'external_variable_data': result.external_variable_data,
-                'current_value': result.current_value,
-                'target_value': result.target_value,
-                'variable_info': result.variable_info,
-                'external_variable_info': result.external_variable_info,
-                'condition_name': result.condition_name
-            }
+        # 차트 업데이트 - 실제 시뮬레이션 데이터 사용, 폴백 제거
+        if hasattr(self, 'simulation_result_widget') and self.simulation_result_widget:
+            # 트리거 결과를 (triggered, _) 형태로 변환
+            trigger_results_paired = [(point in result.trigger_points, 0) for point in range(len(result.price_data))]
             
-            trigger_results = {
-                'trigger_points': result.trigger_points,
-                'trigger_activated': trigger_count > 0,
-                'total_signals': trigger_count
-            }
+            # 올바른 메서드 호출 - update_simulation_chart 사용, 폴백 제거
+            self.simulation_result_widget.update_simulation_chart(
+                result.scenario,                      # scenario
+                result.price_data,                    # price_data
+                trigger_results_paired,               # trigger_results
+                result.base_variable_data,            # base_variable_data
+                result.external_variable_data,        # external_variable_data
+                result.variable_info,                 # variable_info
+                result.target_value                   # comparison_value
+            )
             
-            self.simulation_result_widget.update_chart_with_simulation_results(chart_data, trigger_results)
+            print(f"✅ 시뮬레이션 차트 업데이트 완료: {result.scenario}")
         
         # 로그 추가
         self.add_test_history_item(result.result_text, "test")

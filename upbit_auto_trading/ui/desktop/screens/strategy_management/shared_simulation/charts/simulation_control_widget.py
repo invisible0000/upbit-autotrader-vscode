@@ -12,14 +12,15 @@ from upbit_auto_trading.utils.debug_logger import get_logger
 
 logger = get_logger("SimulationControl")
 
-# DataSourceSelectorWidget import
+# DataSourceSelectorWidget import - 올바른 경로 사용
 try:
-    from ..data_source_selector import DataSourceSelectorWidget
+    from ..data_sources.data_source_selector import DataSourceSelectorWidget
     DATA_SOURCE_AVAILABLE = True
-except ImportError:
+    logger.debug("✅ DataSourceSelectorWidget 로드 성공")
+except ImportError as e:
     DataSourceSelectorWidget = None
     DATA_SOURCE_AVAILABLE = False
-    logger.warning("DataSourceSelectorWidget를 찾을 수 없습니다.")
+    logger.warning(f"DataSourceSelectorWidget를 찾을 수 없습니다: {e}")
 
 
 class SimulationControlWidget(QWidget):
@@ -52,45 +53,34 @@ class SimulationControlWidget(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)  # 표준 마진
         layout.setSpacing(4)  # 표준 간격
         
-        # 데이터 소스 선택 위젯 추가 (원본과 동일)
+        # 데이터 소스 선택 위젯 추가 - UI 구조 보존하면서 에러 명시
         if DATA_SOURCE_AVAILABLE and DataSourceSelectorWidget is not None:
-            try:
-                self.data_source_selector = DataSourceSelectorWidget()
-                self.data_source_selector.source_changed.connect(self.on_data_source_changed)
-                layout.addWidget(self.data_source_selector)
-                logger.debug("DataSourceSelectorWidget 생성 성공")
-            except Exception as e:
-                logger.warning(f"데이터 소스 선택기 초기화 실패: {e}")
-                # 대체 라벨
-                fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-                fallback_label.setStyleSheet("""
-                    background-color: #e7f3ff;
-                    border: 1px solid #007bff;
+            self.data_source_selector = DataSourceSelectorWidget()
+            self.data_source_selector.source_changed.connect(self.on_data_source_changed)
+            layout.addWidget(self.data_source_selector)
+            logger.debug("DataSourceSelectorWidget 생성 성공")
+        else:
+            # UI 구조 보존 - 에러를 명확히 표시하지만 앱 전체는 중단하지 않음
+            error_msg = f"❌ DataSourceSelectorWidget 로드 실패: DATA_SOURCE_AVAILABLE={DATA_SOURCE_AVAILABLE}, DataSourceSelectorWidget={DataSourceSelectorWidget}"
+            logger.error(error_msg)
+            
+            # 에러 표시 위젯 (탭 생성은 계속 진행)
+            error_widget = QLabel(f"❌ 데이터 소스 로더 실패\n{error_msg[:60]}...")
+            error_widget.setStyleSheet("""
+                QLabel {
+                    background-color: #fff3cd;
+                    border: 2px solid #ffeaa7;
                     border-radius: 4px;
                     padding: 8px;
-                    font-size: 11px;
-                    color: #007bff;
+                    font-size: 10px;
+                    color: #856404;
                     text-align: center;
                     font-weight: bold;
-                """)
-                fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout.addWidget(fallback_label)
-        else:
-            logger.warning("DataSourceSelectorWidget 클래스를 로드할 수 없음")
-            # 대체 라벨
-            fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
-            fallback_label.setStyleSheet("""
-                background-color: #e7f3ff;
-                border: 1px solid #007bff;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 11px;
-                color: #007bff;
-                text-align: center;
-                font-weight: bold;
+                }
             """)
-            fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(fallback_label)
+            error_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            error_widget.setWordWrap(True)
+            layout.addWidget(error_widget)
         
         # 구분선
         separator = QFrame()

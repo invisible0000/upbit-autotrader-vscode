@@ -21,7 +21,18 @@ from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManag
 # 공통 컴포넌트 사용 (새로운 아키텍처)
 from ..components.condition_storage import ConditionStorage
 from ..components.strategy_storage import StrategyStorage
-from ..components.mini_simulation import MiniSimulationService
+# 공통 시뮬레이션 시스템 사용
+try:
+    from ..shared_simulation import (
+        get_embedded_engine,
+        get_realdata_engine,
+        get_robust_engine
+    )
+    SHARED_SIMULATION_AVAILABLE = True
+    print("✅ shared_simulation 시스템 로드 성공")
+except ImportError as e:
+    print(f"⚠️ shared_simulation 시스템 import 실패: {e}")
+    SHARED_SIMULATION_AVAILABLE = False
 
 
 class StrategyMaker(QWidget):

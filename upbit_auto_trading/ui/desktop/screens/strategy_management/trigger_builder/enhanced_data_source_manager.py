@@ -30,10 +30,10 @@ class EnhancedSimulationDataSourceManager:
         
     def _check_availability(self):
         """각 데이터 소스의 가용성 확인"""
-        # 1. 내장 최적화 데이터셋 확인
+        # 1. 내장 최적화 데이터셋 확인 (NEW shared_simulation)
         try:
-            from ..engines.embedded_simulation_engine import get_embedded_simulation_engine
-            self._engines[DataSourceType.EMBEDDED] = get_embedded_simulation_engine
+            from ..shared_simulation.engines.simulation_engines import get_embedded_engine
+            self._engines[DataSourceType.EMBEDDED] = get_embedded_engine
             self._availability[DataSourceType.EMBEDDED] = True
             logging.info("✅ 내장 최적화 데이터셋 사용 가능 (시나리오별)")
             print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 내장 최적화 데이터셋 사용 가능 - EMBEDDED 등록됨")
@@ -51,8 +51,8 @@ class EnhancedSimulationDataSourceManager:
             print(f"🔍🔍🔍 ENHANCED_DATA_SOURCE_MANAGER DB 파일 존재: {os.path.exists(db_path)}")
             
             if os.path.exists(db_path):
-                from ..engines.real_data_simulation import RealDataSimulationEngine
-                self._engines[DataSourceType.REAL_DB] = lambda: RealDataSimulationEngine()
+                from ..shared_simulation.engines.simulation_engines import get_realdata_engine
+                self._engines[DataSourceType.REAL_DB] = get_realdata_engine
                 self._availability[DataSourceType.REAL_DB] = True
                 logging.info("✅ 실제 DB 데이터 사용 가능 (시나리오별 세그먼테이션)")
                 print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 실제 DB 데이터 사용 가능 - REAL_DB 등록됨")
@@ -64,10 +64,10 @@ class EnhancedSimulationDataSourceManager:
             self._availability[DataSourceType.REAL_DB] = False
             logging.warning(f"❌ 실제 DB 엔진 불가: {e}")
         
-        # 3. 합성 현실적 데이터 확인
+        # 3. 합성 현실적 데이터 확인 (NEW shared_simulation)
         try:
-            from ..engines.robust_simulation_engine import RobustSimulationEngine
-            self._engines[DataSourceType.SYNTHETIC] = lambda: RobustSimulationEngine()
+            from ..shared_simulation.engines.simulation_engines import get_robust_engine
+            self._engines[DataSourceType.SYNTHETIC] = get_robust_engine
             self._availability[DataSourceType.SYNTHETIC] = True
             logging.info("✅ 합성 현실적 데이터 사용 가능")
             print("✅✅✅ ENHANCED_DATA_SOURCE_MANAGER: 합성 현실적 데이터 사용 가능 - SYNTHETIC 등록됨")

@@ -242,6 +242,39 @@ cd /path/to/project && python -c "import sys; print(sys.version)"
 find upbit_auto_trading -name "*.py" | wc -l
 ```
 
+### 🚨 폴백 코드 제거 정책 (핵심 ⭐⭐⭐)
+
+#### "종기의 고름을 뺀다" - 폴백 코드의 역기능
+- **문제**: 폴백 코드가 실제 에러를 숨겨서 디버깅을 방해
+- **원칙**: "동작이 안되면 화면이 비고 에러가 표시되는게 훨씬 개발에 도움이 됩니다"
+- **해결**: 모든 폴백 코드를 제거하여 **실제 문제가 명확히 드러나도록**
+
+#### 폴백 제거 가이드라인
+```python
+# ❌ 폴백 코드 (문제를 숨김)
+try:
+    from .components.condition_storage import ConditionStorage
+except ImportError:
+    # 폴백으로 더미 클래스 생성 - 문제를 숨김!
+    class ConditionStorage:
+        def __init__(self): pass
+
+# ✅ 폴백 제거 (문제를 명확히 드러냄)
+from .components.core.condition_storage import ConditionStorage
+# 에러가 발생하면 바로 ModuleNotFoundError로 정확한 경로 문제를 알 수 있음
+```
+
+#### 허용되는 최소 폴백
+- **UI 틀 보존**: 화면이 완전히 깨지지 않도록 하는 최소한의 구조적 폴백만 허용
+- **에러 표시**: 폴백 실행 시에도 반드시 에러 메시지 표시
+- **import 에러**: 절대 숨기지 말고 정확한 경로 문제를 드러내기
+
+#### 폴백 제거의 효과
+1. **명확한 에러 메시지**: `ModuleNotFoundError: No module named 'x.y.z'`
+2. **정확한 경로 파악**: 실제 파일 위치를 빠르게 찾을 수 있음
+3. **디버깅 효율성**: 문제 해결 시간 대폭 단축
+4. **코드 품질**: 실제 동작하는 코드만 남김
+
 ### 복잡한 버그 추적 방법론 (권장)
 복잡한 코드베이스에서는 **천천히 가는 것이 빠르게 가는 방법**입니다:
 

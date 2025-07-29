@@ -12,11 +12,12 @@ from upbit_auto_trading.utils.debug_logger import get_logger
 
 logger = get_logger("SimulationControl")
 
-# DataSourceSelectorWidget import
+# DataSourceSelectorWidget import (NEW shared_simulation 절대경로)
 try:
-    from ..data_source_selector import DataSourceSelectorWidget
+    from upbit_auto_trading.ui.desktop.screens.strategy_management.shared_simulation.data_sources.data_source_selector import DataSourceSelectorWidget
     DATA_SOURCE_AVAILABLE = True
-except ImportError:
+    logger.debug("✅ DataSourceSelectorWidget 로드 성공")
+except ImportError as e:
     DataSourceSelectorWidget = None
     DATA_SOURCE_AVAILABLE = False
     logger.warning("DataSourceSelectorWidget를 찾을 수 없습니다.")

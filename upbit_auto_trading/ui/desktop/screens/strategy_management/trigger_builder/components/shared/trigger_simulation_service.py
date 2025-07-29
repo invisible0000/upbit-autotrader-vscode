@@ -10,80 +10,8 @@ import numpy as np
 import pandas as pd
 
 # 기존 컴포넌트들 import
-try:
-    from .trigger_calculator import TriggerCalculator
-    COMPONENTS_AVAILABLE = True
-    print("✅ TriggerCalculator 로드 성공")
-except ImportError as e:
-    print(f"❌ TriggerCalculator 로드 실패: {e}")
-    # 간단한 폴백만 유지 - 실제 계산은 하지 않음
-    class TriggerCalculator:
-        def __init__(self):
-            print("⚠️ 폴백 TriggerCalculator 사용중 - 기본 계산만 가능")
-        
-        def calculate_sma(self, prices, period):
-            """폴백 SMA 계산"""
-            return [sum(prices[max(0, i-period+1):i+1]) / min(period, i+1) for i in range(len(prices))]
-        
-        def calculate_ema(self, prices, period):
-            """폴백 EMA 계산"""
-            if not prices:
-                return []
-            alpha = 2 / (period + 1)
-            ema = [prices[0]]
-            for price in prices[1:]:
-                ema.append(alpha * price + (1 - alpha) * ema[-1])
-            return ema
-        
-        def calculate_rsi(self, prices, period=14):
-            """폴백 RSI 계산"""
-            return [50.0] * len(prices)  # 기본값 50
-        
-        def calculate_macd(self, prices):
-            """폴백 MACD 계산"""
-            return {'macd': [0.0] * len(prices), 'signal': [0.0] * len(prices), 'histogram': [0.0] * len(prices)}
-        
-        def calculate_trigger_points(self, data, op, target):
-            """폴백 트리거 포인트 계산"""
-            trigger_points = []
-            for i, value in enumerate(data):
-                if pd.isna(value):
-                    continue
-                if op == ">" and value > target:
-                    trigger_points.append(i)
-                elif op == "<" and value < target:
-                    trigger_points.append(i)
-                elif op == ">=" and value >= target:
-                    trigger_points.append(i)
-                elif op == "<=" and value <= target:
-                    trigger_points.append(i)
-            return trigger_points
-        
-        def calculate_cross_trigger_points(self, base, ext, op):
-            """폴백 교차 트리거 포인트 계산"""
-            if not base or not ext or len(base) != len(ext):
-                return []
-            
-            trigger_points = []
-            for i in range(1, len(base)):
-                if pd.isna(base[i]) or pd.isna(ext[i]) or pd.isna(base[i-1]) or pd.isna(ext[i-1]):
-                    continue
-                
-                prev_diff = base[i-1] - ext[i-1]
-                curr_diff = base[i] - ext[i]
-                
-                if op == "상향교차" and prev_diff <= 0 and curr_diff > 0:
-                    trigger_points.append(i)
-                elif op == "하향교차" and prev_diff >= 0 and curr_diff < 0:
-                    trigger_points.append(i)
-                elif op == ">" and prev_diff <= 0 and curr_diff > 0:  # ">" 연산자 지원
-                    trigger_points.append(i)
-                elif op == "<" and prev_diff >= 0 and curr_diff < 0:  # "<" 연산자 지원
-                    trigger_points.append(i)
-            
-            return trigger_points
-    
-    COMPONENTS_AVAILABLE = False
+# 폴백 제거 - 실제 TriggerCalculator가 없으면 에러 발생하도록
+from .trigger_calculator import TriggerCalculator
 
 
 @dataclass
@@ -199,56 +127,58 @@ class TriggerSimulationService:
             return self._generate_scenario_data(scenario, limit)
     
     def _generate_scenario_data(self, scenario: str, limit: int) -> List[float]:
-        """시나리오별 가상 데이터 생성 - 매번 다른 랜덤 데이터"""
+        """시나리오별 가상 데이터 생성 - 실제 KRW-BTC 가격대 사용 (NEW)"""
         import time
-        base_price = 50000
+        base_price = 93000000  # 9천3백만원 (실제 KRW-BTC 가격대)
         # 매번 다른 시드 사용 (현재 시간 기반)
         np.random.seed(int(time.time() * 1000) % 2147483647)
         
         if scenario == "상승 추세":
-            trend = np.linspace(0, 10000, limit)
-            noise = np.random.normal(0, 500, limit)
+            trend = np.linspace(0, 15000000, limit)  # +1천5백만원 상승
+            noise = np.random.normal(0, 2000000, limit)  # ±200만원 노이즈
             prices = base_price + trend + noise
             
         elif scenario == "하락 추세":
-            trend = np.linspace(0, -8000, limit)
-            noise = np.random.normal(0, 500, limit)
+            trend = np.linspace(0, -12000000, limit)  # -1천2백만원 하락
+            noise = np.random.normal(0, 2000000, limit)  # ±200만원 노이즈
             prices = base_price + trend + noise
             
         elif scenario == "급등":
             split_point = int(limit * 0.7)
-            trend1 = np.linspace(0, 2000, split_point)
-            trend2 = np.linspace(2000, 15000, limit - split_point)
+            trend1 = np.linspace(0, 3000000, split_point)  # 초기 소폭 상승
+            trend2 = np.linspace(3000000, 20000000, limit - split_point)  # 급등
             trend = np.concatenate([trend1, trend2])
-            noise = np.random.normal(0, 300, limit)
+            noise = np.random.normal(0, 1500000, limit)  # ±150만원 노이즈
             prices = base_price + trend + noise
             
         elif scenario == "급락":
             split_point = int(limit * 0.7)
-            trend1 = np.linspace(0, -1000, split_point)
-            trend2 = np.linspace(-1000, -12000, limit - split_point)
+            trend1 = np.linspace(0, -2000000, split_point)  # 초기 소폭 하락
+            trend2 = np.linspace(-2000000, -18000000, limit - split_point)  # 급락
             trend = np.concatenate([trend1, trend2])
-            noise = np.random.normal(0, 400, limit)
+            noise = np.random.normal(0, 1800000, limit)  # ±180만원 노이즈
             prices = base_price + trend + noise
             
         elif scenario == "횡보":
-            noise = np.random.normal(0, 800, limit)
+            noise = np.random.normal(0, 3000000, limit)  # ±300만원 큰 노이즈로 횡보
             prices = base_price + noise
             
         elif scenario == "이동평균 교차":
+            # 하락 후 상승으로 이동평균 교차 유도
             trend = np.concatenate([
-                np.linspace(0, -3000, 40),
-                np.linspace(-3000, -2000, 20),
-                np.linspace(-2000, 5000, 40)
+                np.linspace(0, -8000000, 40),  # 하락
+                np.linspace(-8000000, -6000000, 20),  # 횡보
+                np.linspace(-6000000, 10000000, 40)  # 강한 상승
             ])
-            noise = np.random.normal(0, 400, limit)
+            noise = np.random.normal(0, 1500000, limit)  # ±150만원 노이즈
             prices = base_price + trend + noise
             
         else:
-            noise = np.random.normal(0, 1000, limit)
+            noise = np.random.normal(0, 4000000, limit)  # ±400만원 노이즈
             prices = base_price + noise
         
-        return [max(price, 10000) for price in prices]
+        # 최소 가격 제한 (5천만원 이하로 떨어지지 않도록)
+        return [max(price, 50000000) for price in prices]
     
     def _analyze_condition(self, condition: Dict[str, Any]) -> Dict[str, Any]:
         """조건 분석"""

@@ -9,11 +9,14 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import pandas as pd
 
-from ..engines.factory import (
+# 올바른 shared_simulation 사용
+from ...shared_simulation.engines.simulation_engines import (
     get_simulation_engine, 
-    DataSourceType
+    get_embedded_engine,
+    get_realdata_engine,
+    get_robust_engine
 )
-from .data_source_manager import SimulationDataSourceManager
+from ...shared_simulation.data_sources.data_source_manager import SimulationDataSourceManager
 
 
 class MiniSimulationService:
@@ -23,7 +26,7 @@ class MiniSimulationService:
         """서비스 초기화"""
         self.data_source_manager = SimulationDataSourceManager()
         self.current_scenario = None
-        self.current_data_source = DataSourceType.AUTO
+        self.current_data_source = "embedded"  # 문자열로 처리
         
         # 지원 시나리오 목록
         self.available_scenarios = [
@@ -35,7 +38,7 @@ class MiniSimulationService:
             'ma_cross'        # MA 크로스
         ]
         
-        print("🔗 MiniSimulationService 초기화 완료")
+        print("🔗 MiniSimulationService 초기화 완료 (shared_simulation 사용)")
     
     def get_available_scenarios(self) -> List[str]:
         """사용 가능한 시나리오 목록 반환"""
@@ -43,7 +46,7 @@ class MiniSimulationService:
     
     def get_data_sources(self) -> List[str]:
         """사용 가능한 데이터 소스 목록 반환"""
-        return [source.value for source in DataSourceType]
+        return ["embedded", "real_db", "synthetic"]  # 간단한 문자열 목록
     
     def run_simulation(self, scenario: str, data_source: str = 'auto') -> Dict[str, Any]:
         """
@@ -57,26 +60,23 @@ class MiniSimulationService:
             시뮬레이션 결과 딕셔너리
         """
         try:
-            # 데이터 소스 타입 변환
-            if data_source == 'auto':
-                source_type = DataSourceType.AUTO
-            elif data_source == 'embedded':
-                source_type = DataSourceType.EMBEDDED
+            # 간단한 엔진 선택 로직
+            if data_source in ['auto', 'embedded']:
+                engine = get_embedded_engine()
             elif data_source == 'real_db':
-                source_type = DataSourceType.REAL_DB
+                engine = get_realdata_engine()
             elif data_source == 'synthetic':
-                source_type = DataSourceType.SYNTHETIC
+                engine = get_robust_engine()
             else:
-                source_type = DataSourceType.AUTO
+                engine = get_embedded_engine()  # 기본값
             
-            # 시뮬레이션 엔진 가져오기
-            engine = get_simulation_engine(source_type)
-            
-            # 시나리오 데이터 생성
-            data = engine.get_scenario_data(scenario)
+            # 시나리오 데이터 생성 - load_market_data 메서드 사용
+            raw_data = engine.load_market_data(limit=100)
+            if raw_data is None:
+                raise Exception("엔진에서 데이터를 로드할 수 없습니다")
             
             # 차트용 데이터 포맷팅
-            chart_data = self._format_chart_data(data)
+            chart_data = self._format_chart_data(raw_data)
             
             # 결과 구성
             result = {
@@ -88,7 +88,7 @@ class MiniSimulationService:
             }
             
             self.current_scenario = scenario
-            self.current_data_source = source_type
+            self.current_data_source = data_source
             
             print(f"✅ 시뮬레이션 완료: {scenario} (source: {data_source})")
             return result
@@ -246,7 +246,7 @@ class MiniSimulationService:
         """현재 시뮬레이션 상태 반환"""
         return {
             'current_scenario': self.current_scenario,
-            'current_data_source': self.current_data_source.value if self.current_data_source else None,
+            'current_data_source': self.current_data_source,
             'available_scenarios': self.available_scenarios,
             'available_data_sources': self.get_data_sources()
         }
