@@ -16,7 +16,10 @@ sys.path.insert(0, str(project_root))
 
 try:
     from PyQt6.QtWidgets import QApplication
-    from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_dialog import ConditionDialog
+    # 새로운 컴포넌트 기반 시스템 경로 사용
+    from upbit_auto_trading.ui.desktop.screens.strategy_management.trigger_builder.components.core.condition_dialog import (
+        ConditionDialog
+    )
     from upbit_auto_trading.ui.desktop.screens.strategy_management.components.parameter_widgets import ParameterWidgetFactory
     print("✅ 모든 모듈 import 성공")
 except ImportError as e:

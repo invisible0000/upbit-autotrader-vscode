@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QTreeWidgetItem, QListWidgetItem, QTreeWidget, QLineEdit, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from upbit_auto_trading.utils.debug_logger import get_logger
 
 # matplotlib 관련 import (차트용)
 try:
@@ -20,15 +21,6 @@ try:
     ADDITIONAL_LIBS_AVAILABLE = True
 except ImportError:
     ADDITIONAL_LIBS_AVAILABLE = False
-    print("⚠️ 추가 라이브러리를 사용할 수 없습니다.")
-
-# 공통 스타일 시스템 import (메인 애플리케이션에서 상속받으므로 불필요)
-# try:
-#     from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
-#     STYLE_MANAGER_AVAILABLE = True
-# except ImportError:
-#     STYLE_MANAGER_AVAILABLE = False
-#     print("⚠️ 공통 스타일 시스템을 로드할 수 없습니다.")
 
 # TriggerBuilder Core Components import
 from .components.core.condition_dialog import ConditionDialog
@@ -96,30 +88,24 @@ try:
         mpl.font_manager.fontManager.addfont(
             fm.findfont(fm.FontProperties(family=selected_font))
         )
-        
-        print(f"✅ matplotlib 한글 폰트 설정: {selected_font}")
     else:
         plt.rcParams['axes.unicode_minus'] = False
-        print("⚠️ 한글 폰트를 찾을 수 없어 기본 폰트 사용")
 except ImportError:
-    print("⚠️ matplotlib를 찾을 수 없습니다.")
-except Exception as e:
-    print(f"⚠️ matplotlib 한글 폰트 설정 실패: {e}")
+    pass  # matplotlib 없으면 건너뛰기
+except Exception:
+    pass  # 폰트 설정 실패해도 건너뛰기
 
 # ConditionStorage와 ConditionLoader import
 try:
     # 먼저 trigger_builder/components에서 로드 시도 (최신 버전)
     from .components.condition_storage import ConditionStorage
     from .components.condition_loader import ConditionLoader
-    print("✅ ConditionStorage, ConditionLoader 로드 성공 (trigger_builder/components)")
 except ImportError:
     try:
         # 폴백: strategy_management/components에서 로드
         from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_storage import ConditionStorage
         from upbit_auto_trading.ui.desktop.screens.strategy_management.components.condition_loader import ConditionLoader
-        print("✅ ConditionStorage, ConditionLoader 로드 성공 (strategy_management/components)")
-    except ImportError as e:
-        print(f"❌ ConditionStorage, ConditionLoader 로드 실패: {e}")
+    except ImportError:
         # 간단한 폴백 클래스 생성
         class ConditionStorage:
             def get_all_conditions(self):
@@ -134,9 +120,7 @@ except ImportError:
 # DataSourceSelectorWidget는 이제 trigger_builder/components에 있음
 try:
     from .components import DataSourceSelectorWidget
-    print("✅ DataSourceSelectorWidget 로드 성공")
-except ImportError as e:
-    print(f"❌ DataSourceSelectorWidget 로드 실패: {e}")
+except ImportError:
     DataSourceSelectorWidget = None
 
 # 기존 UI 컴포넌트 임포트 (스타일 통일을 위해)
@@ -163,6 +147,8 @@ class TriggerBuilderScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🎯 트리거 빌더 v2.0 (완전 리팩토링)")
+        self.logger = get_logger("TriggerBuilder")
+        
         # 메인 윈도우에 맞춘 최소 크기 설정 (1280x720) - 반응형
         self.setMinimumSize(1280, 720)
         self.resize(1600, 1000)  # 초기 크기 설정
@@ -185,9 +171,9 @@ class TriggerBuilderScreen(QWidget):
             try:
                 self.chart_variable_service = get_chart_variable_service()
                 self.variable_registry = get_variable_registry()
-                print("✅ 차트 변수 카테고리 시스템 로드 완료")
+                self.logger.debug("차트 변수 카테고리 시스템 로드 완료")
             except Exception as e:
-                print(f"⚠️ 차트 변수 카테고리 시스템 초기화 실패: {e}")
+                self.logger.warning(f"차트 변수 카테고리 시스템 초기화 실패: {e}")
                 self.chart_variable_service = None
                 self.variable_registry = None
         else:
@@ -199,7 +185,7 @@ class TriggerBuilderScreen(QWidget):
         
         # 메인 애플리케이션의 스타일을 상속받음 (부모에서 적용된 스타일 재적용)
         self.ensure_style_inheritance()
-        print("✅ 트리거 빌더는 메인 애플리케이션의 스타일을 상속받습니다")
+        self.logger.debug("트리거 빌더 초기화 완료")
     
     def ensure_style_inheritance(self):
         """메인 애플리케이션의 스타일 상속 보장"""
@@ -219,13 +205,13 @@ class TriggerBuilderScreen(QWidget):
                     if hasattr(self, 'figure') and self.figure:
                         self.apply_chart_theme(is_dark_theme)
                     
-                    print(f"✅ 애플리케이션 스타일 상속 완료 (다크 테마: {is_dark_theme})")
+                    self.logger.debug(f"애플리케이션 스타일 상속 완료 (다크 테마: {is_dark_theme})")
                 else:
-                    print("⚠️ 애플리케이션에 적용된 스타일시트가 없습니다")
+                    self.logger.warning("애플리케이션에 적용된 스타일시트가 없습니다")
             else:
-                print("⚠️ QApplication 인스턴스를 찾을 수 없습니다")
+                self.logger.warning("QApplication 인스턴스를 찾을 수 없습니다")
         except Exception as e:
-            print(f"⚠️ 스타일 상속 설정 실패: {e}")
+            self.logger.warning(f"스타일 상속 설정 실패: {e}")
     
     def apply_chart_theme(self, is_dark_theme):
         """차트에 테마 적용"""
@@ -237,7 +223,7 @@ class TriggerBuilderScreen(QWidget):
                     self.figure.patch.set_facecolor('white')
                 self.canvas.draw()
         except Exception as e:
-            print(f"⚠️ 차트 테마 적용 실패: {e}")
+            self.logger.warning(f"차트 테마 적용 실패: {e}")
     
     def showEvent(self, event):
         """화면 표시 시 스타일 재적용"""
@@ -294,7 +280,7 @@ class TriggerBuilderScreen(QWidget):
         if hasattr(self, 'simulation_status'):
             self.simulation_status.setText("Status: 트리거를 선택하고 추세 버튼을 누르세요.")
         
-        print("✅ 트리거 빌더 UI 초기화 완료")
+        self.logger.debug("트리거 빌더 UI 초기화 완료")
     
     def create_header(self, layout):
         """헤더 영역 생성"""
@@ -326,9 +312,9 @@ class TriggerBuilderScreen(QWidget):
             # 최대 높이 제한 제거하여 화면 크기에 맞춰 확장 가능하도록 함
             # self.condition_dialog.setMaximumHeight(800)  # 주석 처리
             layout.addWidget(self.condition_dialog)
-            print("✅ 조건 빌더 다이얼로그 생성 성공")
+            self.logger.debug("조건 빌더 다이얼로그 생성 성공")
         except Exception as e:
-            print(f"⚠️ 조건 빌더 다이얼로그 생성 실패: {e}")
+            self.logger.error(f"조건 빌더 다이얼로그 생성 실패: {e}")
             # 폴백: 간단한 인터페이스
             fallback_widget = self.create_condition_builder_fallback()
             layout.addWidget(fallback_widget)
@@ -1585,10 +1571,15 @@ class TriggerBuilderScreen(QWidget):
             if hasattr(self, 'log_widget') and self.log_widget is not None:
                 self.log_widget.setPlainText("시뮬레이션 실행 기록이 여기에 표시됩니다.")
             
-            print("✅ 전체 컴포넌트 새로고침 완료")
+            if hasattr(self, 'logger'):
+                self.logger.debug("전체 컴포넌트 새로고침 완료")
             
         except Exception as e:
-            print(f"❌ 컴포넌트 새로고침 실패: {e}")
+            error_msg = f"컴포넌트 새로고침 실패: {e}"
+            if hasattr(self, 'logger'):
+                self.logger.error(error_msg)
+            else:
+                print(f"❌ {error_msg}")
     
     def get_selected_trigger(self):
         """선택된 트리거 반환"""
@@ -1603,203 +1594,18 @@ class TriggerBuilderScreen(QWidget):
             if CHART_AVAILABLE:
                 self.update_chart_display()
             
-            print("✅ 모든 결과 초기화 완료")
+            if hasattr(self, 'logger'):
+                self.logger.debug("모든 결과 초기화 완료")
             
         except Exception as e:
-            print(f"❌ 결과 초기화 실패: {e}")
-
-
-# 차트 관련 클래스 추가
-class MiniChartWidget(QWidget):
-    """미니 차트 위젯"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.init_ui()
-    
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(2, 2, 2, 2)
-        
-        if CHART_AVAILABLE:
-            try:
-                self.figure = Figure(figsize=(4, 2), dpi=80)
-                self.canvas = FigureCanvas(self.figure)
-                self.canvas.setMaximumHeight(120)
-                layout.addWidget(self.canvas)
-                
-                # 초기 차트 표시
-                self.show_placeholder_chart()
-                
-            except Exception as e:
-                print(f"⚠️ 미니 차트 생성 실패: {e}")
-                # 차트 생성 실패 시 간단한 라벨만 표시
-                chart_label = QLabel("📈 차트 생성 실패\n(matplotlib 필요)")
-                chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                chart_label.setStyleSheet("""
-                    border: 2px dashed #ccc;
-                    border-radius: 8px;
-                    padding: 20px;
-                    color: #666;
-                    min-height: 100px;
-                """)
-                layout.addWidget(chart_label)
-        else:
-            # matplotlib이 없을 경우 간단한 라벨만 표시
-            chart_label = QLabel("📈 차트 로딩 실패\n(matplotlib 필요)")
-            chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chart_label.setStyleSheet("""
-                border: 2px dashed #ccc;
-                border-radius: 8px;
-                padding: 20px;
-                color: #666;
-                min-height: 100px;
-            """)
-            layout.addWidget(chart_label)
-    
-    def show_placeholder_chart(self):
-        """플레이스홀더 차트 표시"""
-        if not CHART_AVAILABLE or not hasattr(self, 'figure'):
-            return
-        
-        try:
-            self.figure.clear()
-            ax = self.figure.add_subplot(111)
-            
-            # 플레이스홀더 데이터
-            x = range(10)
-            y = [0] * 10
-            
-            ax.plot(x, y, 'b-', linewidth=1)
-            ax.set_title('차트 대기 중', fontsize=8)
-            ax.set_ylabel('가격', fontsize=7)
-            ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.grid(True, alpha=0.3)
-            
-            self.figure.tight_layout(pad=0.5)
-            self.canvas.draw()
-            
-        except Exception as e:
-            print(f"⚠️ 플레이스홀더 차트 표시 실패: {e}")
-    
-    def update_simulation_chart(self, scenario, price_data, trigger_results):
-        """시뮬레이션 결과로 차트 업데이트"""
-        if not CHART_AVAILABLE or not hasattr(self, 'figure'):
-            return
-        
-        try:
-            self.figure.clear()
-            ax = self.figure.add_subplot(111)
-            
-            if price_data:
-                # 가격 데이터 플롯
-                x = range(len(price_data))
-                ax.plot(x, price_data, 'b-', linewidth=1, label='가격')
-                
-                # 트리거 포인트 표시
-                if trigger_results:
-                    for i, (triggered, _) in enumerate(trigger_results):
-                        if triggered and i < len(price_data):
-                            ax.scatter(i, price_data[i], c='red', s=20, marker='^', zorder=5)
-            
-            ax.set_title(f'{scenario} 결과', fontsize=8)
-            ax.set_ylabel('가격', fontsize=7)
-            ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.grid(True, alpha=0.3)
-            
-            self.figure.tight_layout(pad=0.5)
-            self.canvas.draw()
-            
-        except Exception as e:
-            print(f"⚠️ 시뮬레이션 차트 업데이트 실패: {e}")
-    
-    def update_chart_with_simulation_data(self, scenario, price_data, trigger_points, current_value, target_value):
-        """실제 시뮬레이션 데이터로 차트 업데이트"""
-        if not CHART_AVAILABLE or not hasattr(self, 'figure'):
-            print("⚠️ 차트 기능을 사용할 수 없습니다.")
-            return
-        
-        try:
-            # 차트 클리어
-            self.figure.clear()
-            ax = self.figure.add_subplot(111)
-            
-            if price_data and len(price_data) > 0:
-                # X축 (시간/인덱스)
-                x_values = range(len(price_data))
-                
-                # 가격 라인 플롯
-                ax.plot(x_values, price_data, 'b-', linewidth=2, label='Price', alpha=0.8)
-                
-                # 목표 가격 라인 표시 - 포인트 배열로 변경 (향후 외부 변수 대응)
-                if target_value > 0:
-                    target_data = [target_value] * len(price_data)  # 고정값일 때는 동일한 값으로 배열 생성
-                    ax.plot(x_values, target_data, color='orange', linestyle='--', linewidth=1,
-                           label='Target', alpha=0.7)
-                
-                # 트리거 포인트 표시
-                if trigger_points and len(trigger_points) > 0:
-                    for point_idx in trigger_points:
-                        if 0 <= point_idx < len(price_data):
-                            ax.scatter(point_idx, price_data[point_idx], 
-                                     c='red', s=50, marker='^', 
-                                     label='트리거 발동' if point_idx == trigger_points[0] else "",
-                                     zorder=5, alpha=0.8)
-                
-                # 차트 스타일링
-                # 차트 제목 제거하여 더 큰 차트 공간 확보  
-                # ax.set_title(f'🎯 {scenario} 시뮬레이션 결과', fontsize=12, fontweight='bold', pad=20)
-                ax.set_xlabel('시간 (일)', fontsize=10)
-                ax.set_ylabel('가격 (원)', fontsize=10)
-                ax.grid(True, alpha=0.3)
-                ax.legend(loc='upper left', fontsize=8)
-                
-                # Y축 포맷팅 (3자 이내)
-                def format_y_tick(value, pos):
-                    if value >= 1000000:
-                        return f"{value / 1000000:.1f}m"
-                    elif value >= 1000:
-                        return f"{value / 1000:.0f}k"
-                    elif value >= 1:
-                        return f"{value:.0f}"
-                    else:
-                        return f"{value:.1f}"
-                
-                from matplotlib.ticker import FuncFormatter
-                ax.yaxis.set_major_formatter(FuncFormatter(format_y_tick))
-                
-                # X축 틱 라벨 포맷팅 (데이터 인덱스 표시)
-                x_tick_positions = range(0, len(price_data), max(1, len(price_data) // 5))
-                ax.set_xticks(x_tick_positions)
-                ax.set_xticklabels([str(i) for i in x_tick_positions])
-                
-                # 차트 여백 조정
-                self.figure.tight_layout(pad=1.0)
-                
-                # 차트 다시 그리기
-                self.canvas.draw()
-                
-                print(f"📈 차트 업데이트 완료: {scenario}, {len(price_data)}개 데이터포인트, {len(trigger_points) if trigger_points else 0}개 트리거")
-                
+            error_msg = f"결과 초기화 실패: {e}"
+            if hasattr(self, 'logger'):
+                self.logger.error(error_msg)
             else:
-                # 데이터가 없을 때 플레이스홀더
-                ax.text(0.5, 0.5, 'No simulation data',
-                       transform=ax.transAxes, ha='center', va='center',
-                       fontsize=12, alpha=0.5)
-                # ax.set_title('Simulation Result', fontsize=12)  # 제목 제거
-                self.figure.tight_layout(pad=1.0)
-                self.canvas.draw()
-                
-        except Exception as e:
-            print(f"❌ 차트 업데이트 중 오류 발생: {e}")
-            import traceback
-            traceback.print_exc()
+                print(f"❌ {error_msg}")
 
 
 if __name__ == "__main__":
-    from PyQt6.QtWidgets import QApplication
-    import sys
-    
     app = QApplication(sys.argv)
     
     window = TriggerBuilderScreen()

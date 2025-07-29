@@ -9,6 +9,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
+# 디버그 로깅 시스템
+from upbit_auto_trading.utils.debug_logger import get_logger
+
+logger = get_logger("TriggerDetail")
+
 
 class TriggerDetailWidget(QWidget):
     """트리거 상세정보 위젯 - 기존 기능 정확 복제"""
@@ -102,7 +107,7 @@ class TriggerDetailWidget(QWidget):
             self.detail_text.setPlainText(detail_text)
             
         except Exception as e:
-            print(f"❌ 트리거 상세정보 업데이트 실패: {e}")
+            logger.error(f"트리거 상세정보 업데이트 실패: {e}")
             self.detail_text.setPlainText(f"상세정보 로드 중 오류 발생: {e}")
     
     def _format_trigger_detail(self, trigger_data):
@@ -233,7 +238,7 @@ class TriggerDetailWidget(QWidget):
                         return var_name
             
         except Exception as e:
-            print(f"⚠️ 변수 정의 시스템 사용 실패: {e}")
+            logger.warning(f"변수 정의 시스템 사용 실패: {e}")
         
         # 하드코딩 폴백 (더 많은 변수 추가)
         name_mapping = {
@@ -279,7 +284,7 @@ class TriggerDetailWidget(QWidget):
             chart_category = VariableDefinitions.get_chart_category(variable_id)
             return '🔗 오버레이' if chart_category == 'overlay' else '📊 서브플롯'
         except Exception as e:
-            print(f"⚠️ 차트 카테고리 확인 실패: {e}")
+            logger.warning(f"차트 카테고리 확인 실패: {e}")
             # 폴백
             overlay_vars = ['SMA', 'EMA', 'BOLLINGER_BAND', 'CURRENT_PRICE', 'OPEN_PRICE', 'HIGH_PRICE', 'LOW_PRICE']
             return '🔗 오버레이' if variable_id in overlay_vars else '📊 서브플롯'
@@ -312,9 +317,9 @@ class TriggerDetailWidget(QWidget):
             from PyQt6.QtWidgets import QApplication
             clipboard = QApplication.clipboard()
             clipboard.setText(self.detail_text.toPlainText())
-            print("📄 트리거 상세정보가 클립보드에 복사되었습니다.")
+            logger.silent_success("트리거 상세정보가 클립보드에 복사되었습니다.")
         except Exception as e:
-            print(f"❌ 클립보드 복사 실패: {e}")
+            logger.error(f"클립보드 복사 실패: {e}")
     
     def clear_detail(self):
         """상세정보 초기화"""

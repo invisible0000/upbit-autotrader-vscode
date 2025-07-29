@@ -246,18 +246,20 @@ class BaseWidget(QWidget):
 
 ### 컴포넌트별 에러 처리
 ```python
-import logging
+from upbit_auto_trading.utils.debug_logger import get_logger
 from functools import wraps
 
 def error_boundary(component_name: str):
-    """컴포넌트 에러 경계 데코레이터"""
+    """컴포넌트 에러 경계 데코레이터 - v2.3 디버그 로거 활용"""
+    logger = get_logger(component_name)
+    
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logging.error(f"{component_name} 에러: {e}", exc_info=True)
+                logger.error(f"❌ {component_name} 에러: {e}", exc_info=True)
                 # 사용자에게 친화적인 에러 메시지 표시
                 if hasattr(args[0], 'show_error_message'):
                     args[0].show_error_message(f"{component_name}에서 오류가 발생했습니다.")
@@ -266,7 +268,23 @@ def error_boundary(component_name: str):
     return decorator
 
 class StrategyManagerWidget(BaseWidget):
-    """전략 관리 위젯"""
+    """전략 관리 위젯 - 조건부 컴파일 로깅 적용"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.logger = get_logger("StrategyManager")
+        
+    def load_strategies(self):
+        """전략 로드 - 스마트 로깅 예시"""
+        if self.logger.should_log_debug():  # 프로덕션에서 스킵
+            self.logger.debug("🔍 전략 로드 시작")
+            
+        self.logger.info("📊 전략 목록 업데이트")
+        
+        # 성능 모니터링
+        import time
+        start_time = time.time()
+        # ... 로직 실행 ...
+        self.logger.performance(f"⚡ 전략 로드 완료: {time.time() - start_time:.2f}초")
     
     @error_boundary("전략 관리")
     def create_new_strategy(self):

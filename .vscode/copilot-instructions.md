@@ -180,6 +180,57 @@ class MyWidget(QWidget):
 python run_desktop_ui.py
 ```
 
+### 🔬 디버그 로깅 시스템 v2.3 (조건부 컴파일 통합)
+**위치**: `upbit_auto_trading/utils/debug_logger.py`  
+**가이드**: `upbit_auto_trading/utils/DEBUG_LOGGER_USAGE_GUIDE_v2.2.md`
+
+#### 스마트 로그 필터링 (NEW)
+```powershell
+# 환경변수 설정으로 로그 레벨 제어
+$env:UPBIT_ENV = "production"      # ERROR/CRITICAL만 표시
+$env:UPBIT_ENV = "development"     # 모든 로그 표시 (기본값)
+$env:UPBIT_BUILD_TYPE = "release"  # 최적화된 로그 필터링
+$env:UPBIT_DEBUG_MODE = "false"    # 디버그 로그 완전 제거
+```
+
+#### 기본 사용법
+```python
+# 🟦 기본 사용법 (ComponentLogger 권장)
+from upbit_auto_trading.utils.debug_logger import get_logger
+
+logger = get_logger("MyComponent")  # 자동으로 컴포넌트명 포함
+
+# 모든 로그 메서드 지원
+logger.info("📊 시장 데이터 업데이트")
+logger.warning("⚠️ API 응답 지연")
+logger.error("❌ 거래 실행 실패")
+logger.success("✅ 조건 저장 완료")  # v2.3 신규
+logger.performance("⚡ DB 쿼리 시간: 0.5초")  # v2.3 신규
+
+# 🟦 조건부 컴파일 사용법 (프로덕션 최적화)
+if logger.should_log_debug():  # 환경에 따라 자동 판단
+    logger.debug("🔍 상세 디버그 정보")
+
+# 원라인 조건부 로깅
+logger.conditional_debug(lambda: f"🔍 복잡한 계산 결과: {expensive_calculation()}")
+```
+
+#### 듀얼 파일 시스템
+- **메인 로그**: `logs/upbit_auto_trading.log` (최신 로그가 맨 위, 에이전트 친화적)
+- **세션별**: `logs/session_YYYYMMDD_HHMMSS.log` (전체 로그 백업)
+- **자동 관리**: 헤더 중복 제거, 한글 완벽 지원, 성능 최적화
+
+#### 환경별 최적화 (v2.3)
+```python
+# 개발 환경 (기본값)
+UPBIT_ENV=development → 모든 로그 레벨 표시
+UPBIT_DEBUG_MODE=true → debug(), performance() 메서드 활성화
+
+# 프로덕션 환경
+UPBIT_ENV=production → ERROR, CRITICAL만 표시
+UPBIT_DEBUG_MODE=false → debug(), performance() 완전 제거 (제로 오버헤드)
+```
+
 ### 터미널 명령어 작성 시 주의사항 ⚠️
 ```powershell
 # ✅ 올바른 PowerShell 예시

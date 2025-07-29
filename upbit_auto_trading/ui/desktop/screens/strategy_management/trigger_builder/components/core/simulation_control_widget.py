@@ -7,6 +7,11 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QPushButton,
                             QLabel, QGridLayout, QFrame)
 from PyQt6.QtCore import pyqtSignal, Qt
 
+# 디버그 로깅 시스템
+from upbit_auto_trading.utils.debug_logger import get_logger
+
+logger = get_logger("SimulationControl")
+
 # DataSourceSelectorWidget import
 try:
     from ..data_source_selector import DataSourceSelectorWidget
@@ -14,7 +19,7 @@ try:
 except ImportError:
     DataSourceSelectorWidget = None
     DATA_SOURCE_AVAILABLE = False
-    print("⚠️ DataSourceSelectorWidget를 찾을 수 없습니다.")
+    logger.warning("DataSourceSelectorWidget를 찾을 수 없습니다.")
 
 
 class SimulationControlWidget(QWidget):
@@ -53,9 +58,9 @@ class SimulationControlWidget(QWidget):
                 self.data_source_selector = DataSourceSelectorWidget()
                 self.data_source_selector.source_changed.connect(self.on_data_source_changed)
                 layout.addWidget(self.data_source_selector)
-                print("✅ DataSourceSelectorWidget 생성 성공")
+                logger.silent_success("DataSourceSelectorWidget 생성 성공")
             except Exception as e:
-                print(f"⚠️ 데이터 소스 선택기 초기화 실패: {e}")
+                logger.warning(f"데이터 소스 선택기 초기화 실패: {e}")
                 # 대체 라벨
                 fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
                 fallback_label.setStyleSheet("""
@@ -71,7 +76,7 @@ class SimulationControlWidget(QWidget):
                 fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 layout.addWidget(fallback_label)
         else:
-            print("⚠️ DataSourceSelectorWidget 클래스를 로드할 수 없음")
+            logger.warning("DataSourceSelectorWidget 클래스를 로드할 수 없음")
             # 대체 라벨
             fallback_label = QLabel("📊 가상 데이터로 시뮬레이션")
             fallback_label.setStyleSheet("""
@@ -198,7 +203,7 @@ class SimulationControlWidget(QWidget):
     def on_data_source_changed(self, source_type: str):
         """데이터 소스 변경 시 호출 - 원본과 동일"""
         try:
-            print(f"📊 데이터 소스 변경: {source_type}")
+            logger.debug(f"데이터 소스 변경: {source_type}")
             
             # 시뮬레이션 상태 업데이트 (원본과 동일)
             if hasattr(self, 'simulation_status'):
@@ -211,7 +216,7 @@ class SimulationControlWidget(QWidget):
             self.data_source_changed.emit(source_type)
             
         except Exception as e:
-            print(f"❌ 데이터 소스 변경 중 오류: {e}")
+            logger.error(f"데이터 소스 변경 중 오류: {e}")
             # 오류 시에도 조용히 처리 (원본과 동일)
             if hasattr(self, 'simulation_status'):
                 self.simulation_status.setText("📊 데이터 소스: 시뮬레이션 모드\n준비 완료")

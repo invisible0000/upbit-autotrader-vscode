@@ -1,5 +1,14 @@
 """
-미니 시뮬레이션 공통 컴포넌트 시스템
+미니 시뮬레이from .engines.factory import (
+    get_simulation_engine,
+    get_embedded_simulation_engine,
+    get_real_data_simulation_engine,
+    get_robust_simulation_engine,
+    DataSourceType
+)
+
+from .services.data_source_manager import SimulationDataSourceManager
+from .services.mini_simulation_service import MiniSimulationService 시스템
 
 이 모듈은 재사용 가능한 미니 시뮬레이션 컴포넌트들을 제공합니다.
 TriggerBuilder뿐만 아니라 StrategyMaker, Backtest 등 다른 탭에서도 활용 가능합니다.
@@ -34,6 +43,7 @@ __all__ = [
     
     # 서비스
     'SimulationDataSourceManager',
+    'MiniSimulationService',
 ]
 
 def get_mini_simulation_info():

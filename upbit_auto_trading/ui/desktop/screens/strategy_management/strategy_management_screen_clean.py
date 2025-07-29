@@ -18,13 +18,13 @@ from upbit_auto_trading.utils.debug_logger import get_logger
 try:
     from .trigger_builder.trigger_builder_screen import TriggerBuilderScreen
     TRIGGER_BUILDER_AVAILABLE = True
-    print("✅ 컴포넌트 기반 TriggerBuilderScreen 로드 성공")
-except ImportError as e:
-    print(f"❌ TriggerBuilderScreen 로드 실패: {e}")
+except ImportError:
     TRIGGER_BUILDER_AVAILABLE = False
-
-# 레거시 integrated_condition_manager.py는 더 이상 사용하지 않음
-# 모든 기능이 컴포넌트 기반 TriggerBuilderScreen으로 완전 이관됨
+    # 폴백: 기존 통합 조건 관리 시스템
+    try:
+        from .integrated_condition_manager import IntegratedConditionManager
+    except ImportError:
+        IntegratedConditionManager = None
 
 
 class StrategyManagementScreen(QWidget):
@@ -69,7 +69,10 @@ class StrategyManagementScreen(QWidget):
             if TRIGGER_BUILDER_AVAILABLE:
                 return TriggerBuilderScreen()
             else:
-                raise ImportError("트리거 빌더 컴포넌트들을 찾을 수 없습니다")
+                if IntegratedConditionManager:
+                    return IntegratedConditionManager()
+                else:
+                    raise ImportError("트리거 빌더 컴포넌트들을 찾을 수 없습니다")
         except Exception as e:
             self.logger.error(f"트리거 빌더 탭 생성 실패: {e}")
             return self.create_fallback_screen("트리거 빌더 로딩 실패")
@@ -77,7 +80,7 @@ class StrategyManagementScreen(QWidget):
     def create_strategy_maker_tab(self):
         """전략 메이커 탭 생성 - 실제 매매 전략 생성"""
         try:
-            from .strategy_maker import StrategyMaker
+            from .components.strategy_maker import StrategyMaker
             return StrategyMaker()
         except Exception as e:
             self.logger.error(f"전략 메이커 탭 생성 실패: {e}")

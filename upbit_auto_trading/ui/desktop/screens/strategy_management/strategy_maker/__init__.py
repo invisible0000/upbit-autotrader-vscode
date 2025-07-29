@@ -2,9 +2,10 @@
 Strategy Maker Module
 
 전략 생성 및 매매량 관리를 위한 컴포넌트들
+- 트리거 조합으로 완전한 매매 전략 생성
+- 동적 매매량 조절 시스템
 """
 
-# 현재는 import 오류를 방지하기 위해 주석 처리
-# from .strategy_maker_screen import StrategyMakerScreen
+from .strategy_maker import StrategyMaker
 
-# __all__ = ['StrategyMakerScreen']
+__all__ = ['StrategyMaker']
