@@ -25,14 +25,14 @@ class ConditionStorage:
     def __init__(self, db_path: str = None):
         if USE_GLOBAL_MANAGER:
             # 전역 매니저 사용 - db_path는 호환성을 위해 유지하지만 실제로는 사용하지 않음
-            self.db_path = db_path or "data/app_settings.sqlite3"  # 레거시 호환성
+            self.db_path = db_path or "data/settings.sqlite3"  # 새로운 통합 DB 경로
             self.use_global_manager = True
             print(f"🔗 ConditionStorage: 전역 DB 매니저 사용")
         else:
             # 기존 방식 사용
             if db_path is None:
-                self.db_path = "data/app_settings.sqlite3"  # 레거시 경로
-                print(f"⚠️ ConditionStorage: 레거시 DB 경로 사용 - {self.db_path}")
+                self.db_path = "data/settings.sqlite3"  # 새로운 통합 DB 경로
+                print(f"📂 ConditionStorage: 새로운 통합 DB 경로 사용 - {self.db_path}")
             else:
                 self.db_path = db_path  # 사용자 지정 경로
                 print(f"📂 ConditionStorage: 사용자 지정 DB 경로 - {self.db_path}")

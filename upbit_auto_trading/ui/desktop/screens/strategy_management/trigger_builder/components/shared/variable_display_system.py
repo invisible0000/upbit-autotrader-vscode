@@ -9,10 +9,11 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
-# 새로운 서비스 임포트
+# 새로운 서비스 임포트 (레거시 처리로 비활성화)
 try:
-    from .chart_variable_service import get_chart_variable_service, VariableDisplayConfig
-    _service_available = True
+    # chart_variable_service는 _legacy로 이동됨
+    # from .chart_variable_service import get_chart_variable_service, VariableDisplayConfig
+    _service_available = False
 except ImportError:
     _service_available = False
 
@@ -65,10 +66,13 @@ class VariableRegistry:
     
     def __init__(self):
         self._registry: Dict[str, VariableDisplayConfig] = {}
+        # chart_variable_service가 _legacy로 이동되어 항상 레거시 시스템 사용
+        _service_available = False
         if _service_available:
-            # 새로운 데이터베이스 기반 서비스 사용
-            self._service = get_chart_variable_service()
-            self._load_from_service()
+            # 새로운 데이터베이스 기반 서비스 사용 (비활성화됨)
+            # self._service = get_chart_variable_service()
+            # self._load_from_service()
+            pass
         else:
             # 레거시 시스템 사용
             self._initialize_default_variables()

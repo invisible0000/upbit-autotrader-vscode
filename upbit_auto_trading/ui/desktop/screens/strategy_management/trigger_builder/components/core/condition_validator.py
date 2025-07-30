@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """
-조건 검증기 - 조건 생성 시 유효성 검사
+조건 검증기 (ConditionValidator) - 데이터 유효성 및 비즈니스 룰 검증
+=======================================================================
+
+역할: 조건 생성 시 입력 데이터의 형식과 범위 유효성 검사
+- 필수 필드 검사 (name, variable_id, operator)
+- 조건 이름 유효성 (길이, 특수문자 제한)
+- 비교값 범위 검사 (RSI: 0-100, 가격: > 0)
+- 파라미터 유효성 (MACD 빠른선 < 느린선)
+- 연산자 적합성 (거래량에 "!=" 권장 안함)
+
+호환성 검증기(CompatibilityValidator)와의 차이점:
+- CompatibilityValidator: 변수 간 의미론적 호환성 (RSI ↔ MACD 비교 무의미)
+- ConditionValidator: 단일 조건의 데이터 품질 보장 (RSI 값 0-100 범위)
+
+검증 시점: 조건 저장 직전 최종 데이터 검증 단계
 """
 
 from typing import Dict, Any, Tuple, Optional
 import re
+
 
 class ConditionValidator:
     """조건 생성 시 유효성 검사를 담당하는 클래스"""

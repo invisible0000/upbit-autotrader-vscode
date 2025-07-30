@@ -44,7 +44,7 @@ from .preview_components import PreviewGenerator
 
 # 변수 호환성 검증 import (통합 호환성 검증기 사용)
 try:
-    from ..shared.compatibility_validator import check_compatibility, check_compatibility_with_status
+    from ..shared.compatibility_validator import check_compatibility
     COMPATIBILITY_SERVICE_AVAILABLE = True
     print("✅ 통합 호환성 검증 시스템 활성화")
 except ImportError:
@@ -54,10 +54,6 @@ except ImportError:
     def check_compatibility(var1_id: str, var2_id: str):
         """폴백 함수: 기본 호환성 검증"""
         return True, "기본 호환성 검증 사용 (모든 변수 호환)"
-    
-    def check_compatibility_with_status(var1_id: str, var2_id: str):
-        """폴백 함수: 상태 코드 기반 기본 호환성 검증"""
-        return 1, "기본 호환성 검증 사용 (모든 변수 호환)", "✅"
 
 
 class ConditionDialog(QWidget):
@@ -254,11 +250,11 @@ class ConditionDialog(QWidget):
         self.operator_combo.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.operator_combo.setFixedHeight(28)  # 표준 높이 설정
         operators = [
-            (">", "초과"),
-            (">=", "이상"),
-            ("<", "미만"),
-            ("<=", "이하"),
-            ("~=", "±1%"),
+            (">", "초과 (크다)"),
+            (">=", "이상 (크거나 같다)"),
+            ("<", "미만 (작다)"),
+            ("<=", "이하 (작거나 같다)"),
+            ("~=", "근사값 (±1% 범위)"),
             ("!=", "다름")
         ]
         for op_symbol, op_desc in operators:
@@ -649,8 +645,7 @@ class ConditionDialog(QWidget):
                         try:
                             # 새로운 호환성 검증 시스템 사용
                             if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
-                                status_code, reason, icon = check_compatibility_with_status(base_var_id, external_var_id)
-                                is_compatible = (status_code == 1)
+                                is_compatible, reason = check_compatibility(base_var_id, external_var_id)
                             elif self.compatibility_service:
                                 is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
                                     base_var_id, external_var_id
@@ -960,8 +955,7 @@ class ConditionDialog(QWidget):
                 if external_variable_id:
                     # 새로운 호환성 검증 시스템 사용
                     if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
-                        status_code, reason, icon = check_compatibility_with_status(base_variable_id, external_variable_id)
-                        is_compatible = (status_code == 1)
+                        is_compatible, reason = check_compatibility(base_variable_id, external_variable_id)
                     elif self.compatibility_service:
                         is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
                             base_variable_id, external_variable_id
@@ -1310,17 +1304,17 @@ class ConditionDialog(QWidget):
             return
 
         try:
-            # 새로운 호환성 검증 시스템 직접 사용 (상태 코드 포함)
-            status_code, reason, icon = check_compatibility_with_status(base_variable_id, external_variable_id)
-            print(f"🔍 호환성 검증: {base_variable_id} ↔ {external_variable_id} = {status_code} ({reason})")
+            # 새로운 호환성 검증 시스템 직접 사용
+            is_compatible, reason = check_compatibility(base_variable_id, external_variable_id)
+            print(f"🔍 호환성 검증: {base_variable_id} ↔ {external_variable_id} = {is_compatible} ({reason})")
 
             # 변수명 가져오기 (사용자 친화적 표시용)
             base_var_name = self.variable_combo.currentText()
             external_var_name = self.external_variable_combo.currentText()
 
-            if status_code == 1:  # 호환 가능
+            if is_compatible:
                 # 호환 가능한 경우 - 간결한 메시지
-                message = f"{icon} 호환됩니다"
+                message = "✅ 호환됩니다"
                 self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
@@ -1339,9 +1333,9 @@ class ConditionDialog(QWidget):
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(True)
 
-            elif status_code == 0:  # 호환되지 않음
+            else:
                 # 호환되지 않는 경우 - 전체 메시지 표시 (스크롤 가능)
-                message = f"{icon} 호환되지 않음\n{reason}"  # 전체 내용 표시
+                message = f"❌ 호환되지 않음\n{reason}"  # 전체 내용 표시
                 self.compatibility_status_label.setPlainText(message)
                 self.compatibility_status_label.setStyleSheet("""
                     QTextEdit {
@@ -1360,27 +1354,6 @@ class ConditionDialog(QWidget):
                 if hasattr(self, 'save_btn'):
                     self.save_btn.setEnabled(False)
 
-            else:  # status_code == 2, DB 문제
-                # DB 문제인 경우 - 노란색 배경
-                message = f"{icon} DB 문제\n{reason}"
-                self.compatibility_status_label.setPlainText(message)
-                self.compatibility_status_label.setStyleSheet("""
-                    QTextEdit {
-                        border: 1px solid #ffeaa7;
-                        border-radius: 4px;
-                        padding: 8px;
-                        font-size: 12px;
-                        line-height: 1.0;
-                        background-color: #fff3cd;
-                        color: #856404;
-                        font-family: 'Malgun Gothic';
-                    }
-                """)
-
-                # 저장 버튼은 비활성화 상태 유지 (DB 문제 시 저장 방지)
-                if hasattr(self, 'save_btn'):
-                    self.save_btn.setEnabled(False)
-
             # 호환성 라벨과 스크롤 영역 모두 표시 (숨겨진 상태 복원)
             self.compatibility_status_label.show()  # 라벨 표시 복원
             self.compatibility_scroll_area.show()
@@ -1393,8 +1366,8 @@ class ConditionDialog(QWidget):
                 self.compatibility_scroll_area.setMaximumHeight(int(text_height) + 20)
 
             # 디버깅 로그
-            print(f"🔍 호환성 검증 결과: {base_var_name} ↔ {external_var_name} = {status_code} ({reason})")
-            if status_code != 1:
+            print(f"🔍 호환성 검증 결과: {base_var_name} ↔ {external_var_name} = {is_compatible}")
+            if not is_compatible:
                 print(f"   사유: {reason}")
 
         except Exception as e:
@@ -1486,8 +1459,7 @@ class ConditionDialog(QWidget):
                         try:
                             # 새로운 호환성 검증 시스템 사용
                             if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
-                                status_code, reason_ignored, icon_ignored = check_compatibility_with_status(var_id, var)
-                                is_compatible = (status_code == 1)
+                                is_compatible, _ = check_compatibility(var_id, var)
                             elif self.compatibility_service:
                                 is_compatible, _ = self.compatibility_service.is_compatible_external_variable(var_id, var)
                             else:
@@ -1604,28 +1576,31 @@ class ConditionDialog(QWidget):
             return
         
         try:
-            # 새로운 상태 코드 기반 호환성 검증 사용
-            if COMPATIBILITY_SERVICE_AVAILABLE:
-                status_code, reason, icon = check_compatibility_with_status(base_var_id, external_var_id)
+            # 새로운 호환성 검증 시스템 사용
+            if hasattr(self, 'use_new_compatibility_system') and self.use_new_compatibility_system:
+                is_compatible, reason = check_compatibility(base_var_id, external_var_id)
+            elif self.compatibility_service:
+                is_compatible, reason = self.compatibility_service.is_compatible_external_variable(
+                    base_var_id, external_var_id
+                )
             else:
-                status_code, reason, icon = 1, "호환성 서비스 없음 (기본 허용)", "✅"
+                is_compatible, reason = False, "호환성 서비스 없음"
             
             # UI 업데이트
             self._update_compatibility_ui(
-                status_code, base_var_name, external_var_name, reason, icon
+                is_compatible, base_var_name, external_var_name, reason
             )
             
             # 로그 출력
-            status_names = {0: "❌ 비호환", 1: "✅ 호환", 2: "⚠️ DB문제"}
-            status_text = status_names.get(status_code, f"알 수 없는 상태({status_code})")
+            status_text = "✅ 호환" if is_compatible else "❌ 비호환"
             print(f"🔍 변수 호환성: {base_var_name} ↔ {external_var_name} = {status_text}")
-            if status_code != 1:
+            if not is_compatible:
                 print(f"   사유: {reason}")
                 
         except Exception as e:
-            # 오류 발생 시 DB 문제로 처리 (상태코드 2)
+            # 오류 발생 시 경고 표시
             self._update_compatibility_ui(
-                2, base_var_name, external_var_name, f"검증 오류: {e}", "⚠️"
+                False, base_var_name, external_var_name, f"검증 오류: {e}"
             )
             print(f"❌ 호환성 검증 오류: {e}")
     
@@ -1648,21 +1623,14 @@ class ConditionDialog(QWidget):
         }
         return name_to_id.get(variable_name, "")
     
-    def _update_compatibility_ui(self, status_code, base_var_name, 
-                                external_var_name, reason, icon=""):
-        """호환성 상태에 따른 UI 업데이트 (상태 코드 기반)
-        
-        Args:
-            status_code (int): 0=비호환, 1=호환, 2=DB문제
-            base_var_name (str): 기본 변수명
-            external_var_name (str): 외부 변수명  
-            reason (str): 상세 사유
-            icon (str): 아이콘 (옵션)
-        """
-        if status_code == 1:  # 호환 가능 - 초록색
-            message = f"{icon} {base_var_name}와(과) {external_var_name}는 호환됩니다."
+    def _update_compatibility_ui(self, is_compatible, base_var_name, 
+                                external_var_name, reason):
+        """호환성 상태에 따른 UI 업데이트"""
+        if is_compatible:
+            # 호환 가능 - 초록색 메시지
+            message = f"✅ {base_var_name}와(과) {external_var_name}는 호환됩니다."
             self.compatibility_status_label.setStyleSheet("""
-                QTextEdit {
+                QLabel {
                     background-color: #d4edda;
                     color: #155724;
                     border: 1px solid #c3e6cb;
@@ -1670,7 +1638,6 @@ class ConditionDialog(QWidget):
                     border-radius: 4px;
                     margin: 5px 0;
                     font-size: 12px;
-                    font-family: 'Malgun Gothic';
                 }
             """)
             
@@ -1678,15 +1645,13 @@ class ConditionDialog(QWidget):
             if hasattr(self, 'save_button'):
                 self.save_button.setEnabled(True)
                 
-        elif status_code == 0:  # 호환 불가 - 빨간색
+        else:
+            # 호환 불가 - 빨간색 경고 메시지
             message = self._generate_user_friendly_message(
                 base_var_name, external_var_name, reason
             )
-            if icon:
-                message = f"{icon} " + message.lstrip("❌ ")
-                
             self.compatibility_status_label.setStyleSheet("""
-                QTextEdit {
+                QLabel {
                     background-color: #f8d7da;
                     color: #721c24;
                     border: 1px solid #f5c6cb;
@@ -1694,34 +1659,14 @@ class ConditionDialog(QWidget):
                     border-radius: 4px;
                     margin: 5px 0;
                     font-size: 12px;
-                    font-family: 'Malgun Gothic';
                 }
             """)
             
             # 저장 버튼 비활성화 (있다면)
             if hasattr(self, 'save_button'):
                 self.save_button.setEnabled(False)
-                
-        else:  # status_code == 2: DB 관련 문제 - 노란색
-            message = f"{icon} DB 관련 문제가 발생했습니다.\n{reason}"
-            self.compatibility_status_label.setStyleSheet("""
-                QTextEdit {
-                    background-color: #fff3cd;
-                    color: #856404;
-                    border: 1px solid #ffeaa7;
-                    padding: 8px;
-                    border-radius: 4px;
-                    margin: 5px 0;
-                    font-size: 12px;
-                    font-family: 'Malgun Gothic';
-                }
-            """)
-            
-            # DB 문제 시에는 저장 버튼 비활성화
-            if hasattr(self, 'save_button'):
-                self.save_button.setEnabled(False)
         
-        self.compatibility_status_label.setPlainText(message)
+        self.compatibility_status_label.setText(message)
         self.compatibility_status_label.show()
     
     def _generate_user_friendly_message(self, base_var, external_var, reason):

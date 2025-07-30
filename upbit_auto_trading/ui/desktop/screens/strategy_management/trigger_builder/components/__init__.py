@@ -11,8 +11,7 @@ try:
     from .core.condition_dialog import ConditionDialog
     from .core.trigger_list_widget import TriggerListWidget
     from .core.trigger_detail_widget import TriggerDetailWidget
-    from .core.simulation_control_widget import SimulationControlWidget
-    from .core.simulation_result_widget import SimulationResultWidget
+    # Note: SimulationControlWidget, SimulationResultWidget are now using shared_simulation
     CORE_COMPONENTS_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ Core 컴포넌트 로드 실패: {e}")
@@ -21,19 +20,19 @@ except ImportError as e:
 # Shared Components (공유)
 try:
     from .shared.trigger_calculator import TriggerCalculator
-    from .shared.chart_visualizer import ChartVisualizer
-    from .shared.simulation_engines import get_embedded_simulation_engine
+    # Note: ChartVisualizer is now using shared_simulation.charts.chart_visualizer
     from .shared.variable_display_system import get_variable_registry
     from .shared.compatibility_validator import check_compatibility
+    # Note: simulation_engines moved to shared_simulation
     SHARED_COMPONENTS_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ Shared 컴포넌트 로드 실패: {e}")
     SHARED_COMPONENTS_AVAILABLE = False
 
-# Legacy Components (기존 호환성 유지)
+# Legacy Components (renamed to _legacy)
 try:
-    from .data_source_manager import get_data_source_manager
-    from .data_source_selector import DataSourceSelectorWidget
+    from .data_source_manager_legacy import get_data_source_manager
+    from .data_source_selector_legacy import DataSourceSelectorWidget
     LEGACY_COMPONENTS_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ Legacy 컴포넌트 로드 실패: {e}")
@@ -45,19 +44,18 @@ __all__ = []
 if CORE_COMPONENTS_AVAILABLE:
     __all__.extend([
         'ConditionDialog',
-        'TriggerListWidget', 
-        'TriggerDetailWidget',
-        'SimulationControlWidget',
-        'SimulationResultWidget'
+        'TriggerListWidget',
+        'TriggerDetailWidget'
+        # Note: SimulationControlWidget, SimulationResultWidget moved to shared_simulation
     ])
 
 if SHARED_COMPONENTS_AVAILABLE:
     __all__.extend([
         'TriggerCalculator',
-        'ChartVisualizer', 
-        'get_embedded_simulation_engine',
+        # Note: ChartVisualizer moved to shared_simulation
         'get_variable_registry',
         'check_compatibility'
+        # Note: simulation_engines moved to shared_simulation
     ])
 
 if LEGACY_COMPONENTS_AVAILABLE:

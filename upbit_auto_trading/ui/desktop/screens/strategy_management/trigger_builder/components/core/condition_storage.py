@@ -20,16 +20,18 @@ except ImportError:
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "data/app_settings.sqlite3"):
+    def __init__(self, db_path: str = "data/settings.sqlite3"):
         if USE_GLOBAL_MANAGER:
-            # 전역 매니저 사용 - db_path는 호환성을 위해 유지하지만 실제로는 사용하지 않음
-            self.db_path = db_path  # 레거시 호환성
+            # 전역 매니저 사용
+            self.db_path = db_path
             self.use_global_manager = True
         else:
-            # 기존 방식 사용
+            # 기존 방식 사용 - settings.sqlite3만 사용
             self.db_path = db_path
             self.use_global_manager = False
-            self._ensure_database_exists()
+            # settings.sqlite3 파일이 없으면 에러 발생
+            if not os.path.exists(self.db_path):
+                raise FileNotFoundError(f"설정 DB 파일을 찾을 수 없습니다: {self.db_path}")
         
         self._verify_unified_schema()
     
@@ -39,13 +41,6 @@ class ConditionStorage:
             return get_db_connection('trading_conditions')
         else:
             return sqlite3.connect(self.db_path)
-    
-    def _ensure_database_exists(self):
-        """데이터베이스 디렉토리 및 파일 생성 (기존 방식용)"""
-        if not self.use_global_manager:
-            db_dir = os.path.dirname(self.db_path)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
     
     def _verify_unified_schema(self):
         """통합 데이터베이스 스키마 확인 및 테이블 생성"""

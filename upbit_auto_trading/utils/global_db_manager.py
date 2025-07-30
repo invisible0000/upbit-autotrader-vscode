@@ -10,6 +10,25 @@ from pathlib import Path
 from typing import Optional, Dict
 import threading
 
+# database_paths 모듈 import
+try:
+    from upbit_auto_trading.config.database_paths import get_current_config, TableMappings
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+    # 백업용 더미 클래스
+    class TableMappings:
+        SETTINGS_TABLES = {}
+        STRATEGIES_TABLES = {}
+        MARKET_DATA_TABLES = {}
+    
+    def get_current_config():
+        return {
+            'settings_db': 'upbit_auto_trading/data/settings.sqlite3',
+            'strategies_db': 'upbit_auto_trading/data/strategies.sqlite3',
+            'market_data_db': 'upbit_auto_trading/data/market_data.sqlite3'
+        }
+
 class DatabaseManager:
     """
     싱글톤 패턴으로 구현된 전역 데이터베이스 매니저
@@ -44,64 +63,60 @@ class DatabaseManager:
         self._initialize_paths()
         
     def _initialize_paths(self):
-        """환경 변수나 설정 파일로부터 DB 경로 초기화"""
-        self._load_database_config()
+        """database_paths.py에서 경로 설정 로드"""
+        if CONFIG_AVAILABLE:
+            self._load_from_database_paths()
+        else:
+            self._load_fallback_config()
         
-    def _load_database_config(self):
-        """설정 파일에서 데이터베이스 설정 로드"""
-        config_path = "config/database_config.yaml"
-        
-        # 기본 설정
-        base_dir = Path(__file__).parent
-        default_data_dir = base_dir / "upbit_auto_trading" / "data"
+    def _load_from_database_paths(self):
+        """database_paths.py에서 설정 로드"""
+        try:
+            config = get_current_config()
+            
+            self._db_paths = {
+                'settings': Path(config['settings_db']),
+                'strategies': Path(config['strategies_db']),
+                'market_data': Path(config['market_data_db'])
+            }
+            
+            print("✅ [DEBUG] database_paths.py에서 설정 로드 완료")
+            print(f"   Settings DB: {self._db_paths['settings']}")
+            print(f"   Strategies DB: {self._db_paths['strategies']}")
+            print(f"   Market Data DB: {self._db_paths['market_data']}")
+            
+            # 테이블 매핑도 생성
+            self._create_table_mappings()
+            
+        except Exception as e:
+            print(f"❌ [ERROR] database_paths.py 설정 로드 실패: {e}")
+            self._load_fallback_config()
+    
+    def _load_fallback_config(self):
+        """백업용 기본 설정"""
+        base_dir = Path(__file__).parent.parent
+        default_data_dir = base_dir / "data"
         
         self._db_paths = {
             'settings': default_data_dir / "settings.sqlite3",
-            'strategies': default_data_dir / "strategies.sqlite3", 
+            'strategies': default_data_dir / "strategies.sqlite3",
             'market_data': default_data_dir / "market_data.sqlite3"
         }
         
-        try:
-            if os.path.exists(config_path):
-                import yaml
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-                    
-                # 사용자 정의 설정이 활성화된 경우
-                if config.get('user_defined', {}).get('active', False):
-                    user_config = config['user_defined']
-                    if user_config.get('settings_db'):
-                        self._db_paths['settings'] = Path(user_config['settings_db'])
-                    if user_config.get('strategies_db'):
-                        self._db_paths['strategies'] = Path(user_config['strategies_db'])
-                    if user_config.get('market_data_db'):
-                        self._db_paths['market_data'] = Path(user_config['market_data_db'])
-                        
-                # 환경별 설정 확인
-                env = os.environ.get('UPBIT_ENV', 'development')
-                if env in config:
-                    env_config = config[env]
-                    if not config.get('user_defined', {}).get('active', False):  # 사용자 정의가 비활성화된 경우만
-                        for db_type in ['settings', 'strategies', 'market_data']:
-                            db_key = f"{db_type}_db"
-                            if db_key in env_config:
-                                self._db_paths[db_type] = Path(env_config[db_key])
-                                
-        except Exception as e:
-            print(f"데이터베이스 설정 로드 오류 (기본값 사용): {e}")
-            
+        print(f"⚠️ [WARNING] 백업용 기본 설정 사용")
+        
         # 테이블 매핑 생성
         self._create_table_mappings()
         
     def reload_configuration(self):
-        """설정 파일을 다시 로드하고 연결을 초기화"""
+        """설정을 다시 로드하고 연결을 초기화"""
         print("데이터베이스 설정을 다시 로드합니다...")
         
         # 기존 연결 모두 종료
         self.close_all_connections()
         
         # 설정 다시 로드
-        self._load_database_config()
+        self._initialize_paths()
         
         print("데이터베이스 설정이 업데이트되었습니다.")
         print(f"설정 DB: {self._db_paths['settings']}")
@@ -114,7 +129,7 @@ class DatabaseManager:
             for conn in self._connections.values():
                 try:
                     conn.close()
-                except:
+                except Exception:
                     pass
             self._connections.clear()
             print("모든 데이터베이스 연결이 종료되었습니다.")
@@ -125,27 +140,46 @@ class DatabaseManager:
     
     def _create_table_mappings(self):
         """테이블 → DB 매핑 생성"""
-        # 테이블 → DB 매핑 (이것만 수정하면 모든 곳에서 자동 적용)
-        self._table_mappings = {
-            # Settings DB 테이블들
-            'trading_conditions': 'settings',
-            'chart_variables': 'settings',
-            'component_strategy': 'settings',
-            'strategies': 'settings',
-            'tv_trading_variables': 'settings',
-            'tv_comparison_groups': 'settings',
-            'tv_schema_version': 'settings',
+        if CONFIG_AVAILABLE:
+            # database_paths.py의 TableMappings 사용
+            self._table_mappings = {}
             
-            # Strategies DB 테이블들  
-            'strategy_execution': 'strategies',
-            'migration_info': 'strategies',
+            # Settings DB 테이블들
+            for table, _ in TableMappings.SETTINGS_TABLES.items():
+                self._table_mappings[table] = 'settings'
+            
+            # Strategies DB 테이블들
+            for table, _ in TableMappings.STRATEGIES_TABLES.items():
+                self._table_mappings[table] = 'strategies'
             
             # Market Data DB 테이블들
-            'market_data': 'market_data',
-            'ohlcv_data': 'market_data',
-            'backtest_results': 'market_data',
-            'portfolios': 'market_data'
-        }
+            for table, _ in TableMappings.MARKET_DATA_TABLES.items():
+                self._table_mappings[table] = 'market_data'
+                
+            print(f"✅ database_paths.py에서 테이블 매핑 로드 완료 ({len(self._table_mappings)}개 테이블)")
+        else:
+            # 백업용 기본 매핑
+            self._table_mappings = {
+                # Settings DB 테이블들
+                'trading_conditions': 'settings',
+                'chart_variables': 'settings',
+                'component_strategy': 'settings',
+                'strategies': 'settings',
+                'tv_trading_variables': 'settings',
+                'tv_comparison_groups': 'settings',
+                'tv_schema_version': 'settings',
+                
+                # Strategies DB 테이블들
+                'strategy_execution': 'strategies',
+                'migration_info': 'strategies',
+                
+                # Market Data DB 테이블들
+                'market_data': 'market_data',
+                'ohlcv_data': 'market_data',
+                'backtest_results': 'market_data',
+                'portfolios': 'market_data'
+            }
+            print(f"⚠️ 백업용 테이블 매핑 사용 ({len(self._table_mappings)}개 테이블)")
         
     def get_connection(self, table_name: str) -> sqlite3.Connection:
         """
@@ -194,9 +228,19 @@ class DatabaseManager:
             new_path: 새로운 데이터 디렉토리 경로
         """
         self.close_all_connections()
-        self.data_dir = Path(new_path)
-        self._initialize_paths()
-        print(f"📂 데이터 디렉토리 변경: {self.data_dir}")
+        
+        # 새 경로로 DB 경로 업데이트
+        new_data_dir = Path(new_path)
+        self._db_paths = {
+            'settings': new_data_dir / "settings.sqlite3",
+            'strategies': new_data_dir / "strategies.sqlite3",
+            'market_data': new_data_dir / "market_data.sqlite3"
+        }
+        
+        print(f"📂 데이터 디렉토리 변경: {new_data_dir}")
+        print(f"   Settings DB: {self._db_paths['settings']}")
+        print(f"   Strategies DB: {self._db_paths['strategies']}")
+        print(f"   Market Data DB: {self._db_paths['market_data']}")
 
 # 전역 싱글톤 인스턴스
 db_manager = DatabaseManager()

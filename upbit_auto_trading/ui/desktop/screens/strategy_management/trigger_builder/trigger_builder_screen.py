@@ -35,7 +35,8 @@ from .components.shared.trigger_calculator import TriggerCalculator
 
 # Chart variable system import
 try:
-    from .components.shared.chart_variable_service import get_chart_variable_service
+    # chart_variable_service moved to _legacy
+    # from .components.shared.chart_variable_service import get_chart_variable_service
     from .components.shared.variable_display_system import get_variable_registry
     CHART_VARIABLE_SYSTEM_AVAILABLE = True
 except ImportError:
@@ -95,12 +96,12 @@ except ImportError:
 except Exception:
     pass  # 폰트 설정 실패해도 건너뛰기
 
-# ConditionStorage와 ConditionLoader import - 정확한 경로 사용
+# ConditionStorage import - 정확한 경로 사용
 from .components.core.condition_storage import ConditionStorage
-from .components.condition_loader import ConditionLoader
+# Note: ConditionLoader was unused and moved to legacy
 
-# DataSourceSelectorWidget - 폴백 제거, 정확한 경로 필요
-from .components import DataSourceSelectorWidget
+# DataSourceSelectorWidget - shared_simulation에서 임포트
+from ..shared_simulation.data_sources.data_source_selector import DataSourceSelectorWidget
 
 # 기존 UI 컴포넌트 임포트 - 폴백 제거, 정확한 경로 필요
 from upbit_auto_trading.ui.desktop.common.components import (
@@ -125,7 +126,7 @@ class TriggerBuilderScreen(QWidget):
         
         # 기존 컴포넌트 초기화
         self.storage = ConditionStorage()
-        self.loader = ConditionLoader(self.storage)
+        # Note: ConditionLoader was unused and removed
         self.selected_condition = None
         
         # 새로운 컴포넌트 초기화
@@ -139,11 +140,13 @@ class TriggerBuilderScreen(QWidget):
         # 차트 변수 카테고리 시스템 초기화
         if CHART_VARIABLE_SYSTEM_AVAILABLE:
             try:
-                self.chart_variable_service = get_chart_variable_service()
+                # chart_variable_service moved to _legacy, only use variable_registry
+                # self.chart_variable_service = get_chart_variable_service()
+                self.chart_variable_service = None  # Legacy service disabled
                 self.variable_registry = get_variable_registry()
-                self.logger.debug("차트 변수 카테고리 시스템 로드 완료")
+                self.logger.debug("차트 변수 시스템 로드 완료 (레거시 서비스 비활성화)")
             except Exception as e:
-                self.logger.warning(f"차트 변수 카테고리 시스템 초기화 실패: {e}")
+                self.logger.warning(f"차트 변수 시스템 초기화 실패: {e}")
                 self.chart_variable_service = None
                 self.variable_registry = None
         else:
@@ -697,12 +700,9 @@ class TriggerBuilderScreen(QWidget):
             # 먼저 이모지 포함 UI 텍스트를 실제 변수 ID로 변환
             actual_variable_id = self._map_ui_text_to_variable_id(variable_name)
             
-            if hasattr(self, 'chart_variable_service') and self.chart_variable_service:
-                # 실제 변수 ID로 검색
-                config = self.chart_variable_service.get_variable_config(actual_variable_id)
-                if not config and actual_variable_id != variable_name:
-                    # ID로 찾지 못하면 이름으로 재시도
-                    config = self.chart_variable_service.get_variable_by_name(actual_variable_id)
+            if hasattr(self, 'variable_registry') and self.variable_registry:
+                # variable_registry를 통한 변수 정보 조회로 변경
+                config = self.variable_registry.get_variable_config(actual_variable_id)
                 
                 if config:
                     return {

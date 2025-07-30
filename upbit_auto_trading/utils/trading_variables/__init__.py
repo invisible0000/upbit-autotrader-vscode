@@ -10,21 +10,36 @@
 - UI 통합을 위한 카테고리별 그룹화
 
 사용법:
-    from upbit_auto_trading.utils.trading_variables import SimpleVariableManager
+    from upbit_auto_trading.utils.trading_variables.legacy import SimpleVariableManager
     
     vm = SimpleVariableManager('trading.db')
     compatible = vm.get_compatible_variables('SMA')
 """
 
-from .variable_manager import SimpleVariableManager
-from .indicator_classifier import SmartIndicatorClassifier
-from .indicator_calculator import IndicatorCalculator
+# 안전한 import - legacy 폴더에서 모듈 불러오기
+try:
+    from .legacy.variable_manager import SimpleVariableManager
+except ImportError:
+    print("⚠️ SimpleVariableManager는 legacy 폴더에서 직접 import하세요")
+    SimpleVariableManager = None
+
+try:
+    from .legacy.indicator_classifier import SmartIndicatorClassifier
+except ImportError:
+    print("⚠️ SmartIndicatorClassifier는 legacy 폴더에서 직접 import하세요")
+    SmartIndicatorClassifier = None
+
+try:
+    from .legacy.indicator_calculator import IndicatorCalculator
+except ImportError:
+    print("⚠️ IndicatorCalculator는 legacy 폴더에서 직접 import하세요")
+    IndicatorCalculator = None
 
 __version__ = "1.1.0"
 __author__ = "GitHub Copilot"
 
 __all__ = [
     'SimpleVariableManager',
-    'SmartIndicatorClassifier',
+    'SmartIndicatorClassifier', 
     'IndicatorCalculator'
 ]
