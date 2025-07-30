@@ -64,17 +64,14 @@ class DatabaseSwitchWorker(QThread):
                     return
                     
             self.progress.emit(70, "설정 파일 업데이트 중...")
-            
             # 4. 설정 파일 업데이트
-            config_path = "config/database_config.yaml"
+            config_path = "upbit_auto_trading/config/database_config.yaml"
             import yaml
-            
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config = yaml.safe_load(f)
             else:
                 config = {}
-                
             # 사용자 정의 경로로 설정
             config['user_defined'] = {
                 'settings_db': self.new_config.get('settings', ''),
@@ -82,7 +79,6 @@ class DatabaseSwitchWorker(QThread):
                 'market_data_db': self.new_config.get('market_data', ''),
                 'active': True
             }
-            
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
                 
@@ -467,15 +463,13 @@ class DatabaseConfigTab(QWidget):
         if msg_box.exec() == QMessageBox.StandardButton.Yes:
             try:
                 # 설정 파일에서 사용자 정의 설정 제거
-                config_path = "config/database_config.yaml"
+                config_path = "upbit_auto_trading/config/database_config.yaml"
                 if os.path.exists(config_path):
                     import yaml
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = yaml.safe_load(f)
-                        
                     if 'user_defined' in config:
                         config['user_defined']['active'] = False
-                        
                     with open(config_path, 'w', encoding='utf-8') as f:
                         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
                         
