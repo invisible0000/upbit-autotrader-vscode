@@ -1,0 +1,239 @@
+# 플레이스홀더 텍스트 라이브러리
+# ================================
+# variable_definitions.py의 get_variable_placeholders() 메서드를 위한 표준화된 플레이스홀더 모음
+
+placeholder_library:
+  # === 모멘텀 지표 ===
+  RSI:
+    target: "예: 70 (과매수), 30 (과매도), 50 (중립)"
+    name: "예: RSI 과매수 신호"
+    description: "RSI가 70을 넘어 과매수 구간 진입 시 매도 신호"
+    usage_scenarios:
+      - "RSI > 70 AND 가격이 저항선 근처 → 매도"
+      - "RSI < 30 AND 가격이 지지선 근처 → 매수"
+      - "RSI가 50선 돌파 → 추세 전환 확인"
+
+  STOCHASTIC:
+    target: "예: 80 (과매수), 20 (과매도), %K > %D (골든크로스)"
+    name: "예: 스토캐스틱 과매도 반등"
+    description: "스토캐스틱이 과매도 구간에서 상승 전환 시 매수 신호"
+    usage_scenarios:
+      - "%K < 20 → 과매도 상태"
+      - "%K가 %D 상향돌파 → 상승 신호"
+      - "80선 위에서 하락 전환 → 매도 신호"
+
+  MACD:
+    target: "예: 0 (히스토그램 0선), 0.5 (MACD선 값), -0.3 (시그널선 값)"
+    name: "예: MACD 골든크로스"
+    description: "MACD 히스토그램이 0선 상향돌파로 상승 추세 시작 신호"
+    usage_scenarios:
+      - "히스토그램 > 0 → 상승 모멘텀"
+      - "MACD선 > 시그널선 → 강세"
+      - "MACD선이 시그널선 상향돌파 → 매수 신호"
+
+  # === 추세 지표 ===
+  SMA:
+    target: "예: 현재가 기준 또는 다른 SMA(골든크로스용)"
+    name: "예: 20일선 돌파"
+    description: "가격이 20일 이동평균선 상향 돌파 시 상승 추세 확인"
+    usage_scenarios:
+      - "현재가 > SMA20 → 단기 상승 추세"
+      - "SMA20 > SMA60 → 골든크로스"
+      - "현재가가 SMA 터치 후 반등 → 지지선 역할"
+
+  EMA:
+    target: "예: 현재가 vs EMA12, EMA12 vs EMA26 (크로스)"
+    name: "예: EMA 골든크로스"
+    description: "단기 EMA가 장기 EMA를 상향돌파하여 상승 추세 확인"
+    usage_scenarios:
+      - "EMA12 > EMA26 → 상승 추세"
+      - "현재가 > EMA12 → 단기 강세"
+      - "EMA 정배열 → 강한 상승 추세"
+
+  BOLLINGER_BAND:
+    target: "예: 상단밴드 터치, 하단밴드 반등, 중앙선 돌파"
+    name: "예: 볼린저밴드 하단 반등"
+    description: "가격이 볼린저밴드 하단에서 반등하여 상승 신호"
+    usage_scenarios:
+      - "가격이 하단밴드 터치 → 과매도, 매수 고려"
+      - "가격이 상단밴드 터치 → 과매수, 매도 고려"
+      - "밴드 폭 축소 후 확장 → 변동성 증가"
+
+  # === 변동성 지표 ===
+  ATR:
+    target: "예: ATR의 2배 (손절 거리), ATR의 3배 (목표가)"
+    name: "예: ATR 기반 손절가 설정"
+    description: "ATR 값의 2배를 손절 거리로 설정하여 리스크 관리"
+    usage_scenarios:
+      - "손절가 = 매수가 - (ATR × 2)"
+      - "익절가 = 매수가 + (ATR × 3)"
+      - "ATR 증가 → 변동성 증가, 포지션 크기 축소"
+
+  # === 거래량 지표 ===
+  VOLUME:
+    target: "예: 평균 거래량의 2배, 거래량 급증"
+    name: "예: 거래량 급증 확인"
+    description: "거래량이 평균의 2배 이상 증가하여 중요한 움직임 시사"
+    usage_scenarios:
+      - "거래량 > 평균의 2배 → 관심 증가"
+      - "가격 상승 + 거래량 증가 → 상승 신뢰도 높음"
+      - "가격 하락 + 거래량 증가 → 매도 압력 강함"
+
+  VOLUME_SMA:
+    target: "예: 현재 거래량 vs 20일 평균, 150% 이상"
+    name: "예: 거래량 평균 돌파"
+    description: "현재 거래량이 20일 평균을 상회하여 관심 증가 신호"
+    usage_scenarios:
+      - "거래량 > 거래량SMA × 1.5 → 높은 관심"
+      - "거래량 증가 + 가격 돌파 → 신뢰도 높은 신호"
+
+  # === 가격 지표 ===
+  CURRENT_PRICE:
+    target: "예: 50000 (목표가), 비율: 1.05 (5%상승)"
+    name: "예: 목표가 도달"
+    description: "목표 가격 도달 시 수익 실현"
+    usage_scenarios:
+      - "현재가 ≥ 목표가 → 익절 실행"
+      - "현재가 ≤ 손절가 → 손절 실행"
+      - "주요 저항선/지지선 도달 → 매매 검토"
+
+  OPEN_PRICE:
+    target: "예: 당일 시가 돌파, 전일 시가와 비교"
+    name: "예: 당일 시가 상향 돌파"
+    description: "현재가가 당일 시가를 상향 돌파하여 상승 의지 확인"
+
+  HIGH_PRICE:
+    target: "예: 당일 고가 갱신, 전일 고가 돌파"
+    name: "예: 신고가 갱신"
+    description: "현재가가 기존 고가를 돌파하여 강세 지속 신호"
+
+  LOW_PRICE:
+    target: "예: 당일 저가 반등, 전일 저가 지지"
+    name: "예: 저가 지지선 확인"
+    description: "가격이 기존 저가에서 반등하여 지지선 역할 확인"
+
+  # === 자본/잔고 지표 ===
+  CASH_BALANCE:
+    target: "예: 100만원 이상, 총 자산의 30% 이상"
+    name: "예: 현금 잔고 충분"
+    description: "현금 잔고가 충분하여 추가 매수 가능"
+
+  COIN_BALANCE:
+    target: "예: 0.1 BTC 이상, 목표 수량 달성"
+    name: "예: 목표 수량 보유"
+    description: "목표로 한 코인 수량을 보유하여 포지션 완성"
+
+  TOTAL_BALANCE:
+    target: "예: 1000만원 돌파, 초기 자본 대비 120%"
+    name: "예: 총 자산 목표 달성"
+    description: "총 자산이 목표 금액에 도달하여 포트폴리오 목표 달성"
+
+  # === 포지션 상태 ===
+  PROFIT_PERCENT:
+    target: "예: 5 (익절), -3 (손절), 10 (목표수익)"
+    name: "예: 수익률 5% 달성"
+    description: "목표 수익률 달성 시 포지션 정리"
+    usage_scenarios:
+      - "수익률 ≥ 5% → 익절 고려"
+      - "수익률 ≤ -3% → 손절 실행"
+      - "수익률 10% 달성 → 일부 실현"
+
+  PROFIT_AMOUNT:
+    target: "예: +100만원 (익절), -50만원 (손절)"
+    name: "예: 목표 수익 달성"
+    description: "목표 수익 금액 달성 시 포지션 조정"
+
+  POSITION_SIZE:
+    target: "예: 총 자산의 10%, 1 BTC, 500만원"
+    name: "예: 포지션 크기 적정"
+    description: "포지션 크기가 리스크 관리 기준에 적합한지 확인"
+
+  AVG_BUY_PRICE:
+    target: "예: 현재가 vs 평단가, 5% 이상 상승"
+    name: "예: 평단가 대비 수익"
+    description: "현재가가 평균 매수가보다 충분히 상승한 상태 확인"
+
+# === 카테고리별 공통 플레이스홀더 패턴 ===
+category_patterns:
+  momentum:
+    target_pattern: "예: {threshold_high} ({condition_high}), {threshold_low} ({condition_low})"
+    name_pattern: "예: {indicator_name} {signal_type} 신호"
+    description_pattern: "{indicator_name}이 {condition}에서 {action} 신호"
+    
+  trend:
+    target_pattern: "예: {comparison_base} 기준 또는 {crossover_type}"
+    name_pattern: "예: {period}일선 {direction}"
+    description_pattern: "{comparison}하여 {trend_direction} 추세 확인"
+    
+  volatility:
+    target_pattern: "예: {base_value}의 {multiplier}배 ({purpose})"
+    name_pattern: "예: {indicator_name} 기반 {purpose}"
+    description_pattern: "{indicator_name} 값의 {multiplier}배를 {purpose}으로 설정"
+    
+  volume:
+    target_pattern: "예: 평균의 {multiplier}배, {condition}"
+    name_pattern: "예: 거래량 {change_type} 확인"
+    description_pattern: "거래량이 {condition}하여 {significance}"
+    
+  price:
+    target_pattern: "예: {target_price} (목표가), 비율: {ratio} ({percentage})"
+    name_pattern: "예: {price_type} {action}"
+    description_pattern: "{price_type} {condition} 시 {action}"
+
+# === 플레이스홀더 자동 생성 규칙 ===
+auto_generation_rules:
+  target_examples:
+    integer_with_range: "예: {common_values} ({interpretations})"
+    float_with_multiplier: "예: {base} × {multiplier} ({purpose})"
+    enum_with_options: "예: {option1}, {option2}, {option3}"
+    
+  name_suggestions:
+    momentum: "{indicator} {direction} 신호"
+    trend: "{period}일선 {direction}"
+    breakout: "{level} {direction} 돌파"
+    reversal: "{level}에서 반전"
+    
+  description_templates:
+    condition_action: "{indicator}이 {condition}일 때 {action} 신호"
+    comparison: "{value1}이 {value2}를 {direction}하여 {meaning}"
+    threshold: "{indicator}이 {threshold}를 {direction}하면 {action}"
+
+# === 사용 빈도별 중요도 ===
+importance_levels:
+  essential:
+    - RSI
+    - SMA
+    - CURRENT_PRICE
+    - PROFIT_PERCENT
+    - MACD
+    
+  important:
+    - EMA
+    - BOLLINGER_BAND
+    - ATR
+    - VOLUME
+    - STOCHASTIC
+    
+  useful:
+    - VOLUME_SMA
+    - CASH_BALANCE
+    - POSITION_SIZE
+    - HIGH_PRICE
+    - LOW_PRICE
+
+# === 플레이스홀더 품질 체크리스트 ===
+quality_checklist:
+  clarity:
+    - "구체적인 수치 예시 포함"
+    - "실제 사용 상황 반영"
+    - "초보자도 이해 가능한 설명"
+    
+  completeness:
+    - "target, name, description 모두 포함"
+    - "다양한 사용 시나리오 고려"
+    - "실용적인 예시값 제시"
+    
+  consistency:
+    - "동일 카테고리 내 일관된 패턴"
+    - "용어 사용의 일관성"
+    - "설명 스타일의 통일성"

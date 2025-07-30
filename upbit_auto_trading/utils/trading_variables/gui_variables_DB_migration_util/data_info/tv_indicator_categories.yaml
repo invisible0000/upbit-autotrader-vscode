@@ -1,0 +1,144 @@
+# 트레이딩 지표 카테고리 정의
+# ===============================
+# LLM 에이전트가 읽고 편집하기 위한 구조화된 데이터
+# 
+# 사용법:
+# 1. LLM 에이전트는 이 파일을 읽어 지표 분류 체계를 이해
+# 2. 새로운 지표 추가 시 적절한 카테고리에 배치
+# 3. 수정 후 GUI의 마이그레이션 기능으로 DB 반영
+
+categories:
+  momentum:
+    display_name_ko: "모멘텀 지표"
+    display_name_en: "Momentum Indicators"
+    description: "가격의 변화 속도와 강도를 측정하는 지표들"
+    chart_position: "subplot"
+    color_scheme: "blue_family"
+    typical_range: "0-100 또는 -100~+100"
+    indicators:
+      - RSI
+      - STOCHASTIC
+      - STOCH
+      - STOCH_RSI
+      - CCI
+      - MFI
+      - ROC
+      - WILLIAMS_R
+      - SQUEEZE_MOMENTUM
+      - HULL_MA
+      - MACD
+
+  trend:
+    display_name_ko: "추세 지표"
+    display_name_en: "Trend Indicators" 
+    description: "가격의 방향성과 추세를 파악하는 지표들"
+    chart_position: "overlay"
+    color_scheme: "green_family"
+    typical_range: "가격 범위 내"
+    indicators:
+      - SMA
+      - EMA
+      - WMA
+      - BOLLINGER_BANDS
+      - ICHIMOKU
+      - PARABOLIC_SAR
+      - SUPERTREND
+      - ADX
+      - AROON
+
+  volatility:
+    display_name_ko: "변동성 지표"
+    display_name_en: "Volatility Indicators"
+    description: "가격 변동의 크기와 패턴을 측정하는 지표들"
+    chart_position: "subplot"
+    color_scheme: "orange_family"
+    typical_range: "0 이상의 값"
+    indicators:
+      - ATR
+      - BOLLINGER_WIDTH
+      - STANDARD_DEVIATION
+      - BOLLINGER_BAND
+
+  volume:
+    display_name_ko: "거래량 지표"
+    display_name_en: "Volume Indicators"
+    description: "거래량과 가격의 관계를 분석하는 지표들"
+    chart_position: "subplot"
+    color_scheme: "purple_family"
+    typical_range: "거래량 단위"
+    indicators:
+      - VOLUME
+      - VOLUME_SMA
+      - OBV
+      - VOLUME_PROFILE
+      - VWAP
+
+  price:
+    display_name_ko: "가격 지표"
+    display_name_en: "Price Indicators"
+    description: "기본 가격 정보 (OHLC)"
+    chart_position: "overlay"
+    color_scheme: "red_family"
+    typical_range: "가격 범위"
+    indicators:
+      - CURRENT_PRICE
+      - OPEN_PRICE
+      - HIGH_PRICE
+      - LOW_PRICE
+
+  support_resistance:
+    display_name_ko: "지지/저항 지표"
+    display_name_en: "Support/Resistance Indicators"
+    description: "지지선과 저항선을 계산하는 지표들"
+    chart_position: "overlay"
+    color_scheme: "yellow_family"
+    typical_range: "가격 범위"
+    indicators:
+      - PIVOT_POINTS
+
+  capital:
+    display_name_ko: "자본 정보"
+    display_name_en: "Capital Information"
+    description: "계좌 잔고와 자산 정보"
+    chart_position: "subplot"
+    color_scheme: "gray_family"
+    typical_range: "통화 단위"
+    indicators:
+      - CASH_BALANCE
+      - COIN_BALANCE
+      - TOTAL_BALANCE
+
+  state:
+    display_name_ko: "포지션 상태"
+    display_name_en: "Position State"
+    description: "현재 포지션의 상태와 수익/손실 정보"
+    chart_position: "subplot"
+    color_scheme: "teal_family"
+    typical_range: "다양함"
+    indicators:
+      - POSITION_SIZE
+      - AVG_BUY_PRICE
+      - PROFIT_PERCENT
+      - PROFIT_AMOUNT
+
+# 카테고리 간 관계
+category_relationships:
+  complementary:
+    - [momentum, trend]      # 모멘텀과 추세는 상호 보완적
+    - [volatility, trend]    # 변동성과 추세 함께 사용
+    - [volume, price]        # 거래량과 가격 확인
+  
+  conflicting:
+    - [capital, state]       # 중복 정보 주의
+
+# 새 지표 추가 시 가이드라인
+new_indicator_guidelines:
+  naming_convention: "영문 대문자와 언더스코어(_) 사용"
+  category_selection: "지표의 주요 목적에 따라 분류"
+  chart_position_rule: 
+    overlay: "가격과 함께 표시되는 지표 (이평선, 밴드 등)"
+    subplot: "별도 차트가 필요한 지표 (오실레이터, 거래량 등)"
+  parameter_requirements:
+    - period (기간) - 대부분의 지표에 필요
+    - timeframe (타임프레임) - 시간 관련 지표
+    - multiplier/factor - 배수 적용 지표

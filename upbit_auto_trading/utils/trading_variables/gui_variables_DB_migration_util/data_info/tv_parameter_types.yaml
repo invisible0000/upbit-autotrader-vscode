@@ -1,0 +1,159 @@
+# 트레이딩 변수 파라미터 타입 정의
+# 각 파라미터 타입별 기본 설정과 검증 규칙
+
+parameter_types:
+  integer:
+    description: "정수형 파라미터"
+    validation_rules:
+      type_check: "int"
+      range_check: true
+    default_range:
+      min: 1
+      max: 240
+    common_uses:
+      - "RSI 기간: 14"
+      - "SMA 기간: 20"
+      - "MACD 빠른선: 12"
+      
+  float:
+    description: "소수형 파라미터"
+    validation_rules:
+      type_check: "float"
+      range_check: true
+      precision: 2
+    default_range:
+      min: 0.1
+      max: 100.0
+      step: 0.1
+    common_uses:
+      - "볼린저밴드 표준편차: 2.0"
+      - "ATR 배수: 1.5"
+      - "EMA 지수계수: 2.0"
+      
+  enum:
+    description: "선택형 파라미터"
+    validation_rules:
+      options_check: true
+      allow_empty: false
+    common_uses:
+      - "타임프레임 선택"
+      - "계산 방식 선택"
+      - "표시 통화 선택"
+      
+  # boolean:  # 현재 DB에서 사용되지 않음 - 향후 확장용
+  #   description: "참/거짓 파라미터"
+  #   validation_rules:
+  #     default_value: false
+  #   common_uses:
+  #     - "enabled (활성화)"
+  #     - "include_fees (수수료 포함)"
+  #     - "show_signals (신호 표시)"
+
+# 지표별 필수/권장 파라미터 패턴
+parameter_patterns:
+  moving_average_indicators:
+    required:
+      - "period (integer, 1-240, default: 20)"
+      - "timeframe (enum, timeframes, default: 포지션 설정 따름)"
+    optional:
+      - "smoothing_factor (float, 0.1-10.0, default: 2.0)"
+    applies_to: [SMA, EMA, WMA, HULL_MA]
+
+  oscillator_indicators:
+    required:
+      - "period (integer, 2-100, default: 14)"
+      - "timeframe (enum, timeframes, default: 포지션 설정 따름)"
+    optional:
+      - "overbought_level (integer, 50-100, default: 70)"
+      - "oversold_level (integer, 0-50, default: 30)"
+    applies_to: [RSI, STOCHASTIC, CCI, MFI, WILLIAMS_R]
+
+  volatility_indicators:
+    required:
+      - "period (integer, 5-100, default: 14)"
+      - "multiplier (float, 0.5-5.0, default: 2.0)"
+    optional:
+      - "timeframe (enum, timeframes, default: 포지션 설정 따름)"
+    applies_to: [ATR, BOLLINGER_BAND, STANDARD_DEVIATION]
+
+  volume_indicators:
+    required:
+      - "period (integer, 5-200, default: 20)"
+    optional:
+      - "volume_type (enum, [거래량, 거래대금], default: 거래량)"
+      - "timeframe (enum, timeframes, default: 포지션 설정 따름)"
+    applies_to: [VOLUME_SMA, OBV]
+
+  price_indicators:
+    required:
+      - "timeframe (enum, timeframes, default: 포지션 설정 따름)"
+    optional:
+      - "price_type (enum, [현재가, 매수호가, 매도호가, 중간가], default: 현재가)"
+    applies_to: [CURRENT_PRICE, OPEN_PRICE, HIGH_PRICE, LOW_PRICE]
+
+  balance_indicators:
+    required:
+      - "currency (enum, currencies, default: KRW)"
+      - "scope (enum, [포지션제한, 계좌전체], default: 포지션제한)"
+    applies_to: [CASH_BALANCE, COIN_BALANCE, TOTAL_BALANCE]
+
+  profit_indicators:
+    required:
+      - "calculation_method (enum, calculation_methods, default: 미실현)"
+      - "include_fees (enum, boolean_choices, default: 포함)"
+    optional:
+      - "currency (enum, currencies, default: KRW)"
+      - "scope (enum, [현재포지션, 전체포지션, 포트폴리오], default: 현재포지션)"
+    applies_to: [PROFIT_PERCENT, PROFIT_AMOUNT]
+
+# 파라미터 생성 가이드라인
+parameter_creation_guidelines:
+  naming:
+    korean_label: "사용자가 볼 한글 라벨 (간결하고 직관적)"
+    parameter_name: "코드에서 사용할 영문 이름 (snake_case)"
+    
+  descriptions:
+    help_text: "파라미터의 용도와 추천값 설명"
+    examples: "구체적인 사용 예시 제공"
+    
+  defaults:
+    choose_common_values: "일반적으로 많이 사용되는 값"
+    consider_beginner_friendly: "초보자도 사용하기 쉬운 값"
+    
+  validation:
+    set_reasonable_ranges: "실용적인 최소/최대 범위"
+    provide_step_values: "float 타입의 경우 적절한 step 값"
+
+# 자주 사용되는 파라미터 템플릿
+common_parameter_templates:
+  period_basic:
+    label: "기간"
+    type: "int"
+    min: 1
+    max: 240
+    default: 14
+    suffix: " 봉"
+    help: "계산에 사용할 기간 (봉 개수)"
+    
+  timeframe_basic:
+    label: "타임프레임"
+    type: "enum"
+    options: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    default: "포지션 설정 따름"
+    help: "봉 단위 시간"
+    
+  multiplier_basic:
+    label: "배수"
+    type: "float"
+    min: 0.1
+    max: 10.0
+    default: 2.0
+    step: 0.1
+    help: "기준값에 곱할 배수"
+    
+  currency_basic:
+    label: "표시 통화"
+    type: "enum"
+    options: ["KRW", "USD", "BTC"]
+    default: "KRW"
+    help: "금액 표시 기준 통화"

@@ -1,0 +1,189 @@
+# 지표 도움말 텍스트 라이브러리
+# ===============================
+# variable_definitions.py의 help 텍스트를 위한 표준화된 도움말 모음
+
+help_texts:
+  # === 기간(Period) 관련 ===
+  period_general: "계산에 사용할 기간 (봉 개수)"
+  period_short: "단기: 5,10,20 / 중기: 60,120 / 장기: 200,240"
+  period_rsi: "RSI 계산 기간 (일반적으로 14)"
+  period_sma: "단순이동평균 계산 기간"
+  period_ema: "지수이동평균 계산 기간"
+  period_bollinger: "볼린저밴드 계산 기간 (통상 20)"
+  period_atr: "ATR 계산 기간 (일반적으로 14일)"
+  period_volume: "거래량 이동평균 계산 기간"
+  period_macd_fast: "MACD 빠른 이동평균 (12EMA)"
+  period_macd_slow: "MACD 느린 이동평균 (26EMA)"
+  period_macd_signal: "MACD의 9일 이동평균 (매매신호)"
+  period_stoch_k: "스토캐스틱 %K 계산 기간"
+  period_stoch_d: "스토캐스틱 %D 평활화 기간"
+
+  # === 타임프레임 관련 ===
+  timeframe_general: "봉 단위 시간"
+  timeframe_strategy: "봉 단위 시간 (전략 기본값 사용 시 무시)"
+  timeframe_price: "가격 기준 봉 단위"
+  timeframe_volume: "거래량 기준 봉 단위"
+  timeframe_open: "시가 기준 봉 단위 (당일 시작가 등)"
+  timeframe_high: "고가 기준 봉 단위"
+  timeframe_low: "저가 기준 봉 단위"
+  timeframe_backtest: "백테스팅 시 해당 타임프레임 종가를 현재가로 사용"
+
+  # === 배수/계수 관련 ===
+  multiplier_general: "기준값에 곱할 배수"
+  multiplier_atr: "ATR 값에 곱할 배수 (손절가 계산용)"
+  multiplier_bollinger: "표준편차 곱셈 계수"
+  std_dev_bollinger: "밴드 폭 (1.0=68%, 2.0=95%, 2.5=99%)"
+  exponential_factor: "지수 가중치 (2/(기간+1)이 표준)"
+
+  # === 가격 관련 ===
+  price_type_general: "실시간 거래에서 사용할 가격 기준"
+  price_current: "실시간 시장 가격"
+  backtest_mode: "백테스팅 모드 선택"
+
+  # === 거래량 관련 ===
+  volume_type_general: "거래량 종류 선택"
+  volume_vs_amount: "거래량: 코인 개수, 거래대금: KRW 금액"
+  volume_types_extended: "거래량: 코인수량, 거래대금: 원화금액, 상대거래량: 평균대비 비율"
+
+  # === 화폐/통화 관련 ===
+  currency_display: "표시 기준 통화"
+  currency_cash: "현금 잔고 표시 기준 통화"
+  currency_total: "총 자산 표시 기준 통화"
+  currency_profit: "수익 금액 표시 통화"
+  currency_avg_buy: "평균 매수가 표시 통화 (수수료 포함된 평단가)"
+
+  # === 범위/스코프 관련 ===
+  scope_position_vs_account: "포지션 할당 자본 vs 전체 계좌"
+  scope_cash_vs_total: "포지션 할당 vs 전체 사용가능 현금"
+  scope_coin_current_vs_all: "현재 거래중인 코인 vs 보유한 모든 코인"
+  scope_profit_calculation: "수익률 계산 범위"
+
+  # === 계산 방식 관련 ===
+  calculation_method_profit: "미실현: 현재가 기준, 실현: 매도 완료분, 전체: 포트폴리오 전체"
+  calculation_method_profit_amount: "미실현: 현재가기준, 실현: 매도완료, 전체: 누적"
+
+  # === 수수료 관련 ===
+  include_fees: "거래 수수료 및 슬리피지 포함 여부"
+
+  # === MACD 세부사항 ===
+  macd_type_selection: "MACD선: 빠른선-느린선, 시그널선: MACD의 이평, 히스토그램: MACD-시그널"
+
+  # === 스토캐스틱 세부사항 ===
+  stoch_type_selection: "%K: 원시 스토캐스틱, %D: 평활화된 스토캐스틱"
+
+  # === 볼린저밴드 세부사항 ===
+  bollinger_position: "비교할 볼린저밴드 위치"
+
+  # === 단위 형태 ===
+  unit_type_position: "수량: 코인개수, 금액: 원화가치, 비율: 포트폴리오대비%"
+  unit_type_coin: "코인 보유량 표시 방식"
+
+# === 상황별 도움말 템플릿 ===
+help_templates:
+  basic_period:
+    template: "{indicator_name} 계산 기간 (일반적으로 {default_value})"
+    variables: ["indicator_name", "default_value"]
+    
+  timeframe_with_strategy:
+    template: "봉 단위 시간 ({strategy_note})"
+    variables: ["strategy_note"]
+    default_strategy_note: "전략 기본값 사용 시 무시"
+    
+  multiplier_with_purpose:
+    template: "{base_value} 값에 곱할 배수 ({purpose})"
+    variables: ["base_value", "purpose"]
+    
+  calculation_method_with_options:
+    template: "{option1}: {desc1}, {option2}: {desc2}, {option3}: {desc3}"
+    variables: ["option1", "desc1", "option2", "desc2", "option3", "desc3"]
+
+# === 자주 사용되는 도움말 조합 ===
+common_help_combinations:
+  moving_average_set:
+    period: "period_general"
+    timeframe: "timeframe_general"
+    
+  oscillator_set:
+    period: "period_general"
+    timeframe: "timeframe_strategy"
+    overbought: "과매수 수준 설정"
+    oversold: "과매도 수준 설정"
+    
+  volatility_set:
+    period: "period_general"
+    multiplier: "multiplier_general"
+    timeframe: "timeframe_general"
+    
+  volume_set:
+    period: "period_volume"
+    volume_type: "volume_vs_amount"
+    timeframe: "timeframe_volume"
+    
+  price_set:
+    price_type: "price_type_general"
+    timeframe: "timeframe_price"
+    backtest_mode: "backtest_mode"
+    
+  balance_set:
+    currency: "currency_display"
+    scope: "scope_position_vs_account"
+    
+  profit_set:
+    calculation_method: "calculation_method_profit"
+    include_fees: "include_fees"
+    currency: "currency_profit"
+
+# === 다국어 지원 도움말 ===
+multilingual_help:
+  korean:
+    suffix_period: " 봉"
+    suffix_multiplier: " 배"
+    suffix_percent: "%"
+    suffix_currency_krw: "원"
+    suffix_currency_usd: "달러"
+    
+  english:
+    suffix_period: " bars"
+    suffix_multiplier: "x"
+    suffix_percent: "%"
+    suffix_currency_krw: " KRW"
+    suffix_currency_usd: " USD"
+
+# === 도움말 품질 가이드라인 ===
+help_quality_guidelines:
+  clarity:
+    - "간결하고 명확한 표현 사용"
+    - "전문용어 사용 시 설명 추가"
+    - "초보자도 이해할 수 있는 수준"
+    
+  completeness:
+    - "파라미터의 목적 설명"
+    - "추천값 또는 일반적인 값 제시"
+    - "영향을 미치는 요소 설명"
+    
+  consistency:
+    - "동일한 개념에 대해 일관된 용어 사용"
+    - "표준화된 표현 패턴 유지"
+    - "번역 시에도 의미 일관성 유지"
+    
+  practicality:
+    - "실제 트레이딩 상황에서 유용한 정보"
+    - "설정값 변경의 영향 설명"
+    - "주의사항이 있다면 명시"
+
+# === 도움말 자동 생성 규칙 ===
+auto_generation_rules:
+  period_parameters:
+    pattern: "{indicator_name} 계산 기간 (일반적으로 {common_value})"
+    fallback: "계산에 사용할 기간 (봉 개수)"
+    
+  enum_parameters:
+    pattern: "{option_list}중 선택"
+    include_default: true
+    
+  float_parameters:
+    include_range: true
+    pattern: "{purpose} ({min_val}-{max_val}, 기본값: {default_val})"
+    
+  boolean_parameters:
+    pattern: "{feature_name} 사용 여부"

@@ -1,0 +1,240 @@
+# 트레이딩 지표 라이브러리
+# ========================
+# LLM 에이전트가 참조할 수 있는 표준 지표 정의집
+
+indicators:
+  # === 모멘텀 지표 ===
+  RSI:
+    display_name_ko: "RSI 지표"
+    display_name_en: "Relative Strength Index"
+    category: "momentum"
+    chart_category: "subplot"
+    description: "상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표"
+    typical_range: "0-100"
+    interpretation:
+      overbought: "70 이상 (과매수)"
+      oversold: "30 이하 (과매도)"
+      neutral: "30-70 (중립)"
+    common_periods: [14, 21, 9]
+    trading_signals:
+      - "RSI > 70: 매도 고려"
+      - "RSI < 30: 매수 고려" 
+      - "50선 돌파: 추세 변화 신호"
+
+  STOCHASTIC:
+    display_name_ko: "스토캐스틱"
+    display_name_en: "Stochastic Oscillator"
+    category: "momentum"
+    chart_category: "subplot"
+    description: "특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시"
+    typical_range: "0-100"
+    interpretation:
+      overbought: "80 이상"
+      oversold: "20 이하"
+    common_settings:
+      k_period: 14
+      d_period: 3
+    trading_signals:
+      - "%K가 %D 상향돌파: 매수 신호"
+      - "%K가 %D 하향돌파: 매도 신호"
+
+  MACD:
+    display_name_ko: "MACD 지표"
+    display_name_en: "Moving Average Convergence Divergence"
+    category: "momentum"
+    chart_category: "subplot"
+    description: "두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표"
+    components:
+      - "MACD선: 빠른선(12) - 느린선(26)"
+      - "시그널선: MACD의 9일 지수이동평균"
+      - "히스토그램: MACD - 시그널"
+    common_settings:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+    trading_signals:
+      - "MACD > 시그널: 상승 추세"
+      - "히스토그램 0선 돌파: 골든크로스/데드크로스"
+
+  # === 추세 지표 ===
+  SMA:
+    display_name_ko: "단순이동평균"
+    display_name_en: "Simple Moving Average"
+    category: "trend"
+    chart_category: "overlay"
+    description: "특정 기간의 가격을 산술 평균한 값"
+    common_periods:
+      short_term: [5, 10, 20]
+      medium_term: [50, 60, 120]
+      long_term: [200, 240]
+    trading_signals:
+      - "가격 > SMA: 상승 추세"
+      - "단기선 > 장기선: 골든크로스"
+      - "단기선 < 장기선: 데드크로스"
+
+  EMA:
+    display_name_ko: "지수이동평균"
+    display_name_en: "Exponential Moving Average"
+    category: "trend"
+    chart_category: "overlay"
+    description: "최근 가격에 더 큰 가중치를 부여한 이동평균"
+    advantages: "SMA보다 빠른 신호, 최근 가격 변화에 민감"
+    common_periods: [12, 26, 50]
+    calculation: "가중치 = 2/(기간+1)"
+
+  BOLLINGER_BAND:
+    display_name_ko: "볼린저 밴드"
+    display_name_en: "Bollinger Bands"
+    category: "trend"
+    chart_category: "overlay"
+    description: "이동평균선과 표준편차를 이용한 변동성 채널"
+    components:
+      - "상단밴드: SMA + (표준편차 × 배수)"
+      - "중앙선: SMA"
+      - "하단밴드: SMA - (표준편차 × 배수)"
+    common_settings:
+      period: 20
+      std_dev: 2.0
+    trading_signals:
+      - "가격이 상단밴드 터치: 과매수, 매도 고려"
+      - "가격이 하단밴드 터치: 과매도, 매수 고려"
+      - "밴드 폭 축소: 변동성 압축, 큰 움직임 예고"
+
+  # === 변동성 지표 ===
+  ATR:
+    display_name_ko: "평균실제범위"
+    display_name_en: "Average True Range"
+    category: "volatility"
+    chart_category: "subplot"
+    description: "변동성 측정 지표로 손절가/익절가 설정, 포지션 사이징에 활용"
+    calculation: "True Range의 이동평균"
+    common_period: 14
+    usage:
+      - "손절가 = 매수가 - (ATR × 배수)"
+      - "익절가 = 매수가 + (ATR × 배수)"
+      - "포지션 크기 조절에 활용"
+
+  # === 거래량 지표 ===
+  VOLUME:
+    display_name_ko: "거래량"
+    display_name_en: "Volume"
+    category: "volume"
+    chart_category: "subplot"
+    description: "특정 기간 동안 거래된 주식의 총 수량"
+    types:
+      - "거래량: 코인 수량"
+      - "거래대금: 원화 금액"
+      - "상대거래량: 평균 대비 비율"
+
+  VOLUME_SMA:
+    display_name_ko: "거래량 이동평균"
+    display_name_en: "Volume Simple Moving Average"
+    category: "volume"
+    chart_category: "subplot"
+    description: "거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교"
+    common_period: 20
+    trading_signals:
+      - "거래량 > 거래량SMA: 거래량 증가"
+      - "급격한 거래량 증가: 중요한 움직임 시사"
+
+  # === 가격 지표 ===
+  CURRENT_PRICE:
+    display_name_ko: "현재가"
+    display_name_en: "Current Price"
+    category: "price"
+    chart_category: "overlay"
+    description: "현재 시점의 가격"
+    types:
+      - "현재가: 최종 체결가"
+      - "매수호가: 매수 주문 최고가"
+      - "매도호가: 매도 주문 최저가"
+      - "중간가: (매수호가 + 매도호가) / 2"
+
+  # === 포지션 상태 ===
+  PROFIT_PERCENT:
+    display_name_ko: "현재 수익률"
+    display_name_en: "Profit Percentage"
+    category: "state"
+    chart_category: "subplot"
+    description: "매수가 대비 현재 수익률"
+    calculation_methods:
+      - "미실현: 현재가 기준"
+      - "실현: 매도 완료분"
+      - "전체: 포트폴리오 전체"
+
+# === 고급 지표 (확장 라이브러리) ===
+advanced_indicators:
+  ICHIMOKU:
+    display_name_ko: "일목균형표"
+    display_name_en: "Ichimoku Cloud"
+    category: "trend"
+    complexity: "high"
+    components:
+      - "전환선: (9일 최고가 + 최저가) / 2"
+      - "기준선: (26일 최고가 + 최저가) / 2"
+      - "선행스팬A: (전환선 + 기준선) / 2"
+      - "선행스팬B: (52일 최고가 + 최저가) / 2"
+      - "후행스팬: 현재가를 26일 뒤로 이동"
+
+  SUPERTREND:
+    display_name_ko: "슈퍼트렌드"
+    display_name_en: "Supertrend"
+    category: "trend"
+    complexity: "medium"
+    description: "ATR을 기반으로 추세의 방향과 변동성을 시각적으로 표시"
+    calculation: "중간가 ± (ATR × 배수)"
+
+  VWAP:
+    display_name_ko: "거래량가중평균가격"
+    display_name_en: "Volume Weighted Average Price"
+    category: "volume"
+    complexity: "medium"
+    description: "당일 거래량을 가중치로 부여한 평균 가격"
+
+# === 지표 조합 패턴 ===
+indicator_combinations:
+  trend_following:
+    name: "추세 추종 전략"
+    indicators: [SMA, EMA, MACD]
+    logic: "이동평균 정배열 + MACD 상승 신호"
+    
+  momentum_reversal:
+    name: "모멘텀 반전 전략"
+    indicators: [RSI, STOCHASTIC, BOLLINGER_BAND]
+    logic: "과매수/과매도 + 밴드 터치 시 반전"
+    
+  volatility_breakout:
+    name: "변동성 돌파 전략"
+    indicators: [ATR, BOLLINGER_BAND, VOLUME]
+    logic: "낮은 변동성 → 높은 거래량과 함께 돌파"
+    
+  volume_confirmation:
+    name: "거래량 확인 전략"
+    indicators: [VOLUME, VOLUME_SMA, 가격지표]
+    logic: "가격 움직임 + 거래량 증가로 신호 확인"
+
+# === 신규 지표 개발 가이드 ===
+new_indicator_development:
+  naming_rules:
+    - "영문 대문자와 언더스코어 사용"
+    - "명확하고 직관적인 이름"
+    - "기존 지표와 중복 방지"
+    
+  required_fields:
+    - display_name_ko
+    - display_name_en
+    - category
+    - chart_category
+    - description
+    
+  recommended_fields:
+    - typical_range
+    - common_settings
+    - trading_signals
+    - interpretation
+    
+  testing_checklist:
+    - "다양한 시장 조건에서 테스트"
+    - "백테스팅으로 유효성 검증"
+    - "기존 지표와의 상관관계 확인"
+    - "사용자 피드백 수집"
