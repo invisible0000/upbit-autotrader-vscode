@@ -5,12 +5,17 @@
 
 주요 기능:
 1. DB 파일 선택 및 기존 변수/파라미터 조회
-2. 새로운 스키마 미리보기 및 변경사항 검토
+2. 새로운 스키마         # 데이터 마이그레이션 서브탭 (YAML → DB 동기화)
+        data_migration_frame = tk.Frame(migration_notebook)
+        migration_notebook.add(data_migration_frame, text="🔧 YAML 동기화")
+        self.migration_tab = YAMLSyncTabFrame(data_migration_frame, self)
+        self.migration_tab.pack(fill='both', expand=True, padx=5, pady=5)및 변경사항 검토
 3. 안전한 마이그레이션 실행 (세밀한 백업 기능)
 4. 롤백 및 복원 기능
 
 작성일: 2025-07-30
-버전: 1.0.0
+업데이트: 2025-07-31 (Phase 3 - 기능 명확화)
+버전: 1.1.0
 """
 
 import sys
@@ -31,7 +36,7 @@ from components.backup_manager import BackupManagerFrame
 from components.agent_info import AgentInfoFrame
 from components.json_viewer import JsonViewerFrame
 from components.sync_db_to_code import SyncDBToCodeFrame
-from components.advanced_migration_tab import AdvancedMigrationTab
+from components.migration_tab import YAMLSyncTabFrame
 
 
 class TradingVariablesDBMigrationGUI:
@@ -81,39 +86,23 @@ class TradingVariablesDBMigrationGUI:
         
         # 탭 1: DB 선택 및 현재 상태
         self.tab1 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab1, text="📁 DB 선택 & 현재 상태")
+        self.notebook.add(self.tab1, text="📁 DB 선택 & 상태")
         
         # 탭 2: 변수 및 파라미터 조회
         self.tab2 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab2, text="📊 변수 & 파라미터 조회")
+        self.notebook.add(self.tab2, text="📊 변수 & 파라미터")
         
-        # 탭 3: 마이그레이션 미리보기
+        # 탭 3: 마이그레이션 (미리보기 + 실행 통합)
         self.tab3 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab3, text="🔍 마이그레이션 미리보기")
+        self.notebook.add(self.tab3, text="🚀 마이그레이션")
         
-        # 탭 4: 마이그레이션 실행
+        # 탭 4: 백업 관리
         self.tab4 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab4, text="🚀 마이그레이션 실행")
+        self.notebook.add(self.tab4, text="💾 백업 관리")
         
-        # 탭 5: 백업 관리
+        # 탭 5: 시스템 정보 (에이전트 정보 + JSON 뷰어 + 코드 동기화 통합)
         self.tab5 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab5, text="💾 백업 관리")
-        
-        # 탭 6: 에이전트 정보 요약
-        self.tab6 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab6, text="🤖 AI 에이전트 정보")
-        
-        # 탭 7: JSON 데이터 뷰어
-        self.tab7 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab7, text="📋 JSON 데이터 뷰어")
-        
-        # 탭 8: DB → Code 동기화
-        self.tab8 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab8, text="🔄 DB → Code 동기화")
-        
-        # 탭 9: 고급 마이그레이션 (NEW!)
-        self.tab9 = tk.Frame(self.notebook)
-        self.notebook.add(self.tab9, text="🚀 고급 마이그레이션")
+        self.notebook.add(self.tab5, text="⚙️ 시스템 정보")
         
         # 각 탭의 컴포넌트 초기화
         self.init_tab_components()
@@ -137,35 +126,70 @@ class TradingVariablesDBMigrationGUI:
         self.variables_viewer = VariablesViewerFrame(self.tab2)
         self.variables_viewer.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # 탭 3: 마이그레이션 미리보기
-        self.migration_preview = MigrationPreviewFrame(self.tab3)
-        self.migration_preview.pack(fill='both', expand=True, padx=10, pady=10)
+        # 탭 3: 통합 마이그레이션 (미리보기 + 실행 + 데이터 마이그레이션)
+        self.unified_migration = self.create_unified_migration_tab(self.tab3)
         
-        # 탭 4: 마이그레이션 실행기
-        self.migration_executor = MigrationExecutorFrame(
-            self.tab4,
-            on_migration_complete=self.on_migration_complete
-        )
-        self.migration_executor.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # 탭 5: 백업 관리자
-        self.backup_manager = BackupManagerFrame(self.tab5)
+        # 탭 4: 백업 관리자
+        self.backup_manager = BackupManagerFrame(self.tab4)
         self.backup_manager.pack(fill='both', expand=True, padx=10, pady=10)
         
-        # 탭 6: AI 에이전트 정보
-        self.agent_info = AgentInfoFrame(self.tab6)
-        self.agent_info.pack(fill='both', expand=True, padx=10, pady=10)
+        # 탭 5: 시스템 정보 (에이전트 정보 + JSON 뷰어 + 코드 동기화)
+        self.system_info = self.create_system_info_tab(self.tab5)
+    
+    def create_unified_migration_tab(self, parent_tab):
+        """통합 마이그레이션 탭 생성"""
+        # 노트북으로 하위 탭 구성
+        migration_notebook = ttk.Notebook(parent_tab)
+        migration_notebook.pack(fill='both', expand=True, padx=5, pady=5)
         
-        # 탭 7: JSON 데이터 뷰어
-        self.json_viewer = JsonViewerFrame(self.tab7)
-        self.json_viewer.pack(fill='both', expand=True, padx=10, pady=10)
+        # 미리보기 서브탭
+        preview_frame = tk.Frame(migration_notebook)
+        migration_notebook.add(preview_frame, text="🔍 미리보기")
+        self.migration_preview = MigrationPreviewFrame(preview_frame)
+        self.migration_preview.pack(fill='both', expand=True, padx=5, pady=5)
         
-        # 탭 8: DB → Code 동기화
-        self.sync_db_to_code = SyncDBToCodeFrame(self.tab8)
-        self.sync_db_to_code.pack(fill='both', expand=True, padx=10, pady=10)
+        # 실행 서브탭
+        executor_frame = tk.Frame(migration_notebook)
+        migration_notebook.add(executor_frame, text="⚡ 실행")
+        self.migration_executor = MigrationExecutorFrame(
+            executor_frame,
+            on_migration_complete=self.on_migration_complete
+        )
+        self.migration_executor.pack(fill='both', expand=True, padx=5, pady=5)
         
-        # 탭 9: 고급 마이그레이션 (NEW!)
-        self.advanced_migration = AdvancedMigrationTab(self.notebook, self)
+        # 데이터 마이그레이션 서브탭 (YAML → DB 동기화)
+        data_migration_frame = tk.Frame(migration_notebook)
+        migration_notebook.add(data_migration_frame, text="� YAML 동기화")
+        self.migration_tab = YAMLSyncTabFrame(data_migration_frame, self)
+        self.migration_tab.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        return migration_notebook
+    
+    def create_system_info_tab(self, parent_tab):
+        """시스템 정보 탭 생성"""
+        # 노트북으로 하위 탭 구성
+        system_notebook = ttk.Notebook(parent_tab)
+        system_notebook.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # 에이전트 정보 서브탭
+        agent_frame = tk.Frame(system_notebook)
+        system_notebook.add(agent_frame, text="🤖 에이전트")
+        self.agent_info = AgentInfoFrame(agent_frame)
+        self.agent_info.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # JSON 뷰어 서브탭
+        json_frame = tk.Frame(system_notebook)
+        system_notebook.add(json_frame, text="📋 JSON 뷰어")
+        self.json_viewer = JsonViewerFrame(json_frame)
+        self.json_viewer.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # 코드 동기화 서브탭
+        sync_frame = tk.Frame(system_notebook)
+        system_notebook.add(sync_frame, text="🔄 코드 동기화")
+        self.sync_db_to_code = SyncDBToCodeFrame(sync_frame)
+        self.sync_db_to_code.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        return system_notebook
     
     def setup_status_bar(self):
         """상태바 설정"""
@@ -224,6 +248,10 @@ class TradingVariablesDBMigrationGUI:
         self.agent_info.set_db_path(db_path)
         self.json_viewer.set_db_path(db_path)
         self.sync_db_to_code.set_db_path(db_path)
+        
+        # 데이터 마이그레이션 탭에도 DB 경로 전달
+        if hasattr(self, 'migration_tab') and hasattr(self.migration_tab, 'set_db_path'):
+            self.migration_tab.set_db_path(db_path)
         
         self.update_status(f"DB 선택됨: {os.path.basename(db_path)}")
         

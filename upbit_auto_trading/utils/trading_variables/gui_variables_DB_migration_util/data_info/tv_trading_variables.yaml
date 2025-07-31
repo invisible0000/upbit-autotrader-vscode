@@ -1,0 +1,191 @@
+# 트레이딩 변수 정의
+# ===============================
+# 모든 트레이딩 변수의 기본 정보
+
+trading_variables:
+  # 📈 추세 지표 (Trend Indicators)
+  SMA:
+    display_name_ko: "단순이동평균"
+    display_name_en: "Simple Moving Average"
+    purpose_category: "trend"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 가격을 산술 평균한 값"
+    source: "built-in"
+    
+  EMA:
+    display_name_ko: "지수이동평균"
+    display_name_en: "Exponential Moving Average"
+    purpose_category: "trend"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "최근 가격에 더 큰 가중치를 부여한 이동평균"
+    source: "built-in"
+
+  # ⚡ 모멘텀 지표 (Momentum Indicators)
+  RSI:
+    display_name_ko: "RSI 지표"
+    display_name_en: "Relative Strength Index"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표"
+    source: "built-in"
+    
+  STOCHASTIC:
+    display_name_ko: "스토캐스틱"
+    display_name_en: "Stochastic Oscillator"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시"
+    source: "built-in"
+    
+  MACD:
+    display_name_ko: "MACD 지표"
+    display_name_en: "Moving Average Convergence Divergence"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "signal_conditional"
+    description: "두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표"
+    source: "built-in"
+
+  # 🔥 변동성 지표 (Volatility Indicators)
+  BOLLINGER_BAND:
+    display_name_ko: "볼린저 밴드"
+    display_name_en: "Bollinger Bands"
+    purpose_category: "volatility"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "이동평균선과 표준편차를 이용한 변동성 채널"
+    source: "built-in"
+    
+  ATR:
+    display_name_ko: "평균실제범위"
+    display_name_en: "Average True Range"
+    purpose_category: "volatility"
+    chart_category: "subplot"
+    comparison_group: "volatility_comparable"
+    description: "주가의 변동성을 측정하는 지표. 절대적인 가격 변동폭을 나타냄"
+    source: "built-in"
+
+  # 📦 거래량 지표 (Volume Indicators)
+  VOLUME:
+    display_name_ko: "거래량"
+    display_name_en: "Volume"
+    purpose_category: "volume"
+    chart_category: "subplot"
+    comparison_group: "volume_comparable"
+    description: "특정 기간 동안 거래된 주식의 총 수량"
+    source: "built-in"
+    
+  VOLUME_SMA:
+    display_name_ko: "거래량 이동평균"
+    display_name_en: "Volume Simple Moving Average"
+    purpose_category: "volume"
+    chart_category: "subplot"
+    comparison_group: "volume_comparable"
+    description: "거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교"
+    source: "built-in"
+
+  # 💰 가격 데이터 (Price Data)
+  CURRENT_PRICE:
+    display_name_ko: "현재가"
+    display_name_en: "Current Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "현재 시점의 가격"
+    source: "built-in"
+    
+  OPEN_PRICE:
+    display_name_ko: "시가"
+    display_name_en: "Open Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 시작 가격"
+    source: "built-in"
+    
+  HIGH_PRICE:
+    display_name_ko: "고가"
+    display_name_en: "High Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 최고가"
+    source: "built-in"
+    
+  LOW_PRICE:
+    display_name_ko: "저가"
+    display_name_en: "Low Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 최저가"
+    source: "built-in"
+
+  # 💳 자본 관리 (Capital Management)
+  CASH_BALANCE:
+    display_name_ko: "현금 잔고"
+    display_name_en: "Cash Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "사용 가능한 현금 잔고"
+    source: "built-in"
+    
+  COIN_BALANCE:
+    display_name_ko: "코인 보유량"
+    display_name_en: "Coin Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "현재 보유중인 코인 수량"
+    source: "built-in"
+    
+  TOTAL_BALANCE:
+    display_name_ko: "총 자산"
+    display_name_en: "Total Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "현금과 코인을 합친 총 자산"
+    source: "built-in"
+
+  # 📊 거래 상태 (Trading State)
+  PROFIT_PERCENT:
+    display_name_ko: "현재 수익률(%)"
+    display_name_en: "Current Profit Percentage"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "매수가 대비 현재 수익률"
+    source: "built-in"
+    
+  PROFIT_AMOUNT:
+    display_name_ko: "현재 수익 금액"
+    display_name_en: "Current Profit Amount"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "매수가 대비 현재 수익 금액"
+    source: "built-in"
+    
+  POSITION_SIZE:
+    display_name_ko: "포지션 크기"
+    display_name_en: "Position Size"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "quantity_comparable"
+    description: "현재 포지션의 크기"
+    source: "built-in"
+    
+  AVG_BUY_PRICE:
+    display_name_ko: "평균 매수가"
+    display_name_en: "Average Buy Price"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "price_comparable"
+    description: "수수료 포함 평균 매수가"
+    source: "built-in"

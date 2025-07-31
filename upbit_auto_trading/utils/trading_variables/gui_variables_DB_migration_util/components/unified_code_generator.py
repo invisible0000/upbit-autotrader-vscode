@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🚀 Enhanced Variable Definitions 코드 생성기 v2.0
+🚀 Unified Variable Definitions 코드 생성기 v2.0
 ===============================================
 
 DB 데이터 + data_info 통합으로 완전한 variable_definitions.py 생성
@@ -13,7 +13,7 @@ DB 데이터 + data_info 통합으로 완전한 variable_definitions.py 생성
 - 완전한 자동화 (data_info 의존성 제거)
 
 작성일: 2025-07-30
-버전: 2.0 (Enhanced)
+버전: 2.0 (Unified)
 """
 
 from typing import Dict, Any, List, Optional
@@ -22,8 +22,8 @@ import json
 import sqlite3
 
 
-class EnhancedVariableDefinitionsGenerator:
-    """향상된 variable_definitions.py 파일 생성기 (DB 완전 통합)"""
+class UnifiedVariableDefinitionsGenerator:
+    """통합 variable_definitions.py 파일 생성기 (DB 완전 통합)"""
     
     def __init__(self, db_path: str):
         """
@@ -126,10 +126,10 @@ class EnhancedVariableDefinitionsGenerator:
         self.db_data['indicators'] = indicators
         
         # 카테고리 로드
-        cursor.execute("SELECT category_id, category_name_ko FROM tv_indicator_categories WHERE is_active = 1")
+        cursor.execute("SELECT category_id, category_name FROM tv_indicator_categories WHERE is_active = 1")
         categories = {}
         for row in cursor.fetchall():
-            categories[row['category_id']] = row['category_name_ko']
+            categories[row['category_id']] = row['category_name']
         self.db_data['categories'] = categories
         
         # 차트 카테고리 매핑 생성
@@ -639,7 +639,7 @@ def generate_enhanced_variable_definitions(db_path: str, output_path: str = None
     Returns:
         생성된 파일 내용
     """
-    generator = EnhancedVariableDefinitionsGenerator(db_path)
+    generator = UnifiedVariableDefinitionsGenerator(db_path)
     content = generator.generate_file_content()
     
     if output_path:
@@ -656,7 +656,7 @@ def main():
     from pathlib import Path
     
     if len(sys.argv) < 2:
-        print("사용법: python enhanced_code_generator.py <db_path> [output_path]")
+        print("사용법: python unified_code_generator.py <db_path> [output_path]")
         return
     
     db_path = sys.argv[1]

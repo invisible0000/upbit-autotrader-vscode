@@ -1,0 +1,46 @@
+# 비교 그룹 정의
+# ===============================
+# 지표 간 비교 가능성을 정의하는 메타데이터
+
+comparison_groups:
+  price_comparable:
+    group_name_ko: "가격 비교 가능"
+    group_name_en: "Price Comparable"
+    description: "가격 기반 지표들끼리 비교 가능"
+    can_compare_with: ["price_comparable"]
+    
+  percentage_comparable:
+    group_name_ko: "퍼센트 비교 가능"
+    group_name_en: "Percentage Comparable"
+    description: "0-100% 범위의 지표들끼리 비교 가능"
+    can_compare_with: ["percentage_comparable"]
+    
+  signal_conditional:
+    group_name_ko: "신호 조건부"
+    group_name_en: "Signal Conditional"
+    description: "특별한 신호 조건에서만 비교 가능"
+    can_compare_with: ["signal_conditional"]
+    
+  volatility_comparable:
+    group_name_ko: "변동성 비교 가능"
+    group_name_en: "Volatility Comparable"
+    description: "변동성 지표들끼리 비교 가능"
+    can_compare_with: ["volatility_comparable"]
+    
+  volume_comparable:
+    group_name_ko: "거래량 비교 가능"
+    group_name_en: "Volume Comparable"
+    description: "거래량 기반 지표들끼리 비교 가능"
+    can_compare_with: ["volume_comparable"]
+    
+  capital_comparable:
+    group_name_ko: "자본 비교 가능"
+    group_name_en: "Capital Comparable"
+    description: "자본/자산 관련 지표들끼리 비교 가능"
+    can_compare_with: ["capital_comparable"]
+    
+  quantity_comparable:
+    group_name_ko: "수량 비교 가능"
+    group_name_en: "Quantity Comparable"
+    description: "수량 관련 지표들끼리 비교 가능"
+    can_compare_with: ["quantity_comparable"]

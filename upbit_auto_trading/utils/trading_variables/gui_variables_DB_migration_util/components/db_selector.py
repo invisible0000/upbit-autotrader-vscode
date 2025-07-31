@@ -4,12 +4,15 @@
 DB 파일 선택 및 기본 정보 표시 컴포넌트
 
 작성일: 2025-07-30
+업데이트: 2025-07-31 (Phase 3 - GUI 공통 유틸리티 적용)
 """
 
 import os
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+
+from .gui_utils import StandardFrame, create_standard_button, LayoutUtils, MessageUtils
 
 
 class DatabaseSelectorFrame(tk.Frame):
@@ -70,53 +73,15 @@ class DatabaseSelectorFrame(tk.Frame):
         button_frame = tk.Frame(select_frame, bg='white')
         button_frame.pack(fill='x', padx=10, pady=5)
         
-        # DB 파일 선택 버튼
-        select_btn = tk.Button(
-            button_frame,
-            text="📂 DB 파일 선택",
-            command=self.select_db_file,
-            bg='#3498db',
-            fg='white',
-            font=('Arial', 9, 'bold'),
-            width=15
-        )
-        select_btn.pack(side='left', padx=(0, 10))
+        # 공통 유틸리티를 사용한 버튼 생성
+        buttons_config = [
+            {'text': '📂 DB 파일 선택', 'command': self.select_db_file, 'style': 'primary'},
+            {'text': '🏠 기본 경로 사용', 'command': self.use_default_path, 'style': 'success'},
+            {'text': '➕ 새 DB 생성', 'command': self.create_new_db, 'style': 'warning'},
+            {'text': '🔄 새로고침', 'command': self.refresh_db_info, 'style': 'secondary'}
+        ]
         
-        # 기본 경로 사용 버튼
-        default_btn = tk.Button(
-            button_frame,
-            text="🏠 기본 경로 사용",
-            command=self.use_default_path,
-            bg='#27ae60',
-            fg='white',
-            font=('Arial', 9, 'bold'),
-            width=15
-        )
-        default_btn.pack(side='left', padx=(0, 10))
-        
-        # 새 DB 생성 버튼
-        create_btn = tk.Button(
-            button_frame,
-            text="➕ 새 DB 생성",
-            command=self.create_new_db,
-            bg='#e67e22',
-            fg='white',
-            font=('Arial', 9, 'bold'),
-            width=15
-        )
-        create_btn.pack(side='left', padx=(0, 10))
-        
-        # 새로고침 버튼 추가
-        refresh_btn = tk.Button(
-            button_frame,
-            text="🔄 새로고침",
-            command=self.refresh_db_info,
-            bg='#9b59b6',
-            fg='white',
-            font=('Arial', 9, 'bold'),
-            width=15
-        )
-        refresh_btn.pack(side='left')
+        LayoutUtils.create_button_row(button_frame, buttons_config)
         
         # DB 정보 표시 섹션
         info_frame = tk.LabelFrame(

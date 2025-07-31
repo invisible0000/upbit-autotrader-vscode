@@ -3,20 +3,20 @@
 Variables Data Info 로더 - 변수/조건 빌더 전용 YAML 파일 관리
 ============================================================
 
-variables_* 접두사를 가진 YAML 파일들을 로드하고 관리하는 모듈
+tv_* 접두사를 가진 YAML 파일들을 로드하고 관리하는 모듈
 condition builder에서 trigger 생성에 사용되는 variables 정보 전용
 향후 DB 마이그레이션을 위한 임시 솔루션
 
 관리 파일들:
-- variables_indicator_categories.yaml: 지표 카테고리 정의
-- variables_parameter_types.yaml: 파라미터 타입 가이드라인
-- variables_indicator_library.yaml: 지표 라이브러리
-- variables_help_texts.yaml: 도움말 텍스트
-- variables_placeholder_texts.yaml: 플레이스홀더 예시
-- variables_workflow_guide.yaml: 워크플로우 가이드
+- tv_indicator_categories.yaml: 지표 카테고리 정의
+- tv_parameter_types.yaml: 파라미터 타입 가이드라인
+- tv_indicator_library.yaml: 지표 라이브러리
+- tv_help_texts.yaml: 도움말 텍스트
+- tv_placeholder_texts.yaml: 플레이스홀더 예시
+- tv_workflow_guides.yaml: 워크플로우 가이드
 
 주요 기능:
-- variables_* YAML 파일 일괄 로드
+- tv_* YAML 파일 일괄 로드
 - 데이터 검증 및 표준화
 - DB 마이그레이션 준비
 
@@ -31,7 +31,7 @@ from datetime import datetime
 
 
 class DataInfoLoader:
-    """variables_* 파일들을 관리하는 클래스 (condition builder용 variables 전용)"""
+    """tv_* 파일들을 관리하는 클래스 (condition builder용 variables 전용)"""
     
     def __init__(self, data_info_path: str = None):
         """
@@ -82,12 +82,11 @@ class DataInfoLoader:
             return self.loaded_data
         
         yaml_files = {
-            'indicator_categories': 'variables_indicator_categories.yaml',
-            'parameter_types': 'variables_parameter_types.yaml',
-            'indicator_library': 'variables_indicator_library.yaml',
-            'help_texts': 'variables_help_texts.yaml',
-            'placeholder_texts': 'variables_placeholder_texts.yaml',
-            'workflow_guide': 'variables_workflow_guide.yaml'
+            'indicator_categories': 'tv_indicator_categories.yaml',
+            'parameter_types': 'tv_parameter_types.yaml',
+            'indicator_library': 'tv_indicator_library.yaml',
+            'help_texts': 'tv_help_texts.yaml',
+            'placeholder_texts': 'tv_placeholder_texts.yaml'
         }
         
         self.loaded_data = {}

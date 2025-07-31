@@ -18,8 +18,13 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
 from PyQt6.QtGui import QFont, QIcon
 
-from ...config.database_paths import DatabasePaths, get_current_config
-from ...utils.global_db_manager import DatabaseManager
+## 상대경로 import (테스트용, 주석 처리)
+# from ...config.database_paths import DatabasePaths, get_current_config
+# from ...utils.global_db_manager import DatabaseManager
+
+# 절대경로 import (테스트 및 실제 실행용)
+from upbit_auto_trading.config.database_paths import DatabasePaths, get_current_config
+from upbit_auto_trading.utils.global_db_manager import DatabaseManager
 
 
 class DatabaseSwitchWorker(QThread):

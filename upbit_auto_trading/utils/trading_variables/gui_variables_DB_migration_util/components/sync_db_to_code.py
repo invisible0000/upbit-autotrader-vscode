@@ -28,7 +28,7 @@ import threading
 from .db_data_manager import DBDataManager
 from .code_generator import VariableDefinitionsGenerator, create_safe_filename
 from .data_info_loader import DataInfoLoader
-from .enhanced_code_generator import EnhancedVariableDefinitionsGenerator
+from .unified_code_generator import UnifiedVariableDefinitionsGenerator
 
 
 class SyncDBToCodeFrame(tk.Frame):

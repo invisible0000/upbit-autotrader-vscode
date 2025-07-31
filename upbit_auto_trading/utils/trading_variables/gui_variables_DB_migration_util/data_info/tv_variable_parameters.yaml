@@ -1,0 +1,279 @@
+# 변수 파라미터 정의
+# ===============================
+# 각 트레이딩 변수의 파라미터 설정 정보
+
+variable_parameters:
+  # RSI 파라미터
+  - variable_id: "RSI"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "14"
+    min_value: "2"
+    max_value: "240"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "RSI 계산 기간"
+    display_order: 1
+    
+  - variable_id: "RSI"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간 (전략 기본값 사용 시 무시)"
+    display_order: 2
+
+  # SMA 파라미터
+  - variable_id: "SMA"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "20"
+    min_value: "1"
+    max_value: "240"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "단기: 5,10,20 / 중기: 60,120 / 장기: 200,240"
+    display_order: 1
+    
+  - variable_id: "SMA"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 2
+
+  # EMA 파라미터
+  - variable_id: "EMA"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "12"
+    min_value: "1"
+    max_value: "240"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "지수이동평균 계산 기간"
+    display_order: 1
+    
+  - variable_id: "EMA"
+    parameter_name: "exponential_factor"
+    parameter_type: "float"
+    default_value: "2.0"
+    min_value: "0.1"
+    max_value: "10.0"
+    is_required: true
+    display_name_ko: "지수 계수"
+    display_name_en: "Exponential Factor"
+    description: "지수 가중치 (2/(기간+1)이 표준)"
+    display_order: 2
+    
+  - variable_id: "EMA"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 3
+
+  # STOCHASTIC 파라미터
+  - variable_id: "STOCHASTIC"
+    parameter_name: "k_period"
+    parameter_type: "integer"
+    default_value: "14"
+    min_value: "1"
+    max_value: "100"
+    is_required: true
+    display_name_ko: "%K 기간"
+    display_name_en: "%K Period"
+    description: "%K 라인 계산 기간"
+    display_order: 1
+    
+  - variable_id: "STOCHASTIC"
+    parameter_name: "d_period"
+    parameter_type: "integer"
+    default_value: "3"
+    min_value: "1"
+    max_value: "50"
+    is_required: true
+    display_name_ko: "%D 기간"
+    display_name_en: "%D Period"
+    description: "%D 라인 계산 기간"
+    display_order: 2
+    
+  - variable_id: "STOCHASTIC"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 3
+
+  # MACD 파라미터
+  - variable_id: "MACD"
+    parameter_name: "fast_period"
+    parameter_type: "integer"
+    default_value: "12"
+    min_value: "1"
+    max_value: "50"
+    is_required: true
+    display_name_ko: "빠른 기간"
+    display_name_en: "Fast Period"
+    description: "빠른 EMA 기간"
+    display_order: 1
+    
+  - variable_id: "MACD"
+    parameter_name: "slow_period"
+    parameter_type: "integer"
+    default_value: "26"
+    min_value: "1"
+    max_value: "100"
+    is_required: true
+    display_name_ko: "느린 기간"
+    display_name_en: "Slow Period"
+    description: "느린 EMA 기간"
+    display_order: 2
+    
+  - variable_id: "MACD"
+    parameter_name: "signal_period"
+    parameter_type: "integer"
+    default_value: "9"
+    min_value: "1"
+    max_value: "50"
+    is_required: true
+    display_name_ko: "시그널 기간"
+    display_name_en: "Signal Period"
+    description: "시그널 라인 기간"
+    display_order: 3
+    
+  - variable_id: "MACD"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 4
+
+  # BOLLINGER_BAND 파라미터
+  - variable_id: "BOLLINGER_BAND"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "20"
+    min_value: "2"
+    max_value: "100"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "이동평균 기간"
+    display_order: 1
+    
+  - variable_id: "BOLLINGER_BAND"
+    parameter_name: "multiplier"
+    parameter_type: "float"
+    default_value: "2.0"
+    min_value: "0.1"
+    max_value: "5.0"
+    is_required: true
+    display_name_ko: "표준편차 배수"
+    display_name_en: "Std Dev Multiplier"
+    description: "표준편차 곱셈 계수"
+    display_order: 2
+    
+  - variable_id: "BOLLINGER_BAND"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 3
+
+  # ATR 파라미터
+  - variable_id: "ATR"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "14"
+    min_value: "1"
+    max_value: "100"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "ATR 계산 기간"
+    display_order: 1
+    
+  - variable_id: "ATR"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "3분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 2
+
+  # VOLUME 파라미터
+  - variable_id: "VOLUME"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "거래량 기준 봉 단위"
+    display_order: 1
+    
+  - variable_id: "VOLUME"
+    parameter_name: "volume_type"
+    parameter_type: "enum"
+    default_value: "거래량"
+    enum_values: ["거래량", "거래대금", "상대거래량"]
+    is_required: true
+    display_name_ko: "거래량 종류"
+    display_name_en: "Volume Type"
+    description: "거래량: 코인수량, 거래대금: 원화금액, 상대거래량: 평균대비 비율"
+    display_order: 2
+
+  # VOLUME_SMA 파라미터
+  - variable_id: "VOLUME_SMA"
+    parameter_name: "period"
+    parameter_type: "integer"
+    default_value: "20"
+    min_value: "1"
+    max_value: "240"
+    is_required: true
+    display_name_ko: "기간"
+    display_name_en: "Period"
+    description: "거래량 이동평균 계산 기간"
+    display_order: 1
+    
+  - variable_id: "VOLUME_SMA"
+    parameter_name: "timeframe"
+    parameter_type: "enum"
+    default_value: "포지션 설정 따름"
+    enum_values: ["포지션 설정 따름", "1분", "5분", "15분", "30분", "1시간", "4시간", "1일"]
+    is_required: true
+    display_name_ko: "타임프레임"
+    display_name_en: "Timeframe"
+    description: "봉 단위 시간"
+    display_order: 2

@@ -424,11 +424,7 @@ def generate_variable_definitions_file(db_data: Dict[str, Any],
     return generator.save_to_file(output_path)
 
 def create_safe_filename(base_dir: str, base_name: str = "variable_definitions_new") -> str:
-    """안전한 파일명 생성 (덮어쓰기 방지)"""
-    basic_path = os.path.join(base_dir, f"{base_name}.py")
-    if not os.path.exists(basic_path):
-        return basic_path
-    
-    # 타임스탬프 추가
+    """안전한 파일명 생성 (항상 타임스탬프 포함)"""
+    # 항상 타임스탬프가 포함된 파일명 생성
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return os.path.join(base_dir, f"{base_name}_{timestamp}.py")

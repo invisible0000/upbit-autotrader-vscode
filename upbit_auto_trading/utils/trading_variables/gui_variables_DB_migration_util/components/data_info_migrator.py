@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-🚀 Advanced Data Info to DB Migration Manager
-=============================================
+🚀 Data Info to DB Migration Manager
+==========================================
 
-data_info 폴더의 모든 variables_* YAML 파일들을 
-확장된 DB 스키마(v3.0)로 완전 마이그레이션하는 고급 관리자
+data_info 폴더의 tv_* YAML 파일들을 
+확장된 DB 스키마로 완전 마이그레이션하는 관리자
 
 주요 기능:
-- variables_help_texts.yaml → tv_help_texts 테이블
-- variables_placeholder_texts.yaml → tv_placeholder_texts 테이블  
-- variables_indicator_categories.yaml → tv_indicator_categories 테이블
-- variables_parameter_types.yaml → tv_parameter_types 테이블
-- variables_indicator_library.yaml → tv_indicator_library 테이블
-- variables_workflow_guide.yaml → tv_workflow_guides 테이블
+- tv_help_texts.yaml → tv_help_texts 테이블
+- tv_placeholder_texts.yaml → tv_placeholder_texts 테이블  
+- tv_indicator_categories.yaml → tv_indicator_categories 테이블
+- tv_parameter_types.yaml → tv_parameter_types 테이블
+- tv_indicator_library.yaml → tv_indicator_library 테이블
+
+참고: tv_workflow_guides.yaml은 LLM_Agent_Workflow_Guide.md로 변환되어 별도 관리됨
 
 작성일: 2025-07-30
 작성자: GitHub Copilot
@@ -27,7 +28,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 
 
-class AdvancedDataInfoMigrator:
+class DataInfoMigrator:
     """data_info → 확장 DB 스키마 마이그레이션 관리자"""
     
     def __init__(self, db_path: str, data_info_path: str = None):
@@ -119,10 +120,10 @@ class AdvancedDataInfoMigrator:
             return False
     
     def migrate_help_texts(self) -> bool:
-        """variables_help_texts.yaml → tv_help_texts 마이그레이션"""
+        """tv_help_texts.yaml → tv_help_texts 마이그레이션"""
         self._log("📝 도움말 텍스트 마이그레이션 시작...")
         
-        data = self._load_yaml_file("variables_help_texts.yaml")
+        data = self._load_yaml_file("tv_help_texts.yaml")
         if not data:
             return False
         
@@ -168,10 +169,10 @@ class AdvancedDataInfoMigrator:
             return False
     
     def migrate_placeholder_texts(self) -> bool:
-        """variables_placeholder_texts.yaml → tv_placeholder_texts 마이그레이션"""
+        """tv_placeholder_texts.yaml → tv_placeholder_texts 마이그레이션"""
         self._log("🎯 플레이스홀더 텍스트 마이그레이션 시작...")
         
-        data = self._load_yaml_file("variables_placeholder_texts.yaml")
+        data = self._load_yaml_file("tv_placeholder_texts.yaml")
         if not data:
             return False
         
@@ -234,11 +235,103 @@ class AdvancedDataInfoMigrator:
             self._log(f"플레이스홀더 텍스트 마이그레이션 실패: {str(e)}", "ERROR")
             return False
     
+    def migrate_indicator_categories(self) -> bool:
+        """tv_indicator_categories.yaml → tv_indicator_categories 마이그레이션"""
+        self._log("📂 지표 카테고리 마이그레이션 시작...")
+        
+        data = self._load_yaml_file("tv_indicator_categories.yaml")
+        if not data:
+            return False
+        
+        categories = data.get('categories', {})
+        if not categories:
+            self._log("지표 카테고리 데이터가 없습니다", "WARNING")
+            return True
+        
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 기존 데이터 삭제
+                cursor.execute("DELETE FROM tv_indicator_categories")
+                
+                # 카테고리 정보 삽입
+                for category_id, category_info in categories.items():
+                    cursor.execute("""
+                        INSERT INTO tv_indicator_categories (
+                            category_id, category_name, description, 
+                            display_order, is_active, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        category_id,
+                        category_info.get('name_ko', category_info.get('category_name', category_id)),
+                        category_info.get('description', ''),
+                        category_info.get('display_order', 0),
+                        category_info.get('is_active', True),
+                        datetime.now()
+                    ))
+                
+                conn.commit()
+                count = len(categories)
+                self._log(f"지표 카테고리 {count}개 마이그레이션 완료")
+                return True
+                
+        except Exception as e:
+            self._log(f"지표 카테고리 마이그레이션 실패: {str(e)}", "ERROR")
+            return False
+    
+    def migrate_parameter_types(self) -> bool:
+        """tv_parameter_types.yaml → tv_parameter_types 마이그레이션"""
+        self._log("🔧 파라미터 타입 마이그레이션 시작...")
+        
+        data = self._load_yaml_file("tv_parameter_types.yaml")
+        if not data:
+            return False
+        
+        parameter_types = data.get('parameter_types', {})
+        if not parameter_types:
+            self._log("파라미터 타입 데이터가 없습니다", "WARNING")
+            return True
+        
+        try:
+            with self._get_db_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 기존 데이터 삭제
+                cursor.execute("DELETE FROM tv_parameter_types")
+                
+                # 파라미터 타입 정보 삽입
+                for type_id, type_info in parameter_types.items():
+                    validation_rules = type_info.get('validation_rules', {})
+                    
+                    cursor.execute("""
+                        INSERT INTO tv_parameter_types (
+                            type_id, type_name, description,
+                            validation_rule, is_active, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        type_id,
+                        type_info.get('name_ko', type_info.get('type_name', type_id)),
+                        type_info.get('description', ''),
+                        json.dumps(validation_rules),
+                        type_info.get('is_active', True),
+                        datetime.now()
+                    ))
+                
+                conn.commit()
+                count = len(parameter_types)
+                self._log(f"파라미터 타입 {count}개 마이그레이션 완료")
+                return True
+                
+        except Exception as e:
+            self._log(f"파라미터 타입 마이그레이션 실패: {str(e)}", "ERROR")
+            return False
+    
     def migrate_indicator_library(self) -> bool:
-        """variables_indicator_library.yaml → tv_indicator_library 마이그레이션"""
+        """tv_indicator_library.yaml → tv_indicator_library 마이그레이션"""
         self._log("📚 지표 라이브러리 마이그레이션 시작...")
         
-        data = self._load_yaml_file("variables_indicator_library.yaml")
+        data = self._load_yaml_file("tv_indicator_library.yaml")
         if not data:
             return False
         
@@ -285,73 +378,6 @@ class AdvancedDataInfoMigrator:
             self._log(f"지표 라이브러리 마이그레이션 실패: {str(e)}", "ERROR")
             return False
     
-    def migrate_workflow_guides(self) -> bool:
-        """variables_workflow_guide.yaml → tv_workflow_guides 마이그레이션"""
-        self._log("📋 워크플로우 가이드 마이그레이션 시작...")
-        
-        data = self._load_yaml_file("variables_workflow_guide.yaml")
-        if not data:
-            return False
-        
-        try:
-            with self._get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # 기존 데이터 삭제
-                cursor.execute("DELETE FROM tv_workflow_guides")
-                
-                # 워크플로우 데이터 구조 분석 및 삽입
-                workflow_sections = data.get('workflow', {})
-                if workflow_sections:
-                    order = 0
-                    for section_key, section_data in workflow_sections.items():
-                        order += 1
-                        cursor.execute("""
-                            INSERT INTO tv_workflow_guides (
-                                guide_type, guide_title_ko, guide_content,
-                                display_order, target_audience, importance_level,
-                                is_active, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            'section',
-                            section_key.replace('_', ' ').title(),
-                            json.dumps(section_data, ensure_ascii=False),
-                            order,
-                            'both',
-                            3,  # 중간 중요도
-                            1,
-                            datetime.now()
-                        ))
-                
-                # 기타 가이드 섹션들도 추가
-                for guide_type in ['principles', 'checklist', 'troubleshooting']:
-                    if guide_type in data:
-                        order += 1
-                        cursor.execute("""
-                            INSERT INTO tv_workflow_guides (
-                                guide_type, guide_title_ko, guide_content,
-                                display_order, target_audience, importance_level,
-                                is_active, created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            guide_type,
-                            guide_type.replace('_', ' ').title(),
-                            json.dumps(data[guide_type], ensure_ascii=False),
-                            order,
-                            'both',
-                            4,  # 높은 중요도
-                            1,
-                            datetime.now()
-                        ))
-                
-                conn.commit()
-                self._log(f"워크플로우 가이드 마이그레이션 완료")
-                return True
-                
-        except Exception as e:
-            self._log(f"워크플로우 가이드 마이그레이션 실패: {str(e)}", "ERROR")
-            return False
-    
     def run_full_migration(self) -> Dict[str, Any]:
         """전체 마이그레이션 실행"""
         self._log("🚀 data_info → DB 전체 마이그레이션 시작")
@@ -383,8 +409,9 @@ class AdvancedDataInfoMigrator:
         migration_tasks = [
             ('help_texts', self.migrate_help_texts),
             ('placeholder_texts', self.migrate_placeholder_texts),
+            ('indicator_categories', self.migrate_indicator_categories),
+            ('parameter_types', self.migrate_parameter_types),
             ('indicator_library', self.migrate_indicator_library),
-            ('workflow_guides', self.migrate_workflow_guides),
         ]
         
         for task_name, task_func in migration_tasks:
@@ -420,9 +447,10 @@ class AdvancedDataInfoMigrator:
                 # 각 테이블별 레코드 수 조회
                 tables = [
                     'tv_help_texts',
-                    'tv_placeholder_texts', 
-                    'tv_indicator_library',
-                    'tv_workflow_guides'
+                    'tv_placeholder_texts',
+                    'tv_indicator_categories',
+                    'tv_parameter_types',
+                    'tv_indicator_library'
                 ]
                 
                 for table in tables:
@@ -444,7 +472,7 @@ def main():
     db_path = current_dir / "test_migration.db"
     
     # 마이그레이터 생성 및 실행
-    migrator = AdvancedDataInfoMigrator(str(db_path))
+    migrator = DataInfoMigrator(str(db_path))
     
     print("🚀 Advanced Data Info Migration 테스트 시작")
     print("=" * 60)
