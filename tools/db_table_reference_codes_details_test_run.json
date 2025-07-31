@@ -1,0 +1,164 @@
+{
+  "analysis_info": {
+    "total_tables": 28,
+    "analyzed_tables": 2,
+    "total_files": 273,
+    "suspect_tables": [
+      "backup_info",
+      "execution_history"
+    ],
+    "analyzer_version": "Super_v5.0_precise",
+    "total_references_found": 17
+  },
+  "table_references": {
+    "backup_info": {
+      "code_reference_analyzer.py": [
+        {
+          "line_number": 41,
+          "line_content": "'backup_info', 'execution_history'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "backup_info",
+          "pattern": "[\"\\']backup_info[\"\\']"
+        }
+      ],
+      "code_reference_analyzer_v4.py": [
+        {
+          "line_number": 11,
+          "line_content": "python code_reference_analyzer_v4.py --tables app_settings,backup_info,chart_variables",
+          "match_type": "sql_context",
+          "table_name": "backup_info"
+        },
+        {
+          "line_number": 35,
+          "line_content": "'backup_info',            # ✅ 분석 대상 - 백업 정보",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "backup_info",
+          "pattern": "[\"\\']backup_info[\"\\']"
+        },
+        {
+          "line_number": 63,
+          "line_content": "'backup_info', 'execution_history'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "backup_info",
+          "pattern": "[\"\\']backup_info[\"\\']"
+        },
+        {
+          "line_number": 434,
+          "line_content": "python code_reference_analyzer_v4.py --tables app_settings,backup_info",
+          "match_type": "sql_context",
+          "table_name": "backup_info"
+        },
+        {
+          "line_number": 438,
+          "line_content": "app_settings, backup_info, chart_variables,",
+          "match_type": "sql_context",
+          "table_name": "backup_info"
+        }
+      ],
+      "db_analysis_tool.py": [
+        {
+          "line_number": 133,
+          "line_content": "'chart_variables', 'backup_info'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "backup_info",
+          "pattern": "[\"\\']backup_info[\"\\']"
+        }
+      ],
+      "upbit_auto_trading\\config\\database_paths.py": [
+        {
+          "line_number": 74,
+          "line_content": "'backup_info': 'settings.sqlite3',",
+          "match_type": "sql_context",
+          "table_name": "backup_info"
+        }
+      ],
+      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\backup_manager.py": [
+        {
+          "line_number": 421,
+          "line_content": "def display_backup_info(self, backup_path):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "backup_info",
+          "pattern": "def\\s+.*backup_info.*\\("
+        },
+        {
+          "line_number": 472,
+          "line_content": "def clear_backup_info(self):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "backup_info",
+          "pattern": "def\\s+.*backup_info.*\\("
+        }
+      ]
+    },
+    "execution_history": {
+      "code_reference_analyzer.py": [
+        {
+          "line_number": 41,
+          "line_content": "'backup_info', 'execution_history'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "execution_history",
+          "pattern": "[\"\\']execution_history[\"\\']"
+        }
+      ],
+      "code_reference_analyzer_v4.py": [
+        {
+          "line_number": 38,
+          "line_content": "'execution_history',      # ✅ 분석 대상 - 실행 이력",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "execution_history",
+          "pattern": "[\"\\']execution_history[\"\\']"
+        },
+        {
+          "line_number": 63,
+          "line_content": "'backup_info', 'execution_history'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "execution_history",
+          "pattern": "[\"\\']execution_history[\"\\']"
+        },
+        {
+          "line_number": 435,
+          "line_content": "python code_reference_analyzer_v4.py --tables \"chart_variables,execution_history\"",
+          "match_type": "sql_context",
+          "table_name": "execution_history"
+        }
+      ],
+      "db_analysis_tool.py": [
+        {
+          "line_number": 132,
+          "line_content": "'trading_conditions', 'execution_history', 'chart_layout_templates',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "execution_history",
+          "pattern": "[\"\\']execution_history[\"\\']"
+        }
+      ],
+      "upbit_auto_trading\\config\\database_paths.py": [
+        {
+          "line_number": 77,
+          "line_content": "'execution_history': 'settings.sqlite3',",
+          "match_type": "sql_context",
+          "table_name": "execution_history"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 489,
+          "line_content": "def get_strategy_execution_history(self, strategy_id: str, limit: int = 100) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "execution_history",
+          "pattern": "def\\s+.*execution_history.*\\("
+        }
+      ]
+    }
+  },
+  "summary": {
+    "backup_info": {
+      "total_references": 10,
+      "affected_files": 5,
+      "avg_refs_per_file": 2.0
+    },
+    "execution_history": {
+      "total_references": 7,
+      "affected_files": 5,
+      "avg_refs_per_file": 1.4
+    }
+  }
+}

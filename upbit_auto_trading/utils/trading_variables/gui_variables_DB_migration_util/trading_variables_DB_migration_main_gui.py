@@ -5,7 +5,15 @@
 
 주요 기능:
 1. DB 파일 선택 및 기존 변수/파라미터 조회
-2. 새로운 스키마         # 데이터 마이그레이션 서브탭 (YAML → DB 동기화)
+2. 새로운 스키마             # 데이터 마이그레이션 서브탭 (YAML → DB 동기화) - 실행 탭과 연동
+        data_migration_frame = tk.Frame(migration_notebook)
+        migration_notebook.add(data_migration_frame, text="📄 YAML 동기화")
+        self.migration_tab = YAMLSyncTabFrame(
+            data_migration_frame, 
+            self, 
+            schema_manager=self.migration_executor  # 실행 탭과 연동
+        )
+        self.migration_tab.pack(fill='both', expand=True, padx=5, pady=5) 데이터 마이그레이션 서브탭 (YAML → DB 동기화)
         data_migration_frame = tk.Frame(migration_notebook)
         migration_notebook.add(data_migration_frame, text="🔧 YAML 동기화")
         self.migration_tab = YAMLSyncTabFrame(data_migration_frame, self)

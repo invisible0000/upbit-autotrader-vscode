@@ -1,7 +1,16 @@
 """
 마이그레이션 미리보기 모듈
-2x2 그리드 레이아웃으로 상세한 마이그레이션 분석 정보 제공
-
+2x2 그리드 레이아웃으로 상세한 마이그레이션         select_schema_btn = tk.Button(
+            schema_info_frame,
+            text="📂 스키마 파일 선택",
+            font=('맑은 고딕', 9),
+            bg='#27ae60',
+            fg='white',
+            relief='raised',
+            bd=2,
+            command=self.select_schema_file,
+            width=15  # 텍스트에 맞게 조정
+        )
 작성자: Upbit Auto Trading Team
 버전: 3.0.0
 최종 수정: 2025-07-30
@@ -18,7 +27,9 @@ class MigrationPreviewFrame(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg='white')
         self.parent = parent
+        self.selected_schema_file = None
         self.setup_ui()
+        self.load_default_schema()  # 기본 스키마 자동 로드
         
     def setup_ui(self):
         """2x2 그리드 UI 구성"""
@@ -338,9 +349,10 @@ class MigrationPreviewFrame(tk.Frame):
         from tkinter import filedialog
         import os
         
-        # 현재 실행 파일 위치 기준으로 기본 경로 설정
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))))
+        # data_info 폴더로 기본 경로 설정
+        data_info_path = os.path.join(os.path.dirname(__file__), "..", "data_info")
+        if not os.path.exists(data_info_path):
+            data_info_path = os.getcwd()
         
         # 스키마 파일 선택
         schema_file = filedialog.askopenfilename(
@@ -349,8 +361,7 @@ class MigrationPreviewFrame(tk.Frame):
                 ("SQL 파일", "*.sql"),
                 ("모든 파일", "*.*")
             ],
-            initialdir=project_root,
-            initialfile="upbit_autotrading_unified_schema.sql"
+            initialdir=data_info_path
         )
         
         if schema_file:
@@ -450,16 +461,20 @@ class MigrationPreviewFrame(tk.Frame):
             with open(schema_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-                # 테이블 분석
-                total_tables = content.count('CREATE TABLE')
-                tv_tables = content.count('CREATE TABLE tv_')
+                # 테이블 분석 - CREATE TABLE IF NOT EXISTS도 포함
+                total_tables = content.count('CREATE TABLE IF NOT EXISTS') + content.count('CREATE TABLE ')
+                tv_tables = content.count('CREATE TABLE IF NOT EXISTS tv_') + content.count('CREATE TABLE tv_')
                 
-                # TV 테이블들 찾기
+                # TV 테이블들 찾기 - IF NOT EXISTS 구문도 처리
                 tv_table_names = []
                 lines = content.split('\n')
                 for line in lines:
-                    if 'CREATE TABLE tv_' in line:
-                        table_name = line.split('CREATE TABLE')[1].split('(')[0].strip()
+                    if 'CREATE TABLE IF NOT EXISTS tv_' in line or 'CREATE TABLE tv_' in line:
+                        # IF NOT EXISTS가 있는 경우와 없는 경우 모두 처리
+                        if 'IF NOT EXISTS' in line:
+                            table_name = line.split('CREATE TABLE IF NOT EXISTS')[1].split('(')[0].strip()
+                        else:
+                            table_name = line.split('CREATE TABLE')[1].split('(')[0].strip()
                         tv_table_names.append(table_name)
                 
                 # 새로운 테이블 식별 (기존에 없던 것들)
@@ -787,6 +802,34 @@ class MigrationPreviewFrame(tk.Frame):
             text_widget.delete(1.0, tk.END)
             text_widget.insert(tk.END, "📄 분석 결과가 초기화되었습니다.\n\n다시 분석하려면 상단 탭에서 분석을 실행하세요.")
             text_widget.config(state=tk.DISABLED)
+    
+    def load_default_schema(self):
+        """기본 스키마 파일 자동 로드"""
+        import os
+        
+        # 기본 스키마 파일 경로
+        default_schema_path = os.path.join(
+            os.path.dirname(__file__), 
+            "..", 
+            "data_info", 
+            "upbit_autotrading_unified_schema.sql"
+        )
+        
+        if os.path.exists(default_schema_path):
+            self.selected_schema_file = default_schema_path
+            
+            # 파일명 표시
+            filename = os.path.basename(default_schema_path)
+            self.schema_path_var.set(f"📄 {filename} (기본)")
+            
+            # 툴팁 설정
+            self.create_tooltip(self.schema_path_label, f"기본 스키마 파일:\n{default_schema_path}")
+            
+            # 스키마 분석 및 업데이트
+            self.analyze_schema_and_update_all(default_schema_path)
+        else:
+            # 기본 파일이 없으면 안내 메시지
+            self.schema_path_var.set("기본 스키마 파일 없음 - 파일을 선택하세요")
         
         # 요약도 초기화
         self.summary_text.config(state=tk.NORMAL)

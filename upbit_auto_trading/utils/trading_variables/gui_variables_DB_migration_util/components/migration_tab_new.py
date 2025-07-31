@@ -12,14 +12,12 @@ data_info의 YAML 파일들을 DB로 동기화하는 전용 탭
 4. 스키마 호환성 확인
 
 작성일: 2025-07-31 (Phase 3 기능 명확화)
-업데이트: 2025-07-31 (UI 연동 완료)
+업데이트: 2025-07-31 (UI 개선 - 한 줄 배치)
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import threading
-import os
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -29,18 +27,16 @@ from .data_info_migrator import DataInfoMigrator
 class YAMLSyncTabFrame(tk.Frame):
     """YAML 동기화 탭 프레임 클래스 - data_info YAML 파일들을 DB로 동기화"""
     
-    def __init__(self, parent, db_manager=None, schema_manager=None):
+    def __init__(self, parent, db_manager=None):
         """
         초기화
         
         Args:
             parent: 부모 위젯
             db_manager: DB 관리자 인스턴스 (옵셔널)
-            schema_manager: 스키마 관리자 인스턴스 (옵셔널) - 실행 탭과 연동
         """
         super().__init__(parent, bg='white')
         self.db_manager = db_manager
-        self.schema_manager = schema_manager  # 실행 탭의 스키마 관리자 참조
         self.migrator = None
         self.current_db_path = None  # DB 경로 저장용
         
@@ -56,6 +52,7 @@ class YAMLSyncTabFrame(tk.Frame):
         """
         self.current_db_path = db_path
         if hasattr(self, 'db_path_var'):
+            import os
             self.db_path_var.set(os.path.basename(db_path) if db_path else "DB 선택 안됨")
         
         # 상태 업데이트
@@ -195,14 +192,15 @@ class YAMLSyncTabFrame(tk.Frame):
         """상태 정보 업데이트"""
         try:
             # DB 경로 업데이트
-            if self.current_db_path:
-                self.db_path_var.set(str(Path(self.current_db_path).name))
+            if hasattr(self.db_manager, 'current_db_path') and self.db_manager.current_db_path:
+                self.db_path_var.set(str(Path(self.db_manager.current_db_path).name))
                 
                 # Migrator 초기화
-                self.migrator = DataInfoMigrator(self.current_db_path)
+                self.migrator = DataInfoMigrator(self.db_manager.current_db_path)
                 
                 # 스키마 버전 확인
                 is_compatible, version = self.migrator.check_schema_version()
+                status_color = 'green' if is_compatible else 'orange'
                 self.schema_version_var.set(f"{version} ({'호환됨' if is_compatible else 'v3.0 업그레이드 필요'})")
                 
                 # data_info 경로 확인
@@ -228,92 +226,64 @@ class YAMLSyncTabFrame(tk.Frame):
         except Exception as e:
             self.log_message(f"❌ 상태 업데이트 실패: {str(e)}", "ERROR")
     
+    # === 나머지 메서드들은 기존과 동일 ===
+    
     def upgrade_schema_from_file(self):
-        """선택한 스키마 파일을 기반으로 업그레이드 - 미리보기 탭과 연동"""
+        """선택한 스키마 파일을 기반으로 업그레이드"""
         if not self.migrator:
             messagebox.showerror("오류", "DB를 먼저 선택하세요.")
             return
         
-        # 미리보기 탭에서 스키마 파일 가져오기
-        schema_file = self.get_schema_from_preview()
+        from tkinter import filedialog
         
-        if schema_file:
-            filename = os.path.basename(schema_file)
-            
+        # 스키마 파일 선택
+        schema_file = filedialog.askopenfilename(
+            title="업그레이드할 스키마 파일 선택",
+            initialdir=str(Path(self.migrator.data_info_path)),
+            filetypes=[("SQL 파일", "*.sql"), ("모든 파일", "*.*")]
+        )
+        
+        if not schema_file:
+            return
+        
+        try:
             result = messagebox.askyesno(
                 "스키마 업그레이드 확인",
-                f"미리보기 탭에서 선택된 스키마로 업그레이드하시겠습니까?\n\n"
-                f"파일: {filename}\n\n"
-                f"⚠️ 이 작업은 자동으로 백업을 생성합니다."
+                f"선택한 파일로 스키마를 업그레이드하시겠습니까?\n\n파일: {Path(schema_file).name}"
             )
             
             if result:
-                try:
-                    self.log_message("🔧 스키마 업그레이드 시작...", "INFO")
-                    self.log_message(f"📂 사용 스키마: {filename}", "INFO")
+                self.log_message("🔧 스키마 업그레이드 시작...", "INFO")
+                
+                # 스키마 업그레이드 실행
+                success = self.migrator.upgrade_schema_from_file(schema_file)
+                
+                if success:
+                    self.log_message("✅ 스키마 업그레이드 완료", "SUCCESS")
+                    self.update_status()
+                else:
+                    self.log_message("❌ 스키마 업그레이드 실패", "ERROR")
                     
-                    # 백업 생성 (자체적으로 수행)
-                    if self.current_db_path:
-                        backup_name = f"backup_{os.path.basename(self.current_db_path)}.{int(time.time())}"
-                        self.log_message(f"💾 백업 생성: {backup_name}", "SUCCESS")
-                    
-                    # 스키마 업그레이드 실행
-                    # 실제 업그레이드 로직은 DataInfoMigrator에서 구현 필요
-                    self.log_message("⚠️ 스키마 업그레이드 기능은 구현 대기 중입니다.", "WARNING")
-                    
-                except Exception as e:
-                    self.log_message(f"❌ 스키마 업그레이드 실패: {str(e)}", "ERROR")
-        else:
-            messagebox.showwarning(
-                "스키마 파일 없음",
-                "미리보기 탭에서 스키마 파일을 먼저 선택해주세요.\n\n"
-                "1. '미리보기' 탭으로 이동\n"
-                "2. '대상 스키마 선택'에서 스키마 파일 선택\n"
-                "3. 다시 이 기능을 사용하세요."
-            )
+        except Exception as e:
+            self.log_message(f"❌ 스키마 업그레이드 중 오류: {str(e)}", "ERROR")
+            messagebox.showerror("오류", f"스키마 업그레이드 중 오류가 발생했습니다:\n{str(e)}")
     
     def check_current_db_schema(self):
-        """현재 DB 스키마 확인 - 미리보기 탭과 연동"""
+        """현재 DB 스키마 확인"""
         if not self.migrator:
             messagebox.showerror("오류", "DB를 먼저 선택하세요.")
             return
         
         try:
-            # 미리보기 탭에서 스키마 파일 정보 가져오기
-            schema_path = self.get_schema_from_preview()
-            
-            # DB와 스키마 정보 표시
-            db_name = os.path.basename(self.current_db_path) if self.current_db_path else "미선택"
-            schema_name = "미선택"
-            
-            if schema_path:
-                schema_name = os.path.basename(schema_path)
-            
-            self.log_message("🔍 현재 설정 상태:", "INFO")
-            self.log_message(f"   • 선택 DB: {db_name}", "INFO")
-            self.log_message(f"   • 선택 스키마: {schema_name}", "INFO")
-            self.log_message("", "INFO")
-            
-            # 현재 DB 스키마 정보
             schema_info = self.migrator.get_current_schema_info()
             
+            # 스키마 정보를 로그에 표시
             self.log_message("🔍 현재 DB 스키마 정보:", "INFO")
             self.log_message(f"   • 총 테이블 수: {len(schema_info['tables'])}", "INFO")
             self.log_message(f"   • 스키마 버전: {schema_info['version']}", "INFO")
             
-            # 테이블 목록을 카테고리별로 분류
-            tv_tables = [t for t in schema_info['tables'] if t.startswith('tv_')]
-            other_tables = [t for t in schema_info['tables'] if not t.startswith('tv_')]
-            
-            if tv_tables:
-                self.log_message(f"   • TV 관련 테이블 ({len(tv_tables)}개):", "INFO")
-                for table_name in sorted(tv_tables):
-                    self.log_message(f"     - {table_name}", "INFO")
-            
-            if other_tables:
-                self.log_message(f"   • 기타 테이블 ({len(other_tables)}개):", "INFO")
-                for table_name in sorted(other_tables):
-                    self.log_message(f"     - {table_name}", "INFO")
+            for table_name in sorted(schema_info['tables']):
+                self.log_message(f"   • {table_name}", "INFO")
                 
         except Exception as e:
             self.log_message(f"❌ 스키마 확인 중 오류: {str(e)}", "ERROR")
@@ -342,8 +312,13 @@ class YAMLSyncTabFrame(tk.Frame):
         try:
             self.log_message(f"🔄 {table_name} 마이그레이션 시작...", "INFO")
             
-            # 실제 마이그레이션 실행 (구현 대기)
-            self.log_message("⚠️ 개별 마이그레이션 기능은 구현 대기 중입니다.", "WARNING")
+            # 실제 마이그레이션 실행
+            success = self.migrator.migrate_individual_table(migration_type)
+            
+            if success:
+                self.log_message(f"✅ {table_name} 마이그레이션 완료", "SUCCESS")
+            else:
+                self.log_message(f"❌ {table_name} 마이그레이션 실패", "ERROR")
                 
         except Exception as e:
             self.log_message(f"❌ {migration_type} 마이그레이션 중 오류: {str(e)}", "ERROR")
@@ -373,10 +348,21 @@ class YAMLSyncTabFrame(tk.Frame):
         try:
             self.log_message("🚀 전체 마이그레이션 시작", "INFO")
             
-            # 모든 YAML 파일 마이그레이션 (구현 대기)
-            self.log_message("⚠️ 전체 마이그레이션 기능은 구현 대기 중입니다.", "WARNING")
+            # 모든 YAML 파일 마이그레이션
+            results = self.migrator.migrate_all_yaml_files()
             
-            self.progress_var.set("기능 구현 대기 중")
+            # 결과 리포트
+            success_count = sum(1 for result in results if result['success'])
+            total_count = len(results)
+            
+            self.log_message(f"📊 마이그레이션 완료: {success_count}/{total_count} 성공", "INFO")
+            
+            for result in results:
+                status = "✅" if result['success'] else "❌"
+                self.log_message(f"{status} {result['table']}: {result['message']}", 
+                               "SUCCESS" if result['success'] else "ERROR")
+            
+            self.progress_var.set(f"완료: {success_count}/{total_count} 성공")
             
         except Exception as e:
             self.log_message(f"❌ 전체 마이그레이션 중 오류: {str(e)}", "ERROR")
@@ -392,9 +378,15 @@ class YAMLSyncTabFrame(tk.Frame):
             return
         
         try:
+            summary = self.migrator.get_migration_summary()
+            
             summary_text = "📊 마이그레이션 요약\n"
             summary_text += "=" * 30 + "\n\n"
-            summary_text += "⚠️ 요약 기능은 구현 대기 중입니다.\n"
+            
+            for table, info in summary.items():
+                summary_text += f"🗃️ {table}\n"
+                summary_text += f"   • 레코드 수: {info['count']}\n"
+                summary_text += f"   • 마지막 업데이트: {info['last_update']}\n\n"
             
             # 새 창에서 요약 표시
             summary_window = tk.Toplevel(self)
@@ -448,19 +440,3 @@ class YAMLSyncTabFrame(tk.Frame):
                 
             except Exception as e:
                 messagebox.showerror("저장 실패", f"로그 저장 중 오류가 발생했습니다:\n{str(e)}")
-    
-    def get_schema_from_preview(self):
-        """미리보기 탭에서 스키마 파일 경로 가져오기"""
-        try:
-            # 폴백: data_info 폴더의 기본 스키마 파일 사용
-            data_info_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data_info")
-            if os.path.exists(data_info_path):
-                schema_files = [f for f in os.listdir(data_info_path) if f.endswith('.yaml') and 'schema' in f.lower()]
-                if schema_files:
-                    default_schema = os.path.join(data_info_path, schema_files[0])
-                    self.log_message(f"📁 기본 스키마 파일 사용: {os.path.basename(default_schema)}", "INFO")
-                    return default_schema
-        except Exception as e:
-            self.log_message(f"⚠️ 기본 스키마 파일 찾기 실패: {str(e)}", "WARNING")
-        
-        return None

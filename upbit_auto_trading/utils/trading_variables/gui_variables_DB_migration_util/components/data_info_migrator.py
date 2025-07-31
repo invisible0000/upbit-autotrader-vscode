@@ -463,6 +463,38 @@ class DataInfoMigrator:
         except Exception as e:
             self._log(f"요약 정보 조회 실패: {str(e)}", "ERROR")
             return {}
+    
+    def get_current_schema_info(self) -> Dict[str, Any]:
+        """현재 DB 스키마 정보 조회"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # 테이블 목록 조회
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # 스키마 버전 조회
+                version = "알 수 없음"
+                if 'tv_schema_version' in tables:
+                    cursor.execute("SELECT version FROM tv_schema_version ORDER BY version DESC LIMIT 1")
+                    version_row = cursor.fetchone()
+                    if version_row:
+                        version = version_row[0]
+                else:
+                    version = "v2.x (레거시)"
+                
+                return {
+                    'tables': tables,
+                    'version': version,
+                    'total_tables': len(tables)
+                }
+        except Exception as e:
+            return {
+                'tables': [],
+                'version': f"오류: {str(e)}",
+                'total_tables': 0
+            }
 
 
 def main():
