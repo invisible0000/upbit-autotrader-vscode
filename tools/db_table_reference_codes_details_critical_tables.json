@@ -1,0 +1,528 @@
+{
+  "analysis_info": {
+    "total_tables": 28,
+    "analyzed_tables": 3,
+    "total_files": 274,
+    "suspect_tables": [
+      "strategies",
+      "strategy_components",
+      "system_settings"
+    ],
+    "analyzer_version": "Super_v5.0_precise",
+    "total_references_found": 66
+  },
+  "table_references": {
+    "strategies": {
+      "code_reference_analyzer.py": [
+        {
+          "line_number": 29,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "code_reference_analyzer_v4.py": [
+        {
+          "line_number": 43,
+          "line_content": "# 'strategies',           # ❌ 제외 (확실히 사용)",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 51,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "db_analysis_tool.py": [
+        {
+          "line_number": 126,
+          "line_content": "'app_settings', 'system_settings', 'strategies',",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\business_logic\\component_strategy_manager.py": [
+        {
+          "line_number": 116,
+          "line_content": "def list_strategies(self, category: str = None, active_only: bool = True) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\business_logic\\strategy\\role_based_strategy.py": [
+        {
+          "line_number": 1306,
+          "line_content": "def _load_management_strategies(self) -> List[ManagementStrategy]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 1616,
+          "line_content": "def test_individual_strategies():",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\business_logic\\strategy\\strategy_factory.py": [
+        {
+          "line_number": 86,
+          "line_content": "def get_available_strategies(self) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 126,
+          "line_content": "def load_strategies_from_module(self, module_name: str) -> int:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\business_logic\\strategy\\trading_strategies.py": [
+        {
+          "line_number": 579,
+          "line_content": "def get_all_strategies(self) -> List[StrategyConfig]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 786,
+          "line_content": "def initialize_default_strategies():",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\component_system\\POSITION_BASED_ARCHITECTURE.py": [
+        {
+          "line_number": 460,
+          "line_content": "def execute_strategies_on_position(self,",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\component_system\\__init__.py": [
+        {
+          "line_number": 56,
+          "line_content": "from .strategies.pyramiding_example import (",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\config\\database_paths.py": [
+        {
+          "line_number": 64,
+          "line_content": "'strategies': 'settings.sqlite3',",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 209,
+          "line_content": "test_tables = ['trading_conditions', 'strategies', 'tv_trading_variables', 'market_data']",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\realtime_trade_screen.py": [
+        {
+          "line_number": 32,
+          "line_content": "def load_strategies(self):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 34,
+          "line_content": "self.active_strategy_table.setRowCount(len(self.strategies))",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 65,
+          "line_content": "def fetch_strategies(self):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\components\\database_config_tab.py": [
+        {
+          "line_number": 83,
+          "line_content": "'strategies_db': self.new_config.get('strategies', ''),",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 182,
+          "line_content": "self.strategies_path_edit.setPlaceholderText(\"strategies.sqlite3 파일을 선택하세요...\")",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 184,
+          "line_content": "self.strategies_browse_btn.clicked.connect(lambda: self.browse_database_file('strategies'))",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 287,
+          "line_content": "elif db_type == 'strategies':",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 376,
+          "line_content": "'strategies': self.strategies_path_edit.text().strip(),",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\live_trading\\live_trading_screen.py": [
+        {
+          "line_number": 83,
+          "line_content": "def stop_all_strategies(self):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\live_trading\\components\\active_strategies_panel.py": [
+        {
+          "line_number": 15,
+          "line_content": "class ActiveStrategiesPanel(QWidget):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "class\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 159,
+          "line_content": "def update_table_data(self, strategies):",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 161,
+          "line_content": "self.strategies_table.setRowCount(len(strategies))",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 279,
+          "line_content": "def stop_all_strategies(self):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\settings\\database_settings.py": [
+        {
+          "line_number": 123,
+          "line_content": "'strategies_db': self.new_config.get('strategies', ''),",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 261,
+          "line_content": "self.strategies_path_edit.setPlaceholderText(\"strategies.sqlite3 파일을 선택하세요...\")",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 263,
+          "line_content": "self.strategies_browse_btn.clicked.connect(lambda: self._browse_database_file('strategies'))",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 373,
+          "line_content": "elif db_type == 'strategies':",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 462,
+          "line_content": "'strategies': strategies_path,",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 547,
+          "line_content": "self.strategies_path_edit.setText(\"upbit_auto_trading/data/strategies.sqlite3\")",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\condition_storage.py": [
+        {
+          "line_number": 76,
+          "line_content": "if 'strategies' not in existing_tables:",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 272,
+          "line_content": "def get_all_strategies(self) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        },
+        {
+          "line_number": 424,
+          "line_content": "def get_active_strategies(self) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\condition_storage.py": [
+        {
+          "line_number": 66,
+          "line_content": "if 'strategies' not in existing_tables:",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        }
+      ],
+      "upbit_auto_trading\\ui\\web\\app.py": [
+        {
+          "line_number": 53,
+          "line_content": "def strategies():",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategies",
+          "pattern": "def\\s+.*strategies.*\\("
+        }
+      ],
+      "upbit_auto_trading\\utils\\global_db_manager.py": [
+        {
+          "line_number": 79,
+          "line_content": "'strategies': Path(config['strategies_db']),",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 85,
+          "line_content": "print(f\"   Strategies DB: {self._db_paths['strategies']}\")",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 102,
+          "line_content": "'strategies': default_data_dir / \"strategies.sqlite3\",",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 123,
+          "line_content": "print(f\"전략 DB: {self._db_paths['strategies']}\")",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 153,
+          "line_content": "self._table_mappings[table] = 'strategies'",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 167,
+          "line_content": "'strategies': 'settings',",
+          "match_type": "sql_context",
+          "table_name": "strategies"
+        },
+        {
+          "line_number": 173,
+          "line_content": "'strategy_execution': 'strategies',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 174,
+          "line_content": "'migration_info': 'strategies',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 236,
+          "line_content": "'strategies': new_data_dir / \"strategies.sqlite3\",",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        },
+        {
+          "line_number": 242,
+          "line_content": "print(f\"   Strategies DB: {self._db_paths['strategies']}\")",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategies",
+          "pattern": "[\"\\']strategies[\"\\']"
+        }
+      ]
+    },
+    "strategy_components": {
+      "code_reference_analyzer.py": [
+        {
+          "line_number": 29,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        }
+      ],
+      "code_reference_analyzer_v4.py": [
+        {
+          "line_number": 44,
+          "line_content": "# 'strategy_components',  # ❌ 제외 (확실히 사용)",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategy_components",
+          "pattern": "[\"\\']strategy_components[\"\\']"
+        },
+        {
+          "line_number": 51,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        }
+      ],
+      "db_analysis_tool.py": [
+        {
+          "line_number": 127,
+          "line_content": "'strategy_components', 'strategy_conditions', 'strategy_execution'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "strategy_components",
+          "pattern": "[\"\\']strategy_components[\"\\']"
+        }
+      ],
+      "upbit_auto_trading\\config\\database_paths.py": [
+        {
+          "line_number": 66,
+          "line_content": "'strategy_components': 'settings.sqlite3',",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 91,
+          "line_content": "CREATE TABLE IF NOT EXISTS strategy_components (",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 160,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 176,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 192,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 233,
+          "line_content": "FROM strategy_components",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 313,
+          "line_content": "cursor.execute(\"DELETE FROM strategy_components WHERE strategy_id = ?\", (strategy_id,))",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        },
+        {
+          "line_number": 368,
+          "line_content": "cursor.execute(\"DELETE FROM strategy_components WHERE strategy_id = ?\", (strategy_id,))",
+          "match_type": "sql_context",
+          "table_name": "strategy_components"
+        }
+      ]
+    },
+    "system_settings": {
+      "code_reference_analyzer.py": [
+        {
+          "line_number": 29,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "system_settings"
+        }
+      ],
+      "code_reference_analyzer_v4.py": [
+        {
+          "line_number": 45,
+          "line_content": "# 'system_settings',      # ❌ 제외 (확실히 사용)",
+          "match_type": "sql_context",
+          "table_name": "system_settings"
+        },
+        {
+          "line_number": 51,
+          "line_content": "'strategies', 'strategy_components', 'system_settings'",
+          "match_type": "sql_context",
+          "table_name": "system_settings"
+        }
+      ],
+      "db_analysis_tool.py": [
+        {
+          "line_number": 126,
+          "line_content": "'app_settings', 'system_settings', 'strategies',",
+          "match_type": "sql_context",
+          "table_name": "system_settings"
+        }
+      ],
+      "upbit_auto_trading\\config\\database_paths.py": [
+        {
+          "line_number": 73,
+          "line_content": "'system_settings': 'settings.sqlite3',",
+          "match_type": "sql_context",
+          "table_name": "system_settings"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "strategies": {
+      "total_references": 49,
+      "affected_files": 20,
+      "avg_refs_per_file": 2.45
+    },
+    "strategy_components": {
+      "total_references": 12,
+      "affected_files": 5,
+      "avg_refs_per_file": 2.4
+    },
+    "system_settings": {
+      "total_references": 5,
+      "affected_files": 4,
+      "avg_refs_per_file": 1.25
+    }
+  }
+}

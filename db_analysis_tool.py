@@ -144,6 +144,14 @@ class DatabaseAnalyzer:
             'component_strategy', 'sqlite_sequence'
         }
         
+        # 트리거 빌더 시스템 테이블 (새로운 스키마에서 유지)
+        trigger_builder_tables = {
+            'tv_comparison_groups', 'tv_help_texts', 'tv_indicator_categories',
+            'tv_indicator_library', 'tv_parameter_types', 'tv_placeholder_texts',
+            'tv_schema_version', 'tv_trading_variables', 'tv_variable_parameters',
+            'tv_workflow_guides'
+        }
+        
         if table_name in critical_tables:
             if record_count > 0:
                 return "🔴 CRITICAL (데이터 있음)"
@@ -158,6 +166,11 @@ class DatabaseAnalyzer:
             return "🔵 SIMULATION"
         elif table_name in system_tables:
             return "🟢 SYSTEM/LOG"
+        elif table_name in trigger_builder_tables:
+            if record_count > 0:
+                return "🟦 TRIGGER_BUILDER (데이터 있음) - 유지됨"
+            else:
+                return "🟦 TRIGGER_BUILDER (데이터 없음) - 유지됨"
         else:
             return "⚪ UNKNOWN"
     
@@ -175,6 +188,8 @@ class DatabaseAnalyzer:
             'important_no_data': [],
             'simulation': [],
             'system': [],
+            'trigger_builder_with_data': [],
+            'trigger_builder_no_data': [],
             'unknown': []
         }
         
@@ -196,6 +211,10 @@ class DatabaseAnalyzer:
                 risk_categories['simulation'].append((table, count))
             elif "SYSTEM" in risk_level:
                 risk_categories['system'].append((table, count))
+            elif "TRIGGER_BUILDER" in risk_level and "데이터 있음" in risk_level:
+                risk_categories['trigger_builder_with_data'].append((table, count))
+            elif "TRIGGER_BUILDER" in risk_level and "데이터 없음" in risk_level:
+                risk_categories['trigger_builder_no_data'].append((table, count))
             else:
                 risk_categories['unknown'].append((table, count))
         
@@ -224,6 +243,14 @@ class DatabaseAnalyzer:
         for table, count in risk_categories['system']:
             print(f"  🔧 {table}: {count:,}개 레코드")
         
+        print("\n🟦 **유지됨** - 트리거 빌더 시스템 (데이터 있음):")
+        for table, count in risk_categories['trigger_builder_with_data']:
+            print(f"  🔄 {table}: {count:,}개 레코드 ← 새 스키마에서 유지")
+        
+        print("\n🟦 **유지됨** - 트리거 빌더 시스템 (데이터 없음):")
+        for table, count in risk_categories['trigger_builder_no_data']:
+            print(f"  🔄 {table}: {count}개 레코드 ← 새 스키마에서 유지")
+        
         if risk_categories['unknown']:
             print("\n⚪ **미분류** - 추가 분석 필요:")
             for table, count in risk_categories['unknown']:
@@ -232,15 +259,29 @@ class DatabaseAnalyzer:
         # 요약
         total_critical_data = len(risk_categories['critical_with_data'])
         total_important_data = len(risk_categories['important_with_data'])
+        total_trigger_builder = len(risk_categories['trigger_builder_with_data']) + len(risk_categories['trigger_builder_no_data'])
         
         print(f"\n📋 **위험도 요약**:")
         print(f"  🔴 데이터 보유 핵심 테이블: {total_critical_data}개")
         print(f"  🟡 데이터 보유 중요 테이블: {total_important_data}개")
+        print(f"  🟦 유지되는 트리거 빌더 테이블: {total_trigger_builder}개")
         print(f"  ⚠️ 총 위험 테이블: {total_critical_data + total_important_data}개")
         
         if total_critical_data > 0:
             print(f"\n🚨 **긴급 권고**: {total_critical_data}개의 핵심 테이블에 데이터가 있습니다.")
             print("   현재 상태로 마이그레이션 시 프로그램이 작동하지 않을 수 있습니다!")
+            
+        print(f"\n💡 **마이그레이션 분석**:")
+        print(f"  ✅ 안전하게 유지: {total_trigger_builder}개 (트리거 빌더 시스템)")
+        print(f"  ⚠️ 삭제 위험: {total_critical_data + total_important_data}개 (핵심/중요 테이블)")
+        
+        # 삭제될 테이블 중 데이터가 있는 것들
+        total_deletion_risk = 0
+        for category in ['critical_with_data', 'important_with_data', 'simulation', 'system']:
+            total_deletion_risk += len(risk_categories[category])
+        
+        if total_deletion_risk > 0:
+            print(f"  🚨 데이터 손실 위험: {total_deletion_risk}개 테이블이 삭제될 예정입니다!")
     
     def run_full_analysis(self) -> Dict[str, Any]:
         """전체 분석 실행"""

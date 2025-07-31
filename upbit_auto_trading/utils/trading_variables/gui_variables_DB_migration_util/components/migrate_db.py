@@ -113,31 +113,37 @@ class TradingVariablesDBMigration:
                 tables = [row[0] for row in cursor.fetchall()]
                 analysis["tables"] = tables
                 
-                # 새 스키마 테이블 확인
-                new_schema_tables = ["tv_trading_variables", "tv_variable_parameters", "tv_comparison_groups"]
-                for table in new_schema_tables:
-                    if table in tables:
+                # 스키마 파일에서 정의된 테이블 목록 가져오기
+                schema_tables = self._get_schema_tables()
+                
+                # 새 스키마 테이블 확인 (tv_ 접두사)
+                for table in tables:
+                    if table.startswith('tv_') and table in schema_tables:
                         analysis["new_tables"].append(table)
                         analysis["has_new_schema"] = True
                 
-                # 레거시 테이블 식별
-                legacy_patterns = [
-                    "trading_variables",    # 접두사 없는 구버전
-                    "variable_parameters",  # 접두사 없는 구버전
-                ]
+                # 레거시 테이블 식별 (스키마 기반)
+                # 하드코딩 제거: 이전 방식 (주석)
+                # legacy_patterns = [
+                #     "trading_variables",    # 접두사 없는 구버전
+                #     "variable_parameters",  # 접두사 없는 구버전
+                # ]
                 
                 for table in tables:
-                    if table in legacy_patterns:
-                        analysis["legacy_tables"].append(table)
-                        analysis["has_legacy"] = True
-                        
-                        # 데이터 개수 확인
-                        try:
-                            cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                            count = cursor.fetchone()[0]
-                            analysis["data_count"][table] = count
-                        except sqlite3.Error:
-                            analysis["data_count"][table] = 0
+                    # tv_ 접두사가 없고 스키마에 정의되지 않은 테이블을 레거시로 간주
+                    if not table.startswith('tv_') and table not in schema_tables:
+                        # sqlite 시스템 테이블 제외
+                        if not table.startswith('sqlite_'):
+                            analysis["legacy_tables"].append(table)
+                            analysis["has_legacy"] = True
+                            
+                            # 데이터 개수 확인
+                            try:
+                                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                                count = cursor.fetchone()[0]
+                                analysis["data_count"][table] = count
+                            except sqlite3.Error:
+                                analysis["data_count"][table] = 0
                 
                 # 마이그레이션 필요 여부 판단
                 if not analysis["has_new_schema"]:
@@ -163,7 +169,10 @@ class TradingVariablesDBMigration:
     
     def remove_legacy_tables(self, conn: sqlite3.Connection) -> bool:
         """
-        레거시 테이블 완전 제거
+        레거시 테이블 완전 제거 (스키마 파일 기반)
+        
+        스키마 파일에서 정의된 테이블과 현재 DB의 테이블을 비교하여
+        스키마에 없는 테이블을 레거시로 간주하고 제거합니다.
         
         Args:
             conn: DB 연결 객체
@@ -171,12 +180,32 @@ class TradingVariablesDBMigration:
         Returns:
             성공 여부
         """
-        legacy_tables = [
-            "trading_variables",
-            "variable_parameters", 
-            "comparison_groups",
-            "schema_version"
-        ]
+        # 하드코딩 제거: 이전 방식 (주석)
+        # legacy_tables = [
+        #     "trading_variables",      # → tv_trading_variables로 대체됨
+        #     "variable_parameters",    # → tv_variable_parameters로 대체됨  
+        #     "comparison_groups",      # → tv_comparison_groups로 대체됨
+        #     "schema_version"          # → tv_schema_version으로 대체됨
+        # ]
+        
+        # 새로운 방식: 스키마 파일에서 정의된 테이블 목록 가져오기
+        schema_tables = self._get_schema_tables()
+        current_tables = self._get_current_tables(conn)
+        
+        # 스키마에 없는 테이블을 레거시로 간주
+        legacy_tables = []
+        for table in current_tables:
+            # tv_ 접두사가 없고 스키마에 정의되지 않은 테이블
+            if not table.startswith('tv_') and table not in schema_tables:
+                # sqlite 시스템 테이블 제외
+                if not table.startswith('sqlite_'):
+                    legacy_tables.append(table)
+        
+        if not legacy_tables:
+            self._log("ℹ️ 제거할 레거시 테이블이 없습니다.", "INFO")
+            return True
+            
+        self._log(f"🔍 발견된 레거시 테이블: {', '.join(legacy_tables)}", "INFO")
         
         cursor = conn.cursor()
         removed_count = 0
@@ -205,6 +234,44 @@ class TradingVariablesDBMigration:
             self._log("ℹ️ 제거할 레거시 테이블이 없습니다.", "INFO")
         
         return True
+    
+    def _get_schema_tables(self) -> set:
+        """스키마 파일에서 정의된 테이블 목록 가져오기"""
+        schema_tables = set()
+        
+        try:
+            if os.path.exists(self.schema_file):
+                with open(self.schema_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    
+                # CREATE TABLE 구문에서 테이블명 추출
+                import re
+                table_pattern = r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)'
+                matches = re.findall(table_pattern, content, re.IGNORECASE)
+                
+                for match in matches:
+                    schema_tables.add(match)
+                    
+                self._log(f"📋 스키마 파일에서 {len(schema_tables)}개 테이블 발견", "INFO")
+                
+        except Exception as e:
+            self._log(f"⚠️ 스키마 파일 읽기 실패: {e}", "WARNING")
+            
+        return schema_tables
+    
+    def _get_current_tables(self, conn: sqlite3.Connection) -> list:
+        """현재 DB의 테이블 목록 가져오기"""
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            
+            self._log(f"📊 현재 DB에 {len(tables)}개 테이블 존재", "INFO")
+            return tables
+            
+        except Exception as e:
+            self._log(f"⚠️ 현재 테이블 목록 조회 실패: {e}", "ERROR")
+            return []
     
     def apply_new_schema(self, conn: sqlite3.Connection) -> bool:
         """
