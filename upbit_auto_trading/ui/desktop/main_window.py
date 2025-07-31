@@ -3,6 +3,9 @@
 """
 import sys
 import os
+import json
+import sqlite3
+import gc
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
     QStackedWidget, QMessageBox, QApplication, QLabel
@@ -174,6 +177,12 @@ class MainWindow(QMainWindow):
         # 상태 바 설정
         self.status_bar = StatusBar()
         self.setStatusBar(self.status_bar)
+        
+        # 초기 API 연결 상태 확인
+        self._check_initial_api_status()
+        
+        # 초기 DB 연결 상태 확인
+        self._check_initial_db_status()
         
         # 메뉴 바 설정
         self._setup_menu_bar()
@@ -356,6 +365,11 @@ class MainWindow(QMainWindow):
             elif screen_name == "설정":
                 from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
                 screen = SettingsScreen()
+                # API 상태 변경 시그널 연결
+                if hasattr(screen, 'api_status_changed'):
+                    screen.api_status_changed.connect(self._on_api_status_changed)
+                else:
+                    print("⚠️ SettingsScreen에 api_status_changed 시그널이 없습니다")
                 
             else:
                 print(f"❌ 알 수 없는 화면: {screen_name}")
@@ -573,3 +587,156 @@ class MainWindow(QMainWindow):
             print(f"❌ 백테스팅 요청 처리 실패: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _on_api_status_changed(self, connected):
+        """API 연결 상태 변경 시 호출되는 메서드"""
+        try:
+            # 상태바의 API 연결 상태 업데이트
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_api_status(connected)
+                print(f"📊 API 연결 상태 업데이트: {'연결됨' if connected else '연결 끊김'}")
+            else:
+                print("⚠️ 상태바를 찾을 수 없습니다")
+        except Exception as e:
+            print(f"❌ API 상태 업데이트 실패: {e}")
+    
+    def _check_initial_db_status(self):
+        """애플리케이션 시작 시 DB 연결 상태 확인"""
+        try:
+            # data 디렉터리 경로 설정
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            data_dir = os.path.join(base_dir, '../../data')
+            db_path = os.path.join(data_dir, "settings.sqlite3")
+            
+            db_connected = False
+            show_warning = False
+            warning_message = ""
+            
+            # DB 파일 존재 여부 확인
+            if not os.path.exists(db_path):
+                warning_message = f"DB 파일이 존재하지 않습니다.\n경로: {db_path}\n\n새로 설치했거나 파일이 손상되었을 수 있습니다."
+                show_warning = True
+                print(f"❌ DB 파일 없음: {os.path.basename(db_path)}")
+            else:
+                try:
+                    import sqlite3
+                    # 실제 DB 연결 테스트
+                    with sqlite3.connect(db_path) as conn:
+                        cursor = conn.cursor()
+                        # 간단한 쿼리로 연결 확인
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
+                        result = cursor.fetchone()
+                        
+                        if result:
+                            db_connected = True
+                            print(f"✅ DB 연결 성공: {os.path.basename(db_path)}")
+                        else:
+                            warning_message = f"DB 파일이 비어있거나 손상되었습니다.\n경로: {db_path}\n\n데이터베이스를 다시 초기화해야 할 수 있습니다."
+                            show_warning = True
+                            print(f"❌ DB가 비어있음: {os.path.basename(db_path)}")
+                            
+                except Exception as e:
+                    warning_message = f"DB 연결에 실패했습니다.\n경로: {db_path}\n오류: {str(e)}\n\n데이터베이스 파일이 손상되었을 수 있습니다."
+                    show_warning = True
+                    print(f"❌ DB 연결 실패: {str(e)}")
+                    db_connected = False
+            
+            # 상태바 DB 상태 설정
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_db_status(db_connected)
+                print(f"🗄️ 초기 DB 상태: {'연결됨' if db_connected else '연결 끊김'}")
+            
+            # DB 문제가 있는 경우 콘솔에만 로그 출력 (알림 비활성화)
+            if show_warning:
+                print(f"⚠️ DB 상태 경고: {warning_message}")
+                # 사용자 알림은 표시하지 않음 (조용한 체크)
+            
+        except Exception as e:
+            print(f"❌ 초기 DB 상태 확인 실패: {e}")
+            # 오류 발생 시 연결 끊김으로 설정
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_db_status(False)
+    
+    def _check_initial_api_status(self):
+        """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인"""
+        try:
+            # data 디렉터리 경로 설정
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            data_dir = os.path.join(base_dir, '../../data')
+            settings_dir = os.path.join(data_dir, "settings")
+            api_keys_path = os.path.join(settings_dir, "api_keys.json")
+            
+            # API 키 파일 존재 여부 확인
+            if not os.path.exists(api_keys_path):
+                # API 키 파일이 없는 경우
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(False)
+                print("🔑 API 키 파일이 없습니다. 설정에서 API 키를 등록해주세요.")
+                return
+            
+            # API 키가 있는 경우 실제 통신 테스트
+            print("🔑 API 키 파일 발견 - 연결 테스트 중...")
+            
+            try:
+                from cryptography.fernet import Fernet
+                
+                # 암호화 키 로드
+                key_dir = os.path.join(settings_dir)
+                key_path = os.path.join(key_dir, "encryption_key.key")
+                
+                if not os.path.exists(key_path):
+                    print("❌ 암호화 키 파일이 없습니다")
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(False)
+                    return
+                
+                with open(key_path, "rb") as key_file:
+                    encryption_key = key_file.read()
+                fernet = Fernet(encryption_key)
+                
+                # API 키 복호화
+                with open(api_keys_path, "r", encoding='utf-8') as f:
+                    settings = json.load(f)
+                
+                if "access_key" not in settings or "secret_key" not in settings:
+                    print("❌ API 키 정보가 불완전합니다")
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(False)
+                    return
+                
+                access_key = fernet.decrypt(settings["access_key"].encode()).decode()
+                secret_key = fernet.decrypt(settings["secret_key"].encode()).decode()
+                
+                # 실제 API 통신 테스트
+                from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
+                api = UpbitAPI(access_key, secret_key)
+                accounts = api.get_account()
+                
+                # 메모리에서 키 삭제
+                access_key = ""
+                secret_key = ""
+                gc.collect()
+                
+                if accounts:
+                    # API 통신 성공
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(True)
+                    print("✅ API 연결 테스트 성공 - 정상 연결됨")
+                else:
+                    # API 응답이 없음
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(False)
+                    print("❌ API 연결 테스트 실패 - 계좌 정보 조회 불가")
+                    
+            except Exception as api_e:
+                # API 통신 오류
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(False)
+                print(f"❌ API 연결 테스트 실패: {str(api_e)}")
+                # 조용한 테스트이므로 사용자에게 팝업은 표시하지 않음
+            
+        except Exception as e:
+            print(f"❌ 초기 API 상태 확인 실패: {e}")
+            # 오류 발생 시 연결 끊김으로 설정
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_api_status(False)

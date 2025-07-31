@@ -8,7 +8,7 @@
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, 
+    QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QPushButton, QLabel, QSpacerItem, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -23,6 +23,7 @@ class SettingsScreen(QWidget):
     
     # 설정 변경 시그널
     settings_changed = pyqtSignal()
+    api_status_changed = pyqtSignal(bool)  # API 상태 변경 시그널 추가
     
     def __init__(self, parent=None):
         """초기화"""
@@ -111,6 +112,7 @@ class SettingsScreen(QWidget):
         
         # 각 설정 위젯의 설정 변경 시그널 연결
         self.api_key_manager.settings_changed.connect(self._on_settings_changed)
+        self.api_key_manager.api_status_changed.connect(self._on_api_status_changed)  # API 상태 시그널 연결
         self.database_settings.settings_changed.connect(self._on_settings_changed)
         self.notification_settings.settings_changed.connect(self._on_settings_changed)
     
@@ -135,3 +137,9 @@ class SettingsScreen(QWidget):
         """설정 변경 시 호출되는 메서드"""
         # 설정 변경 시그널 발생
         self.settings_changed.emit()
+        
+    def _on_api_status_changed(self, connected):
+        """API 연결 상태 변경 시 호출되는 메서드"""
+        # API 상태 변경 시그널을 상위로 전달
+        self.api_status_changed.emit(connected)
+        

@@ -46,7 +46,7 @@ data/backups/
 .env.development
 .env.production
 
-# API 키 파일 (보안)
+# API 키 및 암호화 파일 (보안 최우선)
 *_key.txt
 *_keys.txt
 *_api_key.txt
@@ -54,6 +54,11 @@ data/backups/
 api_keys.json
 credentials.json
 secrets.yaml
+# 새로운 구조의 보안 파일들
+data/settings/encryption_key.key
+data/settings/api_keys.json
+data/settings/*.key
+data/settings/*.json
 
 # IDE 관련
 .idea/
