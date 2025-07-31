@@ -1,6 +1,6 @@
 -- Upbit Auto Trading Unified Schema
 -- 완전한 통합 스키마 (settings DB에서 추출)
--- 생성일: 2025-07-31 16:00:09
+-- 생성일: 2025-07-31 15:59:45
 -- 추출 도구: Super Schema Extractor
 PRAGMA foreign_keys = ON;
 

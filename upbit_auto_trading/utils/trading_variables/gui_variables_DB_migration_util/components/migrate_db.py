@@ -5,7 +5,7 @@ GUI 컴포넌트에서 사용하는 마이그레이션 클래스
 
 주요 기능:
 1. GUI 환경에 최적화된 진행 상황 보고
-2. 기존 schema_new02.sql을 사용한 마이그레이션
+2. 사용자 선택 스키마 파일을 이용한 마이그레이션
 3. 안전한 백업 및 복원 기능
 4. 실시간 로그 및 진행 상황 업데이트
 
@@ -23,12 +23,17 @@ from typing import Dict, Any, Callable, Optional
 class TradingVariablesDBMigration:
     """GUI용 Trading Variables DB 마이그레이션 클래스"""
     
-    def __init__(self, db_path: str, progress_callback: Optional[Callable] = None, log_callback: Optional[Callable] = None):
+    def __init__(self,
+                 db_path: str,
+                 schema_file: str = None,
+                 progress_callback: Optional[Callable] = None,
+                 log_callback: Optional[Callable] = None):
         """
         초기화
         
         Args:
             db_path: DB 파일 경로
+            schema_file: 스키마 파일 경로 (None이면 기본 경로 사용)
             progress_callback: 진행 상황 콜백 함수 (message, percentage)
             log_callback: 로그 메시지 콜백 함수 (message, level)
         """
@@ -37,14 +42,38 @@ class TradingVariablesDBMigration:
         self.log_callback = log_callback
         self.backup_path = None
         
-        # 스키마 파일 경로 설정 (GUI 컴포넌트 기준)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        gui_util_dir = os.path.dirname(current_dir)  # gui_variables_DB_migration_util
-        trading_vars_dir = os.path.dirname(gui_util_dir)  # trading_variables
-        self.schema_file = os.path.join(trading_vars_dir, "schema_new02.sql")
+        # 스키마 파일 경로 설정
+        if schema_file and os.path.exists(schema_file):
+            # 사용자가 선택한 스키마 파일 사용
+            self.schema_file = schema_file
+            self._log(f"📄 사용자 선택 스키마: {self.schema_file}", "INFO")
+        else:
+            # 기본 스키마 파일 경로 (GUI 컴포넌트 기준)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            gui_util_dir = os.path.dirname(current_dir)  # gui_variables_DB_migration_util
+            data_info_dir = os.path.join(gui_util_dir, "data_info")  # data_info 폴더
+            self.schema_file = os.path.join(data_info_dir, "upbit_autotrading_unified_schema.sql")
+            self._log(f"📄 기본 스키마: {self.schema_file}", "INFO")
         
         self._log(f"🎯 DB 경로: {self.db_path}", "INFO")
-        self._log(f"📄 스키마 파일: {self.schema_file}", "INFO")
+    
+    def set_schema_file(self, schema_file: str) -> bool:
+        """
+        스키마 파일 경로 설정 (GUI에서 파일 선택 후 호출)
+        
+        Args:
+            schema_file: 새로운 스키마 파일 경로
+            
+        Returns:
+            설정 성공 여부
+        """
+        if schema_file and os.path.exists(schema_file):
+            self.schema_file = schema_file
+            self._log(f"📄 스키마 파일 변경: {self.schema_file}", "INFO")
+            return True
+        else:
+            self._log(f"❌ 스키마 파일을 찾을 수 없습니다: {schema_file}", "ERROR")
+            return False
     
     def _log(self, message: str, level: str = "INFO"):
         """로그 메시지 출력"""
@@ -275,7 +304,7 @@ class TradingVariablesDBMigration:
     
     def apply_new_schema(self, conn: sqlite3.Connection) -> bool:
         """
-        새로운 스키마 적용 (schema_new02.sql 사용)
+        새로운 스키마 적용 (사용자 선택 스키마 파일 사용)
         
         Args:
             conn: DB 연결 객체
