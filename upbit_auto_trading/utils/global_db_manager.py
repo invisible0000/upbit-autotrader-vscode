@@ -160,16 +160,16 @@ class DatabaseManager:
         else:
             # 백업용 기본 매핑
             self._table_mappings = {
-                # Settings DB 테이블들
-                'trading_conditions': 'settings',
+                # Settings DB 테이블들 (설정 및 변수 정의)
                 'chart_variables': 'settings',
-                'component_strategy': 'settings',
-                'strategies': 'settings',
+                'component_strategy': 'settings', 
                 'tv_trading_variables': 'settings',
                 'tv_comparison_groups': 'settings',
                 'tv_schema_version': 'settings',
                 
-                # Strategies DB 테이블들
+                # Strategies DB 테이블들 (사용자 생성 데이터)
+                'trading_conditions': 'strategies',  # 🔧 strategies DB로 수정
+                'strategies': 'strategies',
                 'strategy_execution': 'strategies',
                 'migration_info': 'strategies',
                 
@@ -180,6 +180,7 @@ class DatabaseManager:
                 'portfolios': 'market_data'
             }
             print(f"⚠️ 백업용 테이블 매핑 사용 ({len(self._table_mappings)}개 테이블)")
+            print(f"   📊 trading_conditions → strategies DB 매핑 확인")
         
     def get_connection(self, table_name: str) -> sqlite3.Connection:
         """

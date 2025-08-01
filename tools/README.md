@@ -30,6 +30,7 @@
 - `super_db_health_monitor.py` ✅ - 3-Database 실시간 모니터링 및 성능 추적
 - `super_db_schema_validator.py` ✅ - 스키마 정합성 검증 및 네이밍 규칙 검사
 - `super_db_rollback_manager.py` ✅ - 안전한 롤백 및 복구 관리
+- `super_db_debug_path_mapping.py` ✅ **NEW** - DB 경로 및 매핑 문제 진단 및 해결
 
 #### 📊 Analysis Tools (분석 도구)
 - `super_code_reference_analyzer.py` - 코드 참조 관계 분석
@@ -176,7 +177,32 @@ python tools/super_db_schema_validator.py --check consistency --detailed
 - 🔗 관계 무결성: FK 정합성, 순환 참조 검사 100점
 - 📋 완성도 평가: 마이그레이션 상태 종합 분석
 
-### 🔄 super_db_rollback_manager.py ✅ **NEW**
+### � super_db_debug_path_mapping.py ✅ **NEW**
+**목적**: DB 경로 및 매핑 문제 진단 및 해결
+```powershell
+# 사용법
+python tools/super_db_debug_path_mapping.py                    # 전체 진단
+python tools/super_db_debug_path_mapping.py --full-test        # 상세 리포트 포함
+python tools/super_db_debug_path_mapping.py --table-mapping-check  # 테이블 매핑만
+python tools/super_db_debug_path_mapping.py --connection-test      # 연결 테스트만
+
+# 출력 정보
+- 3-Database 경로 설정 검증 (settings/strategies/market_data)
+- 53개 테이블 매핑 정확성 확인
+- DB 연결 상태 및 스키마 검증
+- Global DB Manager 상태 진단
+- 실제 데이터 로딩 테스트 (TV 변수, 조건 등)
+```
+
+**핵심 기능**:
+- 🔍 경로 문제 진단: 3개 DB 파일 존재성, 크기, 권한 확인
+- 🗂️ 매핑 검증: 53개 테이블의 올바른 DB 할당 확인
+- 🔌 연결 테스트: SQLite 연결 상태 및 스키마 검증
+- 🌐 Global Manager: DB 매니저 컴포넌트 상태 확인
+- 📊 데이터 검증: 실제 TV 변수, 조건 데이터 로딩 테스트
+- 📋 종합 리포트: 성공률, 문제점, 권장사항 제공
+
+**사용 시점**: DB 관련 오류 발생 시 최우선 실행 도구
 **목적**: 마이그레이션 실패 시 안전한 롤백 및 복구 관리
 ```powershell
 # 사용법
@@ -216,6 +242,7 @@ python tools/super_db_rollback_manager.py --cleanup-old --days 30
 # Phase 1: 사전 준비
 python tools/super_db_rollback_manager.py --create-checkpoint "pre_migration"
 python tools/super_db_health_monitor.py --mode diagnose --all-dbs
+python tools/super_db_debug_path_mapping.py  # 새로운 경로 진단 도구
 
 # Phase 2: 검증
 python tools/super_db_schema_validator.py --check all --all-dbs
@@ -256,13 +283,14 @@ python tools/super_db_rollback_manager.py --rollback "pre_migration"
 
 ## 🎉 **Super DB 도구 시스템 완성** ✅
 
-**총 11개 도구로 구성된 완전한 DB 관리 생태계가 완성되었습니다!**
+**총 12개 도구로 구성된 완전한 DB 관리 생태계가 완성되었습니다!**
 
 ### 📊 **달성된 품질 지표**
 - **안전성**: 체크포인트 + 롤백으로 Zero 데이터 손실
 - **신뢰성**: 98.1점 스키마 품질, 100점 관계 무결성
 - **효율성**: 94.4점 네이밍 규칙, 실시간 모니터링
-- **완성도**: 11개 도구 완전 통합, 자동화된 워크플로우
+- **완성도**: 12개 도구 완전 통합, 자동화된 워크플로우
+- **진단성**: 신규 path mapping 진단 도구로 문제 조기 발견 ⭐
 
 ## 📊 Super 도구 확장 계획
 
@@ -315,8 +343,8 @@ python tools/super_db_rollback_manager.py --rollback "pre_migration"
 
 💡 **Super 도구 시스템을 통해 프로젝트 전반의 관리 품질과 개발 효율성을 혁신적으로 향상시킵니다!**
 
-🎉 **Super DB 도구 시스템 완성 (2025-08-01)**: 11개 도구로 구성된 완전한 DB 관리 생태계가 완성되어 안전하고 효율적인 DB 운영이 가능합니다!
+🎉 **Super DB 도구 시스템 완성 (2025-08-01)**: 12개 도구로 구성된 완전한 DB 관리 생태계가 완성되어 안전하고 효율적인 DB 운영이 가능합니다!
 
 ---
 *작성일: 2025-08-01*  
-*업데이트: Super DB 운영 도구 3개 완성 및 통합 시스템 구축*
+*업데이트: Super DB 운영 도구 3개 완성 및 통합 시스템 구축 + Path Mapping 진단 도구 추가*

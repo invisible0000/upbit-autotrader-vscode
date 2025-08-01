@@ -183,9 +183,9 @@ class SuperDBTableViewer:
                 
                 # tv_trading_variables 특별 분석  
                 elif table == 'tv_trading_variables' and count > 0:
-                    cursor.execute("SELECT COUNT(DISTINCT category) FROM tv_trading_variables")
+                    cursor.execute("SELECT COUNT(DISTINCT purpose_category) FROM tv_trading_variables")
                     cat_count = cursor.fetchone()[0]
-                    print(f"    └─ 카테고리 수: {cat_count}개")
+                    print(f"    └─ 목적 카테고리 수: {cat_count}개")
                     
             except Exception as e:
                 print(f"  • {table}: 분석 오류 - {e}")

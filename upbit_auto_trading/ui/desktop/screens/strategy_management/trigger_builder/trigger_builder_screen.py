@@ -283,6 +283,11 @@ class TriggerBuilderScreen(QWidget):
         layout.addWidget(self.condition_dialog)
         self.logger.debug("조건 빌더 다이얼로그 생성 성공")
         
+        # 조건 저장 시그널 연결 - 트리거 리스트 새로고침을 위해 필수
+        if hasattr(self.condition_dialog, 'condition_saved'):
+            self.condition_dialog.condition_saved.connect(self.on_condition_saved)
+            self.logger.debug("조건 저장 시그널 연결 완료")
+        
         group.setLayout(layout)
         group.setMinimumWidth(400)  # 최소 너비 증가 (300→400)
         return group
@@ -455,6 +460,16 @@ class TriggerBuilderScreen(QWidget):
         except Exception as e:
             print(f"❌ 트리거 저장 실패: {e}")
             QMessageBox.critical(self, "❌ 오류", f"트리거 저장 중 오류가 발생했습니다:\n{e}")
+    
+    def on_condition_saved(self, condition_data):
+        """조건 저장 완료 시그널 처리 - 트리거 리스트 새로고침"""
+        try:
+            print(f"✅ 조건 저장 시그널 수신: {condition_data.get('name', 'Unknown')}")
+            # 트리거 리스트 새로고침
+            self.load_trigger_list()
+            print("✅ 트리거 리스트 새로고침 완료")
+        except Exception as e:
+            print(f"❌ 조건 저장 시그널 처리 실패: {e}")
     
     def cancel_edit_trigger(self):
         """편집 취소 - 원본 기능"""

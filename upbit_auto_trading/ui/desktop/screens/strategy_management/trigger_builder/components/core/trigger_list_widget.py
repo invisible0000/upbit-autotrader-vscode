@@ -3,6 +3,9 @@
 integrated_condition_manager.py의 create_trigger_list_area() 완전 복제
 """
 
+import os
+import sys
+import json
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton, 
     QTreeWidget, QTreeWidgetItem, QMessageBox, QLineEdit, QLabel
@@ -23,8 +26,6 @@ except ImportError as e:
     logger.warning(f"조건 저장소 (로컬)를 찾을 수 없습니다: {e}")
     try:
         # 상위 디렉터리에서 시도
-        import sys
-        import os
         current_dir = os.path.dirname(__file__)
         parent_dir = os.path.dirname(current_dir)
         if parent_dir not in sys.path:
@@ -257,15 +258,17 @@ class TriggerListWidget(QWidget):
     def load_trigger_list(self):
         """트리거 목록 로드 - 원본 기능 복제"""
         try:
-            if not STORAGE_AVAILABLE:
+            if not STORAGE_AVAILABLE or self.condition_storage is None:
+                logger.warning("조건 저장소가 사용 불가능하여 샘플 트리거를 표시합니다")
                 self._add_sample_triggers()
                 return
                 
-            # 실제 데이터 로드 (원본과 동일한 방식)
-            storage = ConditionStorage()
-            conditions = storage.get_all_conditions()  # 원본 메서드명 사용
+            # 실제 데이터 로드 (기존 인스턴스 사용)
+            conditions = self.condition_storage.get_all_conditions()  # 올바른 메서드명 사용
             
             self.trigger_tree.clear()
+            
+            logger.debug(f"데이터베이스에서 {len(conditions)}개 조건을 로드했습니다")
             
             # 조건들을 직접 리스트에 추가 (3개 열 사용: 트리거명, 변수, 조건)
             for condition in conditions:
@@ -280,7 +283,6 @@ class TriggerListWidget(QWidget):
                 if external_variable and isinstance(external_variable, (dict, str)):
                     if isinstance(external_variable, str):
                         try:
-                            import json
                             external_variable = json.loads(external_variable)
                         except:
                             external_variable = None

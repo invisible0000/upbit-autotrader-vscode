@@ -20,53 +20,58 @@ except ImportError:
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "data/settings.sqlite3"):
+    def __init__(self, db_path: str = "upbit_auto_trading/data/strategies.sqlite3"):
         if USE_GLOBAL_MANAGER:
-            # 전역 매니저 사용
+            # 전역 매니저 사용 - strategies DB에서 trading_conditions 테이블 참조
             self.db_path = db_path
             self.use_global_manager = True
         else:
-            # 기존 방식 사용 - settings.sqlite3만 사용
+            # 기존 방식 사용 - strategies.sqlite3 사용 (사용자 생성 트리거 저장용)
             self.db_path = db_path
             self.use_global_manager = False
-            # settings.sqlite3 파일이 없으면 에러 발생
+            # strategies.sqlite3 파일이 없으면 에러 발생
             if not os.path.exists(self.db_path):
-                raise FileNotFoundError(f"설정 DB 파일을 찾을 수 없습니다: {self.db_path}")
+                raise FileNotFoundError(f"전략 DB 파일을 찾을 수 없습니다: {self.db_path}")
         
         self._verify_unified_schema()
     
     def _get_connection(self):
         """DB 연결 반환 - 전역 매니저 또는 기존 방식"""
         if self.use_global_manager:
+            # 매번 새로운 연결을 요청 (연결 재사용 문제 해결)
             return get_db_connection('trading_conditions')
         else:
             return sqlite3.connect(self.db_path)
     
     def _verify_unified_schema(self):
         """통합 데이터베이스 스키마 확인 및 테이블 생성"""
-        if self.use_global_manager:
+        try:
             conn = self._get_connection()
-        else:
-            conn = self._get_connection()
-            
-        with conn:
-            cursor = conn.cursor()
-            
-            # 필수 테이블 존재 확인
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            existing_tables = [row[0] for row in cursor.fetchall()]
-            
-            # trading_conditions 테이블이 없으면 생성
-            if 'trading_conditions' not in existing_tables:
-                print("📊 trading_conditions 테이블 생성 중...")
-                self._create_trading_conditions_table(cursor)
-                print("✅ trading_conditions 테이블 생성 완료")
-            
-            # strategies 테이블 확인 (선택적)
-            if 'strategies' not in existing_tables:
-                print("📊 strategies 테이블이 없지만 조건 저장에는 영향 없음")
-            
-            print(f"✅ 조건 저장소 초기화 완료 (전역 매니저: {self.use_global_manager})")
+            with conn:
+                cursor = conn.cursor()
+                
+                # 필수 테이블 존재 확인
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                existing_tables = [row[0] for row in cursor.fetchall()]
+                
+                # trading_conditions 테이블이 없으면 생성
+                if 'trading_conditions' not in existing_tables:
+                    print("📊 trading_conditions 테이블 생성 중...")
+                    self._create_trading_conditions_table(cursor)
+                    print("✅ trading_conditions 테이블 생성 완료")
+                
+                # strategies 테이블 확인 (선택적)
+                if 'strategies' not in existing_tables:
+                    print("📊 strategies 테이블이 없지만 조건 저장에는 영향 없음")
+                
+                print(f"✅ 조건 저장소 초기화 완료 (전역 매니저: {self.use_global_manager})")
+        except Exception as e:
+            print(f"❌ 스키마 검증 실패: {e}")
+            # 전역 매니저 실패 시 로컬 방식으로 폴백
+            if self.use_global_manager:
+                print("⚠️ 전역 매니저 사용 불가, 로컬 방식으로 전환")
+                self.use_global_manager = False
+                self._verify_unified_schema()  # 재시도
     
     def _create_trading_conditions_table(self, cursor):
         """trading_conditions 테이블만 생성"""
@@ -173,22 +178,25 @@ class ConditionStorage:
                         # 기존 조건 업데이트 (ID 기반)
                         cursor.execute("""
                             UPDATE trading_conditions SET
-                                name = ?, description = ?, variable_id = ?, variable_name = ?,
-                                variable_params = ?, operator = ?, comparison_type = ?,
+                                name = ?, description = ?, variable_id = ?, variable_name = ?, 
+                                variable_params = ?, operator = ?, comparison_type = ?, 
                                 target_value = ?, external_variable = ?, trend_direction = ?, 
-                                category = ?, chart_category = ?, updated_at = CURRENT_TIMESTAMP
+                                is_active = ?, category = ?, chart_category = ?, updated_at = CURRENT_TIMESTAMP
                             WHERE id = ?
                         """, (
                             condition_data['name'],
                             condition_data.get('description', ''),
                             condition_data['variable_id'],
                             condition_data['variable_name'],
-                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
+                            json.dumps(condition_data.get('variable_params', {})),
                             condition_data['operator'],
                             condition_data.get('comparison_type', 'fixed'),
-                            condition_data.get('target_value'),
-                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            (condition_data.get('target_value', '') if condition_data.get('comparison_type') != 'external'
+                             else None),
+                            (json.dumps(condition_data.get('external_variable'))
+                             if condition_data.get('external_variable') else None),
                             condition_data.get('trend_direction', 'static'),
+                            condition_data.get('is_active', 1),
                             condition_data.get('category', 'custom'),
                             condition_data.get('chart_category', 'subplot'),
                             condition_id
@@ -228,8 +236,10 @@ class ConditionStorage:
                             json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
                             condition_data['operator'],
                             condition_data.get('comparison_type', 'fixed'),
-                            condition_data.get('target_value'),
-                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            (condition_data.get('target_value') if condition_data.get('comparison_type') != 'external'
+                             else None),
+                            (json.dumps(condition_data.get('external_variable'), ensure_ascii=False)
+                             if condition_data.get('external_variable') else None),
                             condition_data.get('trend_direction', 'static'),
                             condition_data.get('category', 'custom'),
                             condition_data.get('chart_category', 'subplot'),
@@ -243,21 +253,24 @@ class ConditionStorage:
                         # 새 조건 저장
                         cursor.execute("""
                             INSERT INTO trading_conditions (
-                                name, description, variable_id, variable_name,
-                                variable_params, operator, comparison_type,
-                                target_value, external_variable, trend_direction, category, chart_category
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                name, description, variable_id, variable_name, variable_params, 
+                                operator, comparison_type, target_value, external_variable, 
+                                trend_direction, is_active, category, chart_category
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             condition_data['name'],
                             condition_data.get('description', ''),
                             condition_data['variable_id'],
                             condition_data['variable_name'],
-                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
+                            json.dumps(condition_data.get('variable_params', {})),
                             condition_data['operator'],
                             condition_data.get('comparison_type', 'fixed'),
-                            condition_data.get('target_value'),
-                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
+                            (condition_data.get('target_value', '') if condition_data.get('comparison_type') != 'external'
+                             else None),
+                            (json.dumps(condition_data.get('external_variable'))
+                             if condition_data.get('external_variable') else None),
                             condition_data.get('trend_direction', 'static'),
+                            condition_data.get('is_active', 1),
                             condition_data.get('category', 'custom'),
                             condition_data.get('chart_category', 'subplot')
                         ))
@@ -320,8 +333,9 @@ class ConditionStorage:
         """모든 조건 조회"""
         try:
             conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            
             with conn:
-                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
                 query = "SELECT * FROM trading_conditions"

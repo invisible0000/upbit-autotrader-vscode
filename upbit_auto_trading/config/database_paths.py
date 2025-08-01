@@ -13,7 +13,7 @@ class DatabasePaths:
     """데이터베이스 경로 상수 클래스"""
     
     # 기본 경로 설정 (설치형 환경 최적화)
-    BASE_DIR = Path(__file__).parent.parent  # upbit_auto_trading/config -> upbit_auto_trading -> project_root
+    BASE_DIR = Path(__file__).parent.parent.parent  # upbit_auto_trading/config -> upbit_auto_trading -> project_root
     DATA_DIR = BASE_DIR / "upbit_auto_trading" / "data"
     
     # 새로운 통합 데이터베이스 경로 (설치형 환경 최적화됨)
@@ -55,56 +55,108 @@ class DatabasePaths:
 
 
 class TableMappings:
-    """테이블 매핑 정보 클래스"""
+    """테이블 매핑 정보 클래스 - 3-Database 아키텍처 (2025-08-01)"""
     
-    # Settings DB에 있는 테이블들 (app_settings.sqlite3 + trading_variables.db 통합)
+    # Settings DB: 시스템 설정 + 변수 정의 (cfg_*, tv_*, sys_*)
     SETTINGS_TABLES = {
-        # 원래 app_settings.sqlite3 테이블들
-        'trading_conditions': 'settings.sqlite3',
-        'strategies': 'settings.sqlite3', 
-        'component_strategy': 'settings.sqlite3',
-        'strategy_components': 'settings.sqlite3',
-        'strategy_execution': 'settings.sqlite3',
-        'chart_variables': 'settings.sqlite3',
-        'chart_layout_templates': 'settings.sqlite3',
-        'simulation_sessions': 'settings.sqlite3',
-        'simulation_market_data': 'settings.sqlite3',
-        'simulation_trades': 'settings.sqlite3',
-        'system_settings': 'settings.sqlite3',
-        'backup_info': 'settings.sqlite3',
-        'variable_compatibility_rules': 'settings.sqlite3',
-        'variable_usage_logs': 'settings.sqlite3',
-        'execution_history': 'settings.sqlite3',
-        'strategy_conditions': 'settings.sqlite3',
+        # 시스템 설정 테이블들 (cfg_* 접두사)
+        'cfg_app_settings': 'settings.sqlite3',
+        'cfg_system_settings': 'settings.sqlite3',
+        'cfg_chart_layout_templates': 'settings.sqlite3',
         
-        # trading_variables.db 테이블들 (tv_ 접두사)
+        # 시스템 관리 테이블들 (sys_* 접두사)
+        'sys_backup_info': 'settings.sqlite3',
+        
+        # Trading Variables 시스템 (tv_* 접두사)
         'tv_trading_variables': 'settings.sqlite3',
-        'tv_comparison_groups': 'settings.sqlite3', 
+        'tv_variable_parameters': 'settings.sqlite3',
+        'tv_help_texts': 'settings.sqlite3',
+        'tv_placeholder_texts': 'settings.sqlite3',
+        'tv_indicator_categories': 'settings.sqlite3',
+        'tv_parameter_types': 'settings.sqlite3',
+        'tv_comparison_groups': 'settings.sqlite3',
+        'tv_indicator_library': 'settings.sqlite3',
         'tv_schema_version': 'settings.sqlite3',
+        'tv_workflow_guides': 'settings.sqlite3',
+        'tv_chart_variables': 'settings.sqlite3',
+        'tv_variable_compatibility_rules': 'settings.sqlite3',
+        'tv_variable_usage_logs': 'settings.sqlite3',
+        
+        # 🔧 구조 정의는 settings에서 관리하지만 실제 데이터는 strategies DB에 있음
     }
     
-    # Strategies DB에 있는 테이블들 (upbit_auto_trading.sqlite3)
+    # Strategies DB: 사용자 생성 데이터 (strategies, strategy_*, user_*)
     STRATEGIES_TABLES = {
-        'market_data': 'strategies.sqlite3',  # 주의: 이름이 같지만 다른 DB
+        # 메인 전략 테이블들
+        'strategies': 'strategies.sqlite3',
+        'strategy_components': 'strategies.sqlite3',
+        'strategy_conditions': 'strategies.sqlite3',
+        'strategy_execution': 'strategies.sqlite3',
+        'strategy_alerts': 'strategies.sqlite3',
+        'strategy_performance_metrics': 'strategies.sqlite3',
+        
+        # 🔧 현재 실제 사용자 트리거 데이터 (기존 마이그레이션된 데이터)
+        'trading_conditions': 'strategies.sqlite3',  # 실제 사용자 생성 트리거들
+        
+        # 사용자 생성 데이터
+        'user_strategies': 'strategies.sqlite3',
+        'user_triggers': 'strategies.sqlite3',
+        
+        # 컴포넌트 시스템
+        'component_strategy': 'strategies.sqlite3',
+        
+        # 실행 및 이력
+        'execution_history': 'strategies.sqlite3',
+        
+        # 시뮬레이션 시스템
+        'simulation_sessions': 'strategies.sqlite3',
+        'simulation_trades': 'strategies.sqlite3',
+        
+        # 포지션 관리
+        'current_positions': 'strategies.sqlite3',
+        'portfolio_snapshots': 'strategies.sqlite3',
+        
+        # 기타
         'migration_info': 'strategies.sqlite3',
     }
     
-    # Market Data DB에 있는 테이블들 (기존 유지)
+    # Market Data DB: 시장 데이터 (candlestick_*, technical_*, real_time_*)
     MARKET_DATA_TABLES = {
-        'market_data': 'market_data.sqlite3',  # 메인 시장 데이터
-        'atomic_strategies': 'market_data.sqlite3',
-        'atomic_variables': 'market_data.sqlite3',
-        'atomic_conditions': 'market_data.sqlite3',
-        'atomic_actions': 'market_data.sqlite3',
-        'atomic_rules': 'market_data.sqlite3',
+        # 기본 시장 정보
+        'market_symbols': 'market_data.sqlite3',
+        
+        # OHLCV 캔들 데이터
+        'candlestick_data_1m': 'market_data.sqlite3',
+        'candlestick_data_5m': 'market_data.sqlite3',
+        'candlestick_data_1h': 'market_data.sqlite3',
+        'candlestick_data_1d': 'market_data.sqlite3',
+        
+        # 기술적 지표
+        'technical_indicators_1d': 'market_data.sqlite3',
+        'technical_indicators_1h': 'market_data.sqlite3',
+        
+        # 실시간 데이터
+        'real_time_quotes': 'market_data.sqlite3',
+        'order_book_snapshots': 'market_data.sqlite3',
+        
+        # 시뮬레이션용 마켓 데이터
+        'simulation_market_data': 'market_data.sqlite3',
+        
+        # 마켓 분석
+        'daily_market_analysis': 'market_data.sqlite3',
+        'screener_results': 'market_data.sqlite3',
+        'market_state_summary': 'market_data.sqlite3',
+        
+        # 데이터 품질 관리
+        'data_quality_logs': 'market_data.sqlite3',
+        'data_collection_status': 'market_data.sqlite3',
+        
+        # 레거시 호환성
+        'market_data': 'market_data.sqlite3',
+        'ohlcv_data': 'market_data.sqlite3',
         'backtest_results': 'market_data.sqlite3',
         'portfolios': 'market_data.sqlite3',
         'positions': 'market_data.sqlite3',
-        'strategy_combinations': 'market_data.sqlite3',
-        'strategy_configs': 'market_data.sqlite3',
-        'strategy_definitions': 'market_data.sqlite3',
-        'ohlcv_data': 'market_data.sqlite3',
-        # ... 나머지 39개 테이블들
     }
     
     @classmethod

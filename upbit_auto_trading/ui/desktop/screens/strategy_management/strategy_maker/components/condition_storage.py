@@ -24,15 +24,15 @@ class ConditionStorage:
     
     def __init__(self, db_path: str = None):
         if USE_GLOBAL_MANAGER:
-            # 전역 매니저 사용 - db_path는 호환성을 위해 유지하지만 실제로는 사용하지 않음
-            self.db_path = db_path or "data/settings.sqlite3"  # 새로운 통합 DB 경로
+            # 전역 매니저 사용 - strategies DB에서 trading_conditions 테이블 참조
+            self.db_path = db_path or "data/strategies.sqlite3"  # strategies DB 경로
             self.use_global_manager = True
             print(f"🔗 ConditionStorage: 전역 DB 매니저 사용")
         else:
-            # 기존 방식 사용
+            # 기존 방식 사용 - strategies.sqlite3 사용 (사용자 생성 트리거 저장용)
             if db_path is None:
-                self.db_path = "data/settings.sqlite3"  # 새로운 통합 DB 경로
-                print(f"📂 ConditionStorage: 새로운 통합 DB 경로 사용 - {self.db_path}")
+                self.db_path = "data/strategies.sqlite3"  # strategies DB 경로로 변경
+                print(f"📂 ConditionStorage: 전략 DB 경로 사용 - {self.db_path}")
             else:
                 self.db_path = db_path  # 사용자 지정 경로
                 print(f"📂 ConditionStorage: 사용자 지정 DB 경로 - {self.db_path}")
@@ -189,23 +189,23 @@ class ConditionStorage:
                         # 기존 조건 업데이트 (ID 기반)
                         cursor.execute("""
                             UPDATE trading_conditions SET
-                                name = ?, description = ?, variable_id = ?, variable_name = ?,
-                                variable_params = ?, operator = ?, comparison_type = ?,
-                                target_value = ?, external_variable = ?, trend_direction = ?, 
-                                category = ?, updated_at = CURRENT_TIMESTAMP
+                                name = ?, category = ?, description = ?, variable_mappings = ?, updated_at = CURRENT_TIMESTAMP
                             WHERE id = ?
                         """, (
                             condition_data['name'],
+                            condition_data.get('category', 'strategy'),
                             condition_data.get('description', ''),
-                            condition_data['variable_id'],
-                            condition_data['variable_name'],
-                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
-                            condition_data['operator'],
-                            condition_data.get('comparison_type', 'fixed'),
-                            condition_data.get('target_value'),
-                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
-                            condition_data.get('trend_direction', 'static'),
-                            condition_data.get('category', 'custom'),
+                            json.dumps({
+                                'variable_id': condition_data['variable_id'],
+                                'variable_name': condition_data['variable_name'],
+                                'variable_params': condition_data.get('variable_params', {}),
+                                'operator': condition_data['operator'],
+                                'comparison_type': condition_data.get('comparison_type', 'fixed'),
+                                'target_value': condition_data.get('target_value'),
+                                'external_variable': condition_data.get('external_variable'),
+                                'trend_direction': condition_data.get('trend_direction', 'static'),
+                                'category': condition_data.get('category', 'custom')
+                            }, ensure_ascii=False),
                             condition_id
                         ))
                         
@@ -257,22 +257,23 @@ class ConditionStorage:
                         # 새 조건 저장
                         cursor.execute("""
                             INSERT INTO trading_conditions (
-                                name, description, variable_id, variable_name,
-                                variable_params, operator, comparison_type,
-                                target_value, external_variable, trend_direction, category
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                name, category, description, variable_mappings
+                            ) VALUES (?, ?, ?, ?)
                         """, (
                             condition_data['name'],
+                            condition_data.get('category', 'strategy'),
                             condition_data.get('description', ''),
-                            condition_data['variable_id'],
-                            condition_data['variable_name'],
-                            json.dumps(condition_data.get('variable_params', {}), ensure_ascii=False),
-                            condition_data['operator'],
-                            condition_data.get('comparison_type', 'fixed'),
-                            condition_data.get('target_value'),
-                            json.dumps(condition_data.get('external_variable'), ensure_ascii=False) if condition_data.get('external_variable') else None,
-                            condition_data.get('trend_direction', 'static'),
-                            condition_data.get('category', 'custom')
+                            json.dumps({
+                                'variable_id': condition_data['variable_id'],
+                                'variable_name': condition_data['variable_name'],
+                                'variable_params': condition_data.get('variable_params', {}),
+                                'operator': condition_data['operator'],
+                                'comparison_type': condition_data.get('comparison_type', 'fixed'),
+                                'target_value': condition_data.get('target_value'),
+                                'external_variable': condition_data.get('external_variable'),
+                                'trend_direction': condition_data.get('trend_direction', 'static'),
+                                'category': condition_data.get('category', 'custom')
+                            }, ensure_ascii=False)
                         ))
                         
                         condition_id = cursor.lastrowid
