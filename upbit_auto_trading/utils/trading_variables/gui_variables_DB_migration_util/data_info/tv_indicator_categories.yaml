@@ -1,144 +1,236 @@
 # 트레이딩 지표 카테고리 정의
 # ===============================
+# 통일된 ID 기반 딕셔너리 구조
 # LLM 에이전트가 읽고 편집하기 위한 구조화된 데이터
-# 
-# 사용법:
-# 1. LLM 에이전트는 이 파일을 읽어 지표 분류 체계를 이해
-# 2. 새로운 지표 추가 시 적절한 카테고리에 배치
-# 3. 수정 후 GUI의 마이그레이션 기능으로 DB 반영
 
-categories:
+indicator_categories:
+  # 모멘텀 지표 카테고리
   momentum:
+    category_id: "momentum"
     display_name_ko: "모멘텀 지표"
     display_name_en: "Momentum Indicators"
     description: "가격의 변화 속도와 강도를 측정하는 지표들"
     chart_position: "subplot"
     color_scheme: "blue_family"
     typical_range: "0-100 또는 -100~+100"
+    purpose_type: "momentum"
+    chart_type: "subplot"
     indicators:
-      - RSI
-      - STOCHASTIC
-      - STOCH
-      - STOCH_RSI
-      - CCI
-      - MFI
-      - ROC
-      - WILLIAMS_R
-      - SQUEEZE_MOMENTUM
-      - HULL_MA
-      - MACD
+      - "RSI"
+      - "STOCHASTIC"
+      - "STOCH"
+      - "STOCH_RSI"
+      - "CCI"
+      - "MFI"
+      - "ROC"
+      - "WILLIAMS_R"
+      - "SQUEEZE_MOMENTUM"
+      - "HULL_MA"
+      - "MACD"
 
+  # 추세 지표 카테고리
   trend:
+    category_id: "trend"
     display_name_ko: "추세 지표"
     display_name_en: "Trend Indicators" 
     description: "가격의 방향성과 추세를 파악하는 지표들"
     chart_position: "overlay"
     color_scheme: "green_family"
     typical_range: "가격 범위 내"
+    purpose_type: "trend"
+    chart_type: "overlay"
     indicators:
-      - SMA
-      - EMA
-      - WMA
-      - BOLLINGER_BANDS
-      - ICHIMOKU
-      - PARABOLIC_SAR
-      - SUPERTREND
-      - ADX
-      - AROON
+      - "SMA"
+      - "EMA"
+      - "WMA"
+      - "BOLLINGER_BANDS"
+      - "ICHIMOKU"
+      - "PARABOLIC_SAR"
+      - "SUPERTREND"
+      - "ADX"
+      - "AROON"
 
+  # 변동성 지표 카테고리
   volatility:
+    category_id: "volatility"
     display_name_ko: "변동성 지표"
     display_name_en: "Volatility Indicators"
     description: "가격 변동의 크기와 패턴을 측정하는 지표들"
     chart_position: "subplot"
     color_scheme: "orange_family"
     typical_range: "0 이상의 값"
+    purpose_type: "volatility"
+    chart_type: "subplot"
     indicators:
-      - ATR
-      - BOLLINGER_WIDTH
-      - STANDARD_DEVIATION
-      - BOLLINGER_BAND
+      - "ATR"
+      - "BOLLINGER_WIDTH"
+      - "STANDARD_DEVIATION"
+      - "BOLLINGER_BAND"
 
+  # 거래량 지표 카테고리
   volume:
+    category_id: "volume"
     display_name_ko: "거래량 지표"
     display_name_en: "Volume Indicators"
     description: "거래량과 가격의 관계를 분석하는 지표들"
     chart_position: "subplot"
     color_scheme: "purple_family"
     typical_range: "거래량 단위"
+    purpose_type: "volume"
+    chart_type: "subplot"
     indicators:
-      - VOLUME
-      - VOLUME_SMA
-      - OBV
-      - VOLUME_PROFILE
-      - VWAP
+      - "VOLUME"
+      - "VOLUME_SMA"
+      - "OBV"
+      - "VOLUME_PROFILE"
+      - "VWAP"
 
+  # 가격 지표 카테고리
   price:
+    category_id: "price"
     display_name_ko: "가격 지표"
     display_name_en: "Price Indicators"
     description: "기본 가격 정보 (OHLC)"
     chart_position: "overlay"
     color_scheme: "red_family"
     typical_range: "가격 범위"
+    purpose_type: "price"
+    chart_type: "overlay"
     indicators:
-      - CURRENT_PRICE
-      - OPEN_PRICE
-      - HIGH_PRICE
-      - LOW_PRICE
+      - "CURRENT_PRICE"
+      - "OPEN_PRICE"
+      - "HIGH_PRICE"
+      - "LOW_PRICE"
 
+  # 지지/저항 지표 카테고리
   support_resistance:
+    category_id: "support_resistance"
     display_name_ko: "지지/저항 지표"
     display_name_en: "Support/Resistance Indicators"
     description: "지지선과 저항선을 계산하는 지표들"
     chart_position: "overlay"
     color_scheme: "yellow_family"
     typical_range: "가격 범위"
+    purpose_type: "price"
+    chart_type: "overlay"
     indicators:
-      - PIVOT_POINTS
+      - "PIVOT_POINTS"
 
+  # 자본 정보 카테고리
   capital:
+    category_id: "capital"
     display_name_ko: "자본 정보"
     display_name_en: "Capital Information"
     description: "계좌 잔고와 자산 정보"
     chart_position: "subplot"
     color_scheme: "gray_family"
     typical_range: "통화 단위"
+    purpose_type: "volume"
+    chart_type: "subplot"
     indicators:
-      - CASH_BALANCE
-      - COIN_BALANCE
-      - TOTAL_BALANCE
+      - "CASH_BALANCE"
+      - "COIN_BALANCE"
+      - "TOTAL_BALANCE"
 
+  # 포지션 상태 카테고리
   state:
+    category_id: "state"
     display_name_ko: "포지션 상태"
     display_name_en: "Position State"
     description: "현재 포지션의 상태와 수익/손실 정보"
     chart_position: "subplot"
     color_scheme: "teal_family"
     typical_range: "다양함"
+    purpose_type: "price"
+    chart_type: "subplot"
     indicators:
-      - POSITION_SIZE
-      - AVG_BUY_PRICE
-      - PROFIT_PERCENT
-      - PROFIT_AMOUNT
+      - "POSITION_SIZE"
+      - "AVG_BUY_PRICE"
+      - "PROFIT_PERCENT"
+      - "PROFIT_AMOUNT"
 
-# 카테고리 간 관계
+# 카테고리 간 관계 정의
 category_relationships:
-  complementary:
-    - [momentum, trend]      # 모멘텀과 추세는 상호 보완적
-    - [volatility, trend]    # 변동성과 추세 함께 사용
-    - [volume, price]        # 거래량과 가격 확인
+  # 상호 보완적 관계
+  complementary_pairs:
+    momentum_trend:
+      categories: ["momentum", "trend"]
+      description: "모멘텀과 추세는 상호 보완적"
+      usage_pattern: "추세 확인 후 모멘텀으로 진입 타이밍 결정"
+      
+    volatility_trend:
+      categories: ["volatility", "trend"]
+      description: "변동성과 추세 함께 사용"
+      usage_pattern: "변동성 확인 후 추세 방향으로 거래"
+      
+    volume_price:
+      categories: ["volume", "price"]
+      description: "거래량과 가격 확인"
+      usage_pattern: "가격 움직임을 거래량으로 검증"
   
-  conflicting:
-    - [capital, state]       # 중복 정보 주의
+  # 충돌 가능성 있는 관계
+  conflicting_pairs:
+    capital_state:
+      categories: ["capital", "state"]
+      description: "중복 정보 주의"
+      warning: "동일한 계좌 정보를 다른 방식으로 표현할 수 있음"
 
-# 새 지표 추가 시 가이드라인
+# 새 지표 추가 가이드라인
 new_indicator_guidelines:
-  naming_convention: "영문 대문자와 언더스코어(_) 사용"
-  category_selection: "지표의 주요 목적에 따라 분류"
-  chart_position_rule: 
-    overlay: "가격과 함께 표시되는 지표 (이평선, 밴드 등)"
-    subplot: "별도 차트가 필요한 지표 (오실레이터, 거래량 등)"
-  parameter_requirements:
-    - period (기간) - 대부분의 지표에 필요
-    - timeframe (타임프레임) - 시간 관련 지표
-    - multiplier/factor - 배수 적용 지표
+  naming_convention:
+    rule: "영문 대문자와 언더스코어(_) 사용"
+    examples: ["NEW_INDICATOR", "CUSTOM_RSI", "MODIFIED_MACD"]
+    forbidden_patterns: ["lowercase", "CamelCase", "special-chars"]
+    
+  category_selection:
+    rule: "지표의 주요 목적에 따라 분류"
+    decision_tree:
+      momentum: "0-100 범위의 오실레이터 지표"
+      trend: "가격과 함께 표시되는 방향성 지표"
+      volatility: "변동성 측정 지표"
+      volume: "거래량 관련 지표"
+      price: "기본 가격 정보"
+      
+  chart_position_rules:
+    overlay:
+      description: "가격과 함께 표시되는 지표"
+      examples: ["이평선", "볼린저밴드", "지지/저항선"]
+      purpose_types: ["trend", "price"]
+      
+    subplot:
+      description: "별도 차트가 필요한 지표"
+      examples: ["RSI", "MACD", "거래량", "오실레이터"]
+      purpose_types: ["momentum", "volatility", "volume"]
+      
+  required_parameters:
+    common_params:
+      period:
+        description: "기간 - 대부분의 지표에 필요"
+        validation: "1-200 사이의 정수"
+        default_values: {"short": 9, "medium": 20, "long": 50}
+        
+      timeframe:
+        description: "타임프레임 - 시간 관련 지표"
+        validation: "포지션 설정 따름 또는 특정 시간"
+        default_value: "포지션 설정 따름"
+        
+      multiplier:
+        description: "배수/팩터 - 배수 적용 지표"
+        validation: "0.1-10.0 사이의 실수"
+        default_values: {"bollinger": 2.0, "atr": 1.0}
+
+# 카테고리 매핑 규칙
+category_mapping_rules:
+  purpose_to_chart:
+    trend: "overlay"
+    momentum: "subplot"
+    volatility: "subplot"
+    volume: "subplot"
+    price: "overlay"
+    
+  comparison_groups:
+    price_comparable: ["trend", "price", "support_resistance"]
+    percentage_comparable: ["momentum"]
+    volume_comparable: ["volume", "capital"]
+    volatility_comparable: ["volatility"]
+    absolute_comparable: ["state"]

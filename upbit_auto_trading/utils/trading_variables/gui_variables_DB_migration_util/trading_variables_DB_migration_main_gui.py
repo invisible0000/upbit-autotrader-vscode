@@ -165,6 +165,9 @@ class TradingVariablesDBMigrationGUI:
         )
         self.migration_executor.pack(fill='both', expand=True, padx=5, pady=5)
         
+        # 스키마 파일 경로 공유를 위한 콜백 설정
+        self.migration_preview.set_schema_change_callback(self.on_schema_file_changed)
+        
         # 데이터 마이그레이션 서브탭 (YAML → DB 동기화)
         data_migration_frame = tk.Frame(migration_notebook)
         migration_notebook.add(data_migration_frame, text="� YAML 동기화")
@@ -281,6 +284,19 @@ class TradingVariablesDBMigrationGUI:
                 self.backup_manager.refresh_backup_list()
         else:
             self.update_status("❌ 마이그레이션 실패")
+    
+    def on_schema_file_changed(self, schema_file_path):
+        """
+        미리보기에서 스키마 파일이 변경되었을 때 호출되는 콜백
+        
+        Args:
+            schema_file_path: 선택된 스키마 파일 경로
+        """
+        # 실행 탭에 선택된 스키마 파일 경로 전달
+        if hasattr(self, 'migration_executor') and hasattr(self.migration_executor, 'set_schema_file'):
+            self.migration_executor.set_schema_file(schema_file_path)
+            self.update_status(f"스키마 파일 설정: {os.path.basename(schema_file_path)}")
+    
     
     def update_status(self, message):
         """

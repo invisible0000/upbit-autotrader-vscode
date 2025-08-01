@@ -28,6 +28,7 @@ class MigrationPreviewFrame(tk.Frame):
         super().__init__(parent, bg='white')
         self.parent = parent
         self.selected_schema_file = None
+        self.schema_change_callback = None  # 스키마 파일 변경 콜백
         self.setup_ui()
         self.load_default_schema()  # 기본 스키마 자동 로드
         
@@ -344,6 +345,10 @@ class MigrationPreviewFrame(tk.Frame):
         # 미리보기 탭은 분석 결과를 기다리므로 별도 처리 없음
         pass
 
+    def set_schema_change_callback(self, callback):
+        """스키마 파일 변경 콜백 설정"""
+        self.schema_change_callback = callback
+
     def select_schema_file(self):
         """스키마 파일 선택 다이얼로그"""
         from tkinter import filedialog
@@ -441,6 +446,10 @@ class MigrationPreviewFrame(tk.Frame):
             }
             
             self.update_preview(migration_data)
+            
+            # 스키마 파일 변경 콜백 호출
+            if self.schema_change_callback:
+                self.schema_change_callback(schema_file_path)
             
         except Exception as e:
             from tkinter import messagebox

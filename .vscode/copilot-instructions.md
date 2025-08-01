@@ -315,6 +315,47 @@ if logger.should_log_debug():  # 환경에 따라 자동 판단
 logger.conditional_debug(lambda: f"🔍 복잡한 계산 결과: {expensive_calculation()}")
 ```
 
+### 🗄️ DB 분석 도구 시스템 (작업 효율성 핵심 ⭐⭐⭐)
+**목적**: DB 관련 작업 시 토큰 낭비 방지 및 작업 속도 향상  
+**위치**: `tools/super_db_table_viewer.py`, `tools/super_db_table_reference_code_analyzer.py`
+
+#### 필수 사용 시점
+DB 관련 작업 시 **반드시 먼저 실행하여 현황 파악**:
+```powershell
+# 1) DB 전체 상태 분석 (테이블, 레코드 수, 구조)
+python tools/super_db_table_viewer.py settings     # settings.sqlite3 분석
+python tools/super_db_table_viewer.py strategies   # strategies.sqlite3 분석  
+python tools/super_db_table_viewer.py market_data  # market_data.sqlite3 분석
+
+# 2) 특정 테이블의 코드 참조 분석 (마이그레이션/삭제 전 필수)
+python tools/super_db_table_reference_code_analyzer.py --tables trading_conditions strategies app_settings
+python tools/super_db_table_reference_code_analyzer.py --tables tv_trading_variables tv_variable_parameters
+```
+
+#### 사용 가이드라인
+```markdown
+DB 작업 전 체크리스트:
+□ super_db_table_viewer.py로 현재 DB 상태 파악
+□ 테이블 구조, 레코드 수, 주요 컬럼 확인
+□ 마이그레이션/삭제 시 super_db_table_reference_code_analyzer.py로 코드 참조 분석
+□ 영향받는 파일과 참조 횟수 확인 후 작업 계획 수립
+
+작업 효율성:
+✅ 도구 사용 → 정확한 현황 파악 → 계획적 작업
+❌ 추측으로 작업 → 시행착오 → 토큰 낭비 증가
+```
+
+#### 도구별 활용법
+```python
+# super_db_table_viewer.py - DB 현황 파악
+# - 사용시점: DB 스키마 검토, 마이그레이션 계획, 데이터 현황 확인
+# - 출력: 테이블 목록, 레코드 수, 주요 컬럼, 변수 분석
+
+# super_db_table_reference_code_analyzer.py - 코드 영향도 분석  
+# - 사용시점: 테이블 삭제/변경 전, 리팩토링 계획, 의존성 분석
+# - 출력: 파일별 참조 횟수, 영향받는 코드 위치, 위험도 평가
+```
+
 ---
 
 ## 🚨 폴백 코드 제거 정책 (핵심 ⭐⭐⭐)
@@ -454,6 +495,29 @@ if not validate_variable_compatibility(left_var, right_var):
 ---
 
 ## 🚨 중요 고려사항
+
+### 🔤 이모티콘 사용 가이드라인 (중요 ⭐)
+- **콘솔 출력**: Windows CP949 인코딩 문제로 인해 이모티콘 사용 최소화
+- **로그 메시지**: 기본 ASCII 문자 우선 사용, 필요시 간단한 이모티콘만 사용
+- **코드 주석**: 이모티콘보다는 명확한 텍스트 설명 우선
+- **DB 데이터**: 절대 이모티콘 사용 금지 (호환성 문제)
+- **에러 처리**: 이모티콘으로 인한 인코딩 오류 발생 시 fallback 텍스트 제공
+
+#### 권장 패턴
+```python
+# ✅ 좋은 예 - 간단한 상태 표시
+logger.info("DB 연결 성공")
+logger.error("DB 연결 실패") 
+
+# ❌ 피해야 할 예 - 복잡한 이모티콘
+logger.info("🎉🔥⚡💯 복잡한 처리 완료")
+
+# ✅ 안전한 예외 처리
+try:
+    print("✅ 성공")
+except UnicodeEncodeError:
+    print("[OK] 성공")  # fallback
+```
 
 ### 보안 (OWASP 원칙)
 - **API 키 보안**: 환경변수 사용, 하드코딩 절대 금지

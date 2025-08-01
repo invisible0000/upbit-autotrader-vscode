@@ -25,10 +25,6 @@ from .gui_utils import (
     GUIStyles, MessageUtils, LayoutUtils, AsyncOperationMixin,
     create_standard_button, create_status_label, create_progress_frame
 )
-from .performance_utils import (
-    PerformanceOptimizedDBManager, DatabaseConnectionPool, QueryCache,
-    get_db_manager, close_all_db_managers, monitor_performance
-)
 
 # 데이터 처리 모듈들
 from .data_info_migrator import DataInfoMigrator
@@ -59,14 +55,6 @@ __all__ = [
     'create_standard_button',
     'create_status_label',
     'create_progress_frame',
-    
-    # 성능 최적화
-    'PerformanceOptimizedDBManager',
-    'DatabaseConnectionPool',
-    'QueryCache',
-    'get_db_manager',
-    'close_all_db_managers',
-    'monitor_performance',
     
     # 데이터 처리
     'DataInfoMigrator',

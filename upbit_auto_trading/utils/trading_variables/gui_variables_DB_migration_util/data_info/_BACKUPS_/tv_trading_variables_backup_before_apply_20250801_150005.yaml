@@ -1,0 +1,318 @@
+# 트레이딩 변수 정의
+# ==================
+# 통일된 ID 기반 딕셔너리 구조
+# 모든 사용 가능한 트레이딩 변수들의 메타데이터
+
+trading_variables:
+  # 추세 지표들
+  SMA:
+    variable_id: "SMA"
+    display_name_ko: "단순이동평균"
+    display_name_en: "Simple Moving Average"
+    purpose_category: "trend"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 가격을 산술 평균한 값"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "추세 확인, 지지/저항선"
+    
+  EMA:
+    variable_id: "EMA"
+    display_name_ko: "지수이동평균"
+    display_name_en: "Exponential Moving Average"
+    purpose_category: "trend"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "최근 가격에 더 큰 가중치를 부여한 이동평균"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "빠른 추세 변화 감지"
+    
+  # 모멘텀 지표들
+  RSI:
+    variable_id: "RSI"
+    display_name_ko: "RSI 지표"
+    display_name_en: "Relative Strength Index"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "과매수/과매도 확인"
+    
+  STOCHASTIC:
+    variable_id: "STOCHASTIC"
+    display_name_ko: "스토캐스틱"
+    display_name_en: "Stochastic Oscillator"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "모멘텀 변화 감지"
+    
+  MACD:
+    variable_id: "MACD"
+    display_name_ko: "MACD 지표"
+    display_name_en: "Moving Average Convergence Divergence"
+    purpose_category: "momentum"
+    chart_category: "subplot"
+    comparison_group: "signal_conditional"
+    description: "두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "추세 변화와 모멘텀 확인"
+    
+  # 변동성 지표들
+  BOLLINGER_BAND:
+    variable_id: "BOLLINGER_BAND"
+    display_name_ko: "볼린저 밴드"
+    display_name_en: "Bollinger Bands"
+    purpose_category: "volatility"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "이동평균선과 표준편차를 이용한 변동성 채널"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "과매수/과매도 및 변동성 확인"
+    
+  ATR:
+    variable_id: "ATR"
+    display_name_ko: "평균실제범위"
+    display_name_en: "Average True Range"
+    purpose_category: "volatility"
+    chart_category: "subplot"
+    comparison_group: "volatility_comparable"
+    description: "주가의 변동성을 측정하는 지표. 절대적인 가격 변동폭을 나타냄"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "변동성 측정, 손절/익절 기준"
+    
+  # 거래량 지표들
+  VOLUME:
+    variable_id: "VOLUME"
+    display_name_ko: "거래량"
+    display_name_en: "Volume"
+    purpose_category: "volume"
+    chart_category: "subplot"
+    comparison_group: "volume_comparable"
+    description: "특정 기간 동안 거래된 주식의 총 수량"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "거래 활동 확인"
+    
+  VOLUME_SMA:
+    variable_id: "VOLUME_SMA"
+    display_name_ko: "거래량 이동평균"
+    display_name_en: "Volume Simple Moving Average"
+    purpose_category: "volume"
+    chart_category: "subplot"
+    comparison_group: "volume_comparable"
+    description: "거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "거래량 트렌드 분석"
+    
+  # 가격 지표들
+  CURRENT_PRICE:
+    variable_id: "CURRENT_PRICE"
+    display_name_ko: "현재가"
+    display_name_en: "Current Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "현재 시점의 가격"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "실시간 가격 확인"
+    
+  OPEN_PRICE:
+    variable_id: "OPEN_PRICE"
+    display_name_ko: "시가"
+    display_name_en: "Open Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 시작 가격"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "봉 패턴 분석"
+    
+  HIGH_PRICE:
+    variable_id: "HIGH_PRICE"
+    display_name_ko: "고가"
+    display_name_en: "High Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 최고가"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "저항선 확인"
+    
+  LOW_PRICE:
+    variable_id: "LOW_PRICE"
+    display_name_ko: "저가"
+    display_name_en: "Low Price"
+    purpose_category: "price"
+    chart_category: "overlay"
+    comparison_group: "price_comparable"
+    description: "특정 기간의 최저가"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "지지선 확인"
+    
+  # 자본 지표들
+  CASH_BALANCE:
+    variable_id: "CASH_BALANCE"
+    display_name_ko: "현금 잔고"
+    display_name_en: "Cash Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "사용 가능한 현금 잔고"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "매수 여력 확인"
+    
+  COIN_BALANCE:
+    variable_id: "COIN_BALANCE"
+    display_name_ko: "코인 보유량"
+    display_name_en: "Coin Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "현재 보유중인 코인 수량"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "보유 포지션 확인"
+    
+  TOTAL_BALANCE:
+    variable_id: "TOTAL_BALANCE"
+    display_name_ko: "총 자산"
+    display_name_en: "Total Balance"
+    purpose_category: "capital"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "현금과 코인을 합친 총 자산"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "총 포트폴리오 가치 확인"
+    
+  # 상태 지표들
+  PROFIT_PERCENT:
+    variable_id: "PROFIT_PERCENT"
+    display_name_ko: "현재 수익률(%)"
+    display_name_en: "Current Profit Percentage"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "percentage_comparable"
+    description: "매수가 대비 현재 수익률"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "수익률 모니터링"
+    
+  PROFIT_AMOUNT:
+    variable_id: "PROFIT_AMOUNT"
+    display_name_ko: "현재 수익 금액"
+    display_name_en: "Current Profit Amount"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "capital_comparable"
+    description: "매수가 대비 현재 수익 금액"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "절대 수익 확인"
+    
+  POSITION_SIZE:
+    variable_id: "POSITION_SIZE"
+    display_name_ko: "포지션 크기"
+    display_name_en: "Position Size"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "quantity_comparable"
+    description: "현재 포지션의 크기"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "포지션 규모 관리"
+    
+  AVG_BUY_PRICE:
+    variable_id: "AVG_BUY_PRICE"
+    display_name_ko: "평균 매수가"
+    display_name_en: "Average Buy Price"
+    purpose_category: "state"
+    chart_category: "subplot"
+    comparison_group: "price_comparable"
+    description: "수수료 포함 평균 매수가"
+    source: "built-in"
+    data_type: "float"
+    typical_usage: "손익분기점 확인"
+
+# 변수 분류별 요약
+variable_categories:
+  trend:
+    variables: ["SMA", "EMA"]
+    description: "추세 방향성을 파악하는 지표들"
+    chart_position: "overlay"
+    typical_comparison: "가격과 직접 비교"
+    
+  momentum:
+    variables: ["RSI", "STOCHASTIC", "MACD"]
+    description: "가격 변화의 속도와 강도를 측정"
+    chart_position: "subplot"
+    typical_comparison: "임계값 기반 신호"
+    
+  volatility:
+    variables: ["BOLLINGER_BAND", "ATR"]
+    description: "시장 변동성과 위험도 측정"
+    chart_position: "mixed"
+    typical_comparison: "변동성 수준 비교"
+    
+  volume:
+    variables: ["VOLUME", "VOLUME_SMA"]
+    description: "거래 활동과 유동성 분석"
+    chart_position: "subplot"
+    typical_comparison: "거래량 크기 비교"
+    
+  price:
+    variables: ["CURRENT_PRICE", "OPEN_PRICE", "HIGH_PRICE", "LOW_PRICE"]
+    description: "기본 가격 정보"
+    chart_position: "overlay"
+    typical_comparison: "가격 수준 비교"
+    
+  capital:
+    variables: ["CASH_BALANCE", "COIN_BALANCE", "TOTAL_BALANCE"]
+    description: "계좌 자산 정보"
+    chart_position: "subplot"
+    typical_comparison: "자산 규모 비교"
+    
+  state:
+    variables: ["PROFIT_PERCENT", "PROFIT_AMOUNT", "POSITION_SIZE", "AVG_BUY_PRICE"]
+    description: "현재 포지션 상태"
+    chart_position: "subplot"
+    typical_comparison: "상태값 비교"
+
+# 사용법 가이드
+usage_guide:
+  basic_analysis:
+    description: "기본 분석용 변수들"
+    recommended: ["CURRENT_PRICE", "SMA", "RSI", "VOLUME"]
+    reason: "가장 널리 사용되고 이해하기 쉬움"
+    
+  advanced_analysis:
+    description: "고급 분석용 변수들"
+    recommended: ["MACD", "BOLLINGER_BAND", "ATR", "STOCHASTIC"]
+    reason: "복합적인 시장 분석 가능"
+    
+  portfolio_management:
+    description: "포트폴리오 관리용 변수들"
+    recommended: ["TOTAL_BALANCE", "PROFIT_PERCENT", "POSITION_SIZE"]
+    reason: "자산 관리와 위험 통제"
+    
+  risk_management:
+    description: "리스크 관리용 변수들"
+    recommended: ["ATR", "PROFIT_AMOUNT", "CASH_BALANCE"]
+    reason: "손실 제한과 자본 보호"

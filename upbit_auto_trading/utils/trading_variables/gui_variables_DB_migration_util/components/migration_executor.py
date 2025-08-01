@@ -44,6 +44,19 @@ class MigrationExecutorFrame(tk.Frame):
         
         self.setup_ui()
     
+    def set_schema_file(self, schema_file_path):
+        """
+        미리보기에서 선택한 스키마 파일 경로 설정
+        
+        Args:
+            schema_file_path: 스키마 파일 경로
+        """
+        self.selected_schema_path = schema_file_path
+        if hasattr(self, 'schema_info_var'):
+            filename = os.path.basename(schema_file_path) if schema_file_path else "스키마 미선택"
+            self.schema_info_var.set(f"📄 {filename}")
+    
+    
     def setup_ui(self):
         """UI 구성"""
         # 제목
@@ -337,6 +350,10 @@ class MigrationExecutorFrame(tk.Frame):
     
     def get_schema_from_preview(self):
         """미리보기 탭에서 선택된 스키마 파일 경로 가져오기"""
+        # 우선 순위: 1. set_schema_file로 설정된 경로 사용
+        if self.selected_schema_path and os.path.exists(self.selected_schema_path):
+            return self.selected_schema_path
+            
         try:
             # 여러 경로로 미리보기 탭 찾기 시도
             preview_tab = None
@@ -357,17 +374,19 @@ class MigrationExecutorFrame(tk.Frame):
                     preview_tab = current.migration_preview
             
             if preview_tab and hasattr(preview_tab, 'selected_schema_file'):
-                return preview_tab.selected_schema_file
-            else:
-                # 기본 스키마 파일 경로 사용
-                default_schema = os.path.join(
-                    os.path.dirname(__file__), 
-                    "..", 
-                    "data_info", 
-                    "upbit_autotrading_unified_schema.sql"
-                )
-                if os.path.exists(default_schema):
-                    return default_schema
+                schema_file = preview_tab.selected_schema_file
+                if schema_file and os.path.exists(schema_file):
+                    return schema_file
+            
+            # 기본 스키마 파일 경로 사용
+            default_schema = os.path.join(
+                os.path.dirname(__file__), 
+                "..", 
+                "data_info", 
+                "upbit_autotrading_unified_schema.sql"
+            )
+            if os.path.exists(default_schema):
+                return default_schema
                     
         except Exception as e:
             self.log_execution_message(f"스키마 경로 조회 중 오류: {str(e)}", "WARNING")

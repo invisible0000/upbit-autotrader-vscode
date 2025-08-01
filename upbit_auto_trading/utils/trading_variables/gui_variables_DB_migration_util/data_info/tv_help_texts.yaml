@@ -1,189 +1,173 @@
 # 지표 도움말 텍스트 라이브러리
 # ===============================
+# 통일된 ID 기반 딕셔너리 구조
 # variable_definitions.py의 help 텍스트를 위한 표준화된 도움말 모음
 
 help_texts:
-  # === 기간(Period) 관련 ===
-  period_general: "계산에 사용할 기간 (봉 개수)"
-  period_short: "단기: 5,10,20 / 중기: 60,120 / 장기: 200,240"
-  period_rsi: "RSI 계산 기간 (일반적으로 14)"
-  period_sma: "단순이동평균 계산 기간"
-  period_ema: "지수이동평균 계산 기간"
-  period_bollinger: "볼린저밴드 계산 기간 (통상 20)"
-  period_atr: "ATR 계산 기간 (일반적으로 14일)"
-  period_volume: "거래량 이동평균 계산 기간"
-  period_macd_fast: "MACD 빠른 이동평균 (12EMA)"
-  period_macd_slow: "MACD 느린 이동평균 (26EMA)"
-  period_macd_signal: "MACD의 9일 이동평균 (매매신호)"
-  period_stoch_k: "스토캐스틱 %K 계산 기간"
-  period_stoch_d: "스토캐스틱 %D 평활화 기간"
-
-  # === 타임프레임 관련 ===
-  timeframe_general: "봉 단위 시간"
-  timeframe_strategy: "봉 단위 시간 (전략 기본값 사용 시 무시)"
-  timeframe_price: "가격 기준 봉 단위"
-  timeframe_volume: "거래량 기준 봉 단위"
-  timeframe_open: "시가 기준 봉 단위 (당일 시작가 등)"
-  timeframe_high: "고가 기준 봉 단위"
-  timeframe_low: "저가 기준 봉 단위"
-  timeframe_backtest: "백테스팅 시 해당 타임프레임 종가를 현재가로 사용"
-
-  # === 배수/계수 관련 ===
-  multiplier_general: "기준값에 곱할 배수"
-  multiplier_atr: "ATR 값에 곱할 배수 (손절가 계산용)"
-  multiplier_bollinger: "표준편차 곱셈 계수"
-  std_dev_bollinger: "밴드 폭 (1.0=68%, 2.0=95%, 2.5=99%)"
-  exponential_factor: "지수 가중치 (2/(기간+1)이 표준)"
-
-  # === 가격 관련 ===
-  price_type_general: "실시간 거래에서 사용할 가격 기준"
-  price_current: "실시간 시장 가격"
-  backtest_mode: "백테스팅 모드 선택"
-
-  # === 거래량 관련 ===
-  volume_type_general: "거래량 종류 선택"
-  volume_vs_amount: "거래량: 코인 개수, 거래대금: KRW 금액"
-  volume_types_extended: "거래량: 코인수량, 거래대금: 원화금액, 상대거래량: 평균대비 비율"
-
-  # === 화폐/통화 관련 ===
-  currency_display: "표시 기준 통화"
-  currency_cash: "현금 잔고 표시 기준 통화"
-  currency_total: "총 자산 표시 기준 통화"
-  currency_profit: "수익 금액 표시 통화"
-  currency_avg_buy: "평균 매수가 표시 통화 (수수료 포함된 평단가)"
-
-  # === 범위/스코프 관련 ===
-  scope_position_vs_account: "포지션 할당 자본 vs 전체 계좌"
-  scope_cash_vs_total: "포지션 할당 vs 전체 사용가능 현금"
-  scope_coin_current_vs_all: "현재 거래중인 코인 vs 보유한 모든 코인"
-  scope_profit_calculation: "수익률 계산 범위"
-
-  # === 계산 방식 관련 ===
-  calculation_method_profit: "미실현: 현재가 기준, 실현: 매도 완료분, 전체: 포트폴리오 전체"
-  calculation_method_profit_amount: "미실현: 현재가기준, 실현: 매도완료, 전체: 누적"
-
-  # === 수수료 관련 ===
-  include_fees: "거래 수수료 및 슬리피지 포함 여부"
-
-  # === MACD 세부사항 ===
-  macd_type_selection: "MACD선: 빠른선-느린선, 시그널선: MACD의 이평, 히스토그램: MACD-시그널"
-
-  # === 스토캐스틱 세부사항 ===
-  stoch_type_selection: "%K: 원시 스토캐스틱, %D: 평활화된 스토캐스틱"
-
-  # === 볼린저밴드 세부사항 ===
-  bollinger_position: "비교할 볼린저밴드 위치"
-
-  # === 단위 형태 ===
-  unit_type_position: "수량: 코인개수, 금액: 원화가치, 비율: 포트폴리오대비%"
-  unit_type_coin: "코인 보유량 표시 방식"
-
-# === 상황별 도움말 템플릿 ===
-help_templates:
-  basic_period:
-    template: "{indicator_name} 계산 기간 (일반적으로 {default_value})"
-    variables: ["indicator_name", "default_value"]
+  # RSI 도움말들
+  RSI_period:
+    variable_id: "RSI"
+    parameter_name: "period"
+    help_text_ko: "RSI 계산에 사용할 기간 (일반적으로 14일)"
+    help_text_en: "Period for RSI calculation (typically 14 days)"
+    tooltip_ko: "짧은 기간: 민감한 신호, 긴 기간: 안정적 신호"
+    tooltip_en: "Short period: Sensitive signals, Long period: Stable signals"
     
-  timeframe_with_strategy:
-    template: "봉 단위 시간 ({strategy_note})"
-    variables: ["strategy_note"]
-    default_strategy_note: "전략 기본값 사용 시 무시"
-    
-  multiplier_with_purpose:
-    template: "{base_value} 값에 곱할 배수 ({purpose})"
-    variables: ["base_value", "purpose"]
-    
-  calculation_method_with_options:
-    template: "{option1}: {desc1}, {option2}: {desc2}, {option3}: {desc3}"
-    variables: ["option1", "desc1", "option2", "desc2", "option3", "desc3"]
+  RSI_timeframe:
+    variable_id: "RSI"
+    parameter_name: "timeframe"
+    help_text_ko: "RSI 계산에 사용할 봉 단위 (기본값은 전략 설정 따름)"
+    help_text_en: "Timeframe for RSI calculation (default follows strategy setting)"
+    tooltip_ko: "전략 기본값 권장, 특별한 경우에만 변경"
+    tooltip_en: "Strategy default recommended, change only for special cases"
 
-# === 자주 사용되는 도움말 조합 ===
-common_help_combinations:
-  moving_average_set:
-    period: "period_general"
-    timeframe: "timeframe_general"
+  # SMA 도움말들
+  SMA_period:
+    variable_id: "SMA"
+    parameter_name: "period"
+    help_text_ko: "단순이동평균 계산 기간 (단기: 5,10,20 / 중기: 60,120 / 장기: 200,240)"
+    help_text_en: "Simple Moving Average period (Short: 5,10,20 / Medium: 60,120 / Long: 200,240)"
+    tooltip_ko: "짧은 기간은 빠른 신호, 긴 기간은 추세 확인용"
+    tooltip_en: "Short periods for quick signals, long periods for trend confirmation"
     
-  oscillator_set:
-    period: "period_general"
-    timeframe: "timeframe_strategy"
-    overbought: "과매수 수준 설정"
-    oversold: "과매도 수준 설정"
-    
-  volatility_set:
-    period: "period_general"
-    multiplier: "multiplier_general"
-    timeframe: "timeframe_general"
-    
-  volume_set:
-    period: "period_volume"
-    volume_type: "volume_vs_amount"
-    timeframe: "timeframe_volume"
-    
-  price_set:
-    price_type: "price_type_general"
-    timeframe: "timeframe_price"
-    backtest_mode: "backtest_mode"
-    
-  balance_set:
-    currency: "currency_display"
-    scope: "scope_position_vs_account"
-    
-  profit_set:
-    calculation_method: "calculation_method_profit"
-    include_fees: "include_fees"
-    currency: "currency_profit"
+  SMA_timeframe:
+    variable_id: "SMA"
+    parameter_name: "timeframe"
+    help_text_ko: "이동평균 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for moving average calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
 
-# === 다국어 지원 도움말 ===
-multilingual_help:
-  korean:
-    suffix_period: " 봉"
-    suffix_multiplier: " 배"
-    suffix_percent: "%"
-    suffix_currency_krw: "원"
-    suffix_currency_usd: "달러"
+  # EMA 도움말들
+  EMA_period:
+    variable_id: "EMA"
+    parameter_name: "period"
+    help_text_ko: "지수이동평균 계산 기간 (일반적으로 12일)"
+    help_text_en: "Exponential Moving Average period (typically 12 days)"
+    tooltip_ko: "SMA보다 최근 가격에 더 민감하게 반응"
+    tooltip_en: "More sensitive to recent prices than SMA"
     
-  english:
-    suffix_period: " bars"
-    suffix_multiplier: "x"
-    suffix_percent: "%"
-    suffix_currency_krw: " KRW"
-    suffix_currency_usd: " USD"
+  EMA_timeframe:
+    variable_id: "EMA"
+    parameter_name: "timeframe"
+    help_text_ko: "지수이동평균 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for exponential moving average calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
 
-# === 도움말 품질 가이드라인 ===
-help_quality_guidelines:
-  clarity:
-    - "간결하고 명확한 표현 사용"
-    - "전문용어 사용 시 설명 추가"
-    - "초보자도 이해할 수 있는 수준"
+  # STOCHASTIC 도움말들
+  STOCHASTIC_k_period:
+    variable_id: "STOCHASTIC"
+    parameter_name: "k_period"
+    help_text_ko: "스토캐스틱 %K 계산 기간 (일반적으로 14일)"
+    help_text_en: "Stochastic %K calculation period (typically 14 days)"
+    tooltip_ko: "짧은 기간: 민감한 신호, 긴 기간: 안정적 신호"
+    tooltip_en: "Short period: Sensitive signals, Long period: Stable signals"
     
-  completeness:
-    - "파라미터의 목적 설명"
-    - "추천값 또는 일반적인 값 제시"
-    - "영향을 미치는 요소 설명"
+  STOCHASTIC_d_period:
+    variable_id: "STOCHASTIC"
+    parameter_name: "d_period"
+    help_text_ko: "스토캐스틱 %D 평활화 기간 (일반적으로 3일)"
+    help_text_en: "Stochastic %D smoothing period (typically 3 days)"
+    tooltip_ko: "%K의 이동평균으로 신호선 역할"
+    tooltip_en: "Moving average of %K, acts as signal line"
     
-  consistency:
-    - "동일한 개념에 대해 일관된 용어 사용"
-    - "표준화된 표현 패턴 유지"
-    - "번역 시에도 의미 일관성 유지"
-    
-  practicality:
-    - "실제 트레이딩 상황에서 유용한 정보"
-    - "설정값 변경의 영향 설명"
-    - "주의사항이 있다면 명시"
+  STOCHASTIC_timeframe:
+    variable_id: "STOCHASTIC"
+    parameter_name: "timeframe"
+    help_text_ko: "스토캐스틱 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for stochastic calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
 
-# === 도움말 자동 생성 규칙 ===
-auto_generation_rules:
-  period_parameters:
-    pattern: "{indicator_name} 계산 기간 (일반적으로 {common_value})"
-    fallback: "계산에 사용할 기간 (봉 개수)"
+  # MACD 도움말들
+  MACD_fast_period:
+    variable_id: "MACD"
+    parameter_name: "fast_period"
+    help_text_ko: "MACD 빠른선 기간 (일반적으로 12일)"
+    help_text_en: "MACD fast line period (typically 12 days)"
+    tooltip_ko: "짧은 기간의 EMA로 빠른 신호 생성"
+    tooltip_en: "Short-term EMA for quick signals"
     
-  enum_parameters:
-    pattern: "{option_list}중 선택"
-    include_default: true
+  MACD_slow_period:
+    variable_id: "MACD"
+    parameter_name: "slow_period"
+    help_text_ko: "MACD 느린선 기간 (일반적으로 26일)"
+    help_text_en: "MACD slow line period (typically 26 days)"
+    tooltip_ko: "긴 기간의 EMA로 추세 확인"
+    tooltip_en: "Long-term EMA for trend confirmation"
     
-  float_parameters:
-    include_range: true
-    pattern: "{purpose} ({min_val}-{max_val}, 기본값: {default_val})"
+  MACD_signal_period:
+    variable_id: "MACD"
+    parameter_name: "signal_period"
+    help_text_ko: "MACD 시그널선 기간 (일반적으로 9일)"
+    help_text_en: "MACD signal line period (typically 9 days)"
+    tooltip_ko: "MACD선의 이동평균으로 매매 신호 생성"
+    tooltip_en: "Moving average of MACD line for trading signals"
     
-  boolean_parameters:
-    pattern: "{feature_name} 사용 여부"
+  MACD_timeframe:
+    variable_id: "MACD"
+    parameter_name: "timeframe"
+    help_text_ko: "MACD 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for MACD calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
+
+  # BOLLINGER_BAND 도움말들
+  BOLLINGER_BAND_period:
+    variable_id: "BOLLINGER_BAND"
+    parameter_name: "period"
+    help_text_ko: "볼린저밴드 중심선(이동평균) 기간 (일반적으로 20일)"
+    help_text_en: "Bollinger Band center line (moving average) period (typically 20 days)"
+    tooltip_ko: "기간이 길수록 밴드가 안정적"
+    tooltip_en: "Longer periods create more stable bands"
+    
+  BOLLINGER_BAND_std_dev:
+    variable_id: "BOLLINGER_BAND"
+    parameter_name: "std_dev"
+    help_text_ko: "볼린저밴드 표준편차 배수 (일반적으로 2.0)"
+    help_text_en: "Bollinger Band standard deviation multiplier (typically 2.0)"
+    tooltip_ko: "큰 값: 넓은 밴드, 작은 값: 좁은 밴드"
+    tooltip_en: "Higher values: Wider bands, Lower values: Narrower bands"
+    
+  BOLLINGER_BAND_timeframe:
+    variable_id: "BOLLINGER_BAND"
+    parameter_name: "timeframe"
+    help_text_ko: "볼린저밴드 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for Bollinger Band calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
+
+  # ATR 도움말들
+  ATR_period:
+    variable_id: "ATR"
+    parameter_name: "period"
+    help_text_ko: "ATR 계산 기간 (일반적으로 14일)"
+    help_text_en: "ATR calculation period (typically 14 days)"
+    tooltip_ko: "평균 변동폭 측정으로 변동성 확인"
+    tooltip_en: "Measures average volatility range"
+    
+  ATR_timeframe:
+    variable_id: "ATR"
+    parameter_name: "timeframe"
+    help_text_ko: "ATR 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for ATR calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"
+
+  # VOLUME_SMA 도움말들
+  VOLUME_SMA_period:
+    variable_id: "VOLUME_SMA"
+    parameter_name: "period"
+    help_text_ko: "거래량 이동평균 기간 (일반적으로 20일)"
+    help_text_en: "Volume moving average period (typically 20 days)"
+    tooltip_ko: "평균 거래량 대비 현재 거래량 비교"
+    tooltip_en: "Compare current volume against average volume"
+    
+  VOLUME_SMA_timeframe:
+    variable_id: "VOLUME_SMA"
+    parameter_name: "timeframe"
+    help_text_ko: "거래량 이동평균 계산에 사용할 봉 단위"
+    help_text_en: "Timeframe for volume moving average calculation"
+    tooltip_ko: "전략 타임프레임과 일치 권장"
+    tooltip_en: "Recommended to match strategy timeframe"

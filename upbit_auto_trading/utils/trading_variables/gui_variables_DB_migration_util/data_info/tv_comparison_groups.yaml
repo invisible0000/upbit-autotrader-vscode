@@ -1,46 +1,169 @@
 # 비교 그룹 정의
 # ===============================
+# 통일된 ID 기반 딕셔너리 구조
 # 지표 간 비교 가능성을 정의하는 메타데이터
 
 comparison_groups:
+  # 가격 비교 가능 그룹
   price_comparable:
+    group_id: "price_comparable"
     group_name_ko: "가격 비교 가능"
     group_name_en: "Price Comparable"
     description: "가격 기반 지표들끼리 비교 가능"
     can_compare_with: ["price_comparable"]
+    typical_units: ["KRW", "원", "가격"]
+    value_range: "시장 가격 범위"
+    data_type: "float"
+    validation_rule: "positive_number"
     
+  # 퍼센트 비교 가능 그룹
   percentage_comparable:
+    group_id: "percentage_comparable"
     group_name_ko: "퍼센트 비교 가능"
     group_name_en: "Percentage Comparable"
     description: "0-100% 범위의 지표들끼리 비교 가능"
     can_compare_with: ["percentage_comparable"]
+    typical_units: ["%", "퍼센트", "비율"]
+    value_range: "0-100"
+    data_type: "float"
+    validation_rule: "percentage_range"
     
+  # 신호 조건부 그룹
   signal_conditional:
+    group_id: "signal_conditional"
     group_name_ko: "신호 조건부"
     group_name_en: "Signal Conditional"
     description: "특별한 신호 조건에서만 비교 가능"
     can_compare_with: ["signal_conditional"]
+    typical_units: ["신호", "상태", "불린"]
+    value_range: "조건부"
+    data_type: "boolean_or_enum"
+    validation_rule: "conditional_logic"
     
+  # 변동성 비교 가능 그룹
   volatility_comparable:
+    group_id: "volatility_comparable"
     group_name_ko: "변동성 비교 가능"
     group_name_en: "Volatility Comparable"
     description: "변동성 지표들끼리 비교 가능"
     can_compare_with: ["volatility_comparable"]
+    typical_units: ["포인트", "절대값", "표준편차"]
+    value_range: "0 이상"
+    data_type: "float"
+    validation_rule: "non_negative"
     
+  # 거래량 비교 가능 그룹
   volume_comparable:
+    group_id: "volume_comparable"
     group_name_ko: "거래량 비교 가능"
     group_name_en: "Volume Comparable"
     description: "거래량 기반 지표들끼리 비교 가능"
     can_compare_with: ["volume_comparable"]
+    typical_units: ["개", "코인", "거래량"]
+    value_range: "0 이상"
+    data_type: "float"
+    validation_rule: "non_negative"
     
+  # 자본 비교 가능 그룹
   capital_comparable:
+    group_id: "capital_comparable"
     group_name_ko: "자본 비교 가능"
     group_name_en: "Capital Comparable"
     description: "자본/자산 관련 지표들끼리 비교 가능"
     can_compare_with: ["capital_comparable"]
+    typical_units: ["KRW", "원", "자산"]
+    value_range: "0 이상"
+    data_type: "float"
+    validation_rule: "non_negative"
     
+  # 수량 비교 가능 그룹
   quantity_comparable:
+    group_id: "quantity_comparable"
     group_name_ko: "수량 비교 가능"
     group_name_en: "Quantity Comparable"
     description: "수량 관련 지표들끼리 비교 가능"
     can_compare_with: ["quantity_comparable"]
+    typical_units: ["개", "수량", "단위"]
+    value_range: "0 이상"
+    data_type: "integer_or_float"
+    validation_rule: "non_negative"
+
+# 그룹 간 호환성 매트릭스
+compatibility_matrix:
+  # 완전 호환 (동일 그룹)
+  full_compatible:
+    price_comparable: ["price_comparable"]
+    percentage_comparable: ["percentage_comparable"]
+    signal_conditional: ["signal_conditional"]
+    volatility_comparable: ["volatility_comparable"]
+    volume_comparable: ["volume_comparable"]
+    capital_comparable: ["capital_comparable"]
+    quantity_comparable: ["quantity_comparable"]
+    
+  # 조건부 호환 (특별한 경우에만)
+  conditional_compatible:
+    volume_to_capital:
+      source: "volume_comparable"
+      target: "capital_comparable"
+      condition: "거래량에 가격을 곱한 경우"
+      conversion_rule: "volume * price = capital"
+      
+    percentage_to_signal:
+      source: "percentage_comparable"
+      target: "signal_conditional"
+      condition: "임계값 기반 신호 변환"
+      conversion_rule: "percentage > threshold → boolean"
+      
+  # 완전 비호환
+  incompatible:
+    price_vs_percentage: 
+      groups: ["price_comparable", "percentage_comparable"]
+      reason: "단위와 범위가 완전히 다름"
+      
+    volume_vs_percentage:
+      groups: ["volume_comparable", "percentage_comparable"]
+      reason: "거래량과 비율은 의미가 다름"
+
+# 그룹별 검증 규칙
+validation_rules:
+  positive_number:
+    rule: "value > 0"
+    error_message: "양수여야 합니다"
+    
+  percentage_range:
+    rule: "0 <= value <= 100"
+    error_message: "0-100 범위여야 합니다"
+    
+  conditional_logic:
+    rule: "value in allowed_values"
+    error_message: "허용된 값이어야 합니다"
+    
+  non_negative:
+    rule: "value >= 0"
+    error_message: "0 이상이어야 합니다"
+
+# 사용 예시
+usage_examples:
+  compatible_comparisons:
+    - comparison: "현재가 > SMA(20)"
+      groups: ["price_comparable", "price_comparable"]
+      result: "✅ 호환 가능"
+      
+    - comparison: "RSI > 70"
+      groups: ["percentage_comparable", "percentage_comparable"]
+      result: "✅ 호환 가능"
+      
+    - comparison: "거래량 > 평균거래량"
+      groups: ["volume_comparable", "volume_comparable"]
+      result: "✅ 호환 가능"
+      
+  incompatible_comparisons:
+    - comparison: "현재가 > RSI"
+      groups: ["price_comparable", "percentage_comparable"]
+      result: "❌ 호환 불가능"
+      reason: "가격과 퍼센트는 비교할 수 없음"
+      
+    - comparison: "거래량 > RSI"
+      groups: ["volume_comparable", "percentage_comparable"]
+      result: "❌ 호환 불가능"
+      reason: "거래량과 퍼센트는 의미가 다름"
