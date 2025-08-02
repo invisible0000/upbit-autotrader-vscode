@@ -62,13 +62,17 @@ from typing import Dict, Any, Optional
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# 로그 디렉토리 생성
+log_dir = PROJECT_ROOT / "logs"
+log_dir.mkdir(exist_ok=True)
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('logs/super_db_yaml_editor_workflow.log', encoding='utf-8')
+        logging.FileHandler(log_dir / 'super_db_yaml_editor_workflow.log', encoding='utf-8')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -473,9 +477,23 @@ class SuperDBYAMLEditorWorkflow:
             return
         
         parameters = data['variable_parameters']
-        if not isinstance(parameters, list):
-            compatibility['errors'].append("variable_parameters는 리스트여야 합니다")
+        if not isinstance(parameters, dict):
+            compatibility['errors'].append("variable_parameters는 딕셔너리여야 합니다")
             compatibility['status'] = 'incompatible'
+            return
+        
+        # 각 파라미터 검증
+        required_fields = ['variable_id', 'parameter_name', 'parameter_type', 'default_value']
+        
+        for param_key, param_data in parameters.items():
+            if not isinstance(param_data, dict):
+                compatibility['errors'].append(f"{param_key}: 파라미터 데이터가 딕셔너리가 아닙니다")
+                continue
+            
+            # 필수 필드 확인
+            for field in required_fields:
+                if field not in param_data:
+                    compatibility['warnings'].append(f"{param_key}: 필수 필드 '{field}'가 없습니다")
     
     def _validate_common_schema_rules(self, data: Dict[str, Any], compatibility: Dict[str, Any]) -> None:
         """공통 스키마 규칙 검증"""

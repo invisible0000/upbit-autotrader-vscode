@@ -352,20 +352,23 @@ class SuperDBExtractionDBToYAML:
     
     def _extract_variable_parameters_to_yaml(self, rows: List[sqlite3.Row]) -> Dict[str, Any]:
         """tv_variable_parameters → YAML 변환"""
-        variable_parameters = []
+        variable_parameters = {}
         
         for row in rows:
+            # 파라미터 키 생성 (variable_id + parameter_name)
+            param_key = f"{row['variable_id']}_{row['parameter_name']}"
+            
             param_data = {
-                'parameter_id': row['parameter_id'],
                 'variable_id': row['variable_id'],
                 'parameter_name': row['parameter_name'],
                 'parameter_type': row['parameter_type'],
                 'default_value': row['default_value'],
                 'min_value': row['min_value'],
                 'max_value': row['max_value'],
-                'step_value': row['step_value'],
+                'is_required': bool(row['is_required']) if row['is_required'] is not None else True,
+                'display_name_ko': row['display_name_ko'],
+                'display_name_en': row['display_name_en'],
                 'description': row['description'],
-                'required': bool(row['required']),
                 'display_order': row['display_order']
             }
             
@@ -381,7 +384,7 @@ class SuperDBExtractionDBToYAML:
             else:
                 param_data['enum_values'] = None
             
-            variable_parameters.append(param_data)
+            variable_parameters[param_key] = param_data
         
         return {'variable_parameters': variable_parameters}
     

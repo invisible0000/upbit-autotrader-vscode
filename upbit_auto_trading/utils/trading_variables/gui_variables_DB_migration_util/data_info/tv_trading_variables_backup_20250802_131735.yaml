@@ -1,15 +1,18 @@
 # ════════════════════════════════════════════════════════════════
-# 🔄 Super DB YAML Editor - Applied Changes
+# 🔄 Super DB Extraction - Metadata
 # ════════════════════════════════════════════════════════════════
-# 편집 원본: tv_trading_variables_EDIT_20250801_143152.yaml
-# 대상 테이블: tv_trading_variables
-# 적용 시점: 2025-08-01 15:13:00
-# 적용 도구: super_db_yaml_editor_workflow.py
+# 추출 소스: D:\projects\upbit-autotrader-vscode\upbit_auto_trading\data\settings.sqlite3
+# 소스 테이블: tv_trading_variables (20개 레코드)
+# 추출 시점: 2025-08-02 13:17:35
+# 추출 모드: 백업 모드 (특정 테이블)
+# 추출 옵션: backup_mode: True, specific_tables: True, output_directory: default
+# 대상 파일: tv_trading_variables_backup_20250802_131735.yaml
+# 추출 도구: super_db_extraction_db_to_yaml.py v1.1
 # ────────────────────────────────────────────────────────────────
-# 📝 처리 내역:
-# - 편집된 변경사항이 DB에 반영되었습니다
-# - 이 파일은 적용된 변경사항의 백업입니다
-# - 원본 편집 세션은 정리되었습니다
+# 📝 편집 안내:
+# - 이 파일은 DB에서 추출된 실제 데이터입니다
+# - 편집 후 super_yaml_editor_workflow.py로 DB 반영 가능
+# - 변경 전 반드시 백업을 확인하세요
 # ════════════════════════════════════════════════════════════════
 
 trading_variables:
@@ -20,10 +23,9 @@ trading_variables:
     purpose_category: trend
     chart_category: overlay
     comparison_group: price_comparable
-    parameter_required: true
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
   EMA:
     display_name_ko: 지수이동평균
@@ -32,10 +34,9 @@ trading_variables:
     purpose_category: trend
     chart_category: overlay
     comparison_group: price_comparable
-    parameter_required: true
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
   RSI:
     display_name_ko: RSI 지표 (수정됨)
@@ -45,10 +46,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: percentage_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   STOCHASTIC:
     display_name_ko: 스토캐스틱
     display_name_en: Stochastic Oscillator
@@ -57,10 +57,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: percentage_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   MACD:
     display_name_ko: MACD 지표
     display_name_en: Moving Average Convergence Divergence
@@ -69,10 +68,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: signal_conditional
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   BOLLINGER_BAND:
     display_name_ko: 볼린저 밴드
     display_name_en: Bollinger Bands
@@ -81,10 +79,9 @@ trading_variables:
     chart_category: overlay
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   ATR:
     display_name_ko: 평균실제범위
     display_name_en: Average True Range
@@ -93,10 +90,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: volatility_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   VOLUME:
     display_name_ko: 거래량
     display_name_en: Volume
@@ -105,10 +101,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: volume_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   VOLUME_SMA:
     display_name_ko: 거래량 이동평균
     display_name_en: Volume Simple Moving Average
@@ -117,10 +112,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: volume_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: true
   CURRENT_PRICE:
     display_name_ko: 현재가
     display_name_en: Current Price
@@ -129,10 +123,9 @@ trading_variables:
     chart_category: overlay
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   OPEN_PRICE:
     display_name_ko: 시가
     display_name_en: Open Price
@@ -141,10 +134,9 @@ trading_variables:
     chart_category: overlay
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   HIGH_PRICE:
     display_name_ko: 고가
     display_name_en: High Price
@@ -153,10 +145,9 @@ trading_variables:
     chart_category: overlay
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   LOW_PRICE:
     display_name_ko: 저가
     display_name_en: Low Price
@@ -165,10 +156,9 @@ trading_variables:
     chart_category: overlay
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   CASH_BALANCE:
     display_name_ko: 현금 잔고
     display_name_en: Cash Balance
@@ -177,10 +167,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: capital_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   COIN_BALANCE:
     display_name_ko: 코인 보유량
     display_name_en: Coin Balance
@@ -189,10 +178,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: capital_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   TOTAL_BALANCE:
     display_name_ko: 총 자산
     display_name_en: Total Balance
@@ -201,10 +189,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: capital_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   PROFIT_PERCENT:
     display_name_ko: 현재 수익률(%)
     display_name_en: Current Profit Percentage
@@ -213,10 +200,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: percentage_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   PROFIT_AMOUNT:
     display_name_ko: 현재 수익 금액
     display_name_en: Current Profit Amount
@@ -225,10 +211,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: capital_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   POSITION_SIZE:
     display_name_ko: 포지션 크기
     display_name_en: Position Size
@@ -237,10 +222,9 @@ trading_variables:
     chart_category: subplot
     comparison_group: quantity_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false
   AVG_BUY_PRICE:
     display_name_ko: 평균 매수가
     display_name_en: Average Buy Price
@@ -249,7 +233,6 @@ trading_variables:
     chart_category: subplot
     comparison_group: price_comparable
     is_active: true
-    created_at: '2025-08-01 04:59:03'
-    updated_at: '2025-08-01 04:59:03'
+    created_at: '2025-08-01 06:13:00'
+    updated_at: '2025-08-01 06:13:00'
     source: built-in
-    parameter_required: false

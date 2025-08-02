@@ -1,22 +1,7 @@
-# ╔════════════════════════════════════════════════════════════════╗
-# ║                     🔄 편집 세션 정보                         ║
-# ╠════════════════════════════════════════════════════════════════╣
-# ║ 세션 ID: 20250802_084357                                    
-# ║ 원본 파일: tv_variable_parameters.yaml                          
-# ║ 편집 시작: 2025-08-02 08:43:57  
-# ║ 백업 위치: D:\projects\upbit-autotrader-vscode\upbit_auto_trading\utils\trading_variables\gui_variables_DB_migration_util\data_info\_BACKUPS_\session_20250802_084357                                 
-# ╠════════════════════════════════════════════════════════════════╣
-# ║                     📝 편집 안내                              ║
-# ╠════════════════════════════════════════════════════════════════╣
-# ║ 1. 이 파일을 자유롭게 편집하세요                              ║
-# ║ 2. 편집 완료 후 저장하세요 (Ctrl+S)                          ║
-# ║ 3. 다음 명령어로 검증하세요:                                  ║
-# ║    python tools/super_db_yaml_editor_workflow.py \           ║
-# ║      --validate-changes tv_variable_parameters_EDIT_20250802_084357.yaml         ║
-# ║ 4. 검증 후 적용하세요:                                        ║
-# ║    python tools/super_db_yaml_editor_workflow.py \           ║
-# ║      --apply-changes tv_variable_parameters_EDIT_20250802_084357.yaml            ║
-# ╚════════════════════════════════════════════════════════════════╝
+# 변수 파라미터 정의
+# ===============================
+# 각 트레이딩 변수의 파라미터 설정 정보
+# 통일된 ID 기반 딕셔너리 구조
 
 variable_parameters:
   # RSI 파라미터들
@@ -95,19 +80,6 @@ variable_parameters:
     display_name_ko: "타임프레임"
     display_name_en: "Timeframe"
     description: "봉 단위 시간"
-    display_order: 3
-
-  EMA_exponential_factor:
-    variable_id: "EMA"
-    parameter_name: "exponential_factor"
-    parameter_type: "float"
-    default_value: "2.0"
-    min_value: "0.1"
-    max_value: "10.0"
-    is_required: false
-    display_name_ko: "지수 계수"
-    display_name_en: "Exponential Factor"
-    description: "지수 가중치 (2/(기간+1)이 표준)"
     display_order: 2
 
   # STOCHASTIC 파라미터들
@@ -199,18 +171,6 @@ variable_parameters:
     display_name_ko: "타임프레임"
     display_name_en: "Timeframe"
     description: "봉 단위 시간"
-    display_order: 5
-
-  MACD_macd_type:
-    variable_id: "MACD"
-    parameter_name: "macd_type"
-    parameter_type: "enum"
-    default_value: "MACD선"
-    enum_values: ["MACD선", "시그널선", "히스토그램"]
-    is_required: true
-    display_name_ko: "MACD 종류"
-    display_name_en: "MACD Type"
-    description: "MACD선: 빠른선-느린선, 시그널선: MACD의 이평, 히스토그램: MACD-시그널"
     display_order: 4
 
   # BOLLINGER_BAND 파라미터들
@@ -250,18 +210,6 @@ variable_parameters:
     display_name_ko: "타임프레임"
     display_name_en: "Timeframe"
     description: "봉 단위 시간"
-    display_order: 4
-
-  BOLLINGER_BAND_band_position:
-    variable_id: "BOLLINGER_BAND"
-    parameter_name: "band_position"
-    parameter_type: "enum"
-    default_value: "상단"
-    enum_values: ["상단", "중앙선", "하단"]
-    is_required: true
-    display_name_ko: "밴드 위치"
-    display_name_en: "Band Position"
-    description: "비교할 볼린저밴드 위치"
     display_order: 3
 
   # ATR 파라미터들

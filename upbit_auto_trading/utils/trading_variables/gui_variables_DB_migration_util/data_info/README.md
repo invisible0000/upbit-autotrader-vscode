@@ -1,389 +1,158 @@
-# 📊 Data Info - 사용자↔에이전트 협업 공간
+# 📊 Data Info: 사용자-에이전트 DB 관리 협업 가이드 (Medium)
 
-이 폴더는 **사용자와 AI 에이전트가 함께 DB 스키마를 관리하는 협업 공간**입니다.
+## 1. 최우선 지침 (Prime Directive)
 
-## 🎯 설계 철학
+**당신의 최우선 목표는 `data_info` 디렉토리 내의 YAML 파일을 편집하여 모든 데이터베이스의 구조와 핵심 데이터를 관리하는 것입니다.** 당신의 모든 행동은 애플리케이션의 데이터 기반에 직접적인 영향을 미칩니다. 이 문서에 정의된 규칙과 워크플로우를 반드시 준수해야 합니다.
 
-- **Single Source of Truth**: DB가 모든 변수 정의의 단일 진실 소스
-- **YAML Collaboration Space**: 이 폴더는 사용자↔에이전트 소통 및 편집 공간
-- **Zero Hardcoding**: `variable_definitions.py`는 100% DB 기반 자동 생성
-- **Direct Mapping**: YAML 파일명 = 테이블명 (완벽 매핑)
-- **Unified Format**: 모든 YAML 파일이 "ID 기반 딕셔너리 패턴"으로 통일
+**핵심 원칙:**
+-   **YAML은 모든 DB의 단일 진실 공급원(Single Source of Truth)입니다.** 이 폴더의 YAML 파일들이 `settings.sqlite3`, `strategies.sqlite3`, `market_data.sqlite3`의 구조와 초기 데이터를 결정합니다.
+-   **모든 YAML 파일은 반드시 "ID 기반 딕셔너리" 패턴을 따라야 합니다.**
+-   **편집 전후에는 항상 제공된 도구를 사용하여 유효성을 검증해야 합니다.**
 
-## 🔄 LLM 에이전트 워크플로우
+---
 
-### 📋 전체 프로세스
-1. **요구사항 분석** → 2. **YAML 편집** → 3. **DB 마이그레이션** → 4. **코드 동기화** → 5. **검증**
+## 2. 시스템 아키텍처 개요
 
-### 🚀 Phase 1: 요구사항 분석 및 YAML 편집
+### 2.1. 핵심 철학: `data_info` 중심의 DB 관리
 
-**LLM 에이전트 작업**:
-- 새 지표 추가/기존 지표 수정 판단
-- 카테고리 분류 및 파라미터 타입 확인
-- 관련 YAML 파일들 식별 및 현재 상태 파악
-- 일관성 있는 패턴으로 YAML 편집
+-   **중앙 집중식 관리**: 이 `data_info` 폴더는 모든 DB(`settings`, `strategies`, `market_data`)의 구조와 데이터를 정의하는 중앙 허브입니다.
+-   **협업 공간**: 사용자와 에이전트가 YAML이라는 공통 언어를 통해 소통하고 DB를 함께 설계하는 편집 공간입니다.
+-   **직접 매핑**: `파일명.yaml`은 DB의 `테이블명`에 직접 매핑됩니다.
+-   **통일된 형식**: 모든 YAML 파일은 일관된 ID 기반 딕셔너리 구조를 사용하여 예측 가능성을 높입니다.
 
-**베스트 프랙티스**:
-- 기존 "ID 기반 딕셔너리 패턴" 유지
-- 표준화된 명명 규칙 준수
-- 충분한 설명과 예시 포함
+### 2.2. 3-Database 시스템 관리 방안
 
-### 🖥️ Phase 2: GUI 마이그레이션 도구 사용
+향후 모든 DB는 `data_info` 폴더의 YAML 파일을 통해 관리됩니다.
 
-**사용자 작업**:
-```bash
-python run_gui_trading_variables_DB_migration.py
+| 데이터베이스 파일 | 역할 | 관리 방식 | 당신의 상호작용 대상인가? |
+| :--- | :--- | :--- | :--- |
+| `settings.sqlite3` | **구조 및 설정** | YAML 마이그레이션 | ✅ **예 (주요 대상)** |
+| `strategies.sqlite3` | **사용자 인스턴스** | YAML 마이그레이션 (구조) | ✅ **예 (구조 정의 시)** |
+| `market_data.sqlite3` | **시장 데이터** | YAML 마이그레이션 (구조) | ✅ **예 (구조 정의 시)** |
+
+### 2.3. 주요 파일 매핑 (`settings.sqlite3` 기준)
+
+| YAML 파일 | 매핑 테이블 | 목적 |
+| :--- | :--- | :--- |
+| `tv_trading_variables.yaml` | `tv_trading_variables` | 핵심 변수 정의 |
+| `tv_variable_parameters.yaml` | `tv_variable_parameters` | 변수 파라미터 |
+| `tv_help_texts.yaml` | `tv_help_texts` | UI 도움말 텍스트 |
+| `tv_placeholder_texts.yaml` | `tv_placeholder_texts` | UI 플레이스홀더 예시 |
+| `tv_indicator_categories.yaml` | `tv_indicator_categories` | 지표 카테고리 시스템 |
+| `tv_parameter_types.yaml` | `tv_parameter_types` | 파라미터 타입 정의 |
+| `tv_comparison_groups.yaml` | `tv_comparison_groups` | 호환성 그룹 정의 |
+
+---
+
+## 3. 핵심 워크플로우: YAML → DB
+
+### 1단계: 분석 및 준비 (필수 선행 작업)
+
+**목표**: 변경을 수행하기 전에 현재 상태를 이해합니다.
+
+```powershell
+# 1. 현재 DB 상태 보기
+python tools/super_db_table_viewer.py settings
+
+# 2. 비교를 위해 현재 DB 데이터를 YAML로 추출
+python tools/super_db_extraction_db_to_yaml.py --tables tv_trading_variables
 ```
-1. Advanced Migration 탭 접근
-2. YAML → DB 마이그레이션 실행
-3. 로그 메시지 확인
 
-### 🔄 Phase 3: DB → Code 동기화
+### 2단계: YAML 편집 (당신의 핵심 임무)
 
-**자동 동기화**:
-1. DB 스키마 변경 감지
-2. `variable_definitions.py` 자동 재생성
-3. 코드 호환성 검증
+**목표**: 형식 규칙을 엄격히 준수하며 사용자 요청에 따라 YAML 파일을 수정합니다.
 
-### 🔍 Phase 4: 검증 및 배포
+**편집 전 체크리스트:**
+-   [ ] 새 변수에 파라미터가 필요한가? (`parameter_required: true/false`)
+-   [ ] 어떤 `purpose_category`, `chart_category`, `comparison_group`에 속하는가?
+-   [ ] 모든 필수 필드가 존재하는가? (섹션 4.2 참조)
+-   [ ] ID가 고유하며 `UPPERCASE_SNAKE_CASE` 형식인가?
 
-**검증 단계**:
-- 파일 비교 및 변경사항 확인
-- GUI 테스트 실행
-- 프로덕션 배포
+### 3단계: 마이그레이션 및 검증 (사용자/시스템 작업)
 
-## 📋 파일 구조
+**목표**: YAML 변경사항을 데이터베이스에 적용하고 결과를 검증합니다.
 
-### 📝 핵심 YAML 데이터 파일들 (통일된 ID 기반 딕셔너리 구조)
+```powershell
+# 1. 사용자가 마이그레이션 실행
+python tools/super_db_migration_yaml_to_db.py --yaml-files tv_trading_variables.yaml
 
-| YAML 파일 | 대응 테이블 | 용도 | 구조 |
-|-----------|-------------|------|------|
-| `tv_trading_variables.yaml` | `tv_trading_variables` | 🎯 메인 변수 정의 | ✅ 통일됨 |
-| `tv_variable_parameters.yaml` | `tv_variable_parameters` | ⚙️ 변수별 파라미터 | ✅ 통일됨 |
-| `tv_help_texts.yaml` | `tv_help_texts` | 📝 도움말 텍스트 | ✅ 통일됨 |
-| `tv_placeholder_texts.yaml` | `tv_placeholder_texts` | 🎯 플레이스홀더 예시 | ✅ 통일됨 |
-| `tv_indicator_categories.yaml` | `tv_indicator_categories` | 📂 지표 카테고리 체계 | ✅ 통일됨 |
-| `tv_parameter_types.yaml` | `tv_parameter_types` | 🔧 파라미터 타입 정의 | ✅ 통일됨 |
-| `tv_indicator_library.yaml` | `tv_indicator_library` | 📚 지표 라이브러리 상세 | ✅ 통일됨 |
-| `tv_comparison_groups.yaml` | `tv_comparison_groups` | 🔗 호환성 그룹 정의 | ✅ 통일됨 |
+# 2. DB 상태를 다시 확인하여 마이그레이션 검증
+python tools/super_db_table_viewer.py settings
 
-**📐 통일된 구조 특징**:
-- 🔑 **ID 기반 접근**: 모든 항목에 `{type}_id` 필드
-- 📝 **일관된 속성명**: `display_name_ko/en`, `description` 등
-- 🏗️ **계층적 구조**: 논리적 그룹핑과 중첩
-- 🔍 **풍부한 메타데이터**: 사용법, 예시, 검증 규칙
-- �️ **타입 안전성**: 데이터 타입과 범위 명시
+# 3. (중요) 다시 YAML로 추출하여 비교 검증
+python tools/super_db_extraction_db_to_yaml.py --tables tv_trading_variables
+# 이제 새로 추출된 파일과 당신이 편집한 파일이 동일해야 합니다.
+```
 
-## �️ DB 생성 관리 규칙 (2025-08-01 업데이트)
+---
 
-### 🎯 **핵심 설계 원칙: 구조/인스턴스 분리**
+## 4. YAML 데이터 구조 규칙 (엄격)
 
-**자동차 계층 구조 적용**:
+### 4.1. 보편적 형식: ID 기반 딕셔너리
+
+**이 패턴은 이 디렉토리의 모든 `.yaml` 파일에 대해 필수입니다.**
+
 ```yaml
-차 바퀴 (Triggers):
-  - 구조: trigger_structure (settings.sqlite3) - 설계도
-  - 인스턴스: user_triggers (strategies.sqlite3) - 실제 제품
-  
-차 하부 프레임 (Strategies):  
-  - 구조: strategy_structure (settings.sqlite3) - 설계도
-  - 인스턴스: user_strategies (strategies.sqlite3) - 실제 제품
-  
-차 섀시 (Positions):
-  - 구조: position_structure (settings.sqlite3) - 설계도 
-  - 인스턴스: user_positions (strategies.sqlite3) - 실제 제품
+# ✅ 올바른 형식: ID 기반 딕셔너리
+UNIQUE_ID_KEY:
+  {type}_id: "UNIQUE_ID_KEY"
+  display_name_ko: "한글 이름"
+  display_name_en: "English Name"
+  description: "명확한 설명."
+  # ... 기타 필드
 ```
 
-### 📋 **3-Database 시스템 구조 (역할별 분리)**
+### 4.2. 필수 필드 (모든 파일)
 
-```markdown
-🗂️ Database 분리 전략 (역할별 관리 방식):
-┌─ settings.sqlite3 (구조 정의 + 시스템 설정) ← YAML 마이그레이션 대상
-│  ├─ tv_trading_variables      ← 매매 변수 구조 (기본 제공)
-│  ├─ tv_variable_parameters    ← 변수 파라미터 구조
-│  ├─ tv_comparison_groups      ← 변수 그룹핑 구조
-│  ├─ tv_indicator_categories   ← 지표 카테고리 구조
-│  ├─ tv_chart_variables        ← chart_variables 통합
-│  │
-│  ├─ trigger_structure         ← 트리거 구조 정의 (차 바퀴 설계도)
-│  ├─ strategy_structure        ← 전략 구조 정의 (차 하부 프레임 설계도)  
-│  ├─ position_structure        ← 포지션 구조 정의 (차 섀시 설계도)
-│  │
-│  ├─ cfg_app_settings          ← 앱 전역 설정
-│  ├─ cfg_system_settings       ← 시스템 기본 설정
-│  └─ sys_backup_info           ← 백업 관리
-│
-├─ strategies.sqlite3 (사용자 생성 인스턴스) ← 런타임 생성/관리
-│  ├─ user_triggers             ← 사용자가 조건 빌더로 생성한 트리거들
-│  ├─ user_strategies           ← 사용자가 전략 메이커로 생성한 전략들
-│  ├─ user_positions            ← 사용자가 설정한 포지션들 (미래)
-│  ├─ execution_history         ← 실행 이력
-│  └─ performance_logs          ← 성능 기록
-│
-└─ market_data.sqlite3 (시장 데이터) ← API/스크래핑 수집
-   ├─ ohlcv_data               ← OHLCV 시계열 데이터
-   ├─ technical_indicators     ← 계산된 기술적 지표들
-   ├─ market_screener_results  ← 스크리너 분석 결과
-   ├─ backtest_data            ← 백테스팅용 데이터
-   └─ real_time_cache          ← 실시간 데이터 캐시
-```
-
-### 🎯 **DB별 관리 방식 구분**
-
-| DB | 주요 역할 | 데이터 소스 | 관리 방식 | YAML 연동 |
-|---|---------|------------|----------|----------|
-| **settings.sqlite3** | 구조 정의, 시스템 설정 | YAML 파일 | 📝 **YAML 마이그레이션** | ✅ 직접 연동 |
-| **strategies.sqlite3** | 사용자 생성 데이터 | 사용자 입력 | 🎮 **런타임 생성** | ❌ 별도 관리 |
-| **market_data.sqlite3** | 시장 데이터 | API/스크래핑 | 🌐 **API 수집** | ❌ 별도 관리 |
-
-### 🏷️ **네이밍 규칙 정의 (3-Database 시스템)**
-
-| 접두사 | 용도 | 대상 DB | 예시 | 관리 방식 |
-|--------|------|---------|------|----------|
-| `tv_`  | Trading Variables (매매 변수 구조) | settings | `tv_trading_variables` | YAML 마이그레이션 |
-| `cfg_` | Configuration (설정) | settings | `cfg_app_settings` | YAML 마이그레이션 |
-| `sys_` | System (시스템 관리) | settings | `sys_backup_info` | YAML 마이그레이션 |
-| `_structure` | 구조 정의 (설계도) | settings | `trigger_structure` | YAML 마이그레이션 |
-| `user_` | 사용자 생성 인스턴스 | strategies | `user_triggers` | 런타임 생성 |
-| `execution_` | 실행 관련 | strategies | `execution_history` | 런타임 생성 |
-| `ohlcv_` | OHLCV 시계열 데이터 | market_data | `ohlcv_daily` | API 수집 |
-| `technical_` | 기술적 지표 | market_data | `technical_indicators` | API 수집 |
-| `backtest_` | 백테스팅 데이터 | market_data | `backtest_results` | API 수집 |
-
-### 🚀 **사용자 여정 지원 (3-Database 연동)**
-
-```markdown
-Step 1: 프로그램 설치 → settings.sqlite3 제공 (모든 구조 준비됨) + market_data.sqlite3 초기화
-Step 2: 조건 빌더 사용 → strategies.sqlite3 자동 생성, user_triggers 저장
-Step 3: 전략 메이커 사용 → user_strategies 저장 (trigger_structure 참조)
-Step 4: 포지션 설정 → user_positions 저장 (position_structure 참조)
-Step 5: 실시간 매매 → execution_history 누적 + market_data 실시간 업데이트
-Step 6: 백테스팅 → market_data에서 이력 데이터 활용
-```
-
-### ⚡ **DB 표준 패턴 (3-Database 시스템)**
-
-```python
-# ✅ 모든 DB 클래스는 이 패턴을 따라야 함
-
-# 구조 정의 관련 (YAML 마이그레이션 대상)
-class StructureStorage:
-    def __init__(self, db_path: str = "data/settings.sqlite3"):
-        self.db_path = db_path
-        
-# 사용자 인스턴스 관련 (런타임 생성)
-class UserInstanceStorage:
-    def __init__(self, db_path: str = "data/strategies.sqlite3"):
-        self.db_path = db_path
-        
-# 시장 데이터 관련 (API 수집)
-class MarketDataStorage:
-    def __init__(self, db_path: str = "data/market_data.sqlite3"):
-        self.db_path = db_path
-        
-    def connect(self) -> sqlite3.Connection:
-        """안전한 DB 연결 with 에러 처리"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row  # Dict-like access
-            return conn
-        except sqlite3.Error as e:
-            logger.error(f"❌ DB 연결 실패: {e}")
-            raise
-```
-
-## �🔄 통합 마이그레이션 워크플로우
-
-### 1️⃣ **사용자/에이전트**: YAML 파일 편집
-- 통일된 ID 기반 딕셔너리 구조 사용
-- 기존 패턴과 일관성 유지
-- 메타데이터 완전성 확보
-
-### 2️⃣ **시스템**: YAML → 3-Database 자동 마이그레이션 
-```powershell
-# 3-Database 아키텍처 지원 마이그레이션 도구
-python tools/super_db_migration_yaml_to_db.py
-
-# 데이터 분배 체계 (구조/인스턴스 분리):
-# 구조 정의 → settings.sqlite3 (tv_*, cfg_*, sys_*, *_structure 테이블) ← YAML 마이그레이션 대상
-# 사용자 인스턴스 → strategies.sqlite3 (user_*, execution_* 테이블) ← 런타임 생성
-# 시장 데이터 → market_data.sqlite3 (OHLCV, 백테스팅 데이터) ← API/스크래핑으로 수집
-```
-
-### 3️⃣ **시스템**: 3-DB → `variable_definitions.py` 자동 생성
-- 100% settings.sqlite3 기반 코드 생성 (구조 정의)
-- 하드코딩 완전 제거
-- 타입 힌트 및 검증 로직 포함
-- 구조/인스턴스 분리 체계 지원
-
-### 4️⃣ **결과**: 3-Database 구조별 역할 분리 기반 완전 자동화
-- 구조 정의: settings.sqlite3에서 실시간 동기화 (프로그램 설치 시 제공, YAML 마이그레이션)
-- 사용자 인스턴스: strategies.sqlite3에서 사용자 데이터 관리 (점진적 생성, 런타임 관리)
-- 시장 데이터: market_data.sqlite3에서 시장 데이터 관리 (API 수집, 백테스팅 지원)
-- 데이터 무결성 보장 및 확장 가능한 구조
-
-## � 사용 방법
-
-### 새로운 지표 추가 시:
-1. `tv_indicator_categories.yaml`에서 카테고리 확인/추가
-2. `tv_help_texts.yaml`에 도움말 추가
-3. `tv_placeholder_texts.yaml`에 플레이스홀더 추가
-4. `tv_indicator_library.yaml`에 상세 정보 추가
-5. Advanced Migration Tool로 DB 동기화
-
-### 기존 지표 수정 시:
-1. 해당 YAML 파일에서 내용 수정
-2. Advanced Migration Tool로 DB 동기화
-3. 자동으로 `variable_definitions.py` 재생성
-
-## ⚠️ 중요 사항
-
-- **절대 `variable_definitions.py`를 직접 수정하지 마세요** - DB에서 자동 생성됩니다
-- **YAML 파일 변경 후 반드시 DB 마이그레이션을 실행하세요**
-- **스키마 변경 시 백업을 만들고 테스트하세요**
-
-## 🛠️ 도구들
-
-### 🚀 YAML → DB 마이그레이션 도구 (3-Database 역할별 분리)
-```powershell
-# 위치: tools/super_db_migration_yaml_to_db.py
-# 기능: YAML → settings.sqlite3 전용 마이그레이션 (구조 정의만)
-
-# YAML 파일들을 settings.sqlite3로 마이그레이션
-python tools/super_db_migration_yaml_to_db.py
-
-# 지원하는 3-Database 역할별 분리:
-# - settings.sqlite3: 구조 정의 (tv_*, cfg_*, sys_*, *_structure) ← YAML 마이그레이션 대상
-# - strategies.sqlite3: 사용자 인스턴스 (user_*, execution_*) ← 런타임 관리
-# - market_data.sqlite3: 시장 데이터 (ohlcv_*, technical_*, backtest_*) ← API 수집
-```
-
-### 🗄️ DB 분석 도구
-```powershell
-# 위치: tools/super_db_table_viewer.py
-# 기능: DB 현황 파악 및 테이블 구조 분석
-
-python tools/super_db_table_viewer.py settings     # settings.sqlite3 분석 (구조 정의)
-python tools/super_db_table_viewer.py strategies   # strategies.sqlite3 분석 (사용자 인스턴스)
-python tools/super_db_table_viewer.py market_data  # market_data.sqlite3 분석 (시장 데이터)
-```
-
-### 🔍 코드 참조 분석 도구
-```powershell
-# 위치: tools/super_db_table_reference_code_analyzer.py
-# 기능: 테이블 참조 코드 영향도 분석
-
-python tools/super_db_table_reference_code_analyzer.py --tables trading_conditions strategies
-python tools/super_db_table_reference_code_analyzer.py --tables tv_trading_variables tv_variable_parameters
-```
-
-### 🎨 GUI 마이그레이션 도구 (3-Database 역할별 통합 관리)
-```powershell
-# 위치: upbit_auto_trading\utils\trading_variables\gui_variables_DB_migration_util\
-python run_gui_trading_variables_DB_migration.py
-
-# 지원 기능:
-# - Advanced Migration Tab: YAML ↔ settings.sqlite3 동기화 GUI (구조 정의 전용)
-# - 3-Database 역할별 분리 시각화 및 관리
-# - settings(구조) / strategies(사용자) / market_data(시장) 상태 모니터링
-# - 실시간 마이그레이션 로그 및 진행 상황 표시
-# - 사용자 친화적 3-DB 역할별 관리 인터페이스
-```
-
-## 📊 YAML 형식 통일화 완료 (2025-08-01)
-
-### ✅ 달성된 주요 개선사항
-
-1. **코드 복잡성 대폭 감소**: 
-   - YAML 형식별 예외 처리 코드 완전 제거
-   - 통일된 파싱 로직으로 99% 단순화
-
-2. **유지보수성 극대화**:
-   - 일관된 구조로 수정/추가 작업 효율성 10배 향상
-   - 표준화된 필드명으로 개발자 혼동 방지
-
-3. **확장성 완전 확보**:
-   - 새로운 지표/변수 추가 시 예측 가능한 구조
-   - 메타데이터 확장 및 검증 규칙 추가 용이
-
-4. **툴 분해 준비 완료**:
-   - 통일된 형식으로 특화 도구 개발 최적화
-   - 형식 불일치로 인한 개발 장애물 완전 제거
-
-### 🔄 백업 시스템
-모든 원본 YAML 파일은 `.old_format` 확장자로 백업 보관:
-- `tv_variable_parameters.yaml.old_format`
-- `tv_help_texts.yaml.old_format`
-- `tv_placeholder_texts.yaml.old_format`
-- 기타 6개 파일 백업 완료
-
----
-*작성일: 2025-07-30*  
-*업데이트: 2025-08-01 - 3-Database 역할별 분리 시스템으로 명확화 (YAML 마이그레이션은 settings.sqlite3 전용)*
-3. 테스트 환경에서 먼저 검증
-4. 단계별로 진행하며 각 단계 확인
-
-## 📊 효과 및 장점
-
-### 토큰 효율성
-- **기존**: 전체 코드 파일을 읽고 분석 (수천 토큰)
-- **개선**: 구조화된 YAML 파일만 읽기 (수백 토큰)
-- **절약률**: 약 70-80% 토큰 사용량 감소
-
-### 협업 효율성
-- **명확한 역할 분담**: LLM은 데이터 편집, 사용자는 GUI 조작
-- **단계별 검증**: 각 단계마다 확인 포인트 존재
-- **자동화된 반영**: 편집 → DB → 코드로 자동 동기화
-
-### 품질 개선
-- **일관성**: 표준화된 패턴과 규칙
-- **완전성**: 누락 없는 정보 관리
-- **추적성**: 변경 이력 관리 가능
-
-## 🚀 확장 가능성
-
-### 추가 가능한 파일들
-- `validation_rules.yaml`: 파라미터 검증 규칙
-- `ui_layouts.yaml`: GUI 레이아웃 정의
-- `test_scenarios.yaml`: 테스트 시나리오
-- `performance_metrics.yaml`: 성능 지표 정의
-
-### 다른 시스템 적용
-이 패턴은 다른 복잡한 설정 관리 시스템에도 적용 가능:
-- 전략 설정 관리
-- UI 컴포넌트 정의
-- API 스키마 관리
-- 설정 파일 생성
-
-## ⚠️ 주의사항
-
-### YAML 편집 시
-- 들여쓰기는 반드시 공백(space) 사용
-- 콜론(:) 뒤에는 공백 필요
-- 특수문자는 따옴표로 감싸기
-- 리스트 항목은 하이픈(-) 사용
-
-### 데이터 일관성
-- 여러 파일 간 참조 관계 확인
-- 카테고리명, 지표명 일치 확인
-- 파라미터 타입 정의 일치 확인
-
-### 백업 및 복구
-- 중요한 변경 전 반드시 백업
-- 문제 발생 시 즉시 이전 버전으로 복구
-- 변경 로그 유지 권장
-
-## 📞 문제 해결
-
-### 일반적인 오류
-1. **YAML 파싱 오류**: 문법 검사 도구 사용
-2. **마이그레이션 실패**: 스키마 호환성 확인
-3. **동기화 문제**: DB 연결 및 권한 확인
-
-### 도움이 필요한 경우
-1. `workflow_guide.yaml`의 troubleshooting 섹션 참조
-2. GUI 도구의 로그 메시지 확인
-3. 백업에서 복구 후 단계별 재시도
+모든 YAML 파일의 모든 항목은 다음 필드를 포함해야 합니다:
+-   `{type}_id`: `string`, `UPPERCASE_SNAKE_CASE`, 최상위 키와 일치해야 함.
+-   `display_name_ko`: `string`, 사용자 대상 한국어 이름.
+-   `display_name_en`: `string`, 사용자 대상 영어 이름.
+-   `description`: `string`, 항목에 대한 상세 설명.
 
 ---
 
-💡 **이 시스템을 통해 LLM 에이전트와 사용자가 효율적으로 협업하여 복잡한 트레이딩 시스템을 쉽게 관리할 수 있습니다!**
+## 5. 도구 참조 (실제 구현된 `super_*` 도구)
+
+### 5.1. 분석 및 검증 도구
+
+-   **DB 상태 보기**: `python tools/super_db_table_viewer.py [settings|strategies|market_data]`
+-   **DB 스키마 검증**: `python tools/super_db_schema_validator.py`
+-   **코드 참조 분석**: `python tools/super_db_table_reference_code_analyzer.py --tables [테이블명]`
+-   **파라미터 테이블 분석**: `python tools/super_db_analyze_parameter_table.py`
+-   **시스템 상태 모니터링**: `python tools/super_db_health_monitor.py`
+
+### 5.2. 데이터 추출 및 마이그레이션 도구
+
+-   **YAML을 DB로 마이그레이션**: `python tools/super_db_migration_yaml_to_db.py --yaml-files [파일명]`
+-   **DB를 YAML로 추출**: `python tools/super_db_extraction_db_to_yaml.py --tables [테이블명]`
+-   **데이터 마이그레이터**: `python tools/super_db_data_migrator.py`
+-   **DB 스키마 추출**: `python tools/super_db_schema_extractor.py`
+-   **DB 구조 생성**: `python tools/super_db_structure_generator.py`
+
+### 5.3. YAML 편집 및 관리 워크플로우 도구
+
+-   **YAML 편집 워크플로우**: `python tools/super_db_yaml_editor_workflow.py`
+-   **YAML 파일 병합**: `python tools/super_db_yaml_merger.py`
+-   **YAML 간단 비교**: `python tools/super_db_yaml_simple_diff.py`
+
+### 5.4. 디버깅 및 운영 도구
+
+-   **DB 직접 쿼리**: `python tools/super_db_direct_query.py`
+-   **롤백 관리자**: `python tools/super_db_rollback_manager.py`
+-   **경로 매핑 디버깅**: `python tools/super_db_debug_path_mapping.py`
+
+---
+
+## 6. 품질 보증 프로토콜
+
+당신의 편집은 아래의 검증 체인을 통과할 수 있어야 합니다.
+
+-   **1단계: 구문 검증**: 올바른 YAML 구문 (들여쓰기, 따옴표 등).
+-   **2단계: 구조 검증**: ID 기반 딕셔너리 패턴 준수 및 필수 필드 존재.
+-   **3단계: 데이터 무결성 검증**: 중복 ID 없음, 모든 파일 간 참조 유효, 논리적 모순 없음.
+-   **4단계: 시스템 통합 검증**: 성공적인 DB 마이그레이션 및 애플리케이션(`run_desktop_ui.py`)의 정상 동작 확인.
+
+---
+*이 문서는 LLM 에이전트와 사용자가 `data_info` 폴더를 중심으로 협업하여 DB를 관리하기 위한 핵심 지침입니다.*
+*마지막 업데이트: 2025-08-02*

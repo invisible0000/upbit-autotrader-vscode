@@ -171,8 +171,8 @@ class YamlToDbMigrationTool:
             INSERT INTO tv_trading_variables (
                 variable_id, display_name_ko, display_name_en,
                 purpose_category, chart_category, comparison_group,
-                description, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                parameter_required, description, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             variable_id,
             data.get('display_name_ko', ''),
@@ -180,12 +180,34 @@ class YamlToDbMigrationTool:
             data.get('purpose_category', ''),
             data.get('chart_category', ''),
             data.get('comparison_group', ''),
+            bool(data.get('parameter_required', False)),
             data.get('description', ''),
             data.get('source', 'built-in')
         ))
 
     def _insert_variable_parameter(self, cursor: sqlite3.Cursor, param_id: str, data: Dict):
-        """tv_variable_parameters 테이블에 데이터 삽입"""
+        """tv_variable_parameters 테이블에 데이터 삽입 - 유연한 형식 지원"""
+        
+        # enum_values 처리 - 다양한 형식 지원
+        enum_values = data.get('enum_values')
+        if isinstance(enum_values, list):
+            enum_values_json = json.dumps(enum_values)
+        elif isinstance(enum_values, str) and enum_values.strip():
+            try:
+                # 이미 JSON 문자열인지 확인
+                json.loads(enum_values)
+                enum_values_json = enum_values
+            except json.JSONDecodeError:
+                enum_values_json = None
+        else:
+            enum_values_json = None
+        
+        # 문자열에서 따옴표 제거 (값 정규화)
+        def clean_value(value):
+            if isinstance(value, str):
+                return value.strip('"\'')
+            return value
+        
         cursor.execute("""
             INSERT INTO tv_variable_parameters (
                 variable_id, parameter_name, parameter_type,
@@ -193,18 +215,18 @@ class YamlToDbMigrationTool:
                 is_required, display_name_ko, display_name_en, description, display_order
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            data.get('variable_id', ''),
-            data.get('parameter_name', ''),
-            data.get('parameter_type', 'integer'),
-            data.get('default_value', ''),
-            data.get('min_value'),
-            data.get('max_value'),
-            json.dumps(data.get('enum_values')) if isinstance(data.get('enum_values'), list) else data.get('enum_values'),
-            data.get('is_required', True),
-            data.get('display_name_ko', data.get('parameter_name', '')),
-            data.get('display_name_en', data.get('parameter_name', '')),
-            data.get('description', ''),
-            data.get('display_order', 1)
+            clean_value(data.get('variable_id', '')),
+            clean_value(data.get('parameter_name', '')),
+            clean_value(data.get('parameter_type', 'integer')),
+            clean_value(data.get('default_value', '')),
+            clean_value(data.get('min_value')) if data.get('min_value') else None,
+            clean_value(data.get('max_value')) if data.get('max_value') else None,
+            enum_values_json,
+            bool(data.get('is_required', True)),
+            clean_value(data.get('display_name_ko', data.get('parameter_name', ''))),
+            clean_value(data.get('display_name_en', data.get('parameter_name', ''))),
+            clean_value(data.get('description', '')),
+            int(data.get('display_order', 1))
         ))
 
     def _insert_help_text(self, cursor: sqlite3.Cursor, help_id: str, data: Dict):

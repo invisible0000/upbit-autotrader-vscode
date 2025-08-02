@@ -50,6 +50,7 @@ CREATE TABLE tv_trading_variables (
     purpose_category TEXT NOT NULL,         -- 'trend', 'momentum', 'volatility', 'volume', 'price'
     chart_category TEXT NOT NULL,           -- 'overlay', 'subplot'
     comparison_group TEXT NOT NULL,         -- 'price_comparable', 'percentage_comparable', etc.
+    parameter_required BOOLEAN DEFAULT 0,   -- 파라미터 필요 여부 (0: 불필요, 1: 필요)
     is_active BOOLEAN DEFAULT 1,            -- 활성화 상태
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

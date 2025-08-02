@@ -528,8 +528,8 @@ class ConditionDialog(QWidget):
         # 변수별 파라미터 정의
         params = self.variable_definitions.get_variable_parameters(var_id)
         
-        if params:
-            self.parameter_factory.create_parameter_widgets(var_id, params, self.param_layout)
+        # 파라미터가 있든 없든 항상 위젯 생성 (없으면 안내 메시지 표시)
+        self.parameter_factory.create_parameter_widgets(var_id, params, self.param_layout)
     
     def update_variable_description(self):
         """변수 설명 업데이트 - 현재 사용되지 않음"""
@@ -612,12 +612,11 @@ class ConditionDialog(QWidget):
         # 기존 파라미터 제거
         self.parameter_factory.clear_parameter_widgets(self.external_param_layout)
         
-        # 파라미터 생성
+        # 파라미터 생성 - 파라미터가 있든 없든 항상 위젯 생성 (없으면 안내 메시지 표시)
         params = self.variable_definitions.get_variable_parameters(external_var_id)
-        if params:
-            self.parameter_factory.create_parameter_widgets(
-                f"{external_var_id}_external", params, self.external_param_layout
-            )
+        self.parameter_factory.create_parameter_widgets(
+            f"{external_var_id}_external", params, self.external_param_layout
+        )
     
     def update_preview(self):
         """미리보기 업데이트"""

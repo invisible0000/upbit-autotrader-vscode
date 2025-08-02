@@ -23,6 +23,24 @@ class ParameterWidgetFactory:
         from PyQt6.QtWidgets import QSizePolicy  # QSizePolicy 임포트 추가
         
         if not params:
+            # 컨텍스트 기반 상태 메시지 생성
+            status_info = self._get_parameter_status_info(var_id)
+            info_label = QLabel(status_info['message'])
+            info_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {status_info['color']};
+                    font-style: italic;
+                    background-color: {status_info['bg_color']};
+                    border: 1px solid {status_info['border_color']};
+                    border-radius: 4px;
+                    padding: 10px;
+                    margin-top: 8px;
+                    text-align: center;
+                    font-weight: {status_info['font_weight']};
+                }}
+            """)
+            info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(info_label)
             return {}
         
         # 파라미터 라벨 추가
@@ -75,13 +93,16 @@ class ParameterWidgetFactory:
         """파라미터 타입별 위젯 생성"""
         param_type = param_config['type']
         
-        if param_type == 'int':
+        if param_type == 'integer':
             widget = QSpinBox()
-            widget.setRange(param_config.get('min', 1), param_config.get('max', 100))
-            widget.setValue(param_config.get('default', 14))
+            min_val = int(param_config.get('min', 1))
+            max_val = int(param_config.get('max', 100))
+            default_val = int(param_config.get('default', 14))
+            
+            widget.setRange(min_val, max_val)
+            widget.setValue(default_val)
             widget.setSuffix(param_config.get('suffix', ''))
             
-            # 전역 스타일 적용으로 증가/감소 버튼 문제 해결
             widget.setStyleSheet("""
                 QSpinBox {
                     padding: 3px;
@@ -135,7 +156,7 @@ class ParameterWidgetFactory:
         elif param_type == 'float':
             widget = QLineEdit()
             widget.setText(str(param_config.get('default', 1.0)))
-            widget.setPlaceholderText(param_config.get('placeholder', ''))
+            widget.setPlaceholderText(str(param_config.get('placeholder', '')))
             
             # float 검증 함수 연결
             widget.textChanged.connect(lambda text, w=widget, config=param_config: self._validate_float_input(text, w, config))
