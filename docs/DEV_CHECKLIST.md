@@ -11,6 +11,25 @@
 - [ ] **백테스팅**: 7규칙 조합 전략의 백테스팅이 정상 동작하는가?
 - [ ] **UI 통합**: 모든 UI 요소가 7규칙 전략 워크플로를 지원하는가?
 
+## 🏗️ DDD 아키텍처 준수 (필수)
+
+### Domain Layer 구현
+- [ ] **도메인 엔티티**: 비즈니스 로직이 Entity 클래스에 포함되어 있는가?
+- [ ] **값 객체**: ID, Signal 등이 Value Object로 구현되어 있는가?
+- [ ] **도메인 서비스**: 복잡한 비즈니스 규칙이 Domain Service에 있는가?
+- [ ] **Repository 인터페이스**: Domain Layer에 Repository 추상화가 있는가?
+
+### Application Layer 구현
+- [ ] **Application Service**: Use Case가 Application Service로 구현되어 있는가?
+- [ ] **DTO 사용**: 계층 간 데이터 전송에 DTO를 사용하는가?
+- [ ] **Command/Query**: 명령과 조회가 분리되어 있는가?
+- [ ] **트랜잭션 관리**: Application Service에서 트랜잭션 경계를 관리하는가?
+
+### Infrastructure Layer 구현
+- [ ] **Repository 구현**: Infrastructure에 구체적인 Repository 구현이 있는가?
+- [ ] **외부 API**: 외부 시스템 접근이 Infrastructure Layer에 격리되어 있는가?
+- [ ] **의존성 주입**: 구체 클래스가 아닌 인터페이스에 의존하는가?
+
 ## 🗄️ 데이터베이스 개발
 
 ### 3-DB 아키텍처 준수

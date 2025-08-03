@@ -1,57 +1,67 @@
-# 🚨 에러 처리 및 폴백 제거 정책
+# 🚨 DDD 기반 에러 처리 및 폴백 제거 정책
 
 ## 🎯 핵심 철학
 
-**"종기의 고름을 뺀다" - 에러를 숨기지 말고 명확히 드러내라**
+**"종기의 고름을 뺀다" - Domain Layer에서 발생하는 에러를 숨기지 말고 명확히 드러내라**
 
-### 기본 원칙
-- **에러 투명성**: 문제가 있으면 즉시 표면화
-- **폴백 코드 금지**: 문제를 숨기는 더미 구현 제거
-- **명확한 실패**: 애매한 동작보다 명확한 실패 선호
+### DDD 계층별 에러 처리 원칙
+- **Domain Layer**: Business Rule 위반 시 명확한 Domain Exception 발생
+- **Application Layer**: Use Case 실패 시 구체적인 Application Exception 전파
+- **Infrastructure Layer**: 외부 의존성 실패 시 Infrastructure Exception으로 래핑
+- **Presentation Layer**: 사용자 친화적 에러 메시지로 변환
 
-## ❌ 금지되는 폴백 패턴
+## ❌ 금지되는 DDD 폴백 패턴
 
-### 1. Import 에러 숨기기
+### 1. Domain Service Import 에러 숨기기
 ```python
-# ❌ 절대 금지
+# ❌ 절대 금지 - Domain Service 로드 실패 숨김
 try:
-    from .components.condition_storage import ConditionStorage
+    from domain.services.strategy_validation_service import StrategyValidationService
 except ImportError:
-    class ConditionStorage:  # 더미 클래스로 문제 숨김
-        def save_condition(self, data):
-            return True, "폴백 저장", 1
+    class StrategyValidationService:  # 더미 Domain Service
+        def validate_strategy(self, strategy):
+            return ValidationResult.success()  # 검증 실패 숨김
 
-# ✅ 올바른 방식
-from .components.core.condition_storage import ConditionStorage
-# 실패하면 즉시 ModuleNotFoundError → 정확한 경로 문제 파악
+# ✅ 올바른 방식 - Domain Layer 에러 즉시 노출
+from domain.services.strategy_validation_service import StrategyValidationService
+# 실패하면 즉시 ModuleNotFoundError → Domain Layer 구조 문제 파악
 ```
 
-### 2. 비즈니스 로직 폴백
+### 2. Business Logic 폴백
 ```python
-# ❌ 문제 숨김
-def save_condition(self, data):
-    try:
-        return self.storage.save_condition(data)
-    except Exception:
-        return True, "폴백 저장", 1  # 실제 저장 실패 숨김
+# ❌ Domain Rule 위반 숨김
+class StrategyEntity:
+    def add_rule(self, rule: TradingRule) -> None:
+        try:
+            self._validate_rule_compatibility(rule)
+            self._rules.append(rule)
+        except DomainRuleViolationError:
+            pass  # 호환성 문제 무시하고 추가 - 위험!
 
-# ✅ 명확한 에러
-def save_condition(self, data):
-    return self.storage.save_condition(data)
-    # 실패하면 바로 예외 발생 → 문제 즉시 파악
+# ✅ Domain Exception 명확히 전파
+class StrategyEntity:
+    def add_rule(self, rule: TradingRule) -> None:
+        self._validate_rule_compatibility(rule)  # 실패 시 즉시 Exception
+        self._rules.append(rule)
 ```
 
-### 3. UI 컴포넌트 폴백
+### 3. Repository 폴백
 ```python
-# ❌ UI 에러 숨김
-try:
-    self.condition_dialog = ConditionDialog()
-except Exception as e:
-    self.condition_dialog = None  # hasattr로 나중에 확인
+# ❌ Infrastructure 실패 숨김
+class StrategyRepository:
+    def save(self, strategy: Strategy) -> StrategyId:
+        try:
+            return self._db_repository.save(strategy)
+        except DatabaseError:
+            return StrategyId.generate()  # 저장 실패했는데 성공한 것처럼 행동
 
-# ✅ 즉시 에러 표시
-self.condition_dialog = ConditionDialog()
-# 실패하면 즉시 예외 → 정확한 문제 파악
+# ✅ Infrastructure Exception 전파
+class StrategyRepository:
+    def save(self, strategy: Strategy) -> StrategyId:
+        try:
+            return self._db_repository.save(strategy)
+        except DatabaseError as e:
+            raise RepositoryError(f"Strategy 저장 실패: {e}") from e
 ```
 
 ## ✅ 허용되는 최소 예외 처리

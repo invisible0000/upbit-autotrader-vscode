@@ -6,20 +6,24 @@
 **최대 관리 전략**: 5개까지 조합 허용  
 **충돌 해결**: priority/conservative/merge 방식 지원  
 **검증 기준**: 기본 7규칙 전략으로 모든 전략 시스템 검증
+**아키텍처**: DDD 기반 Domain 엔티티로 구현
 
 ## 📊 진입 전략 (Entry Strategies)
 
-### 1. 이동평균 교차 전략
+### Domain Entity 기반 설계
 ```python
+from upbit_auto_trading.domain.entities import EntryStrategy
+
 class MovingAverageCrossoverStrategy(EntryStrategy):
-    """골든크로스/데드크로스 기반 진입"""
+    """골든크로스/데드크로스 기반 진입 - Domain Entity"""
     
-    def __init__(self, short_period=20, long_period=50, ma_type='SMA'):
+    def __init__(self, strategy_id: StrategyId, short_period=20, long_period=50, ma_type='SMA'):
+        super().__init__(strategy_id)
         self.short_period = short_period  # 5~20
         self.long_period = long_period    # 20~60  
         self.ma_type = ma_type           # SMA/EMA
         
-    def generate_signal(self, data: pd.DataFrame) -> str:
+    def generate_signal(self, market_data: MarketData) -> TradingSignal:
         short_ma = self.calculate_ma(data['close'], self.short_period)
         long_ma = self.calculate_ma(data['close'], self.long_period)
         

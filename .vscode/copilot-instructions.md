@@ -4,10 +4,11 @@
 
 **모든 개발 작업은 다음 문서들을 기준으로 합니다:**
 
-1. **[../docs/PROJECT_SPECIFICATIONS.md](../docs/PROJECT_SPECIFICATIONS.md)** - 프로젝트 핵심 명세 (필수)
-2. **[../docs/DEV_CHECKLIST.md](../docs/DEV_CHECKLIST.md)** - 개발 검증 체크리스트 (필수)
-3. **[../docs/STYLE_GUIDE.md](../docs/STYLE_GUIDE.md)** - 코딩 스타일 가이드 (필수)
-4. **[../docs/README.md](../docs/README.md)** - 전체 문서 가이드
+1. **[../docs/LLM_AGENT_TASK_GUIDELINES.md](../docs/LLM_AGENT_TASK_GUIDELINES.md)** - LLM 에이전트 TASK 작업 가이드 (필수)
+2. **[../docs/PROJECT_SPECIFICATIONS.md](../docs/PROJECT_SPECIFICATIONS.md)** - 프로젝트 핵심 명세 (필수)
+3. **[../docs/DEV_CHECKLIST.md](../docs/DEV_CHECKLIST.md)** - 개발 검증 체크리스트 (필수)
+4. **[../docs/STYLE_GUIDE.md](../docs/STYLE_GUIDE.md)** - 코딩 스타일 가이드 (필수)
+5. **[../docs/README.md](../docs/README.md)** - 전체 문서 가이드
 
 ## 🎯 개발 원칙
 
@@ -26,6 +27,13 @@
 - 각 단계가 끝나면, 지시에 따라 TASK 문서를 업데이트하여 작업 기록을 남깁니다.
 - 당신의 목표는 코드를 생성하는 것이 아니라, 문제를 해결하는 것입니다.
 
+#### TASK 작업 절차 (엄격 준수)
+1. **🚨 체크박스 마킹**: 작업 시작 시 `[ ]` → `[-]`, 완료 시 `[-]` → `[X]` (재시작 검색 용도)
+2. **🚨 코드박스 삭제**: 해당 단계의 예시 코드박스 작업 전 완전 삭제 (기존 코드 분석 우선)
+3. **접근 전략 수립**: 코드 작성 전 반드시 `🧠 접근 전략` 템플릿으로 계획 제시 및 승인 받기
+4. **작업 로그 기록**: 완료 후 `📌 작업 로그` 템플릿으로 TASK 문서에 상세 기록
+5. **유연성 발휘**: 비효율적 절차 발견 시 `⚠️ 계획 변경 제안` 템플릿으로 대안 제시
+
 ### 1. 기본 7규칙 전략 중심 개발
 - 모든 기능은 **[기본 7규칙 전략](../docs/BASIC_7_RULE_STRATEGY_GUIDE.md)** 완전 지원이 목표
 - 새로운 기능은 반드시 7규칙 전략으로 검증 후 배포
@@ -43,8 +51,7 @@
 
 ### 작업 전 (필수)
 1. **문서 확인**: 관련 docs 문서 숙지
-2. **호환성 검증**: [VARIABLE_COMPATIBILITY.md](../docs/VARIABLE_COMPATIBILITY.md) 확인
-3. **아키텍처 검토**: [COMPONENT_ARCHITECTURE.md](../docs/COMPONENT_ARCHITECTURE.md) 참조
+2. **아키텍처 검토**: [COMPONENT_ARCHITECTURE.md](../docs/COMPONENT_ARCHITECTURE.md) 참조
 
 ### 구현 중
 1. **스타일 준수**: STYLE_GUIDE.md 기준 적용
@@ -65,7 +72,6 @@
 
 ### 📈 전략 개발  
 - **전략 시스템**: [STRATEGY_SYSTEM.md](../docs/STRATEGY_SYSTEM.md)
-- **트리거 빌더**: [TRIGGER_BUILDER_GUIDE.md](../docs/TRIGGER_BUILDER_GUIDE.md)
 - **진입 + 관리**: 1개 진입 + 0~N개 관리 전략 조합
 
 ### 💾 데이터베이스
@@ -83,7 +89,7 @@
 ### 작업 유형별 문서
 - 매매 전략: STRATEGY_SYSTEM.md + BASIC_7_RULE_STRATEGY_GUIDE.md
 - UI 작업: UI_DESIGN_SYSTEM.md + COMPONENT_ARCHITECTURE.md  
-- DB 작업: DB_SCHEMA.md + ARCHITECTURE_OVERVIEW.md
+- DB 작업: DB_SCHEMA.md
 - 버그 수정: ERROR_HANDLING_POLICY.md + STYLE_GUIDE.md
 
 ## 🔍 자주 하는 실수들
@@ -168,7 +174,7 @@ from .components.core.condition_storage import ConditionStorage
 
 ### 4.3. 변수 호환성 시스템 (핵심 로직)
 
--   **참조 문서:** `.vscode/guides/trigger-builder-system.md`
+-   **참조 문서:** VARIABLE_COMPATIBILITY.md
 -   **시스템:** 3가지 카테고리 시스템(`purpose_category`, `chart_category`, `comparison_group`)이 모든 매매 변수를 관리합니다.
 -   **검증:** 호환성 검사는 UI(실시간)와 백엔드(저장 시) 양쪽에서 필수입니다.
 -   **규칙:** 변수들은 동일한 `comparison_group`을 공유해야만 호환됩니다.
@@ -236,12 +242,18 @@ from .components.core.condition_storage import ConditionStorage
 ## 5. 최종 체크리스트 및 알림
 
 ### 코드 생성 전 확인 사항:
+-   [ ] **TASK 체크박스:** 작업 시작 시 `[ ]` → `[-]` 마킹했는가?
+-   [ ] **코드박스 삭제:** 해당 단계의 예시 코드박스를 모두 삭제했는가?
+-   [ ] **접근 전략:** 코드 작성 전 `🧠 접근 전략` 템플릿으로 계획을 제시했는가?
+-   [ ] **기존 코드 분석:** 새 코드 작성 전 기존 코드베이스를 충분히 분석했는가?
 -   [ ] **환경:** 내 명령어들이 PowerShell 구문인가?
 -   [ ] **아키텍처:** 컴포넌트 기반 설계를 존중하고 있는가?
 -   [ ] **데이터베이스:** 표준 경로와 연결 패턴을 사용하고 있는가?
 -   [ ] **보안:** API 키는 환경 변수로 처리되는가? SQL 인젝션을 방지하고 있는가?
 -   [ ] **로깅:** 스마트 로깅 시스템 v3.0을 사용하고 있는가? 로그 범람을 방지하고 있는가?
 -   [ ] **테스트:** 내 기능에 대한 `pytest` 테스트를 포함하고 있는가?
+-   [ ] **작업 로그:** 완료 후 `📌 작업 로그` 템플릿으로 상세 기록할 예정인가?
+-   [ ] **체크박스 완료:** 작업 완료 후 `[-]` → `[X]` 마킹할 예정인가?
 -   [ ] **호환성:** 변수 호환성 규칙을 강제하고 있는가?
 -   [ ] **자가 수정:** 내 초안에서 최소 3가지 약점을 식별하고 수정했는가?
 

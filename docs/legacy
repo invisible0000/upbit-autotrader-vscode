@@ -2,27 +2,38 @@
 
 ## 📋 핵심 아키텍처 원칙
 
-**업비트 자동매매 시스템**은 **컴포넌트 기반 모듈러 아키텍처**를 기반으로 구축되었습니다.
+**업비트 자동매매 시스템**은 **DDD(Domain-Driven Design) 기반 계층형 아키텍처**를 기반으로 구축되었습니다.
 
 ### 🎯 설계 철학
-- **컴포넌트 기반**: 재사용 가능한 독립적 모듈
-- **계층 분리**: UI → 비즈니스 로직 → 데이터 레이어
-- **테스트 중심**: 모든 컴포넌트는 단위 테스트 가능
+- **도메인 중심**: 비즈니스 로직이 시스템의 핵심
+- **계층 분리**: Presentation → Application → Domain ← Infrastructure
+- **테스트 중심**: 모든 도메인 로직은 단위 테스트 가능
 - **에러 투명성**: 폴백 코드로 문제를 숨기지 않음
 
-## 🏛️ 전체 구조
+## 🏛️ DDD 기반 계층 구조
 
 ```
 upbit_auto_trading/
-├── 📁 core/                    # 핵심 유틸리티
-│   ├── ensure_directory.py     # 디렉토리 관리
-│   └── path_utils.py          # 경로 유틸리티
-├── 📁 ui/desktop/             # PyQt6 GUI
-│   ├── main_window.py         # 메인 윈도우
-│   └── screens/               # 화면별 구현 (components 폴더로 UI 요소 관리)
-├── 📁 business_logic/         # 비즈니스 로직 (분리 진행중)
-├── 📁 data_layer/             # 데이터베이스 관리
-└── 📁 logging/                # 스마트 로깅 v3.0
+├── 📁 presentation/           # Presentation Layer (UI)
+│   ├── desktop/              # PyQt6 GUI 구현
+│   ├── presenters/           # MVP 패턴 Presenter
+│   └── view_models/          # MVVM 패턴 ViewModel
+├── 📁 application/           # Application Layer (Use Cases)
+│   ├── services/             # Application Services
+│   ├── dto/                  # Data Transfer Objects
+│   └── commands/             # Command Objects
+├── 📁 domain/                # Domain Layer (핵심 비즈니스)
+│   ├── entities/             # 도메인 엔티티
+│   ├── value_objects/        # 값 객체
+│   ├── services/             # 도메인 서비스
+│   └── repositories/         # Repository 인터페이스
+├── 📁 infrastructure/        # Infrastructure Layer
+│   ├── repositories/         # Repository 구현체
+│   ├── external_apis/        # 외부 API 클라이언트
+│   └── database/             # 데이터베이스 접근
+└── 📁 shared/                # 공유 계층
+    ├── utils/                # 공통 유틸리티
+    └── config/               # 설정 관리
 ```
 
 ## 🎨 UI 아키텍처 (PyQt6)
@@ -68,22 +79,25 @@ MainWindow
 
 ## 🧩 핵심 시스템 구성
 
-### 트리거 빌더
+### 트리거 빌더 (Domain-Driven)
 - **목적**: 조건부 매매 신호 생성
+- **도메인 모델**: Trigger, Condition, Variable 엔티티
 - **특징**: 드래그앤드롭 UI, 3중 카테고리 시스템
 - **호환성**: purpose_category, chart_category, comparison_group
 
-### 전략 메이커  
+### 전략 메이커 (Domain-Driven)
+- **도메인 모델**: Strategy, EntryStrategy, ManagementStrategy 엔티티
 - **진입 전략**: 6종 (이평선교차, RSI, 볼린저밴드 등)
 - **관리 전략**: 6종 (물타기, 불타기, 트레일링스탑 등)
 - **상태 관리**: 진입대기 ↔ 포지션관리
 
-### 백테스팅 엔진
+### 백테스팅 엔진 (Application Layer)
+- **서비스**: BacktestingApplicationService
 - **데이터**: 1년치 분봉 기준
 - **성능**: 5분 내 처리 목표
 - **지표**: 수익률, MDD, 샤프비율, 승률
 
-**핵심 검증 기준**: [기본 7규칙 전략](basic_7_rule_strategy_guide.md)을 완전히 구현할 수 있어야 함
+**핵심 검증 기준**: [기본 7규칙 전략](BASIC_7_RULE_STRATEGY_GUIDE.md)을 완전히 구현할 수 있어야 함
 
 ## 🔧 로깅 시스템 v3.0
 

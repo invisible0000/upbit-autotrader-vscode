@@ -4,8 +4,8 @@
 
 **프로젝트명**: 업비트 자동매매 시스템 (Upbit Auto Trading System)  
 **기술스택**: Python 3.8+, PyQt6, SQLite, pandas, ta-lib  
-**아키텍처**: 컴포넌트 기반 데스크톱 애플리케이션  
-**개발방법론**: 스펙 기반 개발 (Specification-Driven Development)
+**아키텍처**: DDD 기반 계층형 아키텍처 (Domain-Driven Design)  
+**개발방법론**: 도메인 주도 설계 + 스펙 기반 개발
 
 ## 🎯 핵심 비즈니스 로직
 
@@ -61,9 +61,9 @@
 - **주문 실행**: 업비트 API 연동, 원자적 거래 처리
 - **리스크 관리**: 최대 포지션 크기, 드로우다운 제한
 
-## 🏗️ 시스템 아키텍처
+## 🏗️ DDD 기반 시스템 아키텍처
 
-### UI 계층 (PyQt6)
+### Presentation Layer (PyQt6)
 ```
 MainWindow
 ├── 📊 시장 분석 (Market Analysis)
@@ -76,6 +76,22 @@ MainWindow
     ├── Database Settings
     └── Logging Controls
 ```
+
+### Domain Layer (핵심 비즈니스 로직)
+- **도메인 엔티티**: Strategy, Trigger, Position, Trade
+- **값 객체**: StrategyId, TriggerId, TradingSignal
+- **도메인 서비스**: CompatibilityChecker, SignalEvaluator
+- **도메인 이벤트**: StrategyCreated, PositionOpened, TradeExecuted
+
+### Application Layer (Use Cases)
+- **전략 서비스**: StrategyApplicationService, TriggerApplicationService
+- **거래 서비스**: TradingApplicationService, BacktestingApplicationService
+- **DTO**: StrategyDto, TriggerDto, PositionDto
+
+### Infrastructure Layer (외부 연동)
+- **Repository**: SqliteStrategyRepository, SqliteTriggerRepository
+- **API 클라이언트**: UpbitApiClient, MarketDataProvider
+- **이벤트 버스**: DomainEventBus
 
 ### 데이터베이스 구조 (3-DB 아키텍처)
 1. **settings.sqlite3**: 구조 정의 (변수, 파라미터, 카테고리)

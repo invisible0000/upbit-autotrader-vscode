@@ -1,80 +1,88 @@
-# 🗄️ 데이터베이스 스키마 명세서
+# 🗄️ DDD 기반 데이터베이스 스키마 명세서
 
 ## 📋 개요
 
-업비트 자동매매 시스템은 **3-DB 아키텍처**를 사용하여 구조 정의, 전략 인스턴스, 시장 데이터를 분리 관리합니다.
+DDD 아키텍처 기반 업비트 자동매매 시스템은 **Domain-Driven 3-DB 아키텍처**를 사용하여 Domain Entity를 영속화합니다.
 
-## 🏗️ 데이터베이스 아키텍처
+## 🏗️ DDD 기반 데이터베이스 아키텍처
 
-### 1. `settings.sqlite3` - 구조 정의
-- **목적**: 시스템 구조와 메타데이터 관리
-- **내용**: 변수 정의, 파라미터 스키마, 카테고리 분류
-- **특징**: 읽기 전용, 업데이트 시에만 변경
+### Infrastructure Layer의 Repository 구현
+- **Domain Entity 매핑**: Aggregate Root를 데이터베이스 테이블로 매핑
+- **Repository Pattern**: Domain Layer에서 정의한 Repository Interface 구현
+- **Data Mapper**: Entity ↔ 데이터베이스 레코드 변환
 
-### 2. `strategies.sqlite3` - 전략 인스턴스  
-- **목적**: 사용자 생성 전략과 조건 저장
-- **내용**: 전략 조합, 백테스팅 결과, 실행 기록
-- **특징**: 읽기/쓰기, 사용자별 개인화
+### 1. `settings.sqlite3` - Domain Configuration
+- **목적**: Domain Value Object와 Configuration Entity 저장
+- **내용**: Trading Variable Entity, Parameter Value Object, Category Entity
+- **특징**: Domain-driven 읽기 전용 구조
 
-### 3. `market_data.sqlite3` - 시장 데이터
-- **목적**: 실시간/과거 시장 데이터 캐시
-- **내용**: 가격 데이터, 기술적 지표, 거래량
-- **특징**: 대용량, 자동 정리, 공유 가능
+### 2. `strategies.sqlite3` - Strategy Aggregate
+- **목적**: Strategy Aggregate Root와 관련 Entity 저장  
+- **내용**: Strategy Entity, Trading Rule Entity, Execution Record Entity
+- **특징**: Domain Event 기반 읽기/쓰기
 
-## 📊 Settings.sqlite3 스키마
+### 3. `market_data.sqlite3` - Market Data Aggregate
+- **목적**: Market Data Entity와 Technical Indicator Value Object 저장
+- **내용**: Price Entity, Volume Entity, Indicator Entity
+- **특징**: Domain Service 기반 대용량 처리
 
-### 트레이딩 변수 메인 테이블
+## 📊 Settings.sqlite3 - Domain Configuration Schema
+
+### Trading Variable Entity 매핑
 ```sql
+-- Domain Entity: TradingVariable
 CREATE TABLE tv_trading_variables (
-    variable_id TEXT PRIMARY KEY,           -- 'SMA', 'RSI', 'MACD'
-    display_name_ko TEXT NOT NULL,          -- '단순이동평균', 'RSI 지표'
-    display_name_en TEXT,                   -- 'Simple Moving Average'
-    purpose_category TEXT NOT NULL,         -- 'trend', 'momentum', 'volatility'
-    chart_category TEXT NOT NULL,           -- 'overlay', 'subplot'
-    comparison_group TEXT NOT NULL,         -- 'price_comparable', 'percentage_comparable'
-    parameter_required BOOLEAN DEFAULT 0,   -- 파라미터 필요 여부
-    is_active BOOLEAN DEFAULT 1,
+    variable_id TEXT PRIMARY KEY,           -- VariableId Value Object
+    display_name_ko TEXT NOT NULL,          -- DisplayName Value Object (Korean)
+    display_name_en TEXT,                   -- DisplayName Value Object (English)
+    purpose_category TEXT NOT NULL,         -- PurposeCategory Value Object
+    chart_category TEXT NOT NULL,           -- ChartCategory Value Object  
+    comparison_group TEXT NOT NULL,         -- ComparisonGroup Value Object
+    parameter_required BOOLEAN DEFAULT 0,   -- Domain Business Rule
+    is_active BOOLEAN DEFAULT 1,           -- Entity State
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    description TEXT,                       -- 지표 설명
-    source TEXT DEFAULT 'built-in'          -- 'built-in', 'tradingview', 'custom'
+    description TEXT,                       -- Description Value Object
+    source TEXT DEFAULT 'built-in'          -- Source Value Object
 );
 ```
 
-### 변수 파라미터 정의 테이블
+### Parameter Value Object 매핑
 ```sql
+-- Domain Value Object: ParameterDefinition
 CREATE TABLE tv_variable_parameters (
     parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    variable_id TEXT NOT NULL,              -- 외래키: tv_trading_variables.variable_id
-    parameter_name TEXT NOT NULL,           -- 'period', 'source', 'multiplier'
-    parameter_type TEXT NOT NULL,           -- 'integer', 'float', 'string', 'boolean', 'enum'
-    default_value TEXT,                     -- 기본값
-    min_value TEXT,                         -- 최소값 (숫자 타입용)
-    max_value TEXT,                         -- 최대값 (숫자 타입용)
-    enum_values TEXT,                       -- JSON 형태의 선택 옵션
-    is_required BOOLEAN DEFAULT 1,          -- 필수 파라미터 여부
-    display_name_ko TEXT NOT NULL,          -- '기간', '데이터 소스'
-    display_name_en TEXT,                   -- 'Period', 'Data Source'
-    description TEXT,                       -- 파라미터 설명
-    display_order INTEGER DEFAULT 0,        -- 표시 순서
+    variable_id TEXT NOT NULL,              -- Aggregate Root Reference
+    parameter_name TEXT NOT NULL,           -- ParameterName Value Object
+    parameter_type TEXT NOT NULL,           -- ParameterType Value Object
+    default_value TEXT,                     -- DefaultValue Value Object
+    min_value TEXT,                         -- MinValue Value Object
+    max_value TEXT,                         -- MaxValue Value Object
+    enum_values TEXT,                       -- EnumOptions Value Object (JSON)
+    is_required BOOLEAN DEFAULT 1,          -- RequiredFlag Business Rule
+    display_name_ko TEXT NOT NULL,          -- DisplayName Value Object
+    display_name_en TEXT,                   -- DisplayName Value Object
+    description TEXT,                       -- Description Value Object
+    display_order INTEGER DEFAULT 0,        -- DisplayOrder Value Object
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (variable_id) REFERENCES tv_trading_variables(variable_id) ON DELETE CASCADE
 );
 ```
 
-### 카테고리 관리 테이블
+### Category Entity 매핑
 ```sql
+-- Domain Entity: IndicatorCategory
 CREATE TABLE tv_indicator_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_type TEXT NOT NULL,            -- 'purpose', 'chart', 'comparison'
-    category_key TEXT NOT NULL,             -- 'trend', 'overlay', 'price_comparable'
-    category_name_ko TEXT NOT NULL,         -- '추세 지표', '오버레이'
-    category_name_en TEXT NOT NULL,         -- 'Trend Indicators', 'Overlay'
-    description TEXT,                       -- 카테고리 설명
-    icon TEXT,                              -- UI 아이콘 ('📈', '🔗')
-    color_code TEXT,                        -- 색상 코드 (#FF5733)
-    display_order INTEGER DEFAULT 0,        -- 표시 순서
-    is_active BOOLEAN NOT NULL DEFAULT 1,
+    category_type TEXT NOT NULL,            -- CategoryType Value Object
+    category_key TEXT NOT NULL,             -- CategoryKey Value Object
+    category_name_ko TEXT NOT NULL,         -- CategoryName Value Object
+    category_name_en TEXT NOT NULL,         -- CategoryName Value Object
+    description TEXT,                       -- Description Value Object
+    icon TEXT,                              -- Icon Value Object
+    color_code TEXT,                        -- ColorCode Value Object
+    display_order INTEGER DEFAULT 0,        -- DisplayOrder Value Object
+    is_active BOOLEAN NOT NULL DEFAULT 1,  -- Entity State
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```

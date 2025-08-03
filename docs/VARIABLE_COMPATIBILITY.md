@@ -2,7 +2,7 @@
 
 ## 📋 개요
 
-트리거 빌더에서 **의미있는 변수 비교**만 허용하고, 논리적으로 맞지 않는 조합을 방지하는 호환성 시스템입니다.
+DDD 기반 Domain Service로 구현된 **의미있는 변수 비교**만 허용하고, 논리적으로 맞지 않는 조합을 방지하는 호환성 시스템입니다.
 
 ## 🎯 핵심 호환성 규칙
 
@@ -47,29 +47,30 @@ COMPARISON_GROUPS = {
 }
 ```
 
-## 🔧 UI 레벨 실시간 검증
+## 🔧 Domain Service 기반 실시간 검증
 
 ### 변수 선택 시 즉시 필터링
 ```python
-class VariableCompatibilityChecker:
-    def filter_compatible_variables(self, base_variable_id):
+# Domain Service로 구현된 호환성 검증
+class VariableCompatibilityDomainService:
+    def filter_compatible_variables(self, base_variable_id: VariableId) -> List[Variable]:
         """기본 변수와 호환 가능한 변수들만 반환"""
-        base_variable = self.get_variable(base_variable_id)
-        base_group = base_variable.comparison_group
+        base_variable = self.variable_repository.find_by_id(base_variable_id)
         
         compatible_variables = []
+        all_variables = self.variable_repository.find_all_active()
         
-        for var in self.get_all_variables():
+        for var in all_variables:
             compatibility = self.check_compatibility(base_variable, var)
             
-            if compatibility in ["compatible", "warning"]:
-                compatible_variables.append({
-                    "variable": var,
-                    "compatibility": compatibility,
-                    "warning_message": self._get_warning_message(base_variable, var)
-                })
-        
+            if compatibility.is_valid():
+                compatible_variables.append(var)
+                
         return compatible_variables
+        
+    def check_compatibility(self, var1: Variable, var2: Variable) -> CompatibilityResult:
+        """Domain Logic으로 호환성 검증"""
+        return var1.check_compatibility_with(var2)
 ```
 
 ### 실시간 경고 표시

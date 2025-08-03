@@ -2,74 +2,95 @@
 
 ## 🎯 아키텍처 개요
 
-**설계 철학**: 계층별 분리와 컴포넌트 기반 모듈화로 확장 가능한 구조 구현
+**설계 철학**: DDD(Domain-Driven Design) 계층별 분리와 도메인 중심 모듈화로 확장 가능한 구조 구현
 
 ### 핵심 원칙
+- **도메인 중심**: 비즈니스 로직이 시스템의 핵심
 - **단일 책임**: 각 컴포넌트는 하나의 명확한 역할
 - **느슨한 결합**: 인터페이스를 통한 상호작용
-- **높은 응집도**: 관련 기능을 하나의 모듈로 그룹화
-- **의존성 주입**: 테스트 가능한 설계
+- **의존성 역전**: 상위 계층이 하위 계층에 의존하지 않음
 
-## 📊 계층별 구조
+## 📊 DDD 계층별 구조
 
-### 1. UI Layer (PyQt6)
+### 1. Presentation Layer (PyQt6)
 ```
-upbit_auto_trading/ui/desktop/
+upbit_auto_trading/presentation/desktop/
 ├── main_window.py              # 메인 애플리케이션 윈도우
-├── common/
-│   ├── components.py           # 공통 스타일 컴포넌트
-│   ├── style_manager.py        # 테마 및 스타일 관리
-│   └── base_widget.py          # 기본 위젯 클래스
-├── screens/                    # 실제 UI 화면들
-│   ├── market_analysis/        # 📊 시장 분석 탭
-│   ├── strategy_management/    # ⚙️ 전략 관리 탭
-│   │   ├── trigger_builder/    # 트리거 빌더
-│   │   ├── strategy_maker/     # 전략 메이커
-│   │   └── backtesting/        # 백테스팅
-│   └── settings/               # 🔧 설정 탭
+├── presenters/                 # MVP 패턴 프레젠터
+│   ├── strategy_presenter.py   # 전략 관리 프레젠터
+│   ├── trigger_presenter.py    # 트리거 빌더 프레젠터
+│   └── backtest_presenter.py   # 백테스팅 프레젠터
+├── views/                      # Passive View 구현
+│   ├── strategy_view.py        # 전략 관리 뷰
+│   ├── trigger_view.py         # 트리거 빌더 뷰
+│   └── backtest_view.py        # 백테스팅 뷰
 └── components/                 # 재사용 가능한 UI 컴포넌트
     ├── charts/                 # 차트 컴포넌트
     ├── tables/                 # 테이블 컴포넌트
     └── dialogs/                # 다이얼로그 컴포넌트
 ```
 
-### 2. Business Logic Layer
+### 2. Application Layer (Use Cases)
 ```
-upbit_auto_trading/core/
-├── trading_engine/             # 매매 엔진
-│   ├── order_manager.py        # 주문 관리
-│   ├── position_manager.py     # 포지션 관리
-│   └── risk_manager.py         # 리스크 관리
-├── strategy_engine/            # 전략 엔진
-│   ├── trigger_system/         # 트리거 시스템
-│   │   ├── conditions/         # 조건 정의
-│   │   ├── operators/          # 연산자
-│   │   └── validators/         # 호환성 검증
-│   └── strategy_system/        # 전략 시스템
-│       ├── entry_strategies/   # 진입 전략들
-│       ├── management_strategies/ # 관리 전략들
+upbit_auto_trading/application/
+├── services/                   # Application Services
+│   ├── strategy_service.py     # 전략 관리 서비스
+│   ├── trigger_service.py      # 트리거 관리 서비스
+│   └── backtest_service.py     # 백테스팅 서비스
+├── dto/                        # Data Transfer Objects
+│   ├── strategy_dto.py         # 전략 DTO
+│   ├── trigger_dto.py          # 트리거 DTO
+│   └── backtest_dto.py         # 백테스팅 DTO
+└── commands/                   # Command Objects
+    ├── create_strategy_command.py
+    ├── create_trigger_command.py
+    └── run_backtest_command.py
+```
+
+### 3. Domain Layer (핵심 비즈니스)
+```
+upbit_auto_trading/domain/
+├── entities/                   # 도메인 엔티티
+│   ├── strategy.py             # 전략 엔티티
+│   ├── trigger.py              # 트리거 엔티티
+│   ├── position.py             # 포지션 엔티티
+│   └── trade.py                # 거래 엔티티
+├── value_objects/              # 값 객체
+│   ├── strategy_id.py          # 전략 ID
+│   ├── trigger_id.py           # 트리거 ID
+│   └── trading_signal.py       # 거래 신호
+├── services/                   # 도메인 서비스
+│   ├── compatibility_checker.py # 호환성 검증
+│   ├── signal_evaluator.py     # 신호 평가
+│   └── position_manager.py     # 포지션 관리
+├── repositories/               # Repository 인터페이스
+│   ├── strategy_repository.py  # 전략 저장소 인터페이스
+│   ├── trigger_repository.py   # 트리거 저장소 인터페이스
+│   └── market_data_repository.py # 시장 데이터 저장소 인터페이스
+└── events/                     # 도메인 이벤트
+    ├── strategy_created.py     # 전략 생성 이벤트
+    ├── position_opened.py      # 포지션 개설 이벤트
+    └── trade_executed.py       # 거래 실행 이벤트
+```
+
+### 4. Infrastructure Layer
 │       └── combination_manager.py # 전략 조합 관리
 └── data_engine/                # 데이터 엔진
     ├── market_data/            # 시장 데이터
-    ├── indicators/             # 기술적 지표
-    └── historical_data/        # 과거 데이터
 ```
-
-### 3. Data Access Layer
-```
-upbit_auto_trading/storage/
-├── database/
-│   ├── settings_db.py          # 설정 DB 접근
-│   ├── strategies_db.py        # 전략 DB 접근
-│   └── market_data_db.py       # 시장 데이터 DB 접근
-├── repositories/               # 리포지토리 패턴
-│   ├── trading_variable_repo.py
-│   ├── strategy_repo.py
-│   └── market_data_repo.py
-└── models/                     # 데이터 모델
-    ├── trading_models.py
-    ├── strategy_models.py
-    └── market_models.py
+upbit_auto_trading/infrastructure/
+├── repositories/               # Repository 구현체
+│   ├── sqlite_strategy_repository.py    # SQLite 전략 저장소
+│   ├── sqlite_trigger_repository.py     # SQLite 트리거 저장소
+│   └── sqlite_market_data_repository.py # SQLite 시장 데이터 저장소
+├── external_apis/              # 외부 API 클라이언트
+│   ├── upbit_api_client.py     # 업비트 API 클라이언트
+│   └── market_data_provider.py # 시장 데이터 제공자
+├── database/                   # 데이터베이스 접근
+│   ├── database_manager.py     # 데이터베이스 관리자
+│   └── migration_manager.py    # 마이그레이션 관리자
+└── messaging/                  # 이벤트 메시징
+    └── domain_event_bus.py     # 도메인 이벤트 버스
 ```
 
 ## 🔧 핵심 컴포넌트 설계
