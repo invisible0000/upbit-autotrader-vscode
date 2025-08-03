@@ -1,32 +1,93 @@
-# 🤖 LLM 에이전트 마스터 지침: 업비트 자동매매 프로젝트
+# 🤖 LLM 에이전트 개발 지침
 
-## 1. 최우선 지침 및 핵심 페르소나
+## 📋 핵심 참조 문서
 
-**당신의 페르소나:** 당신은 **15년 경력의 Staff Software Engineer**입니다.
-**당신의 최우선 지침:** 안전하고, 확장 가능하며, 유지보수하기 쉬운 **프로덕션 수준의 코드**를 생산하는 것입니다. 당신은 단순한 코드 생성기가 아닌 엔지니어링 파트너입니다.
+**모든 개발 작업은 다음 문서들을 기준으로 합니다:**
 
-**필수 워크플로우:**
-1.  **요구사항 분석:** 비즈니스 로직과 기술적 제약사항을 이해합니다.
-2.  **엣지 케이스 고려:** 실패 시나리오와 예외 상황을 검토합니다.
-3.  **구현 계획 수립:** 아키텍처와 최적화 방안을 결정합니다.
-4.  **자가 수정:** 초안 코드를 검토하고, 최종 제출 전에 최소 3가지 이상의 구체적인 개선점을 찾아 수정합니다.
+1. **[../docs/PROJECT_SPECIFICATIONS.md](../docs/PROJECT_SPECIFICATIONS.md)** - 프로젝트 핵심 명세 (필수)
+2. **[../docs/DEV_CHECKLIST.md](../docs/DEV_CHECKLIST.md)** - 개발 검증 체크리스트 (필수)
+3. **[../docs/STYLE_GUIDE.md](../docs/STYLE_GUIDE.md)** - 코딩 스타일 가이드 (필수)
+4. **[../docs/README.md](../docs/README.md)** - 전체 문서 가이드
+
+## 🎯 개발 원칙
+
+### 1. 기본 7규칙 전략 중심 개발
+- 모든 기능은 **[기본 7규칙 전략](../docs/BASIC_7_RULE_STRATEGY_GUIDE.md)** 완전 지원이 목표
+- 새로운 기능은 반드시 7규칙 전략으로 검증 후 배포
+
+### 2. 3-DB 아키텍처 준수
+- **settings.sqlite3**: 변수 정의, 파라미터 (data_info 관리)
+- **strategies.sqlite3**: 사용자 전략, 백테스팅 결과  
+- **market_data.sqlite3**: 시장 데이터, 지표 캐시
+
+### 3. 컴포넌트 기반 개발
+- UI 컴포넌트: PyQt6 위젯들의 재사용 가능한 모듈화
+- 전략 컴포넌트: 개념적 모듈 (실제 폴더 아님)
+
+## 🚀 개발 워크플로우
+
+### 작업 전 (필수)
+1. **문서 확인**: 관련 docs 문서 숙지
+2. **호환성 검증**: [VARIABLE_COMPATIBILITY.md](../docs/VARIABLE_COMPATIBILITY.md) 확인
+3. **아키텍처 검토**: [COMPONENT_ARCHITECTURE.md](../docs/COMPONENT_ARCHITECTURE.md) 참조
+
+### 구현 중
+1. **스타일 준수**: STYLE_GUIDE.md 기준 적용
+2. **에러 처리**: [ERROR_HANDLING_POLICY.md](../docs/ERROR_HANDLING_POLICY.md) 준수
+3. **DB 스키마**: [DB_SCHEMA.md](../docs/DB_SCHEMA.md) 정확히 반영
+
+### 완료 후 (필수)
+1. **체크리스트 검증**: DEV_CHECKLIST.md 모든 항목 확인  
+2. **7규칙 테스트**: 기본 7규칙 전략으로 동작 검증
+3. **코드 품질**: 타입 힌트, 문서화, 테스트 포함
+
+## 📊 주요 개발 영역별 가이드
+
+### 🎨 UI 개발
+- **디자인 시스템**: [UI_DESIGN_SYSTEM.md](../docs/UI_DESIGN_SYSTEM.md)
+- **컴포넌트 구조**: screens/ 및 components/ 폴더 활용
+- **반응형**: 최소 1280x720 해상도 지원
+
+### 📈 전략 개발  
+- **전략 시스템**: [STRATEGY_SYSTEM.md](../docs/STRATEGY_SYSTEM.md)
+- **트리거 빌더**: [TRIGGER_BUILDER_GUIDE.md](../docs/TRIGGER_BUILDER_GUIDE.md)
+- **진입 + 관리**: 1개 진입 + 0~N개 관리 전략 조합
+
+### 💾 데이터베이스
+- **스키마 정의**: DB_SCHEMA.md tv_ 테이블 구조 준수
+- **변수 관리**: data_info/*.yaml 파일 활용
+- **쿼리 최적화**: 인덱스와 트랜잭션 고려
+
+## 💡 개발 팁
+
+### 빠른 참조
+- 궁금하면 → **PROJECT_SPECIFICATIONS.md**로 돌아가기
+- 검증하려면 → **DEV_CHECKLIST.md** 확인
+- 코드 품질 → **STYLE_GUIDE.md** 준수
+
+### 작업 유형별 문서
+- 매매 전략: STRATEGY_SYSTEM.md + BASIC_7_RULE_STRATEGY_GUIDE.md
+- UI 작업: UI_DESIGN_SYSTEM.md + COMPONENT_ARCHITECTURE.md  
+- DB 작업: DB_SCHEMA.md + ARCHITECTURE_OVERVIEW.md
+- 버그 수정: ERROR_HANDLING_POLICY.md + STYLE_GUIDE.md
+
+## 🔍 자주 하는 실수들
+
+### ❌ 피해야 할 것들
+- component_system 폴더 참조 (존재하지 않음)
+- 오래된 DB 스키마 정보 사용
+- 하드코딩된 스타일 (QSS 파일 사용)
+- 7규칙 전략 미검증 배포
+
+### ✅ 권장사항
+- docs 폴더 문서가 항상 최신 정보
+- data_info/*.yaml 파일이 변수 정의 소스
+- UI는 components 폴더 활용 (실제 존재)
+- 모든 전략은 기본 7규칙으로 검증
 
 ---
 
-## 2. 코드 품질 5대 원칙 (타협 불가)
-
-1.  **유지보수성 및 가독성:**
-    *   **의미있는 이름:** 명확하고 검색 가능한 이름을 사용합니다. 축약어 금지 (예: `user_manager`, `usr_mgr` 안됨).
-    *   **단일 책임 원칙 (SRP):** 함수는 20줄 미만, 하나의 명확한 목적만 갖습니다.
-    *   **DRY 원칙:** 중복 로직을 적극적으로 추상화합니다.
-    *   **스타일:** PEP 8 엄격 준수, 79자 제한, 타입 힌트 필수.
-    *   **주석:** *무엇*이 아닌 *왜*를 설명합니다.
-
-2.  **신뢰성 및 견고성:**
-    *   **포괄적인 오류 처리:** 모든 예외를 의미있는 메시지와 함께 처리합니다.
-    *   **테스트 가능한 설계:** 의존성 주입(DI)과 느슨한 결합을 사용합니다.
-    *   **필수 단위 테스트:** 모든 신규 기능에 대해 `pytest` 기반의 성공, 엣지 케이스, 오류 케이스 테스트를 자동으로 생성합니다.
-    *   **복잡도 명시:** 각 함수의 시간/공간 복잡도를 주석으로 표기합니다 (예: `# O(n log n) time, O(n) space`).
+**💡 핵심**: 의심스러우면 docs 폴더의 해당 문서를 먼저 확인하고 개발하기!
 
 3.  **성능 및 효율성:**
     *   **알고리즘 선택:** 단순함보다 최적의 알고리즘을 우선합니다.
