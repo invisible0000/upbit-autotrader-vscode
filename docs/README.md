@@ -19,6 +19,7 @@
 - **[DEV_CHECKLIST.md](DEV_CHECKLIST.md)**: 개발 검증 체크리스트 (168줄)
 - **[STYLE_GUIDE.md](STYLE_GUIDE.md)**: 코딩 스타일 가이드 (152줄)
 - **[ERROR_HANDLING_POLICY.md](ERROR_HANDLING_POLICY.md)**: 오류 처리 정책 (118줄)
+- **[LLM_DOCUMENTATION_GUIDELINES.md](LLM_DOCUMENTATION_GUIDELINES.md)**: LLM 최적화 문서 작성법 (NEW!)
 
 ### 🏗️ 시스템 아키텍처
 - **[ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)**: 시스템 개요 (248줄)
@@ -114,6 +115,14 @@
 4. 기본 7규칙 전략으로 동작 확인
 ```
 
+### 리팩토링 계획 수립 시
+```markdown
+1. refactoring_plan/README.md로 전체 개요 파악
+2. 현재 아키텍처 분석 문서로 현황 진단
+3. 전문가 설계 문서로 목표 아키텍처 이해
+4. 실행 계획 문서로 단계별 로드맵 수립
+```
+
 ## 📚 레거시 문서 관리
 
 ### 통합 완료
@@ -140,6 +149,12 @@ docs/legacy/             # 이전 버전 문서들
 - 개발 중: STYLE_GUIDE.md 수시 참조  
 - 개발 후: DEV_CHECKLIST.md로 품질 검증
 - 배포 전: 기본 7규칙 전략으로 동작 검증
+
+### 📝 문서 작성 시
+- 새 문서 작성: LLM_DOCUMENTATION_GUIDELINES.md 참조
+- LLM 최적화: 150-200줄 목표, 구조적 마커 활용
+- 토큰 효율성: 핵심 키워드 상단 배치, 예시 코드 포함
+- 일관성 유지: 용어 통일, 참조 체계 준수
 
 ### 🔄 문서 갱신 방식
 - 주요 변경사항은 관련 문서에 즉시 반영
@@ -200,7 +215,13 @@ python run_desktop_ui.py
 - **[시작 가이드](README_FIRST.md)**: 처음 사용자용
 - **[룰 빌더 실습](RULE_BUILDER_PRACTICE_GUIDE.md)**: UI 사용법
 
-### 📦 Legacy 문서
+### �️ 리팩토링 계획 (4개)
+- **[리팩토링 계획 가이드](refactoring_plan/README.md)**: 리팩토링 계획 수립 문서들
+- **[현재 아키텍처 분석](refactoring_plan/01_CURRENT_ARCHITECTURE_ANALYSIS.md)**: 현재 상황 진단
+- **[전문가 설계 종합](refactoring_plan/02_EXPERT_DESIGN_SYNTHESIS.md)**: 이상적 아키텍처
+- **[리팩토링 실행 계획](refactoring_plan/03_EXPERT_REFACTORING_SYNTHESIS.md)**: 단계별 로드맵
+
+### �📦 Legacy 문서
 긴 문서들과 구버전 내용은 `legacy_long_docs/` 폴더에 보관
 
 ## 🎯 프로토타입 테스트 방법
