@@ -61,9 +61,9 @@ class SuperDBTableViewer:
     
     def __init__(self):
         self.db_paths = {
-            'settings': 'upbit_auto_trading/data/settings.sqlite3',
-            'market_data': 'upbit_auto_trading/data/market_data.sqlite3',
-            'strategies': 'upbit_auto_trading/data/strategies.sqlite3'
+            'settings': 'data/settings.sqlite3',
+            'market_data': 'data/market_data.sqlite3',
+            'strategies': 'data/strategies.sqlite3'
         }
         self.schema_paths = {
             'gui_unified': 'upbit_auto_trading/utils/trading_variables/gui_variables_DB_migration_util/data_info/upbit_autotrading_unified_schema.sql'

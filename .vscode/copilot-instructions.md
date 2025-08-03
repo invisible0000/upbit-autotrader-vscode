@@ -97,7 +97,31 @@ from .components.core.condition_storage import ConditionStorage
 -   **검증:** 호환성 검사는 UI(실시간)와 백엔드(저장 시) 양쪽에서 필수입니다.
 -   **규칙:** 변수들은 동일한 `comparison_group`을 공유해야만 호환됩니다.
 
-### 4.4. 개발 워크플로우 및 도구 (필수)
+### 4.5. 스마트 로깅 시스템 v3.0 (핵심 인프라)
+
+-   **위치:** `upbit_auto_trading/logging/` - 전용 로깅 서브시스템
+-   **핵심 원칙:** 로그 범람 방지 + 개발 상황별 최적화
+-   **필수 사용법:**
+    ```python
+    # 기본 통합 로거 (v2.x 완전 호환)
+    from upbit_auto_trading.logging import get_integrated_logger
+    logger = get_integrated_logger("ComponentName")
+    
+    # 스마트 필터링 활용 (로그 범람 방지)
+    from upbit_auto_trading.logging import get_smart_log_manager
+    manager = get_smart_log_manager()
+    with manager.feature_development("FeatureName"):
+        logger.debug("해당 기능 관련 로그만 출력")
+    ```
+-   **환경변수 제어:** 
+    - `UPBIT_LOG_CONTEXT`: development, testing, production, debugging
+    - `UPBIT_LOG_SCOPE`: silent, minimal, normal, verbose, debug_all
+    - `UPBIT_COMPONENT_FOCUS`: 특정 컴포넌트만 포커스
+    - `UPBIT_CONSOLE_OUTPUT`: true 설정 시 터미널에 실시간 로그 출력 (에러 추적용)
+-   **로그 파일:** 메인 로그(upbit_auto_trading.log) + 세션별 로그(upbit_auto_trading_YYYYMMDD_HHMMSS_PID숫자.log)
+-   **로그 확인:** 실시간 로그는 PID 포함 파일에서, 통합 로그는 메인 파일에서 확인 (이전 세션은 자동 통합됨)
+
+### 4.6. 개발 워크플로우 및 도구 (필수)
 
 1.  **DB 우선 분석:** DB 관련 작업 전, 제공된 도구를 사용하여 현재 상태를 파악해야 합니다. 이는 선택이 아닌 필수이며, 낭비되는 노력을 방지합니다.
     ```powershell
@@ -107,12 +131,24 @@ from .components.core.condition_storage import ConditionStorage
     # 2. 마이그레이션/삭제 전 코드 참조 분석
     python tools/super_db_table_reference_code_analyzer.py --tables tv_trading_variables
     ```
-2.  **로거 사용:** 프로젝트의 커스텀 로거(`upbit_auto_trading/utils/debug_logger.py`)를 활용하십시오.
+2.  **스마트 로깅 시스템 v3.0 (필수):** 통합 로깅 시스템을 사용하여 로그 범람을 방지하십시오.
     ```python
-    from upbit_auto_trading.utils.debug_logger import get_logger
-    logger = get_logger("MyComponent")
-    logger.info("이것은 메시지입니다.")
-    logger.conditional_debug(lambda: f"비싼 데이터: {expensive_op()}")
+    # 기본 사용 (권장)
+    from upbit_auto_trading.logging import get_integrated_logger
+    logger = get_integrated_logger("MyComponent")
+    logger.info("정보 메시지")
+    logger.debug("디버그 정보")  # 스마트 필터링으로 자동 제어
+    
+    # 특정 기능 개발 시 (로그 포커스)
+    from upbit_auto_trading.logging import get_smart_log_manager
+    manager = get_smart_log_manager()
+    with manager.feature_development("FeatureName"):
+        logger.debug("개발 중 상세 로그만 출력")
+    
+    # 환경변수로 전역 제어
+    $env:UPBIT_LOG_CONTEXT='debugging'  # development, testing, production
+    $env:UPBIT_LOG_SCOPE='verbose'      # silent, minimal, normal, verbose
+    $env:UPBIT_COMPONENT_FOCUS='MyComponent'  # 특정 컴포넌트만
     ```
 3.  **모든 변경 후 테스트:** 메인 UI 애플리케이션을 실행하여 아무것도 손상되지 않았는지 확인하십시오.
     ```powershell
@@ -128,6 +164,7 @@ from .components.core.condition_storage import ConditionStorage
 -   [ ] **아키텍처:** 컴포넌트 기반 설계를 존중하고 있는가?
 -   [ ] **데이터베이스:** 표준 경로와 연결 패턴을 사용하고 있는가?
 -   [ ] **보안:** API 키는 환경 변수로 처리되는가? SQL 인젝션을 방지하고 있는가?
+-   [ ] **로깅:** 스마트 로깅 시스템 v3.0을 사용하고 있는가? 로그 범람을 방지하고 있는가?
 -   [ ] **테스트:** 내 기능에 대한 `pytest` 테스트를 포함하고 있는가?
 -   [ ] **호환성:** 변수 호환성 규칙을 강제하고 있는가?
 -   [ ] **자가 수정:** 내 초안에서 최소 3가지 약점을 식별하고 수정했는가?
@@ -135,4 +172,4 @@ from .components.core.condition_storage import ConditionStorage
 **모든 개발 작업의 최종 행동은 `python run_desktop_ui.py`를 실행하여 무결성을 검증하는 것입니다.**
 
 *이 문서는 LLM 에이전트 소비에 최적화되었습니다. 사람이 읽을 수 있는 컨텍스트는 전체 `.vscode/copilot-instructions.md`를 참조하십시오.*
-*마지막 업데이트: 2025-08-02*
+*마지막 업데이트: 2025-08-03*

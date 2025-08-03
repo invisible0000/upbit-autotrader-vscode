@@ -24,6 +24,22 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
 from PyQt6.QtGui import QFont, QIcon
 
+# DatabaseManager 임포트
+try:
+    from upbit_auto_trading.data_layer.storage.database_manager import DatabaseManager
+except ImportError as e:
+    print(f"❌ [ERROR] DatabaseManager import 실패: {e}")
+    # 백업용 더미 클래스
+    class DatabaseManager:
+        def __init__(self, config=None, config_path=None):
+            pass
+            
+        def cleanup_database(self):
+            pass
+            
+        def initialize_database(self):
+            pass
+
 # 공통 컴포넌트 임포트
 try:
     from ...common.components import (
@@ -38,29 +54,23 @@ except ImportError as e:
     StyledLineEdit = QLineEdit
     StyledButton = QPushButton
 
-# 새로운 글로벌 DB 매니저와 설정 임포트
+# simple_paths 시스템 임포트
 try:
-    from upbit_auto_trading.config.database_paths import get_current_config
-    from upbit_auto_trading.utils.global_db_manager import DatabaseManager
+    from upbit_auto_trading.config.simple_paths import SimplePaths
     IMPORT_SUCCESS = True
 except ImportError as import_error:
-    print(f"❌ [ERROR] database_paths import 실패: {import_error}")
+    print(f"❌ [ERROR] simple_paths import 실패: {import_error}")
     IMPORT_SUCCESS = False
     
-    # 백업용 더미 임포트
-    def get_current_config():
-        return {
-            'settings_db': 'upbit_auto_trading/data/settings.sqlite3',
-            'strategies_db': 'upbit_auto_trading/data/strategies.sqlite3',
-            'market_data_db': 'upbit_auto_trading/data/market_data.sqlite3'
-        }
-    
-    class DatabaseManager:
-        def close_all_connections(self):
-            pass
-        
-        def reload_configuration(self):
-            pass
+    # 백업용 더미 클래스
+    class SimplePaths:
+        def __init__(self):
+            from pathlib import Path
+            self.DATA_DIR = Path("data")
+            self.SETTINGS_DB = self.DATA_DIR / "settings.sqlite3"
+            self.STRATEGIES_DB = self.DATA_DIR / "strategies.sqlite3"
+            self.MARKET_DATA_DB = self.DATA_DIR / "market_data.sqlite3"
+            self.BACKUPS_DIR = Path("backups")
 
 
 class DatabaseSwitchWorker(QThread):
@@ -77,9 +87,12 @@ class DatabaseSwitchWorker(QThread):
         try:
             self.progress.emit(10, "데이터베이스 연결 종료 중...")
             
-            # 1. 기존 연결 모두 종료
-            db_manager = DatabaseManager()
-            db_manager.close_all_connections()
+            # 1. 기존 연결 정리 (실제 존재하는 메서드 사용)
+            try:
+                db_manager = DatabaseManager()
+                db_manager.cleanup_database()  # 실제 존재하는 메서드
+            except Exception as e:
+                print(f"⚠️ [WARNING] 데이터베이스 정리 중 오류 (무시): {e}")
             
             self.progress.emit(30, "새 데이터베이스 파일 검증 중...")
             
@@ -107,7 +120,7 @@ class DatabaseSwitchWorker(QThread):
             self.progress.emit(70, "설정 파일 업데이트 중...")
             
             # 4. 설정 파일 업데이트 (올바른 경로 사용)
-            config_path = "upbit_auto_trading/config/database_config.yaml"
+            config_path = "config/database_config.yaml"
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r', encoding='utf-8') as f:
@@ -125,6 +138,9 @@ class DatabaseSwitchWorker(QThread):
                 'active': True
             }
             
+            # 설정 파일 디렉토리 생성
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            
             try:
                 with open(config_path, 'w', encoding='utf-8') as f:
                     yaml.dump(config, f, 
@@ -141,9 +157,13 @@ class DatabaseSwitchWorker(QThread):
                 
             self.progress.emit(90, "새 데이터베이스 초기화 중...")
             
-            # 5. 새 DB 매니저 초기화
-            new_manager = DatabaseManager()
-            new_manager.reload_configuration()
+            # 5. 새 DB 매니저 초기화 (실제 존재하는 방식 사용)
+            try:
+                # 새 설정으로 DatabaseManager 재생성
+                new_manager = DatabaseManager(config=config)
+                new_manager.initialize_database()  # 실제 존재하는 메서드
+            except Exception as e:
+                print(f"⚠️ [WARNING] 새 DB 매니저 초기화 중 오류 (무시): {e}")
             
             self.progress.emit(100, "데이터베이스 교체 완료!")
             self.finished.emit(True, "데이터베이스가 성공적으로 교체되었습니다.")
@@ -161,12 +181,21 @@ class DatabaseSettings(QWidget):
     # 프로그램 재시작 요청 시그널
     restart_requested = pyqtSignal()
     
+    # DB 상태 변경 시그널 추가
+    db_status_changed = pyqtSignal(bool)  # True: 연결됨, False: 연결 끊김
+    
     def __init__(self, parent=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-database-settings")
         
-        self.current_config = get_current_config()
+        # simple_paths 시스템 사용
+        self.paths = SimplePaths()
+        self.current_config = {
+            'settings_db': str(self.paths.SETTINGS_DB),
+            'strategies_db': str(self.paths.STRATEGIES_DB),
+            'market_data_db': str(self.paths.MARKET_DATA_DB)
+        }
         self.pending_config = {}
         self.switch_worker = None
         
@@ -500,7 +529,7 @@ class DatabaseSettings(QWidget):
         self.preview_btn.setEnabled(True)
         
         if success:
-            # 현재 설정을 강제로 새로고침
+            # 현재 설정을 강제로 새로고침 (DB 상태 시그널 자동 발생)
             self.load_current_settings()
             
             # 성공 메시지 표시
@@ -524,8 +553,11 @@ class DatabaseSettings(QWidget):
                         "재시작 알림",
                         f"자동 재시작에 실패했습니다.\n수동으로 프로그램을 재시작해주세요.\n\n오류: {str(e)}"
                     )
-            
         else:
+            # 실패 시 연결 끊김 상태로 설정
+            self.db_status_changed.emit(False)
+            
+            # 실패 메시지 표시
             QMessageBox.critical(
                 self,
                 "교체 실패",
@@ -543,28 +575,58 @@ class DatabaseSettings(QWidget):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            self.settings_path_edit.setText("upbit_auto_trading/data/settings.sqlite3")
-            self.strategies_path_edit.setText("upbit_auto_trading/data/strategies.sqlite3")
-            self.market_data_path_edit.setText("upbit_auto_trading/data/market_data.sqlite3")
+            self.settings_path_edit.setText("data/settings.sqlite3")
+            self.strategies_path_edit.setText("data/strategies.sqlite3")
+            self.market_data_path_edit.setText("data/market_data.sqlite3")
     
     def load_current_settings(self):
         """현재 설정 로드"""
         try:
-            # 현재 설정을 다시 읽어옴
-            config = get_current_config()
+            # simple_paths 기반 설정 표시
+            import sqlite3
             
-            # 현재 설정 라벨 업데이트
-            self.current_settings_label.setText(config.get('settings_db', 'N/A'))
-            self.current_strategies_label.setText(config.get('strategies_db', 'N/A'))
-            self.current_market_data_label.setText(config.get('market_data_db', 'N/A'))
+            # 각 데이터베이스 상태 확인 및 표시
+            databases = [
+                ("Settings", self.paths.SETTINGS_DB, self.current_settings_label),
+                ("Strategies", self.paths.STRATEGIES_DB, self.current_strategies_label),
+                ("Market Data", self.paths.MARKET_DATA_DB, self.current_market_data_label)
+            ]
             
-            # 현재 설정 저장
-            self.current_config = config
+            db_connected = False  # 전체 DB 연결 상태
             
-            # 새 파일 선택 입력란 초기화 (현재 설정과 동일하게)
-            self.settings_path_edit.setText(config.get('settings_db', ''))
-            self.strategies_path_edit.setText(config.get('strategies_db', ''))
-            self.market_data_path_edit.setText(config.get('market_data_db', ''))
+            for name, db_path, label in databases:
+                if db_path.exists():
+                    # 파일 크기
+                    size_mb = db_path.stat().st_size / (1024 * 1024)
+                    
+                    # 테이블 수 확인
+                    table_count = 0
+                    try:
+                        with sqlite3.connect(str(db_path)) as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                            table_count = cursor.fetchone()[0]
+                        
+                        # settings DB가 연결되면 전체 DB 연결 상태를 True로 설정
+                        if name == "Settings" and table_count > 0:
+                            db_connected = True
+                            
+                    except sqlite3.Error:
+                        pass
+                    
+                    status_text = f"✅ {db_path.name} ({size_mb:.2f} MB, {table_count}개 테이블)"
+                else:
+                    status_text = f"❌ 파일 없음 ({db_path.name})"
+                
+                label.setText(status_text)
+            
+            # DB 상태 변경 시그널 발생
+            self.db_status_changed.emit(db_connected)
+            
+            # 새 파일 선택 입력란에 현재 경로 표시
+            self.settings_path_edit.setText(str(self.paths.SETTINGS_DB))
+            self.strategies_path_edit.setText(str(self.paths.STRATEGIES_DB))
+            self.market_data_path_edit.setText(str(self.paths.MARKET_DATA_DB))
             
             # 버튼 상태 업데이트
             self._check_apply_button_state()
@@ -573,6 +635,8 @@ class DatabaseSettings(QWidget):
             self.repaint()
             
         except Exception as e:
+            # 오류 발생 시 연결 끊김 상태로 설정
+            self.db_status_changed.emit(False)
             QMessageBox.warning(
                 self,
                 "설정 로드 오류",

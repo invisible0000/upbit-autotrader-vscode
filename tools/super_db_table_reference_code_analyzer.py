@@ -28,7 +28,7 @@
 
 📖 5. **완전한 예시**:
    python super_db_table_reference_code_analyzer.py \
-     --database "upbit_auto_trading/data/settings.sqlite3" \
+     --database "data/settings.sqlite3" \
      --tables app_settings strategies trading_conditions \
      --output-suffix "critical_tables"
 
@@ -476,7 +476,7 @@ def main():
     
     parser.add_argument('--project', default='.',
                         help='프로젝트 루트 디렉토리 (기본값: 현재 디렉토리)')
-    parser.add_argument('--database', default='upbit_auto_trading/data/settings.sqlite3',
+    parser.add_argument('--database', default='data/settings.sqlite3',
                         help='분석할 데이터베이스 파일 경로')
     parser.add_argument('--tables', nargs='*',
                         help='분석할 특정 테이블들 (공백으로 구분, 없으면 전체 분석)')

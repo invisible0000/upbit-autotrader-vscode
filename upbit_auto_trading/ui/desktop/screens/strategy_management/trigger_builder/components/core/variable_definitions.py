@@ -35,7 +35,7 @@ class VariableDefinitions:
         try:
             # 여러 경로 시도 (프로젝트 루트에서 실행되는 경우 고려)
             possible_paths = [
-                Path("upbit_auto_trading/data/settings.sqlite3"),  # 프로젝트 루트에서
+                Path("data/settings.sqlite3"),  # 프로젝트 루트에서
                 Path("data/settings.sqlite3"),                     # 하위 폴더에서
                 Path("../../../data/settings.sqlite3"),           # 컴포넌트 폴더에서
             ]
@@ -67,10 +67,10 @@ class VariableDefinitions:
             conn = cls._get_db_connection()
             cursor = conn.cursor()
             
-            # 활성화된 변수들만 로드
+            # 활성화된 변수들만 로드 (parameter_required 필드 추가)
             cursor.execute("""
                 SELECT variable_id, display_name_ko, display_name_en, description, 
-                       purpose_category, chart_category, comparison_group, is_active
+                       purpose_category, chart_category, comparison_group, is_active, parameter_required
                 FROM tv_trading_variables 
                 WHERE is_active = 1
                 ORDER BY variable_id
@@ -86,7 +86,8 @@ class VariableDefinitions:
                     "purpose_category": row["purpose_category"],
                     "chart_category": row["chart_category"], 
                     "comparison_group": row["comparison_group"],
-                    "is_active": bool(row["is_active"])
+                    "is_active": bool(row["is_active"]),
+                    "parameter_required": bool(row["parameter_required"])
                 }
             
             conn.close()
@@ -313,6 +314,50 @@ class VariableDefinitions:
         """변수별 파라미터 정의 반환 (DB 기반, 캐시 우선) # O(1) time"""
         parameters = cls._load_parameters_from_db()
         return parameters.get(var_id, {})
+    
+    @classmethod
+    def is_parameter_required(cls, var_id: str) -> bool:
+        """변수가 파라미터를 필요로 하는지 확인 # O(1) time"""
+        variables = cls._load_variables_from_db()
+        var_info = variables.get(var_id, {})
+        return var_info.get("parameter_required", False)
+    
+    @classmethod
+    def get_parameter_status_info(cls, var_id: str) -> Dict[str, str]:
+        """변수의 파라미터 상태 정보 반환 (UI 표시용) # O(1) time"""
+        is_required = cls.is_parameter_required(var_id)
+        parameters = cls.get_variable_parameters(var_id)
+        
+        if not is_required:
+            # 파라미터가 필요 없는 변수
+            return {
+                'message': '✅ 이 변수는 파라미터 설정이 필요하지 않습니다.',
+                'color': '#2e7d32',  # 초록색
+                'bg_color': '#e8f5e9',
+                'border_color': '#4caf50',
+                'font_weight': 'normal',
+                'status_type': 'no_params_needed'
+            }
+        elif not parameters:
+            # 파라미터가 필요하지만 DB에 정의되지 않은 경우 (오류 상황)
+            return {
+                'message': '⚠️ 파라미터 정의가 누락되었습니다. 관리자에게 문의하세요.',
+                'color': '#d32f2f',  # 빨간색
+                'bg_color': '#ffebee',
+                'border_color': '#f44336',
+                'font_weight': 'bold',
+                'status_type': 'error_missing_params'
+            }
+        else:
+            # 파라미터가 정상적으로 정의된 경우 (이 함수가 호출되지 않음)
+            return {
+                'message': '📋 파라미터가 정상적으로 로드되었습니다.',
+                'color': '#1976d2',  # 파란색
+                'bg_color': '#e3f2fd',
+                'border_color': '#2196f3',
+                'font_weight': 'normal',
+                'status_type': 'normal'
+            }
     
     @staticmethod
     def get_variable_descriptions() -> Dict[str, str]:

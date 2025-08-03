@@ -392,3 +392,20 @@ class ParameterWidgetFactory:
         for var_id in self.widgets:
             all_values[var_id] = self.get_parameter_values(var_id)
         return all_values
+    
+    def _get_parameter_status_info(self, var_id: str) -> Dict[str, str]:
+        """변수의 파라미터 상태 정보 반환 (UI 표시용)"""
+        from .variable_definitions import VariableDefinitions
+        
+        try:
+            return VariableDefinitions.get_parameter_status_info(var_id)
+        except Exception as e:
+            # 폴백: DB 접근 실패 시 기본 에러 메시지
+            return {
+                'message': f'⚠️ 파라미터 정보를 불러올 수 없습니다: {str(e)}',
+                'color': '#d32f2f',
+                'bg_color': '#ffebee',
+                'border_color': '#f44336',
+                'font_weight': 'bold',
+                'status_type': 'error_db_access'
+            }

@@ -1,0 +1,5 @@
+"user_defined":
+  "active": !!bool "true"
+  "market_data_db": "data/market_data.sqlite3"
+  "settings_db": "data/settings.sqlite3"
+  "strategies_db": "data/strategies.sqlite3"

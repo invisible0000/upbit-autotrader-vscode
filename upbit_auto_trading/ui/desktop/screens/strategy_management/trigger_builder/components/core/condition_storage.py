@@ -20,7 +20,7 @@ except ImportError:
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
     
-    def __init__(self, db_path: str = "upbit_auto_trading/data/strategies.sqlite3"):
+    def __init__(self, db_path: str = "data/strategies.sqlite3"):
         if USE_GLOBAL_MANAGER:
             # 전역 매니저 사용 - strategies DB에서 trading_conditions 테이블 참조
             self.db_path = db_path

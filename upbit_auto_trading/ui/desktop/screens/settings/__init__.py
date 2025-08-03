@@ -8,7 +8,7 @@
 """
 
 from .settings_screen import SettingsScreen
-from .api_key_manager import ApiKeyManager
+from .api_key_manager_secure import ApiKeyManagerSecure as ApiKeyManager
 from .database_settings import DatabaseSettings
 from .notification_settings import NotificationSettings
 

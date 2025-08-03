@@ -4,10 +4,10 @@
 DB 기반 통합 호환성 검증기 (CompatibilityValidator) - 변수 간 의미론적 호환성 검증
 ====================================================================================
 
-🚀 **DB 기반 설계**: 모든 데이터를 upbit_auto_trading/data/settings.sqlite3에서 실시간 로드
+🚀 **DB 기반 설계**: 모든 데이터를 data/settings.sqlite3에서 실시간 로드
 - 하드코딩 제거: 모든 지표 정보를 DB에서 동적으로 가져옴
 - 실시간 반영: DB 변경 시 즉시 적용, 코드 수정 불필요
-- 전역 DB 매니저: upbit_auto_trading/data/settings.sqlite3 활용
+- 전역 DB 매니저: data/settings.sqlite3 활용
 
 역할: 변수 간 비교가 논리적으로 의미있는지 검증
 - DB 기반 호환성 규칙 (comparison_group 기반 자동 판정)
@@ -79,7 +79,7 @@ class CompatibilityValidator:
             self.db_connection_status = "global_manager_failed"
             self.db_error_message = f"전역 DB 매니저 오류: {str(e)}"
             # 폴백: 하드코딩된 기본 경로
-            return "upbit_auto_trading/data/settings.sqlite3"
+            return "data/settings.sqlite3"
     
     def _validate_database_status(self):
         """데이터베이스 상태를 검증하고 사용자에게 알릴 준비"""

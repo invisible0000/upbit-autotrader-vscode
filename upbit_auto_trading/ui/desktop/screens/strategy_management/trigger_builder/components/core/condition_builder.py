@@ -306,8 +306,10 @@ class ConditionBuilder:
         
         # 기본 파라미터 값 설정
         default_params = {}
-        for param_name, param_config in variable_params.items():
-            default_params[param_name] = param_config.get("default")
+        # parameter_required 확인하여 파라미터 필요 여부 판단
+        if self.variable_definitions.is_parameter_required(variable_id):
+            for param_name, param_config in variable_params.items():
+                default_params[param_name] = param_config.get("default")
         
         template = {
             "name": "",
@@ -320,7 +322,8 @@ class ConditionBuilder:
             "target_value": "",
             "external_variable": None,
             "trend_direction": "static",
-            "category": category
+            "category": category,
+            "parameter_required": self.variable_definitions.is_parameter_required(variable_id)
         }
         
         return template

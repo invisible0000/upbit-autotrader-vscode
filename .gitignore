@@ -89,6 +89,11 @@ debug_*
 .temp/
 .tmp/
 
+# 개발 중 실험 폴더
+experiments/
+playground/
+sandbox/
+
 # 백업 파일
 *.bak
 *.backup
@@ -100,6 +105,27 @@ personal_config.yaml
 trading_history/
 portfolio_data/
 personal_strategies/
+
+# 협업 DB 관리 시스템 (사용자별 커스터마이징 포함)
+data_info/
+
+# 개인 백업 및 체크포인트
+backups/
+rollback_checkpoints/
+
+# 개인 개발 환경
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# Kiro AI 개인 설정 (협업 시 제외)
+.kiro/steering/
+.kiro/hooks/
+
+# VS Code 개인 설정 (일부)
+.vscode/settings.json
+.vscode/launch.json
+.vscode/.ropeproject/
 
 # 차트 캐시
 chart_cache/
@@ -122,3 +148,20 @@ Thumbs.db
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# 프로젝트별 실행/빌드 결과물
+dist/
+build/
+*.egg-info/
+__pycache__/
+
+# 성능 프로파일링 결과
+*.prof
+*.pstats
+profile_results/
+
+# 실행 로그 및 출력
+output/
+results/
+reports/
+*.report

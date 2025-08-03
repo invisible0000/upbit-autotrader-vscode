@@ -13,6 +13,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSettings, QSize, QPoint
 from PyQt6.QtGui import QIcon, QAction
 
+# simple_paths 시스템 import
+from config.simple_paths import SimplePaths
+
 # 공통 위젯 임포트
 try:
     from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
@@ -371,6 +374,12 @@ class MainWindow(QMainWindow):
                 else:
                     print("⚠️ SettingsScreen에 api_status_changed 시그널이 없습니다")
                 
+                # DB 상태 변경 시그널 연결
+                if hasattr(screen, 'db_status_changed'):
+                    screen.db_status_changed.connect(self._on_db_status_changed)
+                else:
+                    print("⚠️ SettingsScreen에 db_status_changed 시그널이 없습니다")
+                
             else:
                 print(f"❌ 알 수 없는 화면: {screen_name}")
                 return
@@ -600,28 +609,39 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"❌ API 상태 업데이트 실패: {e}")
     
+    def _on_db_status_changed(self, connected):
+        """DB 연결 상태 변경 시 호출되는 메서드"""
+        try:
+            # 상태바의 DB 연결 상태 업데이트
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_db_status(connected)
+                print(f"🗄️ DB 연결 상태 업데이트: {'연결됨' if connected else '연결 끊김'}")
+            else:
+                print("⚠️ 상태바를 찾을 수 없습니다")
+        except Exception as e:
+            print(f"❌ DB 상태 업데이트 실패: {e}")
+    
     def _check_initial_db_status(self):
         """애플리케이션 시작 시 DB 연결 상태 확인"""
         try:
-            # data 디렉터리 경로 설정
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            data_dir = os.path.join(base_dir, '../../data')
-            db_path = os.path.join(data_dir, "settings.sqlite3")
+            # simple_paths 시스템 사용
+            paths = SimplePaths()
+            db_path = paths.SETTINGS_DB
             
             db_connected = False
             show_warning = False
             warning_message = ""
             
             # DB 파일 존재 여부 확인
-            if not os.path.exists(db_path):
+            if not db_path.exists():
                 warning_message = f"DB 파일이 존재하지 않습니다.\n경로: {db_path}\n\n새로 설치했거나 파일이 손상되었을 수 있습니다."
                 show_warning = True
-                print(f"❌ DB 파일 없음: {os.path.basename(db_path)}")
+                print(f"❌ DB 파일 없음: {db_path.name}")
             else:
                 try:
                     import sqlite3
                     # 실제 DB 연결 테스트
-                    with sqlite3.connect(db_path) as conn:
+                    with sqlite3.connect(str(db_path)) as conn:
                         cursor = conn.cursor()
                         # 간단한 쿼리로 연결 확인
                         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
@@ -629,11 +649,11 @@ class MainWindow(QMainWindow):
                         
                         if result:
                             db_connected = True
-                            print(f"✅ DB 연결 성공: {os.path.basename(db_path)}")
+                            print(f"✅ DB 연결 성공: {db_path.name}")
                         else:
                             warning_message = f"DB 파일이 비어있거나 손상되었습니다.\n경로: {db_path}\n\n데이터베이스를 다시 초기화해야 할 수 있습니다."
                             show_warning = True
-                            print(f"❌ DB가 비어있음: {os.path.basename(db_path)}")
+                            print(f"❌ DB가 비어있음: {db_path.name}")
                             
                 except Exception as e:
                     warning_message = f"DB 연결에 실패했습니다.\n경로: {db_path}\n오류: {str(e)}\n\n데이터베이스 파일이 손상되었을 수 있습니다."
@@ -660,11 +680,9 @@ class MainWindow(QMainWindow):
     def _check_initial_api_status(self):
         """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인"""
         try:
-            # data 디렉터리 경로 설정
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            data_dir = os.path.join(base_dir, '../../data')
-            settings_dir = os.path.join(data_dir, "settings")
-            api_keys_path = os.path.join(settings_dir, "api_keys.json")
+            # simple_paths 시스템 사용
+            paths = SimplePaths()
+            api_keys_path = paths.API_CREDENTIALS_FILE
             
             # API 키 파일 존재 여부 확인
             if not os.path.exists(api_keys_path):
@@ -680,17 +698,16 @@ class MainWindow(QMainWindow):
             try:
                 from cryptography.fernet import Fernet
                 
-                # 암호화 키 로드
-                key_dir = os.path.join(settings_dir)
-                key_path = os.path.join(key_dir, "encryption_key.key")
+                # 새로운 secure 위치에서 암호화 키 로드
+                encryption_key_path = paths.SECURE_DIR / "encryption_key.key"
                 
-                if not os.path.exists(key_path):
+                if not os.path.exists(encryption_key_path):
                     print("❌ 암호화 키 파일이 없습니다")
                     if hasattr(self, 'status_bar'):
                         self.status_bar.set_api_status(False)
                     return
                 
-                with open(key_path, "rb") as key_file:
+                with open(encryption_key_path, "rb") as key_file:
                     encryption_key = key_file.read()
                 fernet = Fernet(encryption_key)
                 

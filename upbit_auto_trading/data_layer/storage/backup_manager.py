@@ -18,7 +18,7 @@ from typing import Dict, Optional, List
 from pathlib import Path
 
 from upbit_auto_trading.data_layer.storage.database_manager import get_database_manager
-from upbit_auto_trading.utils import ensure_directory
+from upbit_auto_trading.core.utils import ensure_directory
 
 logger = logging.getLogger(__name__)
 

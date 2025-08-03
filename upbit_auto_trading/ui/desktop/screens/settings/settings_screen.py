@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from .api_key_manager import ApiKeyManager
+from .api_key_manager_secure import ApiKeyManagerSecure as ApiKeyManager
 from .database_settings import DatabaseSettings
 from .notification_settings import NotificationSettings
 
@@ -24,6 +24,7 @@ class SettingsScreen(QWidget):
     # 설정 변경 시그널
     settings_changed = pyqtSignal()
     api_status_changed = pyqtSignal(bool)  # API 상태 변경 시그널 추가
+    db_status_changed = pyqtSignal(bool)   # DB 상태 변경 시그널 추가
     
     def __init__(self, parent=None):
         """초기화"""
@@ -114,6 +115,7 @@ class SettingsScreen(QWidget):
         self.api_key_manager.settings_changed.connect(self._on_settings_changed)
         self.api_key_manager.api_status_changed.connect(self._on_api_status_changed)  # API 상태 시그널 연결
         self.database_settings.settings_changed.connect(self._on_settings_changed)
+        self.database_settings.db_status_changed.connect(self._on_db_status_changed)  # DB 상태 시그널 연결
         self.notification_settings.settings_changed.connect(self._on_settings_changed)
     
     def _load_settings(self):
@@ -142,4 +144,9 @@ class SettingsScreen(QWidget):
         """API 연결 상태 변경 시 호출되는 메서드"""
         # API 상태 변경 시그널을 상위로 전달
         self.api_status_changed.emit(connected)
+        
+    def _on_db_status_changed(self, connected):
+        """DB 연결 상태 변경 시 호출되는 메서드"""
+        # DB 상태 변경 시그널을 상위로 전달
+        self.db_status_changed.emit(connected)
         
