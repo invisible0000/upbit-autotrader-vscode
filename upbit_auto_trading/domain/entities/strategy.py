@@ -268,6 +268,74 @@ class Strategy:
             is_active=False  # 완전히 구성될 때까지 비활성화
         )
     
+    def check_trigger_compatibility(self, trigger) -> bool:
+        """
+        트리거 호환성 검증 (CompatibilityService 위임)
+        
+        Args:
+            trigger: 검증할 트리거 객체
+            
+        Returns:
+            bool: 호환성 여부
+        """
+        # 순환 참조 방지를 위한 지연 import
+        from ..services.strategy_compatibility_service import StrategyCompatibilityService
+        
+        try:
+            compatibility_service = StrategyCompatibilityService()
+            
+            # 기존 전략의 변수 ID들 수집 (임시 구현)
+            existing_variable_ids = []
+            if self.entry_strategy_config:
+                # StrategyConfig에서 변수 정보 추출 (실제 구현에서는 더 정교하게)
+                existing_variable_ids.extend(self._extract_variable_ids_from_config(self.entry_strategy_config))
+            
+            for mgmt_config in self.management_strategy_configs:
+                existing_variable_ids.extend(self._extract_variable_ids_from_config(mgmt_config))
+            
+            # 새 트리거의 변수 ID 추출
+            if hasattr(trigger, 'variable') and hasattr(trigger.variable, 'variable_id'):
+                new_variable_id = trigger.variable.variable_id
+                
+                # 호환성 검증
+                if existing_variable_ids:
+                    result = compatibility_service.validate_variable_compatibility(
+                        existing_variable_ids + [new_variable_id]
+                    )
+                    return result.level in ["COMPATIBLE", "WARNING"]
+                else:
+                    # 첫 번째 트리거인 경우 항상 호환
+                    return True
+            
+            return True  # 변수 정보가 없으면 기본적으로 호환으로 간주
+            
+        except Exception as e:
+            # 호환성 검증 실패 시 보수적으로 비호환 반환
+            self._record_domain_event("trigger_compatibility_check_failed", {
+                "strategy_id": str(self.strategy_id),
+                "error": str(e),
+                "trigger_info": str(trigger) if trigger else "None"
+            })
+            return False
+    
+    def _extract_variable_ids_from_config(self, config: StrategyConfig) -> List[str]:
+        """
+        StrategyConfig에서 변수 ID 추출 (임시 구현)
+        
+        실제 구현에서는 StrategyConfig의 구조에 따라 적절히 구현
+        """
+        # 임시 구현 - StrategyConfig의 실제 구조에 맞게 수정 필요
+        variable_ids = []
+        
+        if hasattr(config, 'parameters') and config.parameters:
+            # parameters에서 변수 관련 정보 추출
+            for key, value in config.parameters.items():
+                if key.endswith('_variable_id') or 'variable' in key.lower():
+                    if isinstance(value, str):
+                        variable_ids.append(value)
+        
+        return variable_ids
+    
     @classmethod
     def create_basic_strategy(cls, strategy_id: StrategyId, name: str,
                             entry_config: StrategyConfig) -> "Strategy":

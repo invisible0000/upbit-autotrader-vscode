@@ -203,28 +203,61 @@ class Trigger:
     
     def evaluate(self, market_data: 'MarketData') -> TriggerEvaluationResult:
         """
-        트리거 조건 평가
+        트리거 조건 평가 (EvaluationService 위임)
         
         실제 시장 데이터를 받아 트리거 조건이 만족되는지 평가합니다.
-        현재는 임시 구현이며, 향후 TriggerEvaluationService로 위임할 예정입니다.
+        TriggerEvaluationService로 위임하여 실제 평가 로직을 수행합니다.
         """
         try:
-            # 임시 구현 - 항상 True 반환
-            # 실제 구현에서는 market_data에서 필요한 지표를 계산하고 조건 평가
-            is_triggered = True  # 임시
+            # 순환 참조 방지를 위한 지연 import
+            from ..services.trigger_evaluation_service import TriggerEvaluationService
             
-            result = TriggerEvaluationResult.create_success(
-                self.trigger_id, 
-                f"임시 평가 완료: {self.to_human_readable()}"
-            )
+            # TriggerEvaluationService 사용하여 평가
+            evaluation_service = TriggerEvaluationService()
+            evaluation_result = evaluation_service.evaluate_trigger(self, market_data)
             
+            # EvaluationResult를 TriggerEvaluationResult로 변환
+            if evaluation_result.status.value == "success":
+                result = TriggerEvaluationResult.create_success(
+                    self.trigger_id,
+                    evaluation_result.message or f"평가 완료: {self.to_human_readable()}"
+                )
+                is_triggered = evaluation_result.result
+            else:
+                result = TriggerEvaluationResult.create_failure(
+                    self.trigger_id,
+                    evaluation_result.message or "평가 실패"
+                )
+                is_triggered = False
+            
+            # 도메인 이벤트 발생
             self._emit_domain_event("trigger_evaluated", {
                 "trigger_id": str(self.trigger_id),
                 "is_triggered": is_triggered,
-                "evaluation_time": result.evaluation_time.isoformat()
+                "evaluation_time": result.evaluation_time.isoformat(),
+                "service_result": {
+                    "status": evaluation_result.status.value,
+                    "current_value": evaluation_result.current_value,
+                    "target_value": evaluation_result.target_value,
+                    "operator": evaluation_result.operator
+                }
             })
             
             return result
+            
+        except ImportError as e:
+            # TriggerEvaluationService를 사용할 수 없는 경우 fallback
+            error_result = TriggerEvaluationResult.create_failure(
+                self.trigger_id,
+                f"평가 서비스 로드 실패: {str(e)}"
+            )
+            
+            self._emit_domain_event("trigger_evaluation_service_unavailable", {
+                "trigger_id": str(self.trigger_id),
+                "error": str(e)
+            })
+            
+            return error_result
             
         except Exception as e:
             error_result = TriggerEvaluationResult.create_failure(
