@@ -5,12 +5,24 @@ Domain Service for Trigger Evaluation
 기존 business_logic 계층의 신호 생성 로직을 도메인 서비스로 추상화
 """
 
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Protocol
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
 from upbit_auto_trading.domain.entities.trigger import Trigger, TradingVariable
+
+# Repository 인터페이스 import (Infrastructure 계층과 분리)
+try:
+    from upbit_auto_trading.domain.repositories.market_data_repository import MarketDataRepository
+except ImportError:
+    # Repository 인터페이스가 아직 없을 경우 Protocol로 대체
+    class MarketDataRepository(Protocol):
+        def get_latest_market_data(self, symbol: str) -> Optional[Any]:
+            ...
+
+        def get_indicator_data(self, symbol: str, indicator_name: str, timeframe: str, count: int) -> List[float]:
+            ...
 
 
 class EvaluationStatus(Enum):
@@ -139,8 +151,34 @@ class TriggerEvaluationService:
     - 기존 business_logic 시스템과의 브릿지 역할
     """
     
-    def __init__(self):
+    def __init__(self, market_data_repository: MarketDataRepository):
+        """
+        Repository 의존성 주입으로 데이터 접근 추상화
+        
+        Args:
+            market_data_repository: 시장 데이터 접근을 위한 Repository 인터페이스
+        """
+        self._market_data_repository = market_data_repository
         self._variable_calculators = self._init_variable_calculators()
+    
+    def get_latest_market_data(self, symbol: str) -> Optional[Any]:
+        """시장 데이터 Repository에서 최신 데이터 조회"""
+        try:
+            return self._market_data_repository.get_latest_market_data(symbol)
+        except Exception:
+            # Repository 구현이 없을 경우 None 반환
+            return None
+    
+    def get_indicator_value(self, symbol: str, indicator_name: str) -> Optional[float]:
+        """지표 데이터 Repository에서 조회"""
+        try:
+            values = self._market_data_repository.get_indicator_data(
+                symbol, indicator_name, "1h", 1
+            )
+            return values[-1] if values else None
+        except Exception:
+            # Repository 구현이 없을 경우 None 반환
+            return None
     
     def evaluate_trigger(self, trigger: Trigger, market_data: MarketData) -> EvaluationResult:
         """

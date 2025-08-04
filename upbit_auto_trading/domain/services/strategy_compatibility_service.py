@@ -5,9 +5,22 @@ Domain-Driven Design 기반 전략 호환성 검증 서비스
 기존 UI 계층의 compatibility_validator.py에서 비즈니스 로직 추출
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Protocol
 from dataclasses import dataclass
 from enum import Enum
+
+# Repository 인터페이스 import (Infrastructure 계층과 분리)
+try:
+    from upbit_auto_trading.domain.repositories.settings_repository import SettingsRepository
+except ImportError:
+    # Repository 인터페이스가 아직 없을 경우 Protocol로 대체
+    class SettingsRepository(Protocol):
+        def get_trading_variables(self) -> List[Any]:
+            ...
+        def get_compatibility_rules(self) -> Any:
+            ...
+        def is_variable_compatible_with(self, variable_id1: str, variable_id2: str) -> bool:
+            ...
 
 
 class ValidationStrategy(Enum):
@@ -23,7 +36,7 @@ class ValidationContext:
     strategy: ValidationStrategy = ValidationStrategy.CONTEXT_AWARE
     allow_cross_group: bool = True
     require_active_only: bool = True
-    user_preferences: Dict[str, Any] = None
+    user_preferences: Optional[Dict[str, Any]] = None
     
     def __post_init__(self):
         if self.user_preferences is None:
@@ -32,7 +45,7 @@ class ValidationContext:
 
 class CompatibilityResult:
     """호환성 검증 결과"""
-    def __init__(self, level: str, message: str, details: Dict = None, confidence_score: float = 1.0):
+    def __init__(self, level: str, message: str, details: Optional[Dict] = None, confidence_score: float = 1.0):
         self.level = level
         self.message = message
         self.details = details or {}
@@ -49,13 +62,35 @@ class StrategyCompatibilityService:
     3. purpose_category와 chart_category는 보조 참고 정보
     """
     
-    def __init__(self, variable_repository=None, comparison_group_rules=None):
-        self._variable_repository = variable_repository
-        self._group_rules = comparison_group_rules
+    def __init__(self, settings_repository: SettingsRepository):
+        """
+        Repository 의존성 주입으로 데이터 접근 추상화
         
-    def validate_variable_compatibility(self, 
-                                      variable_ids: List[str],
-                                      context: ValidationContext = None) -> CompatibilityResult:
+        Args:
+            settings_repository: 설정 데이터 접근을 위한 Repository 인터페이스
+        """
+        self._settings_repository = settings_repository
+        self._comparison_group_rules = self._load_comparison_group_rules()
+        
+    def _load_comparison_group_rules(self) -> Any:
+        """설정 Repository에서 호환성 규칙 로드"""
+        try:
+            return self._settings_repository.get_compatibility_rules()
+        except Exception:
+            # 기본 규칙 반환 (Repository 구현이 없을 경우)
+            return {"default": "compatible"}
+    
+    def get_trading_variables(self) -> List[Any]:
+        """설정 Repository에서 매매 변수 조회"""
+        try:
+            return self._settings_repository.get_trading_variables()
+        except Exception:
+            # 빈 리스트 반환 (Repository 구현이 없을 경우)
+            return []
+        
+    def validate_variable_compatibility(self,
+                                        variable_ids: List[str],
+                                        context: Optional[ValidationContext] = None) -> CompatibilityResult:
         """
         변수들 간의 호환성 검증
         
@@ -92,9 +127,9 @@ class StrategyCompatibilityService:
             confidence_score=0.8
         )
     
-    def get_compatible_variables(self, 
-                               base_variable_id: str,
-                               context: ValidationContext = None) -> List[str]:
+    def get_compatible_variables(self,
+                                 base_variable_id: str,
+                                 context: Optional[ValidationContext] = None) -> List[str]:
         """기준 변수와 호환되는 모든 변수 목록 반환"""
         if context is None:
             context = ValidationContext()
@@ -112,9 +147,9 @@ class StrategyCompatibilityService:
                     matrix[(var1, var2)] = result
         return matrix
     
-    def suggest_alternative_variables(self, 
-                                    incompatible_variable_ids: List[str],
-                                    context: ValidationContext = None) -> Dict[str, List[str]]:
+    def suggest_alternative_variables(self,
+                                      incompatible_variable_ids: List[str],
+                                      context: Optional[ValidationContext] = None) -> Dict[str, List[str]]:
         """호환되지 않는 변수들에 대한 대안 제안"""
         if context is None:
             context = ValidationContext()
