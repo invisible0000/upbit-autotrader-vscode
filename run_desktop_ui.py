@@ -21,15 +21,15 @@ except ImportError:
             """환경변수 기반 로그 제어"""
             debug_mode = os.getenv('UPBIT_DEBUG_MODE', 'true').lower() == 'true'
             env_mode = os.getenv('UPBIT_ENV', 'development').lower()
-            
+
             # 프로덕션에서는 error만 허용
             if env_mode == 'production':
                 return level in ['error']
-            
+
             # 디버그 비활성화 시 debug 레벨 숨김
             if not debug_mode and level == 'debug':
                 return False
-            
+
             return True
 
         def info(self, msg):
@@ -47,7 +47,7 @@ except ImportError:
         def debug(self, msg):
             if self._should_log('debug'):
                 print(f"🔍 [MainApp] {msg}")
-    
+
     logger = FallbackLogger()
 
 
@@ -57,28 +57,28 @@ def exception_handler(exc_type, exc_value, exc_traceback):
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     log_file_path = os.path.join(log_dir, "gui_error.log")
-    
+
     # 에러 정보 생성
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     error_content = []
     error_content.append(f"{'=' * 50}")
     error_content.append(f"오류 발생 시간: {now}")
-    
+
     # traceback을 문자열로 수집
     tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
     error_content.extend(tb_lines)
     error_content.append("")  # 빈 줄 추가
-    
+
     # 새 에러 + 기존 내용 (역순 삽입)
     new_error_text = "\n".join(error_content)
-    
+
     try:
         # 기존 내용 읽기 (파일이 있다면)
         existing_content = ""
         if os.path.exists(log_file_path):
             with open(log_file_path, 'r', encoding='utf-8') as f:
                 existing_content = f.read()
-        
+
         # 새 에러를 맨 위에 + 기존 내용 (역순 로깅)
         with open(log_file_path, 'w', encoding='utf-8') as f:
             f.write(new_error_text)
@@ -88,7 +88,7 @@ def exception_handler(exc_type, exc_value, exc_traceback):
         # 로그 쓰기 실패 시 기본 append 방식으로 폴백
         with open(log_file_path, 'a', encoding='utf-8') as f:
             f.write(new_error_text)
-    
+
     try:
         error_message = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
         QMessageBox.critical(None, "애플리케이션 오류", f"오류가 발생했습니다. 'logs/gui_error.log' 파일을 확인해주세요.\n\n{error_message}")
@@ -104,17 +104,17 @@ if __name__ == "__main__":
     # 작업 디렉토리를 프로젝트 루트로 설정
     project_root = os.path.abspath(os.path.dirname(__file__))
     os.chdir(project_root)
-    
+
     # QApplication 생성
     app = QApplication(sys.argv)
-    
+
     # 메인 윈도우 생성 및 실행
     try:
         from upbit_auto_trading.ui.desktop.main_window import MainWindow
         main_window = MainWindow()
         main_window.show()
         logger.success("애플리케이션 시작됨")
-        
+
         # 애플리케이션 이벤트 루프 시작
         sys.exit(app.exec())
     except Exception as e:

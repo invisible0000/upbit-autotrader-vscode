@@ -74,10 +74,10 @@ class Strategy:
         self._validate_strategy_configuration()
         # 새로운 도메인 이벤트 시스템으로 전략 생성 이벤트 발행
         creation_event = StrategyCreated(
-            strategy_id=self.strategy_id,
+            strategy_id=self.strategy_id.value,
             strategy_name=self.name,
             strategy_type="entry",  # 기본값 사용
-            created_by=None,        # 선택사항
+            created_by=self.created_by,        # 선택사항
             strategy_config={       # 전략 설정을 딕셔너리로 구성
                 "entry_strategy_config": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
                 "management_strategy_count": len(self.management_strategy_configs),
@@ -125,15 +125,16 @@ class Strategy:
 
         # 새로운 도메인 이벤트 발행
         modification_event = StrategyUpdated(
-            strategy_id=self.strategy_id,
-            modification_type="management_strategy_added",
-            old_value=str(old_count),
-            new_value=str(len(self.management_strategy_configs)),
-            modified_by="system",
-            additional_data={
-                "config_id": config.config_id,
-                "strategy_name": config.strategy_name,
-                "strategy_definition_id": config.strategy_definition_id
+            strategy_id=self.strategy_id.value,
+            strategy_name=self.name,
+            updated_fields={
+                "management_strategy_count": {
+                    "old": old_count,
+                    "new": len(self.management_strategy_configs)
+                },
+                "added_config_id": config.config_id,
+                "added_strategy_name": config.strategy_name,
+                "added_strategy_definition_id": config.strategy_definition_id
             }
         )
         self._domain_events.append(modification_event)
@@ -147,12 +148,10 @@ class Strategy:
 
                 # 새로운 도메인 이벤트 발행
                 modification_event = StrategyUpdated(
-                    strategy_id=self.strategy_id,
-                    modification_type="management_strategy_removed",
-                    old_value=removed_config.config_id,
-                    new_value="removed",
-                    modified_by="system",
-                    additional_data={
+                    strategy_id=self.strategy_id.value,
+                    strategy_name=self.name,
+                    updated_fields={
+                        "removed_config_id": removed_config.config_id,
                         "removed_config_name": removed_config.strategy_name,
                         "remaining_count": len(self.management_strategy_configs)
                     }
@@ -172,14 +171,15 @@ class Strategy:
 
         # 새로운 도메인 이벤트 발행
         modification_event = StrategyUpdated(
-            strategy_id=self.strategy_id,
-            modification_type="entry_strategy_changed",
-            old_value=old_entry.config_id if old_entry else "none",
-            new_value=config.config_id,
-            modified_by="system",
-            additional_data={
-                "old_strategy_name": old_entry.strategy_name if old_entry else None,
-                "new_strategy_name": config.strategy_name
+            strategy_id=self.strategy_id.value,
+            strategy_name=self.name,
+            updated_fields={
+                "entry_strategy_changed": {
+                    "old_config_id": old_entry.config_id if old_entry else "none",
+                    "new_config_id": config.config_id,
+                    "old_strategy_name": old_entry.strategy_name if old_entry else None,
+                    "new_strategy_name": config.strategy_name
+                }
             }
         )
         self._domain_events.append(modification_event)
@@ -199,17 +199,17 @@ class Strategy:
     def is_fully_configured(self) -> bool:
         """완전히 설정된 전략인지 확인"""
         return (
-            self.entry_strategy_config is not None and
-            self.entry_strategy_config.is_enabled() and
-            len(self.management_strategy_configs) > 0
+            self.entry_strategy_config is not None
+            and self.entry_strategy_config.is_enabled()
+            and len(self.management_strategy_configs) > 0
         )
 
     def is_ready_for_execution(self) -> bool:
         """실행 준비가 완료된 전략인지 확인"""
         return (
-            self.is_active and
-            self.is_fully_configured() and
-            all(config.is_enabled() for config in self.get_all_strategy_configs())
+            self.is_active
+            and self.is_fully_configured()
+            and all(config.is_enabled() for config in self.get_all_strategy_configs())
         )
 
     def activate(self) -> None:
@@ -219,14 +219,10 @@ class Strategy:
             self.updated_at = datetime.now()
             # 새로운 도메인 이벤트 발행
             activation_event = StrategyActivated(
-                strategy_id=self.strategy_id,
+                strategy_id=self.strategy_id.value,
+                strategy_name=self.name,
                 activated_by="system",
-                activation_reason="user_request",
-                strategy_config_summary={
-                    "entry_strategy": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
-                    "management_strategies": [config.config_id for config in self.management_strategy_configs],
-                    "conflict_resolution": self.conflict_resolution.value
-                }
+                activation_reason="user_request"
             )
             self._domain_events.append(activation_event)
 
@@ -237,10 +233,10 @@ class Strategy:
             self.updated_at = datetime.now()
             # 새로운 도메인 이벤트 발행
             deactivation_event = StrategyDeactivated(
-                strategy_id=self.strategy_id,
+                strategy_id=self.strategy_id.value,
+                strategy_name=self.name,
                 deactivated_by="system",
-                deactivation_reason="user_request",
-                final_state_summary=self.get_strategy_summary()
+                deactivation_reason="user_request"
             )
             self._domain_events.append(deactivation_event)
 
@@ -254,12 +250,14 @@ class Strategy:
             changed = True
             # 새로운 도메인 이벤트 발행
             modification_event = StrategyUpdated(
-                strategy_id=self.strategy_id,
-                modification_type="strategy_renamed",
-                old_value=old_name,
-                new_value=name,
-                modified_by="system",
-                additional_data={}
+                strategy_id=self.strategy_id.value,
+                strategy_name=name,  # 새로운 이름
+                updated_fields={
+                    "strategy_renamed": {
+                        "old_name": old_name,
+                        "new_name": name
+                    }
+                }
             )
             self._domain_events.append(modification_event)
 
@@ -279,14 +277,14 @@ class Strategy:
 
         # 새로운 도메인 이벤트 발행
         modification_event = StrategyUpdated(
-            strategy_id=self.strategy_id,
-            modification_type="conflict_resolved",
-            old_value=",".join(signals),
-            new_value=resolved_signal,
-            modified_by="system",
-            additional_data={
-                "conflicting_signals": signals,
-                "resolution_method": self.conflict_resolution.value
+            strategy_id=self.strategy_id.value,
+            strategy_name=self.name,
+            updated_fields={
+                "conflict_resolved": {
+                    "conflicting_signals": signals,
+                    "resolved_signal": resolved_signal,
+                    "resolution_method": self.conflict_resolution.value
+                }
             }
         )
         self._domain_events.append(modification_event)
@@ -326,21 +324,10 @@ class Strategy:
         """전략 삭제 표시 및 이벤트 발행"""
         # 전략 삭제 이벤트 발행
         deletion_event = StrategyDeleted(
-            strategy_id=self.strategy_id,
+            strategy_id=self.strategy_id.value,
             strategy_name=self.name,
             deleted_by=deleted_by or "system",
-            deletion_reason=deletion_reason or "user_request",
-            final_configuration={
-                "entry_strategy": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
-                "management_strategies": [config.config_id for config in self.management_strategy_configs],
-                "was_active": self.is_active,
-                "conflict_resolution": self.conflict_resolution.value
-            },
-            strategy_statistics={
-                "created_at": self.created_at.isoformat(),
-                "total_lifetime_days": (datetime.now() - self.created_at).days,
-                "last_modified": self.updated_at.isoformat()
-            }
+            deletion_reason=deletion_reason or "user_request"
         )
         self._domain_events.append(deletion_event)
 
@@ -388,7 +375,19 @@ class Strategy:
         from ..services.strategy_compatibility_service import StrategyCompatibilityService
 
         try:
-            compatibility_service = StrategyCompatibilityService()
+            # 임시 Mock Repository 클래스
+            class MockRepository:
+                def get_trading_variables(self):
+                    return []
+
+                def get_compatibility_rules(self):
+                    return {"default": "compatible"}
+
+                def is_variable_compatible_with(self, variable_id1: str, variable_id2: str) -> bool:
+                    return True
+
+            # 임시로 Mock Repository 사용 (실제 구현에서는 DI Container에서 주입)
+            compatibility_service = StrategyCompatibilityService(settings_repository=MockRepository())
 
             # 기존 전략의 변수 ID들 수집 (임시 구현)
             existing_variable_ids = []
@@ -418,15 +417,14 @@ class Strategy:
         except Exception as e:
             # 호환성 검증 실패 시 새로운 도메인 이벤트 발행
             error_event = StrategyUpdated(
-                strategy_id=self.strategy_id,
-                modification_type="trigger_compatibility_check_failed",
-                old_value="unknown",
-                new_value="failed",
-                modified_by="system",
-                additional_data={
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                    "trigger_info": str(trigger) if trigger else "None"
+                strategy_id=self.strategy_id.value,
+                strategy_name=self.name,
+                updated_fields={
+                    "trigger_compatibility_check_failed": {
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "trigger_info": str(trigger) if trigger else "None"
+                    }
                 }
             )
             self._domain_events.append(error_event)
@@ -452,7 +450,7 @@ class Strategy:
 
     @classmethod
     def create_basic_strategy(cls, strategy_id: StrategyId, name: str,
-                            entry_config: StrategyConfig) -> "Strategy":
+                              entry_config: StrategyConfig) -> "Strategy":
         """기본 전략 생성 (진입 전략만)"""
         strategy = cls(
             strategy_id=strategy_id,
