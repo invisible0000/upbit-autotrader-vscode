@@ -21,6 +21,16 @@ from ..value_objects.strategy_config import StrategyConfig
 from ..value_objects.conflict_resolution import ConflictResolution
 from ..exceptions.domain_exceptions import DomainException
 
+# 새로운 도메인 이벤트 시스템 import
+from ..events.strategy_events import (
+    StrategyCreated,
+    StrategyUpdated,
+    StrategyActivated,
+    StrategyDeactivated,
+    StrategyDeleted
+)
+from ..events.base_domain_event import DomainEvent
+
 
 class InvalidStrategyConfigurationError(DomainException):
     """잘못된 전략 설정 예외"""
@@ -36,7 +46,7 @@ class IncompatibleStrategyError(DomainException):
 class Strategy:
     """
     전략 도메인 엔티티
-    
+
     매매 전략의 완전한 정의를 포함하는 도메인 엔티티:
     - 고유 식별자와 메타데이터
     - 진입 전략 (필수 1개)
@@ -44,7 +54,7 @@ class Strategy:
     - 충돌 해결 방식
     - 도메인 이벤트 관리
     """
-    
+
     strategy_id: StrategyId
     name: str
     description: Optional[str] = None
@@ -55,91 +65,125 @@ class Strategy:
     updated_at: datetime = field(default_factory=datetime.now)
     created_by: Optional[str] = None
     is_active: bool = True
-    
-    # 도메인 이벤트 (내부 상태, init=False)
-    _domain_events: List[Dict[str, Any]] = field(default_factory=list, init=False)
-    
+
+    # 도메인 이벤트 (새로운 이벤트 시스템)
+    _domain_events: List[DomainEvent] = field(default_factory=list, init=False)
+
     def __post_init__(self):
         """생성 후 유효성 검증 및 초기화"""
         self._validate_strategy_configuration()
-        self._record_domain_event("strategy_created", {
-            "strategy_id": str(self.strategy_id),
-            "name": self.name,
-            "created_at": self.created_at.isoformat()
-        })
-    
+        # 새로운 도메인 이벤트 시스템으로 전략 생성 이벤트 발행
+        creation_event = StrategyCreated(
+            strategy_id=self.strategy_id,
+            strategy_name=self.name,
+            strategy_type="entry",  # 기본값 사용
+            created_by=None,        # 선택사항
+            strategy_config={       # 전략 설정을 딕셔너리로 구성
+                "entry_strategy_config": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
+                "management_strategy_count": len(self.management_strategy_configs),
+                "conflict_resolution": self.conflict_resolution.value
+            }
+        )
+        self._domain_events.append(creation_event)
+
     def _validate_strategy_configuration(self):
         """전략 설정 유효성 검증"""
         if not self.name.strip():
             raise InvalidStrategyConfigurationError("전략 이름은 필수입니다")
-        
+
         # 진입 전략은 선택사항으로 변경 (유연성 확보)
         if self.entry_strategy_config and not self._is_entry_strategy(self.entry_strategy_config):
             raise InvalidStrategyConfigurationError("진입 전략 설정이 올바르지 않습니다")
-        
+
         # 관리 전략들 검증
         for mgmt_config in self.management_strategy_configs:
             if not self._is_management_strategy(mgmt_config):
                 raise InvalidStrategyConfigurationError(f"관리 전략 {mgmt_config.config_id}가 올바르지 않습니다")
-    
+
     def _is_entry_strategy(self, config: StrategyConfig) -> bool:
         """진입 전략인지 확인 (간단한 ID 기반 판단)"""
         # 실제로는 StrategyDefinition에서 role을 확인해야 함
         return "entry" in config.strategy_definition_id.lower()
-    
+
     def _is_management_strategy(self, config: StrategyConfig) -> bool:
         """관리 전략인지 확인"""
         # 실제로는 StrategyDefinition에서 role을 확인해야 함
         return "management" in config.strategy_definition_id.lower() or "mgmt" in config.strategy_definition_id.lower()
-    
+
     def add_management_strategy(self, config: StrategyConfig) -> None:
         """관리 전략 추가"""
         if not self._is_management_strategy(config):
             raise IncompatibleStrategyError(f"'{config.strategy_definition_id}'는 관리 전략이 아닙니다")
-        
+
         # 중복 방지
         if any(existing.config_id == config.config_id for existing in self.management_strategy_configs):
             raise InvalidStrategyConfigurationError(f"관리 전략 '{config.config_id}'가 이미 존재합니다")
-        
+
+        old_count = len(self.management_strategy_configs)
         self.management_strategy_configs.append(config)
         self.updated_at = datetime.now()
-        
-        self._record_domain_event("management_strategy_added", {
-            "strategy_id": str(self.strategy_id),
-            "config_id": config.config_id,
-            "config_name": config.strategy_name
-        })
-    
+
+        # 새로운 도메인 이벤트 발행
+        modification_event = StrategyUpdated(
+            strategy_id=self.strategy_id,
+            modification_type="management_strategy_added",
+            old_value=str(old_count),
+            new_value=str(len(self.management_strategy_configs)),
+            modified_by="system",
+            additional_data={
+                "config_id": config.config_id,
+                "strategy_name": config.strategy_name,
+                "strategy_definition_id": config.strategy_definition_id
+            }
+        )
+        self._domain_events.append(modification_event)
+
     def remove_management_strategy(self, config_id: str) -> bool:
         """관리 전략 제거"""
         for i, config in enumerate(self.management_strategy_configs):
             if config.config_id == config_id:
                 removed_config = self.management_strategy_configs.pop(i)
                 self.updated_at = datetime.now()
-                
-                self._record_domain_event("management_strategy_removed", {
-                    "strategy_id": str(self.strategy_id),
-                    "config_id": removed_config.config_id,
-                    "config_name": removed_config.strategy_name
-                })
+
+                # 새로운 도메인 이벤트 발행
+                modification_event = StrategyUpdated(
+                    strategy_id=self.strategy_id,
+                    modification_type="management_strategy_removed",
+                    old_value=removed_config.config_id,
+                    new_value="removed",
+                    modified_by="system",
+                    additional_data={
+                        "removed_config_name": removed_config.strategy_name,
+                        "remaining_count": len(self.management_strategy_configs)
+                    }
+                )
+                self._domain_events.append(modification_event)
                 return True
         return False
-    
+
     def set_entry_strategy(self, config: StrategyConfig) -> None:
         """진입 전략 설정"""
         if not self._is_entry_strategy(config):
             raise IncompatibleStrategyError(f"'{config.strategy_definition_id}'는 진입 전략이 아닙니다")
-        
+
         old_entry = self.entry_strategy_config
         self.entry_strategy_config = config
         self.updated_at = datetime.now()
-        
-        self._record_domain_event("entry_strategy_changed", {
-            "strategy_id": str(self.strategy_id),
-            "old_config": old_entry.config_id if old_entry else None,
-            "new_config": config.config_id
-        })
-    
+
+        # 새로운 도메인 이벤트 발행
+        modification_event = StrategyUpdated(
+            strategy_id=self.strategy_id,
+            modification_type="entry_strategy_changed",
+            old_value=old_entry.config_id if old_entry else "none",
+            new_value=config.config_id,
+            modified_by="system",
+            additional_data={
+                "old_strategy_name": old_entry.strategy_name if old_entry else None,
+                "new_strategy_name": config.strategy_name
+            }
+        )
+        self._domain_events.append(modification_event)
+
     def get_all_strategy_configs(self) -> List[StrategyConfig]:
         """모든 전략 설정 반환"""
         configs = []
@@ -147,11 +191,11 @@ class Strategy:
             configs.append(self.entry_strategy_config)
         configs.extend(self.management_strategy_configs)
         return configs
-    
+
     def get_management_strategies_by_priority(self) -> List[StrategyConfig]:
         """우선순위순으로 정렬된 관리 전략들 반환"""
         return sorted(self.management_strategy_configs, key=lambda config: config.priority)
-    
+
     def is_fully_configured(self) -> bool:
         """완전히 설정된 전략인지 확인"""
         return (
@@ -159,7 +203,7 @@ class Strategy:
             self.entry_strategy_config.is_enabled() and
             len(self.management_strategy_configs) > 0
         )
-    
+
     def is_ready_for_execution(self) -> bool:
         """실행 준비가 완료된 전략인지 확인"""
         return (
@@ -167,62 +211,88 @@ class Strategy:
             self.is_fully_configured() and
             all(config.is_enabled() for config in self.get_all_strategy_configs())
         )
-    
+
     def activate(self) -> None:
         """전략 활성화"""
         if not self.is_active:
             self.is_active = True
             self.updated_at = datetime.now()
-            self._record_domain_event("strategy_activated", {
-                "strategy_id": str(self.strategy_id)
-            })
-    
+            # 새로운 도메인 이벤트 발행
+            activation_event = StrategyActivated(
+                strategy_id=self.strategy_id,
+                activated_by="system",
+                activation_reason="user_request",
+                strategy_config_summary={
+                    "entry_strategy": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
+                    "management_strategies": [config.config_id for config in self.management_strategy_configs],
+                    "conflict_resolution": self.conflict_resolution.value
+                }
+            )
+            self._domain_events.append(activation_event)
+
     def deactivate(self) -> None:
         """전략 비활성화"""
         if self.is_active:
             self.is_active = False
             self.updated_at = datetime.now()
-            self._record_domain_event("strategy_deactivated", {
-                "strategy_id": str(self.strategy_id)
-            })
-    
+            # 새로운 도메인 이벤트 발행
+            deactivation_event = StrategyDeactivated(
+                strategy_id=self.strategy_id,
+                deactivated_by="system",
+                deactivation_reason="user_request",
+                final_state_summary=self.get_strategy_summary()
+            )
+            self._domain_events.append(deactivation_event)
+
     def update_metadata(self, name: Optional[str] = None, description: Optional[str] = None) -> None:
         """메타데이터 업데이트"""
         changed = False
-        
+
         if name and name != self.name:
             old_name = self.name
             self.name = name
             changed = True
-            self._record_domain_event("strategy_renamed", {
-                "strategy_id": str(self.strategy_id),
-                "old_name": old_name,
-                "new_name": name
-            })
-        
+            # 새로운 도메인 이벤트 발행
+            modification_event = StrategyUpdated(
+                strategy_id=self.strategy_id,
+                modification_type="strategy_renamed",
+                old_value=old_name,
+                new_value=name,
+                modified_by="system",
+                additional_data={}
+            )
+            self._domain_events.append(modification_event)
+
         if description and description != self.description:
             self.description = description
             changed = True
-        
+
         if changed:
             self.updated_at = datetime.now()
-    
+
     def resolve_management_conflicts(self, signals: List[str]) -> str:
         """관리 전략 충돌 해결"""
         if len(signals) <= 1:
             return signals[0] if signals else "HOLD"
-        
+
         resolved_signal = self.conflict_resolution.resolve_signals(signals)
-        
-        self._record_domain_event("conflict_resolved", {
-            "strategy_id": str(self.strategy_id),
-            "conflicting_signals": signals,
-            "resolved_signal": resolved_signal,
-            "resolution_method": self.conflict_resolution.value
-        })
-        
+
+        # 새로운 도메인 이벤트 발행
+        modification_event = StrategyUpdated(
+            strategy_id=self.strategy_id,
+            modification_type="conflict_resolved",
+            old_value=",".join(signals),
+            new_value=resolved_signal,
+            modified_by="system",
+            additional_data={
+                "conflicting_signals": signals,
+                "resolution_method": self.conflict_resolution.value
+            }
+        )
+        self._domain_events.append(modification_event)
+
         return resolved_signal
-    
+
     def get_strategy_summary(self) -> Dict[str, Any]:
         """전략 요약 정보"""
         return {
@@ -238,25 +308,61 @@ class Strategy:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
-    
-    def _record_domain_event(self, event_type: str, event_data: Dict[str, Any]) -> None:
-        """도메인 이벤트 기록"""
-        event = {
-            "event_type": event_type,
-            "event_data": event_data,
-            "timestamp": datetime.now().isoformat(),
-            "aggregate_id": str(self.strategy_id)
-        }
-        self._domain_events.append(event)
-    
-    def get_domain_events(self) -> List[Dict[str, Any]]:
+
+    def get_domain_events(self) -> List[DomainEvent]:
         """도메인 이벤트 반환 (복사본)"""
         return self._domain_events.copy()
-    
+
     def clear_domain_events(self) -> None:
         """도메인 이벤트 초기화 (이벤트 처리 후 호출)"""
         self._domain_events.clear()
-    
+
+    def has_pending_events(self) -> bool:
+        """처리되지 않은 도메인 이벤트가 있는지 확인"""
+        return len(self._domain_events) > 0
+
+    def mark_for_deletion(self, deleted_by: Optional[str] = None,
+                          deletion_reason: Optional[str] = None) -> None:
+        """전략 삭제 표시 및 이벤트 발행"""
+        # 전략 삭제 이벤트 발행
+        deletion_event = StrategyDeleted(
+            strategy_id=self.strategy_id,
+            strategy_name=self.name,
+            deleted_by=deleted_by or "system",
+            deletion_reason=deletion_reason or "user_request",
+            final_configuration={
+                "entry_strategy": self.entry_strategy_config.config_id if self.entry_strategy_config else None,
+                "management_strategies": [config.config_id for config in self.management_strategy_configs],
+                "was_active": self.is_active,
+                "conflict_resolution": self.conflict_resolution.value
+            },
+            strategy_statistics={
+                "created_at": self.created_at.isoformat(),
+                "total_lifetime_days": (datetime.now() - self.created_at).days,
+                "last_modified": self.updated_at.isoformat()
+            }
+        )
+        self._domain_events.append(deletion_event)
+
+        # 전략 비활성화
+        if self.is_active:
+            self.deactivate()
+
+    @classmethod
+    def create_new(cls, strategy_id: StrategyId, name: str,
+                   description: Optional[str] = None,
+                   created_by: Optional[str] = None) -> "Strategy":
+        """새 전략 생성 (팩토리 메서드) - 도메인 이벤트 포함"""
+        strategy = cls(
+            strategy_id=strategy_id,
+            name=name,
+            description=description or f"{name} - 새로 생성된 전략",
+            created_by=created_by or "system",
+            conflict_resolution=ConflictResolution.CONSERVATIVE,
+            is_active=False  # 완전히 구성될 때까지 비활성화
+        )
+        return strategy
+
     @classmethod
     def create_empty_strategy(cls, strategy_id: StrategyId, name: str) -> "Strategy":
         """빈 전략 생성 (점진적 구성용)"""
@@ -267,36 +373,36 @@ class Strategy:
             conflict_resolution=ConflictResolution.CONSERVATIVE,
             is_active=False  # 완전히 구성될 때까지 비활성화
         )
-    
+
     def check_trigger_compatibility(self, trigger) -> bool:
         """
         트리거 호환성 검증 (CompatibilityService 위임)
-        
+
         Args:
             trigger: 검증할 트리거 객체
-            
+
         Returns:
             bool: 호환성 여부
         """
         # 순환 참조 방지를 위한 지연 import
         from ..services.strategy_compatibility_service import StrategyCompatibilityService
-        
+
         try:
             compatibility_service = StrategyCompatibilityService()
-            
+
             # 기존 전략의 변수 ID들 수집 (임시 구현)
             existing_variable_ids = []
             if self.entry_strategy_config:
                 # StrategyConfig에서 변수 정보 추출 (실제 구현에서는 더 정교하게)
                 existing_variable_ids.extend(self._extract_variable_ids_from_config(self.entry_strategy_config))
-            
+
             for mgmt_config in self.management_strategy_configs:
                 existing_variable_ids.extend(self._extract_variable_ids_from_config(mgmt_config))
-            
+
             # 새 트리거의 변수 ID 추출
             if hasattr(trigger, 'variable') and hasattr(trigger.variable, 'variable_id'):
                 new_variable_id = trigger.variable.variable_id
-                
+
                 # 호환성 검증
                 if existing_variable_ids:
                     result = compatibility_service.validate_variable_compatibility(
@@ -306,36 +412,44 @@ class Strategy:
                 else:
                     # 첫 번째 트리거인 경우 항상 호환
                     return True
-            
+
             return True  # 변수 정보가 없으면 기본적으로 호환으로 간주
-            
+
         except Exception as e:
-            # 호환성 검증 실패 시 보수적으로 비호환 반환
-            self._record_domain_event("trigger_compatibility_check_failed", {
-                "strategy_id": str(self.strategy_id),
-                "error": str(e),
-                "trigger_info": str(trigger) if trigger else "None"
-            })
+            # 호환성 검증 실패 시 새로운 도메인 이벤트 발행
+            error_event = StrategyUpdated(
+                strategy_id=self.strategy_id,
+                modification_type="trigger_compatibility_check_failed",
+                old_value="unknown",
+                new_value="failed",
+                modified_by="system",
+                additional_data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "trigger_info": str(trigger) if trigger else "None"
+                }
+            )
+            self._domain_events.append(error_event)
             return False
-    
+
     def _extract_variable_ids_from_config(self, config: StrategyConfig) -> List[str]:
         """
         StrategyConfig에서 변수 ID 추출 (임시 구현)
-        
+
         실제 구현에서는 StrategyConfig의 구조에 따라 적절히 구현
         """
         # 임시 구현 - StrategyConfig의 실제 구조에 맞게 수정 필요
         variable_ids = []
-        
+
         if hasattr(config, 'parameters') and config.parameters:
             # parameters에서 변수 관련 정보 추출
             for key, value in config.parameters.items():
                 if key.endswith('_variable_id') or 'variable' in key.lower():
                     if isinstance(value, str):
                         variable_ids.append(value)
-        
+
         return variable_ids
-    
+
     @classmethod
     def create_basic_strategy(cls, strategy_id: StrategyId, name: str,
                             entry_config: StrategyConfig) -> "Strategy":

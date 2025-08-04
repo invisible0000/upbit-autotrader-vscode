@@ -42,12 +42,18 @@ class TriggerRepository(BaseRepository[Trigger, TriggerId]):
         트리거의 조건 정보, 파라미터, 비교 연산자, 대상값 등을
         JSON 형태로 직렬화하여 저장합니다.
         
+        도메인 이벤트 발행:
+        저장 완료 후 트리거 엔티티의 도메인 이벤트를 자동으로 발행합니다.
+        구현체에서는 저장 로직 완료 후 반드시 _publish_domain_events()를 호출해야 합니다.
+        
         Args:
             entity: 저장할 Trigger 도메인 엔티티
             
         Raises:
             RepositoryError: 저장 실패 시
             ValidationError: 트리거 데이터 검증 실패 시
+        """
+        pass
         """
         pass
     

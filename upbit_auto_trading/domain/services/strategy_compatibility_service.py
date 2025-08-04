@@ -3,11 +3,18 @@ Domain Service for Strategy Compatibility Validation
 
 Domain-Driven Design 기반 전략 호환성 검증 서비스
 기존 UI 계층의 compatibility_validator.py에서 비즈니스 로직 추출
+Domain Event 발행을 통한 호환성 검증 결과 알림 지원
 """
 
 from typing import List, Optional, Dict, Any, Protocol
 from dataclasses import dataclass
 from enum import Enum
+
+# Domain Event 관련 import 추가
+from upbit_auto_trading.domain.events.strategy_events import (
+    StrategyValidated, StrategyValidationFailed
+)
+from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_event_publisher
 
 # Repository 인터페이스 import (Infrastructure 계층과 분리)
 try:
@@ -37,7 +44,7 @@ class ValidationContext:
     allow_cross_group: bool = True
     require_active_only: bool = True
     user_preferences: Optional[Dict[str, Any]] = None
-    
+
     def __post_init__(self):
         if self.user_preferences is None:
             self.user_preferences = {}
@@ -55,23 +62,24 @@ class CompatibilityResult:
 class StrategyCompatibilityService:
     """
     Domain Service: 전략 호환성 검증
-    
+
     비즈니스 규칙:
     1. 같은 comparison_group 내의 변수들만 직접 비교 가능
     2. cross_group_mapping에 정의된 변수들은 교차 그룹 비교 허용
     3. purpose_category와 chart_category는 보조 참고 정보
     """
-    
+
     def __init__(self, settings_repository: SettingsRepository):
         """
         Repository 의존성 주입으로 데이터 접근 추상화
-        
+
         Args:
             settings_repository: 설정 데이터 접근을 위한 Repository 인터페이스
         """
         self._settings_repository = settings_repository
         self._comparison_group_rules = self._load_comparison_group_rules()
-        
+        self._event_publisher = get_domain_event_publisher()
+
     def _load_comparison_group_rules(self) -> Any:
         """설정 Repository에서 호환성 규칙 로드"""
         try:
@@ -79,7 +87,7 @@ class StrategyCompatibilityService:
         except Exception:
             # 기본 규칙 반환 (Repository 구현이 없을 경우)
             return {"default": "compatible"}
-    
+
     def get_trading_variables(self) -> List[Any]:
         """설정 Repository에서 매매 변수 조회"""
         try:
@@ -87,56 +95,135 @@ class StrategyCompatibilityService:
         except Exception:
             # 빈 리스트 반환 (Repository 구현이 없을 경우)
             return []
-        
+
     def validate_variable_compatibility(self,
                                         variable_ids: List[str],
-                                        context: Optional[ValidationContext] = None) -> CompatibilityResult:
+                                        context: Optional[ValidationContext] = None,
+                                        strategy_id: Optional[str] = None) -> CompatibilityResult:
         """
         변수들 간의 호환성 검증
-        
+
         Args:
             variable_ids: 검증할 변수 ID 목록
             context: 검증 컨텍스트
-            
+            strategy_id: 전략 ID (이벤트 발행용)
+
         Returns:
             CompatibilityResult: 호환성 검증 결과
         """
         if context is None:
             context = ValidationContext()
-            
-        # 기본 검증
-        if not variable_ids:
-            return CompatibilityResult(
-                level="INCOMPATIBLE",
-                message="변수가 선택되지 않았습니다",
-                confidence_score=0.0
-            )
-            
-        if len(variable_ids) == 1:
-            return CompatibilityResult(
+
+        try:
+            # 기본 검증
+            if not variable_ids:
+                error_result = CompatibilityResult(
+                    level="INCOMPATIBLE",
+                    message="변수가 선택되지 않았습니다",
+                    confidence_score=0.0
+                )
+
+                # 검증 실패 이벤트 발행
+                if strategy_id:
+                    self._publish_validation_failed_event(
+                        strategy_id=strategy_id,
+                        error_message="변수가 선택되지 않았습니다",
+                        error_details={"variable_count": 0}
+                    )
+
+                return error_result
+
+            if len(variable_ids) == 1:
+                success_result = CompatibilityResult(
+                    level="COMPATIBLE",
+                    message="단일 변수 선택",
+                    confidence_score=1.0
+                )
+
+                # 검증 성공 이벤트 발행
+                if strategy_id:
+                    self._publish_validation_success_event(
+                        strategy_id=strategy_id,
+                        validation_details={
+                            "variable_count": 1,
+                            "variable_ids": variable_ids,
+                            "confidence_score": 1.0
+                        }
+                    )
+
+                return success_result
+
+            # 다중 변수 호환성 검증 (간소화된 버전)
+            success_result = CompatibilityResult(
                 level="COMPATIBLE",
-                message="단일 변수 선택",
-                confidence_score=1.0
+                message="호환성 검증 완료",
+                details={"variable_count": len(variable_ids)},
+                confidence_score=0.8
             )
-            
-        # 다중 변수 호환성 검증 (간소화된 버전)
-        return CompatibilityResult(
-            level="COMPATIBLE",
-            message="호환성 검증 완료",
-            details={"variable_count": len(variable_ids)},
-            confidence_score=0.8
-        )
-    
+
+            # 검증 성공 이벤트 발행
+            if strategy_id:
+                self._publish_validation_success_event(
+                    strategy_id=strategy_id,
+                    validation_details={
+                        "variable_count": len(variable_ids),
+                        "variable_ids": variable_ids,
+                        "confidence_score": 0.8
+                    }
+                )
+
+            return success_result
+
+        except Exception as e:
+            # 예외 발생 시 검증 실패 이벤트 발행
+            if strategy_id:
+                self._publish_validation_failed_event(
+                    strategy_id=strategy_id,
+                    error_message=f"호환성 검증 중 오류 발생: {str(e)}",
+                    error_details={"exception": str(e), "variable_ids": variable_ids}
+                )
+            raise
+
+    def _publish_validation_success_event(self, strategy_id: str, validation_details: Dict[str, Any]):
+        """호환성 검증 성공 이벤트 발행"""
+        try:
+            event = StrategyValidated(
+                strategy_id=strategy_id,
+                validation_type="compatibility",
+                validation_result="success",
+                validation_details=validation_details,
+                confidence_score=validation_details.get("confidence_score", 1.0)
+            )
+            self._event_publisher.publish(event)
+        except Exception as e:
+            # 이벤트 발행 실패는 비즈니스 로직에 영향을 주지 않도록 로깅만 수행
+            print(f"⚠️ 호환성 검증 성공 이벤트 발행 실패: {e}")
+
+    def _publish_validation_failed_event(self, strategy_id: str, error_message: str, error_details: Dict[str, Any]):
+        """호환성 검증 실패 이벤트 발행"""
+        try:
+            event = StrategyValidationFailed(
+                strategy_id=strategy_id,
+                validation_type="compatibility",
+                validation_result="failed",
+                error_message=error_message,
+                error_details=error_details
+            )
+            self._event_publisher.publish(event)
+        except Exception as e:
+            # 이벤트 발행 실패는 비즈니스 로직에 영향을 주지 않도록 로깅만 수행
+            print(f"⚠️ 호환성 검증 실패 이벤트 발행 실패: {e}")
+
     def get_compatible_variables(self,
                                  base_variable_id: str,
                                  context: Optional[ValidationContext] = None) -> List[str]:
         """기준 변수와 호환되는 모든 변수 목록 반환"""
         if context is None:
             context = ValidationContext()
-            
+
         # 간소화된 버전 - 빈 리스트 반환
         return []
-    
+
     def get_compatibility_matrix(self, variable_ids: List[str]) -> Dict[tuple, CompatibilityResult]:
         """변수들 간의 호환성 매트릭스 생성"""
         matrix = {}
@@ -146,13 +233,13 @@ class StrategyCompatibilityService:
                     result = self.validate_variable_compatibility([var1, var2])
                     matrix[(var1, var2)] = result
         return matrix
-    
+
     def suggest_alternative_variables(self,
                                       incompatible_variable_ids: List[str],
                                       context: Optional[ValidationContext] = None) -> Dict[str, List[str]]:
         """호환되지 않는 변수들에 대한 대안 제안"""
         if context is None:
             context = ValidationContext()
-            
+
         # 간소화된 버전 - 빈 딕셔너리 반환
         return {var_id: [] for var_id in incompatible_variable_ids}
