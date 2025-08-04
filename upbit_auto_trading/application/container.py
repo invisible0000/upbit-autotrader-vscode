@@ -10,6 +10,10 @@ from typing import Optional
 from upbit_auto_trading.application.services.strategy_application_service import StrategyApplicationService
 from upbit_auto_trading.application.services.trigger_application_service import TriggerApplicationService
 from upbit_auto_trading.application.services.backtest_application_service import BacktestApplicationService
+from upbit_auto_trading.application.event_handlers.event_handler_registry import EventHandlerRegistry
+from upbit_auto_trading.application.notifications.notification_service import NotificationService
+from upbit_auto_trading.application.caching.cache_invalidation_service import CacheInvalidationService
+from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_event_publisher
 
 
 class ApplicationServiceContainer:
@@ -68,6 +72,57 @@ class ApplicationServiceContainer:
                 self._repo_container.get_market_data_repository()
             )
         return self._services["backtest"]
+
+    def get_notification_service(self) -> NotificationService:
+        """알림 서비스 조회
+
+        Returns:
+            NotificationService: 알림 관리 서비스
+        """
+        if "notification" not in self._services:
+            self._services["notification"] = NotificationService()
+        return self._services["notification"]
+
+    def get_cache_invalidation_service(self) -> CacheInvalidationService:
+        """캐시 무효화 서비스 조회
+
+        Returns:
+            CacheInvalidationService: 캐시 무효화 서비스
+        """
+        if "cache_invalidation" not in self._services:
+            self._services["cache_invalidation"] = CacheInvalidationService()
+        return self._services["cache_invalidation"]
+
+    def get_event_handler_registry(self) -> EventHandlerRegistry:
+        """이벤트 핸들러 레지스트리 조회
+
+        Returns:
+            EventHandlerRegistry: 이벤트 핸들러 관리 서비스
+        """
+        if "event_handler_registry" not in self._services:
+            self._services["event_handler_registry"] = EventHandlerRegistry(
+                self.get_notification_service(),
+                self.get_cache_invalidation_service()
+            )
+        return self._services["event_handler_registry"]
+
+    def initialize_event_integration(self) -> None:
+        """이벤트 시스템 통합 초기화
+
+        DomainEventPublisher와 EventHandlerRegistry를 연동합니다.
+        Application 시작 시 한 번 호출되어야 합니다.
+        """
+        # EventHandlerRegistry 인스턴스 생성
+        event_registry = self.get_event_handler_registry()
+
+        # DomainEventPublisher에 EventHandlerRegistry를 글로벌 비동기 핸들러로 등록
+        domain_publisher = get_domain_event_publisher()
+        domain_publisher.subscribe_global_async(event_registry.handle_event)
+
+        # 로깅
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("이벤트 시스템 통합 초기화 완료: DomainEventPublisher ↔ EventHandlerRegistry")
 
     def clear_cache(self) -> None:
         """서비스 캐시 초기화

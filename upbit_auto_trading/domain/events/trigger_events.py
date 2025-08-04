@@ -22,7 +22,6 @@ class TriggerCreated(DomainEvent):
 
     def __post_init__(self):
         """필수 필드 검증"""
-        super().__post_init__()
         if not self.trigger_id:
             raise ValueError("trigger_id는 필수 필드입니다")
         if not self.trigger_name:

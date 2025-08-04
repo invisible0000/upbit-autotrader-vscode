@@ -147,6 +147,7 @@ class BacktestProgressUpdated(DomainEvent):
     """백테스트 진행률 업데이트 이벤트"""
     backtest_id: str
     strategy_id: str
+    symbol: str
     progress_percent: float
     current_date: datetime
     processed_points: int
