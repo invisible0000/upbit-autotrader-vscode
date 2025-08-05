@@ -29,11 +29,15 @@ upbit_auto_trading/logging/
 
 ```
 logs/
-├── upbit_auto_trading.log                          # 메인 로그 (모든 세션 통합)
-└── upbit_auto_trading_20250803_103650_PID72884.log # 현재 세션만 (프로그램 실행 중)
+├── upbit_auto_trading.log                          # 메인 로그 (모든 세션 통합, 50MB 제한)
+├── upbit_auto_trading_20250803_103650_PID72884.log # 현재 세션만 (프로그램 실행 중)
+└── upbit_auto_trading_backup_20250806_120000.log   # 백업 로그 (50MB 초과 시 자동 생성)
 ```
 
-💡 **중요**: 이전 세션 로그들은 프로그램 시작 시 메인 로그로 자동 통합되므로 PID 파일은 현재 실행 중인 세션만 존재합니다.
+💡 **중요**:
+- 이전 세션 로그들은 프로그램 시작 시 메인 로그로 자동 통합되므로 PID 파일은 현재 실행 중인 세션만 존재합니다.
+- 메인 로그가 50MB를 초과하면 자동으로 백업되고 새 로그가 시작됩니다.
+- 30일 이상 된 백업 파일은 자동으로 삭제됩니다.
 
 ## 🚀 빠른 시작
 
@@ -62,7 +66,7 @@ manager = get_smart_log_manager()
 with manager.feature_development("RSI_Strategy"):
     logger = get_integrated_logger("RSI_Strategy")
     logger.debug("RSI 계산 로직")  # ✅ 출력됨
-    
+
     other_logger = get_integrated_logger("UI_Component")
     other_logger.debug("UI 업데이트")  # ❌ 필터링됨
 
@@ -84,7 +88,29 @@ $env:UPBIT_COMPONENT_FOCUS='RSI_Strategy,TradingEngine'  # 특정 컴포넌트�
 python your_script.py
 ```
 
-## 📖 상세 가이드
+## �️ 로그 파일 관리 정책
+
+### 📏 크기 제한 및 로테이션
+- **메인 로그 제한**: 50MB
+- **로테이션 동작**: 50MB 초과 시 `upbit_auto_trading_backup_YYYYMMDD_HHMMSS.log`로 백업 후 새 메인 로그 시작
+- **백업 정리**: 30일 이상 된 백업 파일 자동 삭제
+
+### 🔄 세션 파일 정리
+- **파일 명명**: `upbit_auto_trading_YYYYMMDD_HHMMSS_PID숫자.log`
+- **자동 병합**: 프로그램 시작 시 이전 세션들을 메인 로그로 통합
+- **자동 삭제**: 병합 완료 후 이전 세션 파일들 자동 삭제
+- **현재 세션만**: 실행 중인 PID 파일만 logs 폴더에 유지
+
+### 💾 백업 전략
+```
+logs/
+├── upbit_auto_trading.log                     # 현재 메인 로그 (최대 50MB)
+├── upbit_auto_trading_20250806_120000_PID123.log  # 현재 세션 로그
+├── upbit_auto_trading_backup_20250801_080000.log  # 백업 로그 (30일 보관)
+└── upbit_auto_trading_backup_20250805_140000.log  # 백업 로그 (30일 보관)
+```
+
+## �📖 상세 가이드
 
 ### 🎯 로그 컨텍스트 (상황별 분류)
 

@@ -107,6 +107,27 @@ class TradingConfig:
     default_slippage: float = 0.001       # 기본 슬리피지
     default_risk_percent: float = 0.02    # 기본 위험 비율
 
+    # 추가 매매 설정
+    auto_trading_enabled: bool = False    # 자동매매 활성화
+    strategy_validation: bool = True      # 전략 유효성 검증
+    max_concurrent_strategies: int = 5    # 최대 동시 전략 수
+    order_confirmation: bool = True       # 주문 확인 팝업
+
+    # 위험 관리
+    max_daily_loss_krw: int = 100000     # 일일 최대 손실
+    max_drawdown_percent: float = 0.10   # 최대 드로우다운
+    emergency_stop_enabled: bool = True   # 비상 정지 기능
+
+    # 백테스팅 설정
+    backtest_commission: float = 0.0005   # 백테스트 수수료
+    backtest_slippage: float = 0.001     # 백테스트 슬리피지
+    backtest_start_balance: int = 1000000  # 백테스트 시작 잔고
+
+    # API 제한
+    api_call_delay_ms: int = 100          # API 호출 간격 (밀리초)
+    order_retry_count: int = 3            # 주문 재시도 횟수
+    order_timeout_seconds: int = 30       # 주문 타임아웃
+
 
 @dataclass
 class UIConfig:
@@ -114,10 +135,35 @@ class UIConfig:
     theme: str = "light"  # light, dark
     window_width: int = 1600
     window_height: int = 1000
+    window_x: Optional[int] = None        # 창 X 위치
+    window_y: Optional[int] = None        # 창 Y 위치
+    window_maximized: bool = False        # 창 최대화 상태
     auto_refresh_interval_seconds: int = 5
     chart_update_interval_seconds: int = 1
     max_chart_candles: int = 200
     save_window_state: bool = True        # 창 상태 저장
+
+    # 화면별 설정
+    default_screen: str = "dashboard"     # 시작 화면
+    last_screen: Optional[str] = None     # 마지막 사용 화면
+
+    # 차트 설정
+    chart_style: str = "candlestick"      # candlestick, line, bar
+    chart_timeframe: str = "1h"           # 기본 차트 시간프레임
+    chart_indicators: List[str] = field(default_factory=lambda: ["SMA", "RSI"])  # 기본 지표
+
+    # 알림 설정
+    notifications_enabled: bool = True
+    sound_alerts: bool = True
+    popup_alerts: bool = True
+
+    # 데이터 표시 설정
+    currency_format: str = "KRW"          # KRW, USD
+    decimal_places: int = 2               # 소수점 자리수
+
+    # 성능 설정
+    animation_enabled: bool = True        # UI 애니메이션
+    smooth_scrolling: bool = True         # 부드러운 스크롤링
 
 
 @dataclass

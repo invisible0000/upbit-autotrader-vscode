@@ -82,9 +82,10 @@
 - [ ] **Import 검증**: 모든 import 경로가 실제 파일과 일치하는가?
 
 ### 로깅 시스템
-- [ ] **통합 로거**: `get_integrated_logger("ComponentName")` 사용했는가?
+- [ ] **Infrastructure 로거**: `create_component_logger("ComponentName")` 사용했는가?
 - [ ] **환경변수 제어**: `UPBIT_LOG_CONTEXT`, `UPBIT_LOG_SCOPE` 활용했는가?
 - [ ] **성능 고려**: 프로덕션에서 디버그 로그가 성능에 영향주지 않는가?
+- [ ] **LLM 에이전트 보고**: 에러 발생 시 구조화된 로그로 즉시 문제 인식 가능한가?
 
 ## 🧪 테스트
 

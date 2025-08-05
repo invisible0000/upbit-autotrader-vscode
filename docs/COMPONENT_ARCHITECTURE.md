@@ -15,7 +15,19 @@
 ### 1. Presentation Layer (PyQt6)
 ```
 upbit_auto_trading/presentation/desktop/
-├── main_window.py              # 메인 애플리케이션 윈도우
+├── main_wi## 📚 관련 문서
+
+- [Infrastructure 스마트 로깅 가이드](INFRASTRUCTURE_SMART_LOGGING_GUIDE.md): 로깅 시스템 상세 가이드
+- [LLM 로그 분리 가이드](LLM_LOG_SEPARATION_GUIDE.md): 사람/LLM 전용 로그 분리 시스템
+- [UI 디자인 시스템](UI_DESIGN_SYSTEM.md): UI 컴포넌트 설계 가이드
+- [DB 스키마](DB_SCHEMA.md): 데이터 모델 정의
+- [개발 체크리스트](DEV_CHECKLIST.md): 아키텍처 준수 검증
+- [트리거 빌더](TRIGGER_BUILDER_GUIDE.md): 트리거 시스템 상세
+
+---
+**💡 핵심**: "각 컴포넌트가 독립적으로 테스트 가능하고 교체 가능한 구조가 좋은 아키텍처다!"
+
+**🔍 Infrastructure Layer**: 스마트 로깅 시스템을 통해 모든 컴포넌트의 상태를 실시간으로 모니터링하고 LLM 에이전트에게 효율적으로 보고합니다.            # 메인 애플리케이션 윈도우
 ├── presenters/                 # MVP 패턴 프레젠터
 │   ├── strategy_presenter.py   # 전략 관리 프레젠터
 │   ├── trigger_presenter.py    # 트리거 빌더 프레젠터
@@ -74,11 +86,16 @@ upbit_auto_trading/domain/
 ```
 
 ### 4. Infrastructure Layer
-│       └── combination_manager.py # 전략 조합 관리
-└── data_engine/                # 데이터 엔진
-    ├── market_data/            # 시장 데이터
 ```
 upbit_auto_trading/infrastructure/
+├── logging/                    # 스마트 로깅 시스템 v3.0 (핵심 인프라)
+│   ├── __init__.py             # 통합 진입점
+│   ├── interfaces/
+│   │   └── logging_interface.py # ILoggingService 인터페이스
+│   ├── services/
+│   │   └── smart_logging_service.py # SmartLoggingService 구현
+│   └── configuration/
+│       └── logging_config.py   # 환경 기반 설정
 ├── repositories/               # Repository 구현체
 │   ├── sqlite_strategy_repository.py    # SQLite 전략 저장소
 │   ├── sqlite_trigger_repository.py     # SQLite 트리거 저장소
@@ -89,6 +106,9 @@ upbit_auto_trading/infrastructure/
 ├── database/                   # 데이터베이스 접근
 │   ├── database_manager.py     # 데이터베이스 관리자
 │   └── migration_manager.py    # 마이그레이션 관리자
+├── dependency_injection/       # DI Container 및 ApplicationContext
+│   ├── container.py            # DI Container
+│   └── app_context.py          # 애플리케이션 컨텍스트
 └── messaging/                  # 이벤트 메시징
     └── domain_event_bus.py     # 도메인 이벤트 버스
 ```
@@ -104,7 +124,7 @@ class TriggerCondition:
         self.operator = operator        # 비교 연산자
         self.value = value             # 대상값
         self.parameters = parameters    # 파라미터
-        
+
     def evaluate(self, market_data) -> bool:
         """조건 평가"""
         pass
@@ -114,7 +134,7 @@ class TriggerRule:
     def __init__(self, conditions, logic_operator='AND'):
         self.conditions = conditions
         self.logic_operator = logic_operator
-        
+
     def evaluate(self, market_data) -> bool:
         """규칙 평가"""
         pass
@@ -124,7 +144,7 @@ class TriggerBuilder:
     def __init__(self):
         self.rules = []
         self.validator = CompatibilityValidator()
-        
+
     def add_rule(self, rule: TriggerRule):
         """규칙 추가 (호환성 검증 포함)"""
         if self.validator.validate_rule(rule):
@@ -138,7 +158,7 @@ class BaseStrategy(ABC):
     @abstractmethod
     def generate_signal(self, data) -> TradingSignal:
         pass
-        
+
     @abstractmethod
     def get_parameters(self) -> Dict:
         pass
@@ -150,7 +170,7 @@ class EntryStrategy(BaseStrategy):
         pass
 
 class ManagementStrategy(BaseStrategy):
-    """관리 전략 기본 클래스"""  
+    """관리 전략 기본 클래스"""
     def generate_signal(self, position, data) -> str:
         # 반환값: 'ADD_BUY', 'ADD_SELL', 'CLOSE_POSITION', 'UPDATE_STOP', 'HOLD'
         pass
@@ -160,11 +180,11 @@ class StrategyCombiner:
     def __init__(self):
         self.entry_strategy = None
         self.management_strategies = []
-        
+
     def add_management_strategy(self, strategy, priority=1):
         """관리 전략 추가"""
         pass
-        
+
     def resolve_conflicts(self, signals) -> TradingSignal:
         """신호 충돌 해결"""
         pass
@@ -179,15 +199,15 @@ class BaseWidget(QWidget):
         self.setup_ui()
         self.setup_style()
         self.setup_events()
-        
+
     @abstractmethod
     def setup_ui(self):
         pass
-        
+
     def setup_style(self):
         """QSS 스타일 적용"""
         pass
-        
+
     def setup_events(self):
         """이벤트 연결"""
         pass
@@ -197,7 +217,7 @@ class ConditionCard(BaseWidget):
     def __init__(self, condition: TriggerCondition):
         self.condition = condition
         super().__init__()
-        
+
     def setup_ui(self):
         """조건 카드 UI 구성"""
         pass
@@ -207,11 +227,11 @@ class RuleBuilder(BaseWidget):
     def __init__(self):
         self.conditions = []
         super().__init__()
-        
+
     def add_condition(self, condition):
         """조건 추가"""
         pass
-        
+
     def validate_compatibility(self):
         """호환성 검증"""
         pass
@@ -242,11 +262,11 @@ class DIContainer:
     """의존성 주입 컨테이너"""
     def __init__(self):
         self.services = {}
-        
+
     def register(self, interface, implementation):
         """서비스 등록"""
         self.services[interface] = implementation
-        
+
     def resolve(self, interface):
         """서비스 해결"""
         return self.services.get(interface)
@@ -268,7 +288,7 @@ class IDatabaseService(ABC):
     @abstractmethod
     def save_strategy(self, strategy) -> bool:
         pass
-        
+
     @abstractmethod
     def load_strategy(self, strategy_id) -> Strategy:
         pass
@@ -281,7 +301,7 @@ class IDatabaseService(ABC):
 class TradingEngine:
     def __init__(self, market_data_service: IMarketDataService):
         self.market_data_service = market_data_service
-        
+
     def execute_strategy(self, strategy):
         # 실제 구현에서 의존성을 주입받아 사용
         data = self.market_data_service.get_candle_data("BTC", "1h")
@@ -291,14 +311,73 @@ class TradingEngine:
 def test_trading_engine():
     mock_service = Mock(spec=IMarketDataService)
     mock_service.get_candle_data.return_value = create_test_data()
-    
+
     engine = TradingEngine(mock_service)
     result = engine.execute_strategy(test_strategy)
-    
+
     assert result == expected_signal
 ```
 
-## 📚 관련 문서
+## � Infrastructure Layer 스마트 로깅 시스템
+
+### 핵심 목적
+- **실시간 에러 감지**: 문제 발생 즉시 LLM 에이전트 인식
+- **구조화된 보고**: 디버깅에 필요한 모든 컨텍스트 제공
+- **스마트 필터링**: 개발 상황별 최적화된 로그 레벨
+
+### 아키텍처 설계
+```python
+# ILoggingService 인터페이스 (Clean Architecture)
+class ILoggingService(ABC):
+    @abstractmethod
+    def get_logger(self, component_name: str) -> logging.Logger:
+        pass
+
+    @abstractmethod
+    def set_context(self, context: LogContext) -> None:
+        pass
+
+    @abstractmethod
+    def feature_development_context(self, feature_name: str):
+        pass
+
+# SmartLoggingService 구현체
+class SmartLoggingService(ILoggingService):
+    def __init__(self):
+        self._config = LoggingConfig.from_environment()
+        self._setup_smart_filtering()
+
+    def feature_development_context(self, feature_name: str):
+        """특정 기능 개발 시 집중 로깅"""
+        return FeatureDevelopmentContext(feature_name, self)
+```
+
+### DI Container 통합
+```python
+# ApplicationContext에서 자동 등록
+class ApplicationContext:
+    def _register_logging_services(self) -> None:
+        logging_service = get_logging_service()
+        self._container.register_instance(ILoggingService, logging_service)
+
+        # 환경별 로깅 설정 자동 적용
+        self._configure_environment_logging(logging_service)
+```
+
+### 사용 패턴
+```python
+# 기본 사용법
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+logger = create_component_logger("StrategyBuilder")
+
+# Feature Development Context
+from upbit_auto_trading.infrastructure.logging import get_logging_service
+service = get_logging_service()
+with service.feature_development_context("BacktestEngine"):
+    logger.debug("백테스팅 전용 상세 로그")
+```
+
+## �📚 관련 문서
 
 - [UI 디자인 시스템](UI_DESIGN_SYSTEM.md): UI 컴포넌트 설계 가이드
 - [DB 스키마](DB_SCHEMA.md): 데이터 모델 정의

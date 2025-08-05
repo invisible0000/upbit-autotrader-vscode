@@ -128,7 +128,12 @@ class ApplicationContext:
     def _register_core_services(self) -> None:
         """핵심 서비스 등록"""
         try:
+            # 컨테이너가 준비되었는지 확인
+            if not self._container:
+                raise ApplicationContextError("의존성 주입 컨테이너가 초기화되지 않았습니다")
+
             # 각 서비스 등록을 단계별로 처리
+            self._register_logging_services()
             self._register_database_services()
             self._register_api_services()
             self._register_repositories()
@@ -138,6 +143,87 @@ class ApplicationContext:
             self._logger.debug("핵심 서비스 등록 완료")
         except Exception as e:
             raise ApplicationContextError(f"핵심 서비스 등록 실패: {e}") from e
+
+    def _register_logging_services(self) -> None:
+        """통합 로깅 시스템 등록"""
+        if not self._container:
+            self._logger.error("DI Container가 초기화되지 않았습니다")
+            return
+
+        try:
+            from upbit_auto_trading.infrastructure.logging import (
+                get_logging_service,
+                ILoggingService
+            )
+
+            # 통합 로깅 서비스 싱글톤 등록
+            logging_service = get_logging_service()
+
+            # 타입 기반 등록
+            self._container.register_instance(ILoggingService, logging_service)
+
+            # 문자열 키 기반 등록 (호환성)
+            from upbit_auto_trading.infrastructure.dependency_injection.container import ServiceRegistration, LifetimeScope
+            registration = ServiceRegistration(
+                service_type=str,  # 문자열 키
+                implementation=logging_service,
+                lifetime=LifetimeScope.SINGLETON
+            )
+            registration.instance = logging_service
+            self._container._services["ILoggingService"] = registration
+            self._container._instances["ILoggingService"] = logging_service
+
+            # 환경별 로깅 설정 적용
+            self._configure_environment_logging(logging_service)
+
+            self._logger.debug("✅ Infrastructure 통합 로깅 시스템 등록 완료")
+
+        except Exception as e:
+            self._logger.warning(f"⚠️ 통합 로깅 시스템 등록 실패: {e}")
+            # 기본 로깅으로 폴백 (에러 처리 정책 준수)
+
+    def _configure_environment_logging(self, logging_service) -> None:
+        """환경별 로깅 설정 자동 적용"""
+        if not self._config:
+            return
+
+        try:
+            from upbit_auto_trading.infrastructure.logging import LogContext, LogScope
+
+            # Environment → LogContext 매핑
+            env_context_map = {
+                'development': LogContext.DEVELOPMENT,
+                'testing': LogContext.TESTING,
+                'production': LogContext.PRODUCTION,
+                'debugging': LogContext.DEBUGGING
+            }
+
+            context = env_context_map.get(
+                self._config.environment.value,
+                LogContext.DEVELOPMENT
+            )
+
+            # ApplicationConfig의 로그 레벨 → LogScope 매핑
+            level_scope_map = {
+                'DEBUG': LogScope.DEBUG_ALL,
+                'INFO': LogScope.NORMAL,
+                'WARNING': LogScope.MINIMAL,
+                'ERROR': LogScope.SILENT
+            }
+
+            scope = level_scope_map.get(
+                self._config.logging.level.upper(),
+                LogScope.NORMAL
+            )
+
+            # 로깅 서비스에 설정 적용
+            logging_service.set_context(context)
+            logging_service.set_scope(scope)
+
+            self._logger.debug(f"🎯 환경별 로깅 설정 적용: {context.value} / {scope.value}")
+
+        except Exception as e:
+            self._logger.warning(f"환경별 로깅 설정 실패: {e}")
 
     def _register_database_services(self) -> None:
         """데이터베이스 관련 서비스 등록"""

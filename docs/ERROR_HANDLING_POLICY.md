@@ -110,7 +110,7 @@ class ValidationError(Exception):
 def validate_strategy_config(config):
     if not config.get('entry_strategy'):
         raise ValidationError("진입 전략이 설정되지 않았습니다")
-    
+
     if not config.get('management_strategies'):
         raise ValidationError("관리 전략이 하나도 설정되지 않았습니다")
 ```
@@ -137,11 +137,15 @@ def save_strategy(strategy_data):
 ```python
 def load_trading_variables():
     try:
+        # Infrastructure Layer 스마트 로깅 사용
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        logger = create_component_logger("TradingVariableLoader")
+
         variables = self.db.fetch_all_variables()
-        self.logger.info(f"✅ 트레이딩 변수 {len(variables)}개 로드 완료")
+        logger.info(f"✅ 트레이딩 변수 {len(variables)}개 로드 완료")
         return variables
     except Exception as e:
-        self.logger.error(f"❌ 트레이딩 변수 로드 실패: {e}")
+        logger.error(f"❌ 트레이딩 변수 로드 실패: {e}")
         raise TradingVariableError("변수 정의를 불러올 수 없습니다") from e
 ```
 
@@ -152,20 +156,78 @@ def load_trading_variables():
 - [ ] **DB 연결 실패**: 데이터베이스 없을 때 명확한 에러 메시지 표시하는가?
 - [ ] **파라미터 오류**: 잘못된 파라미터 전달 시 구체적인 검증 메시지 제공하는가?
 - [ ] **UI 컴포넌트 오류**: 필수 UI 요소 로드 실패 시 즉시 표시되는가?
+- [ ] **Infrastructure 로깅**: 에러 발생 시 스마트 로깅 시스템에서 즉시 기록되는가?
+
+### Infrastructure 로깅 기반 디버깅 워크플로우
+
+#### 1. 실시간 에러 감지
+```python
+# Infrastructure Layer 로깅으로 즉시 문제 파악
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+logger = create_component_logger("ErrorHandler")
+
+try:
+    # 위험한 작업
+    process_critical_operation()
+except Exception as e:
+    # 스마트 로깅 시스템에 즉시 기록
+    logger.error(f"🚨 Critical Operation Failed: {e}")
+    logger.debug(f"📊 Context: {get_operation_context()}")
+    # LLM 에이전트 보고용 구조화된 로그
+    logger.info(f"🤖 LLM_REPORT: Operation=critical_operation, Error={type(e).__name__}, Message={str(e)}")
+    raise
+```
+
+#### 2. LLM 에이전트 효율적 보고
+```python
+def report_to_llm_agent(error_context):
+    """LLM 에이전트에게 구조화된 에러 보고"""
+    from upbit_auto_trading.infrastructure.logging import get_logging_service
+
+    service = get_logging_service()
+
+    # Feature Development Context로 집중 로깅
+    with service.feature_development_context("ERROR_INVESTIGATION"):
+        logger = service.get_logger("LLMReporter")
+
+        # 구조화된 보고
+        logger.error("🤖 === LLM 에이전트 에러 보고 시작 ===")
+        logger.error(f"📍 Component: {error_context.component}")
+        logger.error(f"⚠️ Error Type: {error_context.error_type}")
+        logger.error(f"📄 Error Message: {error_context.message}")
+        logger.error(f"📊 Context Data: {error_context.context}")
+        logger.error(f"🔍 Stack Trace: {error_context.stack_trace}")
+        logger.error("🤖 === LLM 에이전트 에러 보고 완료 ===")
+```
+
+#### 3. 환경변수 기반 디버깅 제어
+```powershell
+# 개발 시 상세 로깅 활성화
+$env:UPBIT_LOG_CONTEXT='debugging'
+$env:UPBIT_LOG_SCOPE='debug_all'
+$env:UPBIT_CONSOLE_OUTPUT='true'  # 터미널 실시간 출력
+
+# 특정 컴포넌트만 집중 디버깅
+$env:UPBIT_COMPONENT_FOCUS='ErrorHandler'
+
+# 프로덕션에서는 최소 로깅
+$env:UPBIT_LOG_CONTEXT='production'
+$env:UPBIT_LOG_SCOPE='minimal'
+```
 
 ### 테스트 케이스 예시
 ```python
 def test_no_fallback_behavior():
     """폴백 코드 없이 정확한 에러 발생 테스트"""
-    
+
     # 잘못된 DB 경로
     with pytest.raises(DatabaseError):
         manager = DatabaseManager("nonexistent.db")
-    
+
     # 잘못된 변수 ID
     with pytest.raises(ValidationError):
         validator.check_variable_compatibility("INVALID_VAR", "RSI")
-    
+
     # 필수 파라미터 누락
     with pytest.raises(ValueError):
         strategy = RSIStrategy()  # period 파라미터 없음
@@ -188,8 +250,12 @@ def test_no_fallback_behavior():
 ## 📚 관련 문서
 
 - [개발 체크리스트](DEV_CHECKLIST.md): 에러 처리 검증 항목
-- [개발 가이드](DEVELOPMENT_GUIDE_COMPACT.md): 코딩 표준과 예외 처리
-- [로깅 시스템](LOGGING_SYSTEM.md): 에러 로깅 패턴
+- [Infrastructure 로깅 시스템](../upbit_auto_trading/infrastructure/logging/README.md): 스마트 로깅 아키텍처
+- [LLM 로그 분리 가이드](LLM_LOG_SEPARATION_GUIDE.md): 사람/LLM 전용 로그 분리 시스템
+- [스타일 가이드](STYLE_GUIDE.md): 코딩 표준과 예외 처리
+- [LLM 에이전트 가이드](LLM_AGENT_TASK_GUIDELINES.md): 에러 보고 프로토콜
 
 ---
-**💡 핵심**: "문제를 숨기지 말고 빠르게 해결하자!"
+**💡 핵심**: "문제를 숨기지 말고 Infrastructure 로깅으로 즉시 파악하자!"
+
+**🤖 LLM 에이전트**: Infrastructure 스마트 로깅 시스템이 모든 에러를 실시간으로 추적하여 효율적인 문제 해결을 지원합니다.

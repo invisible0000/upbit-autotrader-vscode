@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon
-from upbit_auto_trading.utils.debug_logger import get_logger
+from upbit_auto_trading.logging import get_integrated_logger
 
 # 리팩토링된 트리거 빌더 시스템 import
 try:
@@ -29,73 +29,101 @@ except ImportError as e:
 
 class StrategyManagementScreen(QWidget):
     """컴포넌트 기반 전략 관리 화면"""
-    
+
     # 백테스팅 요청 시그널
     backtest_requested = pyqtSignal(str)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("📊 매매 전략 관리")
-        self.logger = get_logger("StrategyManagement")
-        
+        self.logger = get_integrated_logger("StrategyManagement")
+
+        # LLM_REPORT 초기화 보고
+        self._log_llm_report("StrategyScreen_초기화", "시작", "전략 관리 화면 생성")
+
         self.init_ui()
-    
+
+        # LLM_REPORT 완료 보고
+        self._log_llm_report("StrategyScreen_초기화", "완료", "4개 탭 구성 완료")
+
+    def _log_llm_report(self, operation: str, status: str, details: str = "") -> None:
+        """LLM 에이전트 구조화된 보고"""
+        if self.logger:
+            self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
+        else:
+            print(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
+
     def init_ui(self):
         """UI 초기화"""
+        self._log_llm_report("UI_초기화", "시작", "레이아웃 및 탭 구성")
+
         layout = QVBoxLayout(self)
-        
+
         # 탭 위젯 생성
         self.tab_widget = QTabWidget()
-        
+
         # 탭들 생성
         self.trigger_builder_tab = self.create_trigger_builder_tab()
         self.strategy_maker_tab = self.create_strategy_maker_tab()
         self.backtest_tab = self.create_backtest_tab()
         self.analysis_tab = self.create_analysis_tab()
-        
+
         # 탭 추가
         self.tab_widget.addTab(self.trigger_builder_tab, "🎯 트리거 빌더")
         self.tab_widget.addTab(self.strategy_maker_tab, "⚙️ 전략 메이커")
         self.tab_widget.addTab(self.backtest_tab, "📊 백테스팅")
         self.tab_widget.addTab(self.analysis_tab, "📈 전략 분석")
-        
+
         layout.addWidget(self.tab_widget)
-        
+
         self.logger.debug("매매전략 관리 화면 초기화 완료 (4개 탭)")
-    
+        self._log_llm_report("UI_초기화", "완료", "4개 탭 생성 및 레이아웃 적용")
+
     def create_trigger_builder_tab(self):
         """트리거 빌더 탭 생성 - 리팩토링된 컴포넌트 기반"""
+        self._log_llm_report("TriggerBuilder_탭_생성", "시작", "컴포넌트 기반 트리거 빌더 로딩")
+
         try:
             if TRIGGER_BUILDER_AVAILABLE:
-                return TriggerBuilderScreen()
+                tab = TriggerBuilderScreen()
+                self._log_llm_report("TriggerBuilder_탭_생성", "성공", "컴포넌트 로드 완료")
+                return tab
             else:
                 raise ImportError("트리거 빌더 컴포넌트들을 찾을 수 없습니다")
         except Exception as e:
             self.logger.error(f"트리거 빌더 탭 생성 실패: {e}")
+            self._log_llm_report("TriggerBuilder_탭_생성", "실패", f"오류: {str(e)}")
             return self.create_fallback_screen("트리거 빌더 로딩 실패")
-    
+
     def create_strategy_maker_tab(self):
         """전략 메이커 탭 생성 - 실제 매매 전략 생성"""
+        self._log_llm_report("StrategyMaker_탭_생성", "시작", "전략 메이커 컴포넌트 로딩")
+
         try:
             from .strategy_maker import StrategyMaker
-            return StrategyMaker()
+            tab = StrategyMaker()
+            self._log_llm_report("StrategyMaker_탭_생성", "성공", "전략 메이커 UI 초기화 완료")
+            return tab
         except Exception as e:
             self.logger.error(f"전략 메이커 탭 생성 실패: {e}")
+            self._log_llm_report("StrategyMaker_탭_생성", "실패", f"오류: {str(e)}")
             return self.create_fallback_screen("전략 메이커 로딩 실패")
-    
+
     def create_backtest_tab(self):
         """백테스팅 탭 생성"""
+        self._log_llm_report("Backtest_탭_생성", "건너뛰기", "백테스팅 탭은 개발 예정")
         return self.create_fallback_screen("백테스팅 (개발 예정)")
-    
+
     def create_analysis_tab(self):
         """전략 분석 탭 생성"""
+        self._log_llm_report("Analysis_탭_생성", "건너뛰기", "분석 탭은 개발 예정")
         return self.create_fallback_screen("전략 분석 (개발 예정)")
-    
+
     def create_fallback_screen(self, title):
         """폴백 화면 생성"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        
+
         error_label = QLabel(f"🔧 {title}\n\n개발 진행 중입니다.")
         error_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         error_label.setStyleSheet("""
@@ -109,9 +137,9 @@ class StrategyManagementScreen(QWidget):
             }
         """)
         layout.addWidget(error_label)
-        
+
         return widget
-    
+
     def refresh_all_data(self):
         """모든 데이터 새로고침"""
         try:

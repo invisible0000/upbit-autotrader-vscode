@@ -195,29 +195,32 @@ from .components.core.condition_storage import ConditionStorage
 -   **검증:** 호환성 검사는 UI(실시간)와 백엔드(저장 시) 양쪽에서 필수입니다.
 -   **규칙:** 변수들은 동일한 `comparison_group`을 공유해야만 호환됩니다.
 
-### 4.5. 스마트 로깅 시스템 v3.0 (핵심 인프라)
+### 4.5. Infrastructure Layer 스마트 로깅 시스템 v3.1 (핵심 인프라)
 
--   **위치:** `upbit_auto_trading/logging/` - 전용 로깅 서브시스템
--   **핵심 원칙:** 로그 범람 방지 + 개발 상황별 최적화
+-   **위치:** `upbit_auto_trading/infrastructure/logging/` - Infrastructure Layer 통합 로깅
+-   **핵심 원칙:** Dual-logging 시스템 + Context-aware 스마트 필터링 + 실시간 LLM 에이전트 보고
+-   **LLM 로그 분리:** [LLM_LOG_SEPARATION_GUIDE.md](../docs/LLM_LOG_SEPARATION_GUIDE.md) - 사람/LLM 전용 로그 분리 시스템
 -   **필수 사용법:**
     ```python
-    # 기본 통합 로거 (v2.x 완전 호환)
-    from upbit_auto_trading.logging import get_integrated_logger
-    logger = get_integrated_logger("ComponentName")
+    # Infrastructure Layer 기본 사용 (권장)
+    from upbit_auto_trading.infrastructure.logging import create_component_logger
+    logger = create_component_logger("ComponentName")
+    logger.info("정보 메시지")
+    logger.debug("디버그 정보")  # 스마트 필터링으로 자동 제어
 
-    # 스마트 필터링 활용 (로그 범람 방지)
-    from upbit_auto_trading.logging import get_smart_log_manager
-    manager = get_smart_log_manager()
-    with manager.feature_development("FeatureName"):
+    # 스마트 필터링 활용 (Feature Development 모드)
+    from upbit_auto_trading.infrastructure.logging import get_logging_service
+    service = get_logging_service()
+    with service.feature_development_context("FeatureName"):
         logger.debug("해당 기능 관련 로그만 출력")
     ```
 -   **환경변수 제어:**
-    - `UPBIT_LOG_CONTEXT`: development, testing, production, debugging
+    - `UPBIT_LOG_CONTEXT`: development, testing, production, debugging, silent
     - `UPBIT_LOG_SCOPE`: silent, minimal, normal, verbose, debug_all
     - `UPBIT_COMPONENT_FOCUS`: 특정 컴포넌트만 포커스
-    - `UPBIT_CONSOLE_OUTPUT`: true 설정 시 터미널에 실시간 로그 출력 (에러 추적용)
+    - `UPBIT_CONSOLE_OUTPUT`: true 설정 시 터미널에 실시간 로그 출력 (LLM 에이전트 즉시 인식)
 -   **로그 파일:** 메인 로그(upbit_auto_trading.log) + 세션별 로그(upbit_auto_trading_YYYYMMDD_HHMMSS_PID숫자.log)
--   **로그 확인:** 실시간 로그는 PID 포함 파일에서, 통합 로그는 메인 파일에서 확인 (이전 세션은 자동 통합됨)
+-   **LLM 에이전트 보고:** 에러 발생 시 구조화된 로그로 즉시 문제 인식 지원
 
 ### 4.6. 개발 워크플로우 및 도구 (필수)
 
@@ -229,24 +232,25 @@ from .components.core.condition_storage import ConditionStorage
     # 2. 마이그레이션/삭제 전 코드 참조 분석
     python tools/super_db_table_reference_code_analyzer.py --tables tv_trading_variables
     ```
-2.  **스마트 로깅 시스템 v3.0 (필수):** 통합 로깅 시스템을 사용하여 로그 범람을 방지하십시오.
+2.  **Infrastructure Layer 스마트 로깅 시스템 v3.0 (필수):** 통합 로깅 시스템을 사용하여 로그 범람을 방지하고 LLM 에이전트 효율적 보고를 지원하십시오.
     ```python
     # 기본 사용 (권장)
-    from upbit_auto_trading.logging import get_integrated_logger
-    logger = get_integrated_logger("MyComponent")
+    from upbit_auto_trading.infrastructure.logging import create_component_logger
+    logger = create_component_logger("MyComponent")
     logger.info("정보 메시지")
     logger.debug("디버그 정보")  # 스마트 필터링으로 자동 제어
 
-    # 특정 기능 개발 시 (로그 포커스)
-    from upbit_auto_trading.logging import get_smart_log_manager
-    manager = get_smart_log_manager()
-    with manager.feature_development("FeatureName"):
+    # 특정 기능 개발 시 (Feature Development Context)
+    from upbit_auto_trading.infrastructure.logging import get_logging_service
+    service = get_logging_service()
+    with service.feature_development_context("FeatureName"):
         logger.debug("개발 중 상세 로그만 출력")
 
     # 환경변수로 전역 제어
-    $env:UPBIT_LOG_CONTEXT='debugging'  # development, testing, production
-    $env:UPBIT_LOG_SCOPE='verbose'      # silent, minimal, normal, verbose
+    $env:UPBIT_LOG_CONTEXT='debugging'  # development, testing, production, debugging
+    $env:UPBIT_LOG_SCOPE='verbose'      # silent, minimal, normal, verbose, debug_all
     $env:UPBIT_COMPONENT_FOCUS='MyComponent'  # 특정 컴포넌트만
+    $env:UPBIT_CONSOLE_OUTPUT='true'    # LLM 에이전트 즉시 인식용
     ```
 3.  **모든 변경 후 테스트:** 메인 UI 애플리케이션을 실행하여 아무것도 손상되지 않았는지 확인하십시오.
     ```powershell
@@ -266,7 +270,7 @@ from .components.core.condition_storage import ConditionStorage
 -   [ ] **아키텍처:** 컴포넌트 기반 설계를 존중하고 있는가?
 -   [ ] **데이터베이스:** 표준 경로와 연결 패턴을 사용하고 있는가?
 -   [ ] **보안:** API 키는 환경 변수로 처리되는가? SQL 인젝션을 방지하고 있는가?
--   [ ] **로깅:** 스마트 로깅 시스템 v3.0을 사용하고 있는가? 로그 범람을 방지하고 있는가?
+-   [ ] **로깅:** Infrastructure Layer 스마트 로깅 시스템 v3.0을 사용하고 있는가? LLM 에이전트 보고 기능을 활용하고 있는가?
 -   [ ] **테스트:** 내 기능에 대한 `pytest` 테스트를 포함하고 있는가?
 -   [ ] **작업 로그:** 완료 후 `📌 작업 로그` 템플릿으로 상세 기록할 예정인가?
 -   [ ] **체크박스 완료:** 작업 완료 후 `[-]` → `[X]` 마킹할 예정인가?

@@ -9,8 +9,8 @@ from enum import Enum
 
 # 디버그 로거 import
 try:
-    from upbit_auto_trading.utils.debug_logger import get_logger
-    logger = get_logger("DataSourceManager")
+    from upbit_auto_trading.logging import get_integrated_logger
+    logger = get_integrated_logger("DataSourceManager")
 except ImportError:
     # 폴백: 기본 logging 사용
     logger = logging.getLogger("DataSourceManager")
@@ -26,16 +26,16 @@ class DataSourceType(Enum):
 
 class SimulationDataSourceManager:
     """시뮬레이션 데이터 소스 관리자"""
-    
+
     def __init__(self):
         """데이터 소스 관리자 초기화"""
         self._engines = {}
         self._availability = {}
         self._user_preference = None
-        
+
         # 각 데이터 소스 가용성 확인
         self._check_availability()
-        
+
     def _check_availability(self):
         """각 데이터 소스의 가용성 확인"""
         # 1. 내장 최적화 데이터셋 확인
@@ -49,7 +49,7 @@ class SimulationDataSourceManager:
             self._availability[DataSourceType.EMBEDDED] = False
             logging.warning(f"❌ 내장 데이터셋 불가: {e}")
             logger.warning(f"내장 데이터셋 불가: {e}")
-        
+
         # 2. 실제 DB 확인 (시나리오별 세그먼테이션)
         try:
             import os
@@ -57,7 +57,7 @@ class SimulationDataSourceManager:
             db_path = os.path.join(os.path.dirname(__file__), "..", "engines", "data", "sampled_market_data.sqlite3")
             logger.debug(f"DB 경로 확인: {db_path}")
             logger.debug(f"DB 파일 존재: {os.path.exists(db_path)}")
-            
+
             if os.path.exists(db_path):
                 from ..engines.real_data_simulation import RealDataSimulationEngine
                 self._engines[DataSourceType.REAL_DB] = lambda: RealDataSimulationEngine()
@@ -71,7 +71,7 @@ class SimulationDataSourceManager:
         except ImportError as e:
             self._availability[DataSourceType.REAL_DB] = False
             logging.warning(f"❌ 실제 DB 엔진 불가: {e}")
-        
+
         # 3. 합성 현실적 데이터 확인
         try:
             from ..engines.robust_simulation_engine import RobustSimulationEngine
@@ -83,27 +83,27 @@ class SimulationDataSourceManager:
             self._availability[DataSourceType.SYNTHETIC] = False
             logging.warning(f"❌ 합성 데이터 엔진 불가: {e}")
             logger.warning(f"합성 데이터 엔진 불가: {e}")
-        
+
         # 4. 단순 폴백 (항상 가능)
         self._availability[DataSourceType.SIMPLE_FALLBACK] = True
         logger.debug("단순 폴백 데이터 항상 사용 가능 - SIMPLE_FALLBACK 등록됨")
-        
+
         logger.debug(f"최종 데이터 소스 가용성: {self._availability}")
         logger.debug(f"사용 가능한 데이터 소스 개수: {sum(self._availability.values())}/{len(self._availability)}")
-        
+
     def get_available_sources(self) -> List[str]:
         """사용 가능한 데이터 소스 목록 반환"""
         available = []
         logger.debug(f"get_available_sources 호출됨 - 가용성: {self._availability}")
-        
+
         for source_type, available_flag in self._availability.items():
             if available_flag:
                 available.append(source_type.value)
                 logger.debug(f"{source_type.value} 소스 추가됨")
-        
+
         logger.debug(f"반환할 소스 목록: {available} (총 {len(available)}개)")
         return available
-    
+
     def set_user_preference(self, source_type: str) -> bool:
         """사용자 선호 데이터 소스 설정"""
         try:
@@ -119,26 +119,26 @@ class SimulationDataSourceManager:
         except ValueError:
             logging.error(f"잘못된 데이터 소스 타입: {source_type}")
             return False
-    
+
     def get_engine(self, source_type: str = None):
         """지정된 타입의 시뮬레이션 엔진 반환"""
         if source_type is None:
             source_type = self._user_preference or DataSourceType.EMBEDDED
-        
+
         if isinstance(source_type, str):
             try:
                 source_type = DataSourceType(source_type)
             except ValueError:
                 logging.error(f"잘못된 데이터 소스 타입: {source_type}")
                 source_type = DataSourceType.SIMPLE_FALLBACK
-        
+
         if source_type in self._engines and self._availability.get(source_type, False):
             engine_factory = self._engines[source_type]
             if callable(engine_factory):
                 return engine_factory()
             else:
                 return engine_factory
-        
+
         # 폴백: 사용 가능한 첫 번째 엔진
         for fallback_type, available in self._availability.items():
             if available and fallback_type in self._engines:
@@ -148,18 +148,18 @@ class SimulationDataSourceManager:
                     return engine_factory()
                 else:
                     return engine_factory
-        
+
         # 최후 폴백
         logging.error("사용 가능한 시뮬레이션 엔진이 없습니다")
         return None
-    
+
     def get_scenario_data(self, scenario: str, source_type: str = None, length: int = 100) -> Dict[str, Any]:
         """시나리오별 데이터 반환 (미니차트 최적화)"""
         engine = self.get_engine(source_type)
-        
+
         if engine is None:
             return self._generate_fallback_data(scenario, length)
-        
+
         try:
             # 엔진별 시나리오 데이터 로딩
             if hasattr(engine, 'get_scenario_data'):
@@ -183,18 +183,18 @@ class SimulationDataSourceManager:
                 df = engine.load_market_data(length)
                 if df is not None and not df.empty:
                     return self._apply_scenario_to_data(df, scenario)
-        
+
         except Exception as e:
             logging.error(f"시나리오 데이터 로딩 실패: {e}")
-        
+
         return self._generate_fallback_data(scenario, length)
-    
+
     def _apply_scenario_to_data(self, df, scenario: str) -> Dict[str, Any]:
         """기본 데이터에 시나리오 패턴 적용"""
         try:
             # 시나리오별 데이터 변형
             price_data = df['close'].copy()
-            
+
             if scenario == "상승 추세":
                 trend = 1 + (range(len(price_data)) / len(price_data)) * 0.3
                 price_data = price_data * trend
@@ -205,7 +205,7 @@ class SimulationDataSourceManager:
                 # 평균 값 중심으로 수렴
                 mean_price = price_data.mean()
                 price_data = price_data * 0.7 + mean_price * 0.3
-            
+
             return {
                 'current_value': float(price_data.iloc[-1]),
                 'price_data': price_data.tolist(),
@@ -218,13 +218,13 @@ class SimulationDataSourceManager:
         except Exception as e:
             logging.error(f"시나리오 패턴 적용 실패: {e}")
             return self._generate_fallback_data(scenario, len(df))
-    
+
     def _generate_fallback_data(self, scenario: str, length: int) -> Dict[str, Any]:
         """폴백 시나리오 데이터 생성"""
         import numpy as np
-        
+
         base_value = 50000000
-        
+
         if scenario == "상승 추세":
             trend = np.linspace(0, base_value * 0.2, length)
         elif scenario == "하락 추세":
@@ -242,11 +242,11 @@ class SimulationDataSourceManager:
             ])
         else:  # 횡보
             trend = np.sin(np.linspace(0, 4*np.pi, length)) * base_value * 0.05
-        
+
         noise = np.random.randn(length) * base_value * 0.02
         price_data = base_value + trend + noise
         price_data = np.maximum(price_data, base_value * 0.1)
-        
+
         return {
             'current_value': float(price_data[-1]),
             'price_data': price_data.tolist(),

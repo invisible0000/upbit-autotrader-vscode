@@ -2,7 +2,7 @@
 
 ## 🎯 문서 체계 개요
 
-이 폴더는 업비트 자동매매 시스템의 모든 개발 지침과 명세를 포함합니다.  
+이 폴더는 업비트 자동매매 시스템의 모든 개발 지침과 명세를 포함합니다.
 **LLM 에이전트와 개발자 모두를 위한 효율적인 문서 구조**로 설계되었습니다.
 
 ### 📋 문서 읽기 순서 (권장)
@@ -39,7 +39,7 @@
 ### 📈 매매 전략 개발 시
 ```
 1. STRATEGY_SYSTEM.md (전체 전략 시스템 이해)
-2. BASIC_7_RULE_STRATEGY_GUIDE.md (검증 기준)  
+2. BASIC_7_RULE_STRATEGY_GUIDE.md (검증 기준)
 3. TRIGGER_BUILDER_GUIDE.md (조건 구성)
 4. VARIABLE_COMPATIBILITY.md (변수 호환성)
 ```
@@ -63,6 +63,16 @@
 1. COMPONENT_ARCHITECTURE.md (시스템 구조)
 2. ERROR_HANDLING_POLICY.md (오류 처리)
 3. STYLE_GUIDE.md (코딩 표준)
+4. INFRASTRUCTURE_SMART_LOGGING_GUIDE.md (스마트 로깅 시스템)
+```
+
+### 🔍 Infrastructure Layer 개발 시
+```
+1. INFRASTRUCTURE_SMART_LOGGING_GUIDE.md (스마트 로깅 시스템 - 개발 첫 단계)
+2. LLM_LOG_SEPARATION_GUIDE.md (LLM 로그 분리 시스템 - 사람/LLM 로그 구분)
+3. COMPONENT_ARCHITECTURE.md (DDD 기반 아키텍처)
+4. ERROR_HANDLING_POLICY.md (에러 처리 정책)
+5. DEV_CHECKLIST.md (개발 검증)
 ```
 
 ## 📝 특별 문서들
@@ -70,7 +80,7 @@
 ### 기본 7규칙 전략 (검증 기준)
 - **[BASIC_7_RULE_STRATEGY_GUIDE.md](BASIC_7_RULE_STRATEGY_GUIDE.md)**: 모든 개발의 검증 기준
 
-### 참고/학습 문서  
+### 참고/학습 문서
 - **[TRADING_VARIABLES_COMPACT.md](TRADING_VARIABLES_COMPACT.md)**: 매매 변수 정의
 - **[STRATEGY_SPECIFICATIONS.md](STRATEGY_SPECIFICATIONS.md)**: 전략 상세 명세
 - **[CONTRIBUTING.md](CONTRIBUTING.md)**: 기여 가이드
@@ -94,7 +104,7 @@
 ### 새로운 개발자라면
 ```markdown
 1. PROJECT_SPECIFICATIONS.md 읽기 (20분)
-2. ARCHITECTURE_OVERVIEW.md 스캔 (10분)  
+2. ARCHITECTURE_OVERVIEW.md 스캔 (10분)
 3. DEV_CHECKLIST.md 북마크 (5분)
 4. 작업 영역별 전문 문서 참조
 ```
@@ -146,7 +156,7 @@ docs/legacy/             # 이전 버전 문서들
 
 ### 📋 체크리스트 활용
 - 개발 전: 관련 문서 체크리스트 확인
-- 개발 중: STYLE_GUIDE.md 수시 참조  
+- 개발 중: STYLE_GUIDE.md 수시 참조
 - 개발 후: DEV_CHECKLIST.md로 품질 검증
 - 배포 전: 기본 7규칙 전략으로 동작 검증
 
@@ -230,7 +240,7 @@ python run_desktop_ui.py
 # 프로토타입 실행 (각각 독립 실행 가능)
 cd ui_prototypes
 python drag_drop_vs_button_comparison.py
-python enhanced_strategy_builder.py  
+python enhanced_strategy_builder.py
 python rule_based_strategy_maker.py
 # ... 등등
 ```
