@@ -8,7 +8,8 @@
 2. **[../docs/PROJECT_SPECIFICATIONS.md](../docs/PROJECT_SPECIFICATIONS.md)** - 프로젝트 핵심 명세 (필수)
 3. **[../docs/DEV_CHECKLIST.md](../docs/DEV_CHECKLIST.md)** - 개발 검증 체크리스트 (필수)
 4. **[../docs/STYLE_GUIDE.md](../docs/STYLE_GUIDE.md)** - 코딩 스타일 가이드 (필수)
-5. **[../docs/README.md](../docs/README.md)** - 전체 문서 가이드
+5. **[../docs/DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md](../docs/DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md)** - DDD 용어 통일 사전 (필수)
+6. **[../docs/README.md](../docs/README.md)** - 전체 문서 가이드
 
 ## 🎯 개발 원칙
 
@@ -40,12 +41,20 @@
 
 ### 2. 3-DB 아키텍처 준수
 - **settings.sqlite3**: 변수 정의, 파라미터 (data_info 관리)
-- **strategies.sqlite3**: 사용자 전략, 백테스팅 결과  
+- **strategies.sqlite3**: 사용자 전략, 백테스팅 결과
 - **market_data.sqlite3**: 시장 데이터, 지표 캐시
 
 ### 3. 컴포넌트 기반 개발
 - UI 컴포넌트: PyQt6 위젯들의 재사용 가능한 모듈화
 - 전략 컴포넌트: 개념적 모듈 (실제 폴더 아님)
+
+### 4. DDD 용어 통일 시스템 (핵심)
+- **용어 사전**: [DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md](../docs/DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md) 기준 준수
+- **Entity 명명**: `Strategy`, `Trigger`, `TradingVariable` 등 통일된 PascalCase
+- **Repository 패턴**: `SqliteStrategyRepository`, `SqliteTriggerRepository` 표준 구현
+- **Value Object**: `StrategyId`, `TriggerId`, `ComparisonOperator` 등 일관성 유지
+- **Database 매핑**: Domain Entity ↔ DB 테이블 용어 매핑표 활용
+- **Mock 패턴**: Domain Layer 미완성 시 `MockStrategy`, `MockTrigger` 사용
 
 ## 🚀 개발 워크플로우
 
@@ -59,7 +68,7 @@
 3. **DB 스키마**: [DB_SCHEMA.md](../docs/DB_SCHEMA.md) 정확히 반영
 
 ### 완료 후 (필수)
-1. **체크리스트 검증**: DEV_CHECKLIST.md 모든 항목 확인  
+1. **체크리스트 검증**: DEV_CHECKLIST.md 모든 항목 확인
 2. **7규칙 테스트**: 기본 7규칙 전략으로 동작 검증
 3. **코드 품질**: 타입 힌트, 문서화, 테스트 포함
 
@@ -70,7 +79,7 @@
 - **컴포넌트 구조**: screens/ 및 components/ 폴더 활용
 - **반응형**: 최소 1280x720 해상도 지원
 
-### 📈 전략 개발  
+### 📈 전략 개발
 - **전략 시스템**: [STRATEGY_SYSTEM.md](../docs/STRATEGY_SYSTEM.md)
 - **진입 + 관리**: 1개 진입 + 0~N개 관리 전략 조합
 
@@ -78,6 +87,12 @@
 - **스키마 정의**: DB_SCHEMA.md tv_ 테이블 구조 준수
 - **변수 관리**: data_info/*.yaml 파일 활용
 - **쿼리 최적화**: 인덱스와 트랜잭션 고려
+
+### 🏗️ DDD Infrastructure 개발
+- **용어 통일**: DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md 필수 참조
+- **Repository 구현**: Domain 인터페이스 → Infrastructure 구현체 패턴
+- **Entity 매핑**: Domain Entity ↔ DB 테이블 일관된 매핑
+- **Mock 패턴**: Domain 미완성 시 Infrastructure Mock으로 호환성 확보
 
 ## 💡 개발 팁
 
@@ -88,8 +103,9 @@
 
 ### 작업 유형별 문서
 - 매매 전략: STRATEGY_SYSTEM.md + BASIC_7_RULE_STRATEGY_GUIDE.md
-- UI 작업: UI_DESIGN_SYSTEM.md + COMPONENT_ARCHITECTURE.md  
+- UI 작업: UI_DESIGN_SYSTEM.md + COMPONENT_ARCHITECTURE.md
 - DB 작업: DB_SCHEMA.md
+- DDD 개발: DDD_UBIQUITOUS_LANGUAGE_DICTIONARY.md + COMPONENT_ARCHITECTURE.md
 - 버그 수정: ERROR_HANDLING_POLICY.md + STYLE_GUIDE.md
 
 ## 🔍 자주 하는 실수들
@@ -188,14 +204,14 @@ from .components.core.condition_storage import ConditionStorage
     # 기본 통합 로거 (v2.x 완전 호환)
     from upbit_auto_trading.logging import get_integrated_logger
     logger = get_integrated_logger("ComponentName")
-    
+
     # 스마트 필터링 활용 (로그 범람 방지)
     from upbit_auto_trading.logging import get_smart_log_manager
     manager = get_smart_log_manager()
     with manager.feature_development("FeatureName"):
         logger.debug("해당 기능 관련 로그만 출력")
     ```
--   **환경변수 제어:** 
+-   **환경변수 제어:**
     - `UPBIT_LOG_CONTEXT`: development, testing, production, debugging
     - `UPBIT_LOG_SCOPE`: silent, minimal, normal, verbose, debug_all
     - `UPBIT_COMPONENT_FOCUS`: 특정 컴포넌트만 포커스
@@ -220,13 +236,13 @@ from .components.core.condition_storage import ConditionStorage
     logger = get_integrated_logger("MyComponent")
     logger.info("정보 메시지")
     logger.debug("디버그 정보")  # 스마트 필터링으로 자동 제어
-    
+
     # 특정 기능 개발 시 (로그 포커스)
     from upbit_auto_trading.logging import get_smart_log_manager
     manager = get_smart_log_manager()
     with manager.feature_development("FeatureName"):
         logger.debug("개발 중 상세 로그만 출력")
-    
+
     # 환경변수로 전역 제어
     $env:UPBIT_LOG_CONTEXT='debugging'  # development, testing, production
     $env:UPBIT_LOG_SCOPE='verbose'      # silent, minimal, normal, verbose
