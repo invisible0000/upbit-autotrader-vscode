@@ -1,78 +1,105 @@
-# 업비트 자동매매 시스템 설정 파일
+# Upbit Auto Trading System - Base Configuration
 
-# API 설정
-api:
-  upbit:
-    base_url: "https://api.upbit.com/v1"
-    websocket_url: "wss://api.upbit.com/websocket/v1"
-    # API 키는 환경 변수 또는 .env 파일에서 로드됩니다.
-    # UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY
-
-# 데이터베이스 설정
+# 데이터베이스 설정 (3-DB 아키텍처)
 database:
-  type: "sqlite"  # sqlite, mysql, postgresql
-  path: "data/upbit_auto_trading.db"  # SQLite 데이터베이스 파일 경로
-  # MySQL/PostgreSQL 설정 (필요시 주석 해제)
-  # host: "localhost"
-  # port: 3306
-  # username: "user"
-  # password: "password"
-  # database_name: "upbit_auto_trading"
-  
-  # 데이터 관리 정책
-  data_retention:
-    minute_candles_days: 90  # 분봉 데이터 보관 기간 (일)
-    daily_candles_days: 365  # 일봉 데이터 보관 기간 (일)
-    max_database_size_gb: 10  # 최대 데이터베이스 크기 (GB)
+  settings_db_path: "data/settings.sqlite3"
+  strategies_db_path: "data/strategies.sqlite3"
+  market_data_db_path: "data/market_data.sqlite3"
+  connection_timeout: 30
+  max_connections: 10
+  wal_mode: true
+  backup_enabled: true
+  backup_interval_hours: 24
 
-# 거래 설정
-trading:
-  default_fee: 0.0005  # 기본 거래 수수료 (0.05%)
-  default_slippage: 0.001  # 기본 슬리피지 (0.1%)
-  max_position_size: 0.3  # 최대 포지션 크기 (전체 자본 대비 %)
-  default_risk_percent: 0.02  # 기본 위험 비율 (2%)
-
-# 백테스팅 설정
-backtesting:
-  default_initial_capital: 10000000  # 기본 초기 자본 (1천만원)
-  default_timeframe: "1h"  # 기본 시간대 (1시간)
-  default_period: 90  # 기본 백테스팅 기간 (일)
-
-# 스크리닝 설정
-screening:
-  default_volume_threshold: 1000000000  # 기본 거래량 임계값 (10억원)
-  default_volatility_min: 0.05  # 기본 최소 변동성 (5%)
-  default_volatility_max: 0.20  # 기본 최대 변동성 (20%)
-
-# 알림 설정
-notifications:
-  enabled: true
-  # 알림 유형 설정
-  types:
-    trade_executed: true  # 거래 체결 알림
-    price_alert: true  # 가격 알림
-    system_error: true  # 시스템 오류 알림
-  # 알림 방법 설정
-  methods:
-    desktop: true  # 데스크톱 알림
-    email: false  # 이메일 알림
-    # 이메일 설정 (필요시 주석 해제)
-    # email_settings:
-    #   smtp_server: "smtp.gmail.com"
-    #   smtp_port: 587
-    #   sender_email: "your-email@gmail.com"
-    #   sender_password: ""  # 앱 비밀번호 사용 권장
+# Upbit API 설정
+upbit_api:
+  base_url: "https://api.upbit.com/v1"
+  websocket_url: "wss://api.upbit.com/websocket/v1"
+  requests_per_second: 10
+  requests_per_minute: 600
+  timeout_seconds: 30
+  max_retries: 3
+  # API 키는 환경변수에서 로드: UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY
 
 # 로깅 설정
 logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  file: "logs/upbit_auto_trading.log"
-  max_size_mb: 10
-  backup_count: 5
+  file_enabled: true
+  file_path: "logs/upbit_auto_trading.log"
+  file_max_size_mb: 10
+  file_backup_count: 5
+  console_enabled: true
+  context: "development"
+  scope: "normal"
+
+# Event Bus 설정
+event_bus:
+  implementation: "in_memory"
+  worker_count: 4
+  batch_size: 10
+  batch_timeout_seconds: 1.0
+  max_queue_size: 10000
+  retry_max_attempts: 3
+  retry_delay_seconds: 1.0
+  retry_exponential_base: 2.0
+  storage_enabled: true
+  storage_cleanup_days: 7
+
+# 매매 설정
+trading:
+  max_position_size_krw: 3000000  # 최대 포지션 크기 (300만원, 기존 30% 기준)
+  min_order_amount_krw: 5000
+  max_orders_per_minute: 10
+  stop_loss_enabled: true
+  take_profit_enabled: true
+  paper_trading: true
+  allowed_markets:
+    - "KRW-BTC"
+    - "KRW-ETH"
+    - "KRW-XRP"
+  default_fee: 0.0005  # 기존 거래 수수료
+  default_slippage: 0.001  # 기존 슬리피지
+  default_risk_percent: 0.02  # 기존 위험 비율
 
 # UI 설정
 ui:
-  theme: "light"  # light, dark
-  chart_update_interval_sec: 5  # 차트 업데이트 간격 (초)
-  save_window_state: true  # 창 상태 저장 여부
+  theme: "light"
+  window_width: 1600
+  window_height: 1000
+  auto_refresh_interval_seconds: 5
+  chart_update_interval_seconds: 5  # 기존 차트 업데이트 간격 유지
+  max_chart_candles: 200
+  save_window_state: true  # 기존 설정 유지
+
+# 애플리케이션 메타정보
+app_name: "Upbit Auto Trading"
+app_version: "1.0.0"
+config_version: "1.0"
+
+# ======================================
+# 기존 설정 (향후 마이그레이션 예정)
+# ======================================
+
+# 백테스팅 설정 (향후 BacktestingConfig로 통합 예정)
+# backtesting:
+#   default_initial_capital: 10000000  # 기본 초기 자본 (1천만원)
+#   default_timeframe: "1h"  # 기본 시간대 (1시간)
+#   default_period: 90  # 기본 백테스팅 기간 (일)
+
+# 스크리닝 설정 (향후 ScreeningConfig로 통합 예정)
+# screening:
+#   default_volume_threshold: 1000000000  # 기본 거래량 임계값 (10억원)
+#   default_volatility_min: 0.05  # 기본 최소 변동성 (5%)
+#   default_volatility_max: 0.20  # 기본 최대 변동성 (20%)
+
+# 알림 설정 (향후 NotificationConfig로 통합 예정)
+# notifications:
+#   enabled: true
+#   types:
+#     trade_executed: true
+#     price_alert: true
+#     system_error: true
+#   methods:
+#     desktop: true
+#     email: false

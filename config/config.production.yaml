@@ -1,0 +1,68 @@
+# Production Environment Overrides
+# 프로덕션 환경 전용 설정 - 실운영 최적화 설정
+
+# 데이터베이스 설정 오버라이드 (안정성 중심)
+database:
+  backup_enabled: true              # 프로덕션 백업 필수
+  backup_interval_hours: 6          # 4시간마다 백업 (더 빈번한 백업)
+  connection_timeout: 60            # 안정적인 연결을 위한 긴 타임아웃
+  max_connections: 20               # 프로덕션용 충분한 연결 풀
+
+# 로깅 설정 오버라이드 (최적화)
+logging:
+  level: "INFO"                     # 운영환경 표준 로그 레벨
+  console_enabled: false            # 프로덕션에서는 콘솔 출력 비활성화
+  file_enabled: true                # 파일 로그 필수
+  file_max_size_mb: 500            # 대용량 로그 파일 허용
+  file_backup_count: 10            # 많은 백업 파일 보관
+  context: "production"             # 프로덕션 컨텍스트
+  scope: "normal"                   # 표준 로그 스코프
+
+# 매매 설정 오버라이드 (실거래 주의)
+trading:
+  paper_trading: false              # ⚠️ 주의: 실제 거래 활성화
+  max_position_size_krw: 5000000    # 프로덕션 대형 포지션 (500만원)
+  max_orders_per_minute: 5          # 안전한 주문 빈도 (API 보호)
+  min_order_amount_krw: 10000       # 프로덕션 최소 주문 금액
+
+# Upbit API 설정 오버라이드 (안정성 중심)
+upbit_api:
+  timeout_seconds: 45               # 안정적인 API 호출
+  max_retries: 5                    # 충분한 재시도
+  requests_per_second: 8            # 보수적인 API 호출 (안전 마진)
+  requests_per_minute: 400          # 보수적인 분당 요청 (안전 마진)
+
+# Event Bus 설정 오버라이드 (고성능)
+event_bus:
+  worker_count: 8                   # 프로덕션 고성능 워커
+  batch_size: 50                    # 효율적인 배치 처리
+  batch_timeout_seconds: 2.0        # 안정적인 배치 타임아웃
+  max_queue_size: 50000            # 대용량 큐
+  storage_enabled: true             # 프로덕션 스토리지 필수
+  storage_cleanup_days: 30          # 장기 데이터 보관
+  retry_max_attempts: 5             # 충분한 재시도
+
+# UI 설정 오버라이드 (성능 최적화)
+ui:
+  auto_refresh_interval_seconds: 10   # 안정적인 UI 업데이트
+  chart_update_interval_seconds: 5    # 적당한 차트 업데이트
+  max_chart_candles: 500             # 충분한 차트 데이터
+
+# 프로덕션환경 전용 설정
+production:
+  strict_validation: true           # 엄격한 검증
+  performance_monitoring: true      # 성능 모니터링 활성화
+  security_enhanced: true           # 보안 강화 모드
+  auto_recovery: true               # 자동 복구 기능
+
+# 보안 설정
+security:
+  api_key_validation_required: true  # API 키 검증 필수
+  encrypted_storage: true           # 암호화된 저장소
+  audit_logging: true               # 감사 로깅 활성화
+
+# 모니터링 설정
+monitoring:
+  health_check_interval: 300        # 5분마다 헬스체크
+  performance_metrics: true         # 성능 메트릭 수집
+  error_reporting: true             # 에러 리포팅 활성화

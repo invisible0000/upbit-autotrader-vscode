@@ -1,0 +1,56 @@
+# Testing Environment Overrides
+# 테스트 환경 전용 설정 - 격리된 테스트 환경
+
+# 데이터베이스 설정 오버라이드 (인메모리)
+database:
+  settings_db_path: ":memory:"      # 인메모리 설정 DB
+  strategies_db_path: ":memory:"    # 인메모리 전략 DB
+  market_data_db_path: ":memory:"   # 인메모리 시장데이터 DB
+  backup_enabled: false             # 테스트환경 백업 비활성화
+  connection_timeout: 5             # 빠른 테스트를 위한 짧은 타임아웃
+  max_connections: 3                # 테스트용 최소 연결
+
+# 로깅 설정 오버라이드 (최소화)
+logging:
+  level: "WARNING"                  # 테스트 노이즈 최소화
+  file_enabled: false               # 파일 로그 비활성화
+  console_enabled: false            # 콘솔 출력 비활성화 (테스트 출력 방해 방지)
+  context: "testing"                # 테스트 컨텍스트
+  scope: "minimal"                  # 최소 로그 스코프
+
+# 매매 설정 오버라이드
+trading:
+  paper_trading: true               # 반드시 모의거래
+  max_position_size_krw: 10000      # 테스트용 극소액 포지션 (1만원)
+  max_orders_per_minute: 100        # 테스트에서는 빠른 주문 허용
+  min_order_amount_krw: 1000        # 테스트용 최소 주문 금액
+
+# Upbit API 설정 오버라이드 (빠른 테스트)
+upbit_api:
+  timeout_seconds: 5                # 빠른 테스트용 타임아웃
+  max_retries: 1                    # 테스트용 최소 재시도
+  requests_per_second: 50           # 테스트용 높은 요청 허용
+  requests_per_minute: 1000         # 테스트용 높은 요청 허용
+
+# Event Bus 설정 오버라이드 (최소 리소스)
+event_bus:
+  implementation: "in_memory"       # 인메모리 구현
+  worker_count: 1                   # 테스트용 단일 워커
+  batch_size: 1                     # 즉시 처리
+  batch_timeout_seconds: 0.1        # 빠른 배치 처리
+  max_queue_size: 100               # 작은 큐 크기
+  storage_enabled: false            # 스토리지 비활성화
+  retry_max_attempts: 1             # 최소 재시도
+
+# UI 설정 오버라이드 (헤드리스 테스트)
+ui:
+  auto_refresh_interval_seconds: 0.1  # 빠른 테스트
+  chart_update_interval_seconds: 0.1  # 빠른 테스트
+  max_chart_candles: 10              # 테스트용 최소 캔들
+
+# 테스트환경 전용 설정
+testing:
+  headless_mode: true               # 헤드리스 모드
+  fast_execution: true              # 빠른 실행 모드
+  mock_external_apis: true          # 외부 API 모킹
+  isolated_environment: true        # 격리된 환경

@@ -1,0 +1,39 @@
+# Development Environment Overrides
+# 개발 환경 전용 설정 - 디버깅 친화적 설정
+
+# 데이터베이스 설정 오버라이드
+database:
+  backup_enabled: false           # 개발환경에서는 백업 비활성화
+  connection_timeout: 10          # 빠른 디버깅을 위한 짧은 타임아웃
+  backup_interval_hours: 0        # 백업 비활성화
+
+# 로깅 설정 오버라이드
+logging:
+  level: "DEBUG"                  # 상세한 디버그 로그
+  console_enabled: true           # 콘솔 출력 활성화
+  file_max_size_mb: 50           # 개발환경에서는 작은 로그 파일
+  context: "development"          # 개발 컨텍스트
+  scope: "verbose"               # 상세 로그 스코프
+
+# 매매 설정 오버라이드
+trading:
+  paper_trading: true             # 반드시 모의거래
+  max_position_size_krw: 100000   # 개발환경 소액 포지션 (10만원)
+  max_orders_per_minute: 30       # 개발환경에서는 빠른 테스트 허용
+
+# Event Bus 설정 오버라이드
+event_bus:
+  worker_count: 2                 # 개발환경 최소 워커
+  storage_cleanup_days: 1         # 빠른 정리로 디스크 절약
+  batch_size: 5                   # 작은 배치 크기로 빠른 반응
+
+# UI 설정 오버라이드
+ui:
+  auto_refresh_interval_seconds: 2  # 빠른 UI 업데이트
+  chart_update_interval_seconds: 0.5  # 실시간에 가까운 차트 업데이트
+
+# 개발환경 전용 설정
+development:
+  enable_debug_features: true     # 디버그 기능 활성화
+  show_detailed_errors: true      # 상세 에러 표시
+  auto_reload_config: true        # 설정 파일 자동 리로드
