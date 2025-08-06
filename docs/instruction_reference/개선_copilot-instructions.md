@@ -1,4 +1,11 @@
-# 🤖 DDD 기반 업비트 자동매매 시스템 개발 시 반드시 지켜야 할 핵심 규칙
+# 🤖 LLM 에이전트 개발 지침
+
+> **목적**: DDD 기반 업비트 자동매매 시스템 개발 시 반드시 지켜야 할 핵심 규칙과 금지사항
+> **대상**: LLM 에이전트
+> **갱신**: 2025-08-06
+> **문서길이**: 토큰 최적화를 위한 240줄 이내 구성
+
+---
 
 ## 🚨 작업 중 꼭 지켜야 할 내용
 
@@ -22,16 +29,17 @@ $env:VAR = "value"           # 환경 변수
 - `data/strategies.sqlite3`: 사용자 전략, 백테스팅 결과
 - `data/market_data.sqlite3`: 시장 데이터, 지표 캐시
 
-#### Infrastructure 로깅 시스템 (필수 사용)
+#### Infrastructure 스마트 로깅 v4.0 (필수 사용)
 ```python
-# 표준 로깅 사용법
-from upbit_auto_trading.infrastructure.logging import create_component_logger
-logger = create_component_logger("ComponentName")
+# v4.0 Enhanced Logging (권장 - 자동 LLM 브리핑)
+from upbit_auto_trading.infrastructure.logging import get_enhanced_logging_service
+logging_service = get_enhanced_logging_service()
+logger = logging_service.get_logger("ComponentName")
 
 # 환경변수 제어
-$env:UPBIT_CONSOLE_OUTPUT='true'           # 콘솔 출력
-$env:UPBIT_LOG_SCOPE='verbose'             # 로그 레벨 제어
-$env:UPBIT_COMPONENT_FOCUS='ComponentName' # 특정 컴포넌트 집중
+$env:UPBIT_LLM_BRIEFING_ENABLED='true'     # 자동 LLM 브리핑
+$env:UPBIT_AUTO_DIAGNOSIS='true'           # 자동 문제 감지
+$env:UPBIT_CONSOLE_OUTPUT='true'           # 실시간 출력
 ```
 
 ### 2. DDD 아키텍처 준수
@@ -142,12 +150,12 @@ grep pattern file
 #### 작업 전 필수 확인
 1. **기존 코드 분석**: 새 코드 작성 전 기존 코드베이스 충분히 분석
 2. **DB 상태 확인**: 제공된 도구로 현재 DB 상태 파악
-3. **Infrastructure 로깅**: 표준 로깅 시스템으로 실시간 모니터링
+3. **Infrastructure 로깅**: 스마트 로깅 v4.0으로 실시간 모니터링
 
 #### 개발 중 실시간 확인
 ```python
 # Infrastructure 로깅으로 진행상황 추적
-logger = create_component_logger("Development")
+logger = get_enhanced_logging_service().get_logger("Development")
 logger.info("개발 단계 시작")
 logger.debug("상세 진행상황")  # 자동 필터링으로 제어됨
 ```
@@ -196,25 +204,6 @@ def test_strategy_creation():
     assert strategy.validate()
     assert len(strategy.rules) == 7
 ```
-### 5. 최종 체크리스트 및 알림
-
-#### 코드 생성 전 확인 사항:
--   [ ] **TASK 체크박스:** 작업 시작 시 `[ ]` → `[-]` 마킹했는가?
--   [ ] **코드박스 삭제:** 해당 단계의 예시 코드박스를 모두 삭제했는가?
--   [ ] **접근 전략:** 코드 작성 전 `🧠 접근 전략` 템플릿으로 계획을 제시했는가?
--   [ ] **기존 코드 분석:** 새 코드 작성 전 기존 코드베이스를 충분히 분석했는가?
--   [ ] **환경:** 내 명령어들이 PowerShell 구문인가?
--   [ ] **아키텍처:** 컴포넌트 기반 설계를 존중하고 있는가?
--   [ ] **데이터베이스:** 표준 경로와 연결 패턴을 사용하고 있는가?
--   [ ] **보안:** API 키는 환경 변수로 처리되는가? SQL 인젝션을 방지하고 있는가?
--   [ ] **로깅:** Infrastructure Layer 로깅 시스템을 사용하고 있는가?
--   [ ] **테스트:** 내 기능에 대한 `pytest` 테스트를 포함하고 있는가?
--   [ ] **작업 로그:** 완료 후 `📌 작업 로그` 템플릿으로 상세 기록할 예정인가?
--   [ ] **체크박스 완료:** 작업 완료 후 `[-]` → `[X]` 마킹할 예정인가?
--   [ ] **호환성:** 변수 호환성 규칙을 강제하고 있는가?
--   [ ] **자가 수정:** 내 초안에서 최소 3가지 약점을 식별하고 수정했는가?
-
-**모든 개발 작업의 최종 행동은 `python run_desktop_ui.py`를 실행하여 무결성을 검증하는 것입니다.**
 
 ---
 
@@ -238,7 +227,8 @@ def test_strategy_creation():
 - **ERROR_HANDLING_POLICY**: 에러 처리 정책
 - **DB_SCHEMA**: 데이터베이스 스키마 명세
 - **UI_DESIGN_SYSTEM**: UI 디자인 시스템
-- **LOGGING_REFACTORING_COMPLETE_REPORT**: 로깅 시스템 가이드
+- **ENHANCED_LOGGING_USER_GUIDE**: 로깅 v4.0 사용자 가이드
+- **ENHANCED_LOGGING_DEVELOPER_GUIDE**: 로깅 v4.0 개발자 가이드
 - **CONTRIBUTING**: 기여 가이드
 - **LLM_AGENT_TASK_GUIDELINES**: LLM 에이전트 TASK 작업 가이드
 

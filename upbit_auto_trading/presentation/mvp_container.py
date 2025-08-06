@@ -12,9 +12,13 @@ from upbit_auto_trading.presentation.presenters import (
     StrategyMakerPresenter,
     TriggerBuilderPresenter,
     BacktestPresenter,
-    SettingsPresenter,
-    LiveTradingPresenter
+    SettingsPresenter
 )
+
+# Smart Logging v3.0
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+
+# TODO: LiveTradingPresenter 구현 후 추가
 
 
 class MVPContainer:
@@ -102,25 +106,26 @@ class MVPContainer:
 
         return self._presenters["settings"]
 
-    def create_live_trading_presenter(self) -> LiveTradingPresenter:
-        """실시간 거래 Presenter 생성
-
-        Returns:
-            LiveTradingPresenter: 실시간 거래 Presenter
-        """
-        if "live_trading" not in self._presenters:
-            # 실시간 거래 관련 서비스들
-            # (실제 구현에 따라 조정 필요)
-            trading_service = None  # TODO: 실시간 거래 서비스 구현 후 연결
-            market_service = None   # TODO: 시장 데이터 서비스 구현 후 연결
-
-            self._presenters["live_trading"] = lambda view: LiveTradingPresenter(
-                view=view,
-                trading_service=trading_service,
-                market_service=market_service
-            )
-
-        return self._presenters["live_trading"]
+    # TODO: LiveTradingPresenter 구현 후 활성화
+    # def create_live_trading_presenter(self) -> LiveTradingPresenter:
+    #     """실시간 거래 Presenter 생성
+    #
+    #     Returns:
+    #         LiveTradingPresenter: 실시간 거래 Presenter
+    #     """
+    #     if "live_trading" not in self._presenters:
+    #         # 실시간 거래 관련 서비스들
+    #         # (실제 구현에 따라 조정 필요)
+    #         trading_service = None  # TODO: 실시간 거래 서비스 구현 후 연결
+    #         market_service = None   # TODO: 시장 데이터 서비스 구현 후 연결
+    #
+    #         self._presenters["live_trading"] = lambda view: LiveTradingPresenter(
+    #             view=view,
+    #             trading_service=trading_service,
+    #             market_service=market_service
+    #         )
+    #
+    #     return self._presenters["live_trading"]
 
     def create_strategy_maker_mvp(self):
         """전략 메이커 MVP 조합 생성
@@ -152,6 +157,42 @@ class MVPContainer:
             return temp_presenter, view
 
         return create_mvp_pair()
+
+    def create_settings_mvp(self, settings_service=None):
+        """설정 MVP 조합 생성
+
+        Presenter와 View를 연결한 완전한 Settings MVP 구조를 반환합니다.
+
+        Args:
+            settings_service: 외부에서 주입된 SettingsService (옵션)
+
+        Returns:
+            tuple: (view, presenter) 튜플 - view가 MainWindow에서 사용될 QWidget
+        """
+        from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
+        from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
+
+        # Settings Service 사용 (외부에서 주입받거나 직접 생성)
+        if settings_service is None:
+            # 폴백: Infrastructure Layer에서 직접 생성
+            try:
+                from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
+                from upbit_auto_trading.infrastructure.config.config_loader import ConfigLoader
+                config_loader = ConfigLoader()
+                settings_service = SettingsService(config_loader)
+            except Exception:
+                settings_service = None
+
+        # View 생성 (QWidget)
+        settings_view = SettingsScreen(settings_service=settings_service)
+
+        # Presenter 생성 (View와 연결)
+        settings_presenter = SettingsPresenter(
+            view=settings_view,  # ISettingsView 인터페이스로 전달
+            settings_service=settings_service
+        )
+
+        return settings_view, settings_presenter
 
     def clear_cache(self) -> None:
         """Presenter 캐시 초기화"""

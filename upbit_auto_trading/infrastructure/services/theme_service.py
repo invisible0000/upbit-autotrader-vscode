@@ -4,44 +4,38 @@
 Configuration Management와 StyleManager를 연결하여
 Infrastructure Layer 기반 테마 관리를 제공합니다.
 """
-from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Protocol
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService
 from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
 
 
-class IThemeService(ABC):
-    """테마 서비스 인터페이스"""
+class IThemeService(Protocol):
+    """테마 서비스 인터페이스 (Protocol 사용으로 메타클래스 충돌 해결)"""
 
-    @abstractmethod
     def get_current_theme(self) -> str:
         """현재 테마 반환"""
-        pass
+        ...
 
-    @abstractmethod
     def set_theme(self, theme: str) -> bool:
         """테마 설정 및 즉시 적용"""
-        pass
+        ...
 
-    @abstractmethod
     def toggle_theme(self) -> str:
         """테마 전환 및 즉시 적용"""
-        pass
+        ...
 
-    @abstractmethod
     def apply_current_theme(self) -> bool:
         """현재 설정된 테마 적용"""
-        pass
+        ...
 
-    @abstractmethod
     def connect_theme_changed(self, callback) -> bool:
         """테마 변경 시그널 연결"""
-        pass
+        ...
 
 
-class ThemeService(QObject, IThemeService):
+class ThemeService(QObject):
     """테마 서비스 구현체 (Infrastructure Layer 기반)"""
 
     # 테마 변경 시그널
@@ -143,8 +137,8 @@ class ThemeService(QObject, IThemeService):
             print(f"⚠️ ThemeService: theme_notifier 알림 실패 - {e}")
 
 
-class MockThemeService(IThemeService):
-    """Mock 테마 서비스 (테스트용)"""
+class MockThemeService:
+    """Mock 테마 서비스 (테스트용) - 메타클래스 충돌 없음"""
 
     def __init__(self):
         self._current_theme = "light"

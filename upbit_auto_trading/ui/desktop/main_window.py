@@ -6,6 +6,7 @@ import os
 import json
 import sqlite3
 import gc
+import traceback
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QMessageBox, QApplication, QLabel
@@ -126,14 +127,38 @@ class MainWindow(QMainWindow):
             self._log_warning(f"⚠️ MVP 시스템 초기화 실패: {e}")
 
         # SettingsService 주입 (DI Container 기반 또는 기존 방식)
+        self._log_info("🔧 SettingsService 주입 시작...")
         self.settings_service = None
         if self.di_container:
+            self._log_info("🔧 DI Container 존재 확인 완료")
             try:
                 from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService
+                self._log_info("🔧 ISettingsService import 성공")
+
+                # DI Container에 등록되어 있는지 확인
+                is_registered = self.di_container.is_registered(ISettingsService)
+                self._log_info(f"🔧 ISettingsService 등록 상태: {is_registered}")
+
+                # DI Container 자체 확인
+                container_type = type(self.di_container).__name__
+                self._log_info(f"🔧 DI Container 타입: {container_type}")
+
+                # resolve 시도 전 로그
+                self._log_info("🔧 SettingsService resolve 시도 중...")
                 self.settings_service = self.di_container.resolve(ISettingsService)
-                self._log_info("✅ SettingsService DI 주입 성공")
+
+                if self.settings_service is not None:
+                    self._log_info(f"✅ SettingsService DI 주입 성공: {type(self.settings_service).__name__}")
+                else:
+                    self._log_error("❌ SettingsService resolve 결과가 None")
+
             except Exception as e:
-                self._log_warning(f"⚠️ SettingsService DI 주입 실패, QSettings 사용: {e}")
+                self._log_error(f"❌ SettingsService DI 주입 실패: {e}")
+                self._log_error(f"❌ Exception 타입: {type(e).__name__}")
+                # 예외 스택 트레이스 로그
+                self._log_debug(f"📊 SettingsService 주입 실패 상세: {traceback.format_exc()}")
+        else:
+            self._log_warning("⚠️ DI Container가 None - SettingsService 주입 불가")
 
         # ThemeService 주입 (Infrastructure Layer 기반)
         self.theme_service = None
@@ -541,11 +566,34 @@ class MainWindow(QMainWindow):
                 screen = MonitoringAlertsScreen()
 
             elif screen_name == "설정":
-                from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                # SettingsService 주입 (DI Container 기반)
-                screen = SettingsScreen(settings_service=self.settings_service)
-                self._log_info("SettingsScreen에 SettingsService 주입 완료")
-                self._log_llm_report("IL", "SettingsScreen 생성 - SettingsService DI 주입")
+                # MVP 패턴 적용 (TASK-13: Settings MVP 구현)
+                if self.mvp_container:
+                    try:
+                        # MVP Container를 통해 Settings Presenter와 View 생성
+                        # SettingsService를 직접 전달
+                        settings_view, settings_presenter = self.mvp_container.create_settings_mvp(
+                            settings_service=self.settings_service
+                        )
+                        screen = settings_view  # View가 실제 QWidget
+
+                        # Presenter 초기 설정 로드
+                        settings_presenter.load_initial_settings()
+
+                        self._log_info("✅ Settings MVP 패턴 생성 완료")
+                        self._log_llm_report("IL", "Settings MVP 패턴 적용 성공")
+                    except Exception as e:
+                        self._log_error(f"❌ Settings MVP 생성 실패: {e}")
+                        self._log_llm_report("IL", f"Settings MVP 실패: {type(e).__name__}")
+                        # 폴백: 기존 방식
+                        from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
+                        screen = SettingsScreen(settings_service=self.settings_service)
+                        self._log_warning("⚠️ Settings 기존 방식으로 폴백")
+                else:
+                    # MVP Container가 없으면 기존 방식
+                    from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
+                    screen = SettingsScreen(settings_service=self.settings_service)
+                    self._log_info("SettingsScreen에 SettingsService 주입 완료 (기존 방식)")
+                    self._log_llm_report("IL", "SettingsScreen 기존 방식 생성")
 
                 # 설정 변경 시그널 연결 (테마 변경 즉시 반영)
                 if hasattr(screen, 'settings_changed'):
@@ -553,6 +601,13 @@ class MainWindow(QMainWindow):
                     self._log_info("SettingsScreen settings_changed 시그널 연결 완료")
                 else:
                     self._log_warning("SettingsScreen에 settings_changed 시그널이 없습니다")
+
+                # 테마 변경 시그널 연결 (즉시 반영용)
+                if hasattr(screen, 'theme_changed'):
+                    screen.theme_changed.connect(self._on_theme_changed_from_ui_settings)
+                    self._log_info("SettingsScreen theme_changed 시그널 연결 완료")
+                else:
+                    self._log_warning("SettingsScreen에 theme_changed 시그널이 없습니다")
 
                 # API 상태 변경 시그널 연결
                 if hasattr(screen, 'api_status_changed'):
@@ -667,6 +722,49 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_warning(f"설정 변경 테마 알림 실패: {e}")
             self._log_llm_report("IL", f"설정 변경 테마 알림 실패: {type(e).__name__}")
+
+    def _on_theme_changed_from_ui_settings(self, theme_name: str):
+        """UI 설정에서 테마 변경 시그널을 받았을 때 처리"""
+        self._log_info(f"🎨 UI 설정에서 테마 변경 시그널 수신: {theme_name}")
+        self._log_llm_report("IL", f"UI 설정 테마 변경 수신: {theme_name}")
+
+        # ThemeService 상태 확인
+        if self.theme_service:
+            self._log_info(f"✅ ThemeService 사용 가능: {type(self.theme_service).__name__}")
+            try:
+                current_theme = self.theme_service.get_current_theme()
+                self._log_info(f"🔍 현재 테마: {current_theme} → 변경 요청: {theme_name}")
+
+                success = self.theme_service.set_theme(theme_name)
+                if success:
+                    new_theme = self.theme_service.get_current_theme()
+                    self._log_info(f"✅ ThemeService를 통한 테마 적용 완료: {new_theme}")
+                    self._log_llm_report("IL", f"테마 적용 성공: {current_theme} → {new_theme}")
+                else:
+                    self._log_warning(f"❌ ThemeService 테마 적용 실패: {theme_name}")
+                    self._log_llm_report("IL", f"테마 적용 실패: {theme_name}")
+            except Exception as e:
+                self._log_warning(f"❌ ThemeService 테마 적용 중 오류: {e}")
+                self._log_llm_report("IL", f"테마 적용 오류: {type(e).__name__}")
+        else:
+            # ThemeService가 없으면 기존 방식으로 폴백
+            self._log_warning("⚠️ ThemeService가 None - 기존 방식으로 테마 적용")
+            self._log_llm_report("IL", "ThemeService 없음, 기존 방식 폴백")
+            self._load_theme()
+
+        # 네비게이션 바 스타일 강제 업데이트
+        if hasattr(self, 'nav_bar') and self.nav_bar:
+            self.nav_bar.update()
+            self.nav_bar.repaint()
+            self._log_info("🔄 네비게이션 바 스타일 강제 업데이트 완료")
+
+        # 메인 윈도우 전체 업데이트
+        self.update()
+        self.repaint()
+        self._log_info("🔄 메인 윈도우 전체 업데이트 완료")
+        if hasattr(self, 'nav_bar') and self.nav_bar:
+            self.nav_bar.update()
+            self.nav_bar.repaint()
 
     def _load_theme(self):
         """저장된 테마 로드 (ThemeService 우선, 실패 시 기존 방식)"""

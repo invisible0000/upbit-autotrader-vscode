@@ -7,6 +7,7 @@
 - 알림 설정
 """
 
+# 메인 설정 화면 (MVP 패턴 적용)
 from .settings_screen import SettingsScreen
 from .api_key_manager_secure import ApiKeyManagerSecure as ApiKeyManager
 from .database_settings import DatabaseSettings

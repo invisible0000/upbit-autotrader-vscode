@@ -91,13 +91,47 @@ def register_ui_services(app_context: ApplicationContext):
     try:
         container = app_context.container
 
-        # Infrastructure 통합 로깅 시스템 사용 (새로운 방식)
+        # Infrastructure 통합 로깅 시스템 사용 + Enhanced v4.0 활성화
         print("🔧 Infrastructure 통합 로깅 시스템 연계...")
         try:
-            # ApplicationContext에서 이미 등록된 ILoggingService 활용
-            from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import ILoggingService
-            logging_service = container.resolve(ILoggingService)
-            print("✅ Infrastructure 통합 로깅 시스템 연계 완료")
+            # Enhanced Logging Service v4.0 활성화 시도
+            try:
+                from upbit_auto_trading.infrastructure.logging.services.enhanced_logging_service import EnhancedLoggingService
+                from upbit_auto_trading.infrastructure.logging.configuration.enhanced_config import EnhancedLoggingConfig
+
+                # Enhanced Config 생성
+                enhanced_config = EnhancedLoggingConfig.from_environment()
+                enhanced_service = EnhancedLoggingService(enhanced_config)
+
+                print("🚀 Enhanced Logging Service v4.0 활성화됨")
+
+                # DI Container에 Enhanced Service 등록
+                from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import ILoggingService
+                container.register_singleton(ILoggingService, enhanced_service)
+
+                # SystemStatusTracker로 상태 보고
+                try:
+                    from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
+                    tracker = SystemStatusTracker()
+                    tracker.update_component_status(
+                        "EnhancedLoggingService",
+                        "OK",
+                        "Enhanced Logging v4.0 시스템 활성화됨",
+                        version="4.0",
+                        features_enabled=["briefing", "dashboard", "performance"]
+                    )
+                    print("📊 SystemStatusTracker에 Enhanced Logging 상태 보고 완료")
+                except Exception as tracker_e:
+                    print(f"⚠️ SystemStatusTracker 연동 실패: {tracker_e}")
+
+                print("✅ Infrastructure Enhanced Logging v4.0 시스템 연계 완료")
+
+            except ImportError as enhanced_e:
+                print(f"⚠️ Enhanced Logging v4.0 모듈 없음, 기본 Infrastructure 로깅 사용: {enhanced_e}")
+                # ApplicationContext에서 이미 등록된 ILoggingService 활용
+                from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import ILoggingService
+                logging_service = container.resolve(ILoggingService)
+                print("✅ Infrastructure 기본 로깅 시스템 연계 완료")
 
             # 기존 LoggerFactory 호환성을 위한 추가 등록
             from upbit_auto_trading.logging import LoggerFactory
@@ -207,6 +241,26 @@ def setup_application() -> tuple[QApplication, ApplicationContext]:
     # 2. UI 서비스 등록
     register_ui_services(app_context)
 
+    # 3. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
+    try:
+        from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
+        from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+
+        # Repository Container 생성
+        repository_container = RepositoryContainer()
+
+        # Application Service Container 생성
+        app_service_container = ApplicationServiceContainer(repository_container)
+
+        # 전역 Application Container 설정
+        set_application_container(app_service_container)
+
+        print("✅ Application Service Container 초기화 완료")
+    except Exception as e:
+        print(f"⚠️ Application Service Container 초기화 실패: {e}")
+        print(f"   상세: {type(e).__name__}: {str(e)}")
+        # Mock Container로 폴백 (나중에 구현 가능)
+
     return app, app_context
 
 
@@ -226,6 +280,17 @@ def run_application() -> int:
         main_window.show()
 
         print("✅ 애플리케이션 시작됨 (Infrastructure Layer 기반)")
+
+        # Enhanced Logging v4.0 Dashboard 업데이트
+        try:
+            from upbit_auto_trading.infrastructure.logging.dashboard.dashboard_service import DashboardService
+            dashboard_service = DashboardService()
+            dashboard_data = dashboard_service.update_dashboard([
+                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - MainApp - INFO - 애플리케이션 시작됨 (Infrastructure Layer v4.0 기반)"
+            ])
+            print("✅ Dashboard updated: logs/llm_agent_dashboard.json")
+        except Exception as dashboard_e:
+            print(f"⚠️ Dashboard 업데이트 실패: {dashboard_e}")
 
         # 애플리케이션 이벤트 루프 시작
         exit_code = app.exec()
