@@ -100,16 +100,30 @@ class MainWindow(QMainWindow):
         # DI Container 저장
         self.di_container = di_container
 
-        # IL 스마트 로깅 초기화
+        # IL 스마트 로깅 초기화 (먼저 초기화)
         self.logger = None
-        if self.di_container:
-            try:
-                from upbit_auto_trading.infrastructure.logging import create_component_logger
-                self.logger = create_component_logger("MainWindow")
-                self.logger.info("🎯 MainWindow IL 스마트 로깅 초기화 완료")
-            except Exception as e:
-                # 폴백: print로 출력하되 로거는 None 유지
-                print(f"⚠️ IL 스마트 로깅 초기화 실패, print 폴백: {e}")
+        try:
+            from upbit_auto_trading.infrastructure.logging import create_component_logger
+            self.logger = create_component_logger("MainWindow")
+            self.logger.info("🎯 MainWindow IL 스마트 로깅 초기화 완료")
+        except Exception as e:
+            # 폴백: print로 출력하되 로거는 None 유지
+            print(f"⚠️ IL 스마트 로깅 초기화 실패, print 폴백: {e}")
+
+        # MVP Container 초기화 (TASK-13: MVP 패턴 적용)
+        self.mvp_container = None
+        try:
+            from upbit_auto_trading.presentation.mvp_container import initialize_mvp_system
+            from upbit_auto_trading.application.container import get_application_container
+
+            app_container = get_application_container()
+            if app_container:
+                self.mvp_container = initialize_mvp_system(app_container)
+                self._log_info("✅ MVP 시스템 초기화 완료")
+            else:
+                self._log_warning("⚠️ Application Container를 찾을 수 없음")
+        except Exception as e:
+            self._log_warning(f"⚠️ MVP 시스템 초기화 실패: {e}")
 
         # SettingsService 주입 (DI Container 기반 또는 기존 방식)
         self.settings_service = None
@@ -483,9 +497,26 @@ class MainWindow(QMainWindow):
                 screen = AssetScreenerScreen()
 
             elif screen_name == "매매전략 관리":
-                # 컴포넌트 기반 전략 관리 화면 사용
-                from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
-                screen = StrategyManagementScreen()
+                # MVP 패턴 기반 전략 관리 화면 사용 (TASK-13)
+                if self.mvp_container:
+                    try:
+                        # MVP 패턴으로 전략 관리 화면 생성
+                        presenter, view = self.mvp_container.create_strategy_maker_mvp()
+                        screen = view
+                        self._log_info("✅ MVP 패턴 전략 관리 화면 생성 완료")
+                        self._log_llm_report("MVP", "전략관리 화면 MVP 패턴 적용 성공")
+                    except Exception as e:
+                        self._log_warning(f"⚠️ MVP 패턴 전략 관리 화면 생성 실패, 기존 방식 사용: {e}")
+                        # 폴백: 기존 전략 관리 화면 사용
+                        from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
+                        screen = StrategyManagementScreen()
+                        self._log_llm_report("MVP", f"전략관리 MVP 폴백: {type(e).__name__}")
+                else:
+                    # MVP Container가 없으면 기존 방식 사용
+                    from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
+                    screen = StrategyManagementScreen()
+                    self._log_info("MVP Container 없음, 기존 전략 관리 화면 사용")
+
                 # 백테스팅 요청 시그널 연결 (시그널이 있는 경우)
                 if hasattr(screen, 'backtest_requested'):
                     screen.backtest_requested.connect(self._on_backtest_requested)

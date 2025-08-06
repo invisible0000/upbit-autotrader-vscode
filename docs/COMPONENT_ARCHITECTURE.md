@@ -88,7 +88,7 @@ upbit_auto_trading/domain/
 ### 4. Infrastructure Layer
 ```
 upbit_auto_trading/infrastructure/
-├── logging/                    # 스마트 로깅 시스템 v3.0 (핵심 인프라)
+├── logging/                    # 스마트 로깅 시스템 v4.0 (핵심 인프라)
 │   ├── __init__.py             # 통합 진입점
 │   ├── interfaces/
 │   │   └── logging_interface.py # ILoggingService 인터페이스
