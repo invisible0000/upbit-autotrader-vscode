@@ -150,6 +150,29 @@ def register_ui_services(app_context: ApplicationContext):
         except ImportError as e:
             print(f"⚠️ StyleManager 로드 실패: {e}")
 
+        # ThemeService 등록 (Infrastructure Layer 기반)
+        print("🔧 ThemeService 등록 시작...")
+        try:
+            from upbit_auto_trading.infrastructure.services.theme_service import IThemeService, ThemeService
+            print("🔧 ThemeService 클래스 import 성공")
+            settings_service_instance = container.resolve(ISettingsService)
+            style_manager_instance = container.resolve(StyleManager)
+            print("🔧 SettingsService 및 StyleManager 의존성 해결 성공")
+            theme_service = ThemeService(settings_service_instance, style_manager_instance)
+            print("🔧 ThemeService 인스턴스 생성 성공")
+            container.register_singleton(IThemeService, theme_service)
+            print("✅ ThemeService 등록 완료")
+        except Exception as e:
+            print(f"⚠️ ThemeService 등록 실패: {e}")
+            print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+            # MockThemeService로 폴백
+            try:
+                from upbit_auto_trading.infrastructure.services.theme_service import IThemeService, MockThemeService
+                container.register_singleton(IThemeService, MockThemeService())
+                print("✅ MockThemeService 폴백 등록 완료")
+            except Exception as e2:
+                print(f"⚠️ MockThemeService 폴백도 실패: {e2}")
+
         # NavigationBar 등록
         try:
             from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar

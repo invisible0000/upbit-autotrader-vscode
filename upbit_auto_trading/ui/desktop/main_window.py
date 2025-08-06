@@ -121,6 +121,20 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self._log_warning(f"⚠️ SettingsService DI 주입 실패, QSettings 사용: {e}")
 
+        # ThemeService 주입 (Infrastructure Layer 기반)
+        self.theme_service = None
+        if self.di_container:
+            try:
+                from upbit_auto_trading.infrastructure.services.theme_service import IThemeService
+                self.theme_service = self.di_container.resolve(IThemeService)
+                self._log_info("✅ ThemeService DI 주입 성공")
+                # 테마 변경 시그널 연결
+                self.theme_service.connect_theme_changed(self._on_theme_changed_from_service)
+                self._log_llm_report("IL", "ThemeService DI 주입 및 시그널 연결 완료")
+            except Exception as e:
+                self._log_warning(f"⚠️ ThemeService DI 주입 실패, 기존 방식 사용: {e}")
+                self._log_llm_report("IL", f"ThemeService DI 실패: {type(e).__name__}")
+
         # 화면 캐시 (지연 로딩용)
         self._screen_cache = {}
         self._screen_widgets = {}
@@ -254,6 +268,61 @@ class MainWindow(QMainWindow):
 
         # 메뉴 바 설정
         self._setup_menu_bar()
+
+        # 저장된 창 상태 로드 (설정 서비스 기반)
+        self._load_window_state()
+
+    def _load_window_state(self):
+        """저장된 창 크기/위치 로드 (SettingsService 우선, 실패 시 QSettings 폴백)"""
+        if self.settings_service:
+            try:
+                window_state = self.settings_service.load_window_state()
+                if window_state:
+                    # 창 크기 설정
+                    if 'width' in window_state and 'height' in window_state:
+                        self.resize(window_state['width'], window_state['height'])
+                        self._log_info(f"SettingsService에서 창 크기 로드: {window_state['width']}x{window_state['height']}")
+
+                    # 창 위치 설정
+                    if 'x' in window_state and 'y' in window_state:
+                        self.move(window_state['x'], window_state['y'])
+                        self._log_info(f"SettingsService에서 창 위치 로드: ({window_state['x']}, {window_state['y']})")
+
+                    # 최대화 상태 설정
+                    if window_state.get('maximized', False):
+                        self.showMaximized()
+                        self._log_info("SettingsService에서 창 최대화 상태 로드")
+
+                    self._log_llm_report("IL", f"창 상태 로드 성공: {window_state}")
+                    return
+                else:
+                    self._log_info("SettingsService에 저장된 창 상태 없음, 기본값 사용")
+            except Exception as e:
+                self._log_warning(f"SettingsService 창 상태 로드 실패, QSettings 사용: {e}")
+                self._log_llm_report("IL", f"SettingsService 창 상태 로드 실패: {type(e).__name__}")
+
+        # 폴백: QSettings 사용
+        try:
+            settings = QSettings("UpbitAutoTrading", "MainWindow")
+
+            # 창 크기 복원
+            size = settings.value("size")
+            if size:
+                self.resize(size)
+                self._log_info(f"QSettings에서 창 크기 로드: {size.width()}x{size.height()}")
+
+            # 창 위치 복원
+            position = settings.value("position")
+            if position:
+                self.move(position)
+                self._log_info(f"QSettings에서 창 위치 로드: ({position.x()}, {position.y()})")
+
+            self._log_llm_report("IL", "QSettings 창 상태 로드 완료")
+        except Exception as e:
+            self._log_warning(f"QSettings 창 상태 로드 실패, 기본값 사용: {e}")
+            # 기본 창 크기/위치 설정
+            self.resize(1600, 1000)
+            self._log_llm_report("IL", "기본 창 상태 사용")
 
     def _setup_menu_bar(self):
         """메뉴 바 설정"""
@@ -442,7 +511,18 @@ class MainWindow(QMainWindow):
 
             elif screen_name == "설정":
                 from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                screen = SettingsScreen()
+                # SettingsService 주입 (DI Container 기반)
+                screen = SettingsScreen(settings_service=self.settings_service)
+                self._log_info("SettingsScreen에 SettingsService 주입 완료")
+                self._log_llm_report("IL", "SettingsScreen 생성 - SettingsService DI 주입")
+
+                # 설정 변경 시그널 연결 (테마 변경 즉시 반영)
+                if hasattr(screen, 'settings_changed'):
+                    screen.settings_changed.connect(self._on_settings_changed_from_screen)
+                    self._log_info("SettingsScreen settings_changed 시그널 연결 완료")
+                else:
+                    self._log_warning("SettingsScreen에 settings_changed 시그널이 없습니다")
+
                 # API 상태 변경 시그널 연결
                 if hasattr(screen, 'api_status_changed'):
                     screen.api_status_changed.connect(self._on_api_status_changed)
@@ -481,7 +561,23 @@ class MainWindow(QMainWindow):
             self._screen_widgets[screen_name] = screen
 
     def _toggle_theme(self):
-        """테마 전환"""
+        """테마 전환 (ThemeService 우선, 실패 시 기존 방식)"""
+        if self.theme_service:
+            try:
+                # ThemeService를 통한 테마 전환
+                new_theme = self.theme_service.toggle_theme()
+                self._log_info(f"ThemeService를 통한 테마 전환 완료: {new_theme}")
+                self._log_llm_report("IL", f"테마 전환 성공: {new_theme}")
+
+                # 네비게이션 바 스타일 강제 업데이트
+                self.nav_bar.update()
+                self.nav_bar.repaint()
+                return
+            except Exception as e:
+                self._log_warning(f"ThemeService 테마 전환 실패, 기존 방식 사용: {e}")
+                self._log_llm_report("IL", f"ThemeService 테마 전환 실패: {type(e).__name__}")
+
+        # 기존 방식 (폴백)
         self.style_manager.toggle_theme()
         # 네비게이션 바 스타일 강제 업데이트
         self.nav_bar.update()
@@ -498,8 +594,64 @@ class MainWindow(QMainWindow):
             self._log_warning(f"테마 변경 알림 실패: {e}")
             self._log_llm_report("IL", f"테마 변경 알림 실패: {type(e).__name__}")
 
+    def _on_theme_changed_from_service(self, theme_name: str):
+        """ThemeService에서 테마 변경 시그널을 받았을 때 처리"""
+        self._log_info(f"ThemeService에서 테마 변경 시그널 수신: {theme_name}")
+        self._log_llm_report("IL", f"테마 변경 시그널 수신: {theme_name}")
+
+        # 네비게이션 바 스타일 강제 업데이트
+        if hasattr(self, 'nav_bar') and self.nav_bar:
+            self.nav_bar.update()
+            self.nav_bar.repaint()
+
+        # 전역 테마 변경 알림 발송 (기존 컴포넌트와의 호환성)
+        try:
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import get_theme_notifier
+            theme_notifier = get_theme_notifier()
+            theme_notifier.notify_theme_changed()
+            self._log_info("기존 theme_notifier를 통한 알림 발송 완료")
+        except Exception as e:
+            self._log_warning(f"기존 테마 변경 알림 실패: {e}")
+            self._log_llm_report("IL", f"기존 테마 변경 알림 실패: {type(e).__name__}")
+
+    def _on_settings_changed_from_screen(self):
+        """설정 화면에서 설정 변경 시그널을 받았을 때 처리 (테마 변경 등)"""
+        self._log_info("설정 화면에서 설정 변경 시그널 수신")
+        self._log_llm_report("IL", "설정 변경 시그널 수신")
+
+        # 테마가 변경되었을 수 있으므로 다시 로드
+        self._load_theme()
+
+        # 네비게이션 바 스타일 강제 업데이트
+        if hasattr(self, 'nav_bar') and self.nav_bar:
+            self.nav_bar.update()
+            self.nav_bar.repaint()
+
+        # 전역 테마 변경 알림 발송 (기존 컴포넌트와의 호환성)
+        try:
+            from upbit_auto_trading.ui.desktop.common.theme_notifier import get_theme_notifier
+            theme_notifier = get_theme_notifier()
+            theme_notifier.notify_theme_changed()
+            self._log_info("설정 변경으로 인한 테마 알림 발송 완료")
+        except Exception as e:
+            self._log_warning(f"설정 변경 테마 알림 실패: {e}")
+            self._log_llm_report("IL", f"설정 변경 테마 알림 실패: {type(e).__name__}")
+
     def _load_theme(self):
-        """저장된 테마 로드 (SettingsService 우선, 실패 시 QSettings 폴백)"""
+        """저장된 테마 로드 (ThemeService 우선, 실패 시 기존 방식)"""
+        if self.theme_service:
+            try:
+                # ThemeService를 통한 현재 테마 적용
+                self.theme_service.apply_current_theme()
+                current_theme = self.theme_service.get_current_theme()
+                self._log_info(f"ThemeService를 통한 테마 로드 완료: {current_theme}")
+                self._log_llm_report("IL", f"ThemeService 테마 로드 성공: {current_theme}")
+                return
+            except Exception as e:
+                self._log_warning(f"ThemeService 테마 로드 실패, 기존 방식 사용: {e}")
+                self._log_llm_report("IL", f"ThemeService 테마 로드 실패: {type(e).__name__}")
+
+        # 기존 방식 (폴백)
         theme_name = "light"  # 기본값
 
         if self.settings_service:

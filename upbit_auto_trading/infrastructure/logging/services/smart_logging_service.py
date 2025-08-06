@@ -137,6 +137,10 @@ class SmartLoggingService(ILoggingService):
 
             # 2. LLM 세션별 로그 핸들러 (upbit_auto_trading_LLM_YYYYMMDD_HHMMSS_PIDxxxxx.log)
             llm_session_path = self._get_llm_session_log_path()
+
+            # LLM 세션 로그 파일에 헤더 추가
+            self._write_session_log_header(llm_session_path, "LLM")
+
             llm_session_handler = logging.FileHandler(
                 llm_session_path,
                 encoding=self._config.encoding
@@ -149,6 +153,10 @@ class SmartLoggingService(ILoggingService):
         # 세션별 로그 파일 핸들러
         if self._config.session_log_enabled:
             session_path = self._get_session_log_path()
+
+            # 세션 로그 파일에 헤더 추가
+            self._write_session_log_header(session_path, "SESSION")
+
             session_handler = logging.FileHandler(
                 session_path,
                 encoding=self._config.encoding
@@ -192,6 +200,35 @@ class SmartLoggingService(ILoggingService):
 
         template = self._config.llm_session_log_path
         return template.format(timestamp=timestamp, pid=pid)
+
+    def _write_session_log_header(self, log_path: str, log_type: str) -> None:
+        """세션 로그 파일에 헤더 정보 작성"""
+        try:
+            # 파일이 존재하지 않을 때만 헤더 작성
+            if not os.path.exists(log_path):
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                pid = os.getpid()
+
+                # 파일명에서 세션 정보 추출
+                filename = os.path.basename(log_path)
+
+                header = f"""================================================================================
+SESSION START - {timestamp}
+PID: {pid}
+세션 파일: {filename}
+스마트 로깅 시스템 v3.1 - {log_type} 로그
+시스템: UPBIT AUTO TRADING v1.0.0
+================================================================================
+
+"""
+
+                # 헤더 작성
+                with open(log_path, 'w', encoding='utf-8') as f:
+                    f.write(header)
+
+        except Exception as e:
+            # 헤더 작성 실패해도 로깅 시스템은 계속 동작해야 함
+            print(f"⚠️ 세션 로그 헤더 작성 실패 ({log_type}): {e}")
 
     def _create_llm_filter(self):
         """LLM_REPORT 전용 필터 생성"""

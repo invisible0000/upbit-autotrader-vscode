@@ -9,7 +9,7 @@ from pathlib import Path
 import json
 
 from upbit_auto_trading.infrastructure.config.models.config_models import UIConfig, TradingConfig
-from upbit_auto_trading.infrastructure.config.config_loader import ConfigLoader
+from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
 
 
 class ISettingsService(ABC):
