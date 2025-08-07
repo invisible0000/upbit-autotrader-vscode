@@ -2,15 +2,18 @@
 API 키 서비스 구현
 
 보안 강화된 API 키 관리를 위한 Infrastructure Layer 서비스
+🔄 DDD Infrastructure Layer paths 적용
 """
+import base64
 import gc
 import json
+import sqlite3
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, Dict, Any
 from cryptography.fernet import Fernet
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from config.simple_paths import SimplePaths
+from upbit_auto_trading.infrastructure.configuration import paths
 
 
 class IApiKeyService(ABC):
@@ -55,8 +58,8 @@ class ApiKeyService(IApiKeyService):
         self.logger = create_component_logger("ApiKeyService")
         self.logger.info("🔐 ApiKeyService Infrastructure Layer 초기화 시작")
 
-        # 경로 관리자 초기화
-        self.paths = SimplePaths()
+        # DDD Infrastructure Layer 경로 관리자 사용
+        self.paths = paths
 
         # 보안 컴포넌트 설정 - 프로그램 시작 시에는 키 생성하지 않음
         self._try_load_existing_encryption_key()
@@ -387,3 +390,553 @@ class ApiKeyService(IApiKeyService):
                 return 72  # 업비트 표준 Secret Key 길이
         except Exception:
             return 72  # 기본값
+
+    # ===== DB 기반 암호화 키 관리 메서드들 =====
+
+    def _save_encryption_key_to_db(self, key_data: bytes) -> bool:
+        """
+        암호화 키를 settings.sqlite3 DB에 저장
+
+        Args:
+            key_data (bytes): 저장할 암호화 키 데이터 (32바이트)
+
+        Returns:
+            bool: 저장 성공 여부
+
+        Raises:
+            sqlite3.Error: DB 작업 실패 시
+            ValueError: 잘못된 키 데이터 시
+        """
+        if not key_data or not isinstance(key_data, bytes):
+            raise ValueError("암호화 키 데이터가 올바르지 않습니다")
+
+        try:
+            # DB 경로 얻기
+            db_path = self.paths.get_db_path('settings')
+            self.logger.debug(f"🔗 DB 경로: {db_path}")
+
+            with sqlite3.connect(str(db_path)) as conn:
+                cursor = conn.cursor()
+
+                # 암호화 키 저장 (기존 키 교체)
+                cursor.execute("""
+                    INSERT OR REPLACE INTO secure_keys (key_type, key_value)
+                    VALUES (?, ?)
+                """, ("encryption", key_data))
+
+                conn.commit()
+                self.logger.info("✅ 암호화 키 DB 저장 완료")
+                return True
+
+        except sqlite3.Error as e:
+            self.logger.error(f"❌ DB 키 저장 실패: {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"❌ 키 저장 중 예상치 못한 오류: {e}")
+            raise
+
+    def _load_encryption_key_from_db(self) -> Optional[bytes]:
+        """
+        settings.sqlite3 DB에서 암호화 키 로드
+
+        Returns:
+            Optional[bytes]: 암호화 키 데이터 (없으면 None)
+
+        Raises:
+            sqlite3.Error: DB 작업 실패 시
+        """
+        try:
+            # DB 경로 얻기
+            db_path = self.paths.get_db_path('settings')
+
+            with sqlite3.connect(str(db_path)) as conn:
+                cursor = conn.cursor()
+
+                # 암호화 키 조회
+                cursor.execute("""
+                    SELECT key_value FROM secure_keys
+                    WHERE key_type = ?
+                """, ("encryption",))
+
+                result = cursor.fetchone()
+
+                if result:
+                    self.logger.debug("✅ DB에서 암호화 키 로드 완료")
+                    return result[0]
+                else:
+                    self.logger.debug("🔑 DB에 암호화 키 없음")
+                    return None
+
+        except sqlite3.Error as e:
+            self.logger.error(f"❌ DB 키 로드 실패: {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"❌ 키 로드 중 예상치 못한 오류: {e}")
+            raise
+
+    def _delete_encryption_key_from_db(self) -> bool:
+        """
+        settings.sqlite3 DB에서 암호화 키 삭제
+
+        Returns:
+            bool: 삭제 성공 여부 (없어도 True)
+        """
+        try:
+            # DB 경로 얻기
+            db_path = self.paths.get_db_path('settings')
+
+            with sqlite3.connect(str(db_path)) as conn:
+                cursor = conn.cursor()
+
+                # 암호화 키 삭제
+                cursor.execute("""
+                    DELETE FROM secure_keys WHERE key_type = ?
+                """, ("encryption",))
+
+                deleted_count = cursor.rowcount
+                conn.commit()
+
+                if deleted_count > 0:
+                    self.logger.info(f"✅ DB에서 암호화 키 삭제 완료 ({deleted_count}개)")
+                else:
+                    self.logger.debug("🔑 DB에 삭제할 암호화 키 없음")
+
+                return True
+
+        except sqlite3.Error as e:
+            self.logger.error(f"❌ DB 키 삭제 실패: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ 키 삭제 중 예상치 못한 오류: {e}")
+            return False
+
+    def _encryption_key_exists_in_db(self) -> bool:
+        """
+        DB에 암호화 키가 존재하는지 확인
+
+        Returns:
+            bool: 암호화 키 존재 여부
+        """
+        try:
+            key_data = self._load_encryption_key_from_db()
+            return key_data is not None
+        except Exception:
+            return False
+
+    # ===== Task 1.3: 상황별 스마트 삭제 로직 =====
+
+    def delete_api_keys_smart(self, confirm_deletion_callback=None) -> str:
+        """
+        상황별 명확한 삭제 로직
+
+        Args:
+            confirm_deletion_callback: 삭제 확인 콜백 함수 (UI용)
+
+        Returns:
+            str: 삭제 결과 메시지
+        """
+        try:
+            deletion_message, deletion_details = self._get_deletion_message()
+
+            if deletion_message == "삭제할 인증 정보가 없습니다.":
+                self.logger.info("✅ 삭제할 인증 정보 없음")
+                return deletion_message
+
+            # 사용자 확인 (콜백이 제공된 경우)
+            if confirm_deletion_callback:
+                confirmed = confirm_deletion_callback(deletion_message, deletion_details)
+                if not confirmed:
+                    self.logger.info("🚫 사용자가 삭제를 취소함")
+                    return "삭제가 취소되었습니다."
+
+            # 삭제 실행
+            result = self._execute_deletion()
+            self.logger.info(f"✅ 스마트 삭제 완료: {result}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"❌ 스마트 삭제 중 오류: {e}")
+            return f"삭제 중 오류가 발생했습니다: {str(e)}"
+
+    def _get_deletion_message(self) -> tuple[str, str]:
+        """
+        삭제 상황별 메시지 생성 (재사용 가능)
+
+        Returns:
+            tuple[str, str]: (deletion_message, deletion_details)
+        """
+        has_db_key = self._encryption_key_exists_in_db()
+        has_credentials_file = self._credentials_file_exists()
+
+        if has_db_key and has_credentials_file:
+            message = "암호화 키(DB)와 자격증명 파일을 모두 삭제하시겠습니까?"
+            details = "삭제 후에는 API 키를 다시 입력해야 합니다."
+        elif has_db_key and not has_credentials_file:
+            message = "암호화 키(DB)만 존재합니다. 삭제하시겠습니까?"
+            details = "자격증명 파일은 이미 없는 상태입니다."
+        elif not has_db_key and has_credentials_file:
+            message = "자격증명 파일만 존재합니다. 삭제하시겠습니까?"
+            details = "암호화 키는 이미 없는 상태입니다."
+        else:
+            message = "삭제할 인증 정보가 없습니다."
+            details = ""
+
+        return message, details
+
+    def _get_save_confirmation_message(self) -> tuple[str, str]:
+        """
+        저장 확인용 메시지 생성 (UX 개선)
+
+        Returns:
+            tuple[str, str]: (save_message, save_details)
+        """
+        has_db_key = self._encryption_key_exists_in_db()
+        has_credentials_file = self._credentials_file_exists()
+
+        if has_db_key and has_credentials_file:
+            message = "기존 API 키를 새로운 키로 교체하시겠습니까?"
+            details = "기존 암호화 키와 자격증명이 모두 새로운 것으로 교체됩니다."
+        elif has_db_key and not has_credentials_file:
+            message = "기존 암호화 키를 새로운 키로 교체하시겠습니까?"
+            details = "DB의 암호화 키가 새로운 것으로 교체됩니다."
+        elif not has_db_key and has_credentials_file:
+            message = "기존 자격증명을 새로운 API 키로 교체하시겠습니까?"
+            details = "자격증명 파일이 새로운 것으로 교체됩니다."
+        else:
+            message = "새로운 API 키를 저장하시겠습니까?"
+            details = "새로운 암호화 키와 자격증명이 생성됩니다."
+
+        return message, details
+
+    def _execute_deletion(self) -> str:
+        """
+        실제 삭제 실행
+
+        Returns:
+            str: 삭제 완료 메시지
+        """
+        has_db_key = self._encryption_key_exists_in_db()
+        has_credentials_file = self._credentials_file_exists()
+
+        deleted_items = []
+
+        # DB 키 삭제
+        if has_db_key:
+            success = self._delete_encryption_key_from_db()
+            if success:
+                deleted_items.append("암호화 키(DB)")
+                self.logger.debug("✅ DB 암호화 키 삭제 완료")
+
+        # 자격증명 파일 삭제
+        if has_credentials_file:
+            success = self._delete_credentials_file()
+            if success:
+                deleted_items.append("자격증명 파일")
+                self.logger.debug("✅ 자격증명 파일 삭제 완료")
+
+        # 메모리 정리
+        self.encryption_key = None
+        self.fernet = None
+        gc.collect()
+
+        if deleted_items:
+            return f"삭제 완료: {', '.join(deleted_items)}"
+        else:
+            return "삭제할 항목이 없었습니다."
+
+    def _credentials_file_exists(self) -> bool:
+        """
+        자격증명 파일 존재 여부 확인
+
+        Returns:
+            bool: 자격증명 파일 존재 여부
+        """
+        try:
+            return self.paths.API_CREDENTIALS_FILE.exists()
+        except Exception:
+            return False
+
+    def _delete_credentials_file(self) -> bool:
+        """
+        자격증명 파일 삭제
+
+        Returns:
+            bool: 삭제 성공 여부
+        """
+        try:
+            if self.paths.API_CREDENTIALS_FILE.exists():
+                self.paths.API_CREDENTIALS_FILE.unlink()
+                self.logger.debug("✅ 자격증명 파일 삭제 완료")
+                return True
+            else:
+                self.logger.debug("🔑 삭제할 자격증명 파일 없음")
+                return True  # 없어도 성공으로 처리
+        except Exception as e:
+            self.logger.error(f"❌ 자격증명 파일 삭제 실패: {e}")
+            return False
+
+    # ===== Task 1.4: 깔끔한 재생성 로직 (코드 재사용) =====
+
+    def save_api_keys_clean(self, access_key: str, secret_key: str, confirm_deletion_callback=None) -> tuple[bool, str]:
+        """
+        깔끔한 재생성: 스마트 삭제 기능 재사용
+
+        Args:
+            access_key (str): 업비트 Access Key
+            secret_key (str): 업비트 Secret Key
+            confirm_deletion_callback: 삭제 확인 콜백 함수 (UI용)
+
+        Returns:
+            tuple[bool, str]: (성공 여부, 결과 메시지)
+        """
+        try:
+            self.logger.info("🔄 깔끔한 API 키 재생성 시작")
+
+            # 1. 기존 인증정보 존재 시 스마트 삭제 로직 호출
+            if self._has_any_existing_credentials():
+                # 저장용 메시지 생성 (UX 개선)
+                save_message, save_details = self._get_save_confirmation_message()
+
+                # 사용자 확인 (콜백이 제공된 경우)
+                if confirm_deletion_callback:
+                    confirmed = confirm_deletion_callback(save_message, save_details)
+                    if not confirmed:
+                        self.logger.info("🚫 사용자가 저장을 취소함")
+                        return False, "저장이 취소되었습니다."
+
+                # 기존 데이터 삭제 (스마트 삭제 로직 재사용)
+                deletion_result = self._execute_deletion()
+                self.logger.info(f"🗑️ 기존 데이터 삭제: {deletion_result}")
+
+            # 2. 새 키 생성 및 저장
+            success, save_message = self._create_and_save_new_credentials(access_key, secret_key)
+
+            if success:
+                self.logger.info("✅ 깔끔한 재생성 완료")
+                return True, save_message
+            else:
+                self.logger.error(f"❌ 새 키 저장 실패: {save_message}")
+                return False, save_message
+
+        except Exception as e:
+            self.logger.error(f"❌ 깔끔한 재생성 중 오류: {e}")
+            return False, f"재생성 중 오류가 발생했습니다: {str(e)}"
+
+    def _has_any_existing_credentials(self) -> bool:
+        """
+        기존 인증정보 존재 여부 확인
+
+        Returns:
+            bool: DB 키 또는 자격증명 파일 중 하나라도 존재하면 True
+        """
+        return (self._encryption_key_exists_in_db()
+                or self._credentials_file_exists())
+
+    def _create_and_save_new_credentials(self, access_key: str, secret_key: str) -> tuple[bool, str]:
+        """
+        새로운 암호화 키 생성 및 자격증명 저장
+
+        Args:
+            access_key (str): 업비트 Access Key
+            secret_key (str): 업비트 Secret Key
+
+        Returns:
+            tuple[bool, str]: (성공 여부, 결과 메시지)
+        """
+        try:
+            self.logger.info("🔑 새로운 암호화 키 생성 및 자격증명 저장 시작")
+
+            # 새 암호화 키 생성
+            import os
+            import base64
+            raw_key = os.urandom(32)  # 32바이트 원시 키
+            new_encryption_key = base64.urlsafe_b64encode(raw_key)  # URL-safe Base64 인코딩
+
+            # DB에 암호화 키 저장
+            if not self._save_encryption_key_to_db(new_encryption_key):
+                return False, "암호화 키 DB 저장에 실패했습니다."
+
+            # 메모리에 새 키 로드
+            self.encryption_key = new_encryption_key
+            self.fernet = Fernet(self.encryption_key)
+
+            # API 키 저장 (기존 save_api_keys 로직 활용)
+            save_success = self.save_api_keys(access_key, secret_key)
+
+            if save_success:
+                return True, "새로운 API 키가 저장되었습니다."
+            else:
+                # 실패 시 DB 키도 정리
+                self._delete_encryption_key_from_db()
+                return False, "API 키 저장에 실패했습니다."
+
+        except Exception as e:
+            self.logger.error(f"❌ 새 자격증명 생성 중 오류: {e}")
+            # 에러 시 정리
+            try:
+                self._delete_encryption_key_from_db()
+            except Exception:
+                pass
+            return False, f"새 자격증명 생성 중 오류: {str(e)}"
+
+    # ========================================
+    # Task 2.1: 기본 마이그레이션 시스템 (새로운 접근)
+    # ========================================
+
+    def _detect_legacy_encryption_file(self) -> bool:
+        """
+        Task 2.1.1: 레거시 암호화 키 파일 감지
+
+        새로운 접근 방법:
+        - 파일 존재 여부만 체크하는 단순한 감지 로직
+        - 복잡한 파일 읽기나 검증은 다음 단계에서 처리
+        - 에러 시 안전하게 False 반환 (마이그레이션 불필요로 간주)
+
+        Returns:
+            bool: 레거시 파일 존재 여부
+        """
+        try:
+            # 레거시 암호화 키 파일 경로: config/secure/encryption_key.key
+            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+
+            self.logger.debug(f"🔍 레거시 파일 감지: {legacy_key_path}")
+
+            # 단순한 파일 존재 여부만 체크
+            exists = legacy_key_path.exists()
+
+            if exists:
+                self.logger.info(f"📁 레거시 암호화 키 파일 발견: {legacy_key_path}")
+            else:
+                self.logger.debug(f"📁 레거시 암호화 키 파일 없음: {legacy_key_path}")
+
+            return exists
+
+        except Exception as e:
+            # 모든 에러는 False 반환 (안전한 처리)
+            self.logger.debug(f"⚠️ 레거시 파일 감지 중 오류 (안전하게 False 반환): {e}")
+            return False
+
+    def _read_file_key_safely(self) -> bytes | None:
+        """
+        Task 2.1.2: 레거시 암호화 키 파일 안전 읽기
+
+        새로운 접근 방법:
+        - 정상적인 레거시 파일에서 키 데이터를 안전하게 읽기
+        - 손상된 파일이나 예외 상황에서 None 반환
+        - 바이너리 데이터를 그대로 반환 (복호화나 검증은 다음 단계)
+
+        Returns:
+            bytes | None: 성공 시 키 데이터, 실패 시 None
+        """
+        try:
+            # 레거시 암호화 키 파일 경로
+            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+
+            self.logger.debug(f"🔍 레거시 파일 읽기: {legacy_key_path}")
+
+            # 파일 존재 여부 확인
+            if not legacy_key_path.exists():
+                self.logger.debug(f"📁 레거시 파일 없음: {legacy_key_path}")
+                return None
+
+            # 파일 크기 확인 (레거시 암호화 키 기본 검증)
+            file_size = legacy_key_path.stat().st_size
+
+            # 레거시 암호화 키 크기 검증
+            # - Base64 인코딩된 32바이트 키: 정확히 44바이트
+            # - 일부 시스템에서 줄바꿈 추가 가능: 44~46바이트
+            if file_size == 0:
+                self.logger.warning(f"⚠️ 빈 레거시 파일: {legacy_key_path}")
+                return None
+
+            if file_size < 32 or file_size > 64:  # 32~64바이트 범위 (여유있게)
+                self.logger.warning(f"⚠️ 비정상적인 레거시 키 파일 크기 ({file_size}바이트, 예상: 44바이트): {legacy_key_path}")
+                return None
+
+            # 파일 읽기
+            key_data = legacy_key_path.read_bytes()
+
+            self.logger.info(f"✅ 레거시 파일 읽기 성공: {len(key_data)}바이트")
+            return key_data
+
+        except PermissionError as e:
+            # 권한 오류는 마이그레이션 불가로 간주
+            self.logger.debug(f"🔒 레거시 파일 접근 권한 없음 (안전하게 None 반환): {e}")
+            return None
+
+        except OSError as e:
+            # 파일 시스템 오류
+            self.logger.debug(f"💾 레거시 파일 읽기 오류 (안전하게 None 반환): {e}")
+            return None
+
+        except Exception as e:
+            # 기타 모든 예외는 안전하게 None 반환
+            self.logger.debug(f"⚠️ 레거시 파일 읽기 중 예상치 못한 오류 (안전하게 None 반환): {e}")
+            return None
+
+    def _migrate_file_key_to_db_simple(self) -> bool:
+        """
+        Task 2.1.3: 3단계 기본 마이그레이션 플로우
+
+        새로운 접근 방법:
+        - 기존 구현된 메서드들을 조합하여 안전한 마이그레이션
+        - 실패 시 원본 파일 보존 (사용자 수동 처리 가능)
+        - DB에 이미 키가 있으면 마이그레이션 스킵
+
+        3단계 플로우:
+        1. 파일감지 (Task 2.1.1)
+        2. 파일읽기 (Task 2.1.2)
+        3. DB저장 (Task 1.2)
+        4. 파일삭제 (새로운 단계)
+
+        Returns:
+            bool: 마이그레이션 성공 여부 (스킵도 성공으로 간주)
+        """
+        try:
+            self.logger.info("🔄 레거시 파일 → DB 마이그레이션 시작")
+
+            # 0단계: DB에 이미 암호화 키가 있는지 확인
+            if self._encryption_key_exists_in_db():
+                self.logger.info("✅ DB에 이미 암호화 키 존재 - 마이그레이션 스킵")
+                return True  # 스킵도 성공으로 간주
+
+            # 1단계: 레거시 파일 감지 (Task 2.1.1 활용)
+            if not self._detect_legacy_encryption_file():
+                self.logger.info("✅ 레거시 파일 없음 - 마이그레이션 불필요")
+                return True  # 마이그레이션 불필요도 성공으로 간주
+
+            # 2단계: 레거시 파일 안전 읽기 (Task 2.1.2 활용)
+            legacy_key_data = self._read_file_key_safely()
+            if legacy_key_data is None:
+                self.logger.warning("⚠️ 레거시 파일 읽기 실패 - 원본 파일 보존")
+                return False  # 읽기 실패는 마이그레이션 실패
+
+            # Base64 디코딩 (레거시 키는 Base64로 저장됨)
+            try:
+                decoded_key = base64.b64decode(legacy_key_data.decode('utf-8').strip())
+                self.logger.debug(f"🔑 레거시 키 디코딩: {len(decoded_key)}바이트")
+            except Exception as e:
+                self.logger.warning(f"⚠️ 레거시 키 Base64 디코딩 실패: {e} - 원본 파일 보존")
+                return False
+
+            # 3단계: DB에 암호화 키 저장 (Task 1.2 활용)
+            if not self._save_encryption_key_to_db(decoded_key):
+                self.logger.error("❌ DB 저장 실패 - 원본 파일 보존")
+                return False  # DB 저장 실패
+
+            # 4단계: 레거시 파일 삭제 (마이그레이션 완료)
+            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            try:
+                legacy_key_path.unlink()
+                self.logger.info(f"✅ 레거시 파일 삭제 완료: {legacy_key_path}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ 레거시 파일 삭제 실패 (수동 삭제 필요): {e}")
+                # 삭제 실패해도 마이그레이션은 성공으로 간주 (DB 저장은 완료됨)
+
+            self.logger.info("🎉 레거시 파일 → DB 마이그레이션 완료")
+            return True
+
+        except Exception as e:
+            # 예상치 못한 오류 시 안전한 실패
+            self.logger.error(f"❌ 마이그레이션 중 예상치 못한 오류: {e}")
+            return False
