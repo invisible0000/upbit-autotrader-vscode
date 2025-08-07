@@ -158,13 +158,14 @@ class MVPContainer:
 
         return create_mvp_pair()
 
-    def create_settings_mvp(self, settings_service=None):
+    def create_settings_mvp(self, settings_service=None, parent=None):
         """설정 MVP 조합 생성
 
         Presenter와 View를 연결한 완전한 Settings MVP 구조를 반환합니다.
 
         Args:
             settings_service: 외부에서 주입된 SettingsService (옵션)
+            parent: 부모 위젯 (DI Container 접근을 위해 필요)
 
         Returns:
             tuple: (view, presenter) 튜플 - view가 MainWindow에서 사용될 QWidget
@@ -183,8 +184,8 @@ class MVPContainer:
             except Exception:
                 settings_service = None
 
-        # View 생성 (QWidget)
-        settings_view = SettingsScreen(settings_service=settings_service)
+        # View 생성 (QWidget) - parent 파라미터 전달
+        settings_view = SettingsScreen(settings_service=settings_service, parent=parent)
 
         # Presenter 생성 (View와 연결)
         settings_presenter = SettingsPresenter(

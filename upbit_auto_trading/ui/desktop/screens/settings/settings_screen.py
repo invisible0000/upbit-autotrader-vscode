@@ -114,8 +114,53 @@ class SettingsScreen(QWidget):
 
             self.logger.info("📦 설정 위젯 모듈들 import 성공")
 
+            # DI 컨테이너에서 ApiKeyService 가져오기
+            api_key_service = None
+            try:
+                # MainWindow에서 DI Container 가져오기 (getattr 사용으로 안전하게)
+                main_window = self.parent()
+                self.logger.debug(f"🔍 현재 parent: {type(main_window).__name__ if main_window else 'None'}")
+                self.logger.debug(f"🔍 현재 parent 주소: {id(main_window) if main_window else 'None'}")
+
+                # parent 체인을 따라 MainWindow 찾기 (상세 로깅)
+                search_count = 0
+                original_parent = main_window
+                while main_window and not hasattr(main_window, 'di_container') and search_count < 5:
+                    self.logger.debug(f"🔍 부모 탐색 중 [{search_count}]: {type(main_window).__name__} (id: {id(main_window)})")
+                    main_window = main_window.parent()
+                    search_count += 1
+
+                self.logger.debug(f"🔍 최종 main_window: {type(main_window).__name__ if main_window else 'None'}")
+                self.logger.debug(f"🔍 부모 탐색 결과: {search_count}번 탐색 후 {'성공' if main_window and hasattr(main_window, 'di_container') else '실패'}")
+
+                if main_window and hasattr(main_window, 'di_container'):
+                    di_container = getattr(main_window, 'di_container', None)
+                    self.logger.debug(f"🔍 DI Container 발견: {type(di_container).__name__ if di_container else 'None'}")
+
+                    if di_container:
+                        from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
+                        api_key_service = di_container.resolve(IApiKeyService)
+                        self.logger.info(f"✅ ApiKeyService 주입 성공: {type(api_key_service).__name__}")
+                    else:
+                        self.logger.warning("⚠️ DI Container가 None입니다")
+                else:
+                    self.logger.warning("⚠️ MainWindow의 DI Container를 찾을 수 없음")
+                    # 디버깅: 부모 체인 전체 출력
+                    parent_chain = []
+                    current = original_parent
+                    depth = 0
+                    while current and depth < 10:
+                        parent_chain.append(f"[{depth}] {type(current).__name__} (id: {id(current)}, hasattr di_container: {hasattr(current, 'di_container')})")
+                        current = current.parent()
+                        depth += 1
+                    self.logger.debug(f"🔍 부모 체인 상세: {' -> '.join(parent_chain) if parent_chain else 'Empty'}")
+            except Exception as e:
+                self.logger.error(f"❌ ApiKeyService 해결 중 오류: {e}")
+                import traceback
+                self.logger.error(f"❌ 스택 트레이스: {traceback.format_exc()}")
+
             # 실제 위젯 인스턴스 생성 (Infrastructure Layer 기반)
-            self.api_key_manager = ApiKeyManagerSecure(self)
+            self.api_key_manager = ApiKeyManagerSecure(self, api_key_service=api_key_service)
             self.logger.debug("🔑 API 키 관리자 생성 완료")
 
             self.database_settings = DatabaseSettings(self)

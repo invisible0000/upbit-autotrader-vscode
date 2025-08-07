@@ -1,9 +1,10 @@
 """
 API 키 관리자 - 보안 강화 버전 (Infrastructure Layer v4.0 통합)
+- tuple 반환 타입 처리 수정
+- 암호화 키 유지 문제 해결
+- UI 그대로 유지
 """
 import gc
-import json
-from cryptography.fernet import Fernet
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
                              QFormLayout, QLineEdit, QCheckBox, QPushButton,
                              QMessageBox)
@@ -11,7 +12,6 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from config.simple_paths import SimplePaths
 
 
 class ApiKeyManagerSecure(QWidget):
@@ -23,37 +23,41 @@ class ApiKeyManagerSecure(QWidget):
     2. 암호화 키와 API 키를 분리된 위치에 저장
     3. 메모리 보안 및 즉시 정리
     4. Infrastructure Layer Enhanced Logging v4.0 연동
+    5. tuple 반환 타입 올바른 처리
     """
     settings_changed = pyqtSignal()
     api_status_changed = pyqtSignal(bool)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, api_key_service=None):
         super().__init__(parent)
         self.setObjectName("widget-api-key-manager-secure")
 
         # Infrastructure Layer Enhanced Logging v4.0 초기화
         self.logger = create_component_logger("ApiKeyManagerSecure")
-        self.logger.info("🔐 API 키 관리자 초기화 시작")
+        self.logger.info("🔐 API 키 관리자 Infrastructure Layer 통합 초기화 시작")
+
+        # ApiKeyService 의존성 주입
+        self.api_key_service = api_key_service
+        if self.api_key_service is None:
+            self.logger.error("❌ ApiKeyService가 None으로 전달됨 - 의존성 주입 실패")
+        else:
+            self.logger.info(f"✅ ApiKeyService 의존성 주입 성공: {type(self.api_key_service).__name__}")
 
         # 보안 상태 관리
-        self._actual_secret_key = ""
         self._is_saved = False
-
-        # 경로 관리자 초기화
-        self.paths = SimplePaths()
+        self._is_editing_mode = False  # 편집 모드 여부
 
         # Infrastructure Layer 연동 상태 보고
         self._report_to_infrastructure()
 
-        # 보안 컴포넌트 설정
-        self._setup_encryption_key()
+        # UI 설정 (기존과 동일)
         self._setup_ui()
         self._connect_signals()
 
         # 기존 설정 로드
         self.load_settings()
 
-        self.logger.info("✅ API 키 관리자 초기화 완료")
+        self.logger.info("✅ API 키 관리자 Infrastructure Layer 통합 완료")
 
     def _report_to_infrastructure(self):
         """Infrastructure Layer v4.0에 상태 보고"""
@@ -71,37 +75,8 @@ class ApiKeyManagerSecure(QWidget):
         except Exception as e:
             self.logger.warning(f"⚠️ SystemStatusTracker 연동 실패: {e}")
 
-    def _setup_encryption_key(self):
-        """
-        암호화 키 설정 및 생성 - 보안 경로 사용
-
-        보안 고려사항:
-        - 암호화 키를 config/secure/에 저장 (데이터 백업에서 제외)
-        - API 키와 암호화 키를 분리된 위치에 저장
-        """
-        try:
-            # 보안 디렉토리 확보
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
-
-            # 암호화 키 생성 또는 로드
-            if not encryption_key_path.exists():
-                key = Fernet.generate_key()
-                with open(encryption_key_path, "wb") as key_file:
-                    key_file.write(key)
-                self.logger.info("새로운 암호화 키가 생성되었습니다.")
-
-            with open(encryption_key_path, "rb") as key_file:
-                self.encryption_key = key_file.read()
-            self.fernet = Fernet(self.encryption_key)
-
-            self.logger.debug(f"암호화 키 로드 완료: {encryption_key_path}")
-
-        except Exception as e:
-            self.logger.error(f"암호화 키 설정 중 오류: {e}")
-            raise
-
     def _setup_ui(self):
-        """UI 설정"""
+        """UI 설정 - 기존과 동일"""
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(10, 10, 10, 10)
         self.main_layout.setSpacing(10)
@@ -121,11 +96,17 @@ class ApiKeyManagerSecure(QWidget):
         self.access_key_input.setPlaceholderText("Access Key를 입력하세요")
         form_layout.addRow("Access Key:", self.access_key_input)
 
-        # Secret Key 입력
+        # Secret Key 입력 - 보안 강화된 설정
         self.secret_key_input = QLineEdit()
         self.secret_key_input.setObjectName("input-secret-key")
         self.secret_key_input.setPlaceholderText("Secret Key를 입력하세요")
         self.secret_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+
+        # 보안 입력 힌트 적용 (PyQt6 표준)
+        hints = (Qt.InputMethodHint.ImhHiddenText
+                 | Qt.InputMethodHint.ImhSensitiveData
+                 | Qt.InputMethodHint.ImhNoPredictiveText)
+        self.secret_key_input.setInputMethodHints(hints)
         form_layout.addRow("Secret Key:", self.secret_key_input)
 
         # 키 표시 체크박스
@@ -171,7 +152,7 @@ class ApiKeyManagerSecure(QWidget):
         self.main_layout.addStretch(1)
 
     def _connect_signals(self):
-        """시그널 연결"""
+        """시그널 연결 - 기존과 동일"""
         self.show_keys_checkbox.stateChanged.connect(self._toggle_key_visibility)
         self.save_button.clicked.connect(self.save_api_keys)
         self.test_button.clicked.connect(self.test_api_keys)
@@ -182,96 +163,64 @@ class ApiKeyManagerSecure(QWidget):
         self.secret_key_input.textChanged.connect(self._on_input_changed)
 
     def _on_input_changed(self):
-        """입력 상자 내용 변경 시 호출되는 함수"""
-        if hasattr(self, '_is_saved') and self._is_saved:
-            sender = self.sender()
+        """입력 상자 내용 변경 시 호출되는 함수 - 보안 강화"""
+        sender = self.sender()
 
-            if sender == self.secret_key_input:
-                current_text = self.secret_key_input.text()
-                if current_text and not current_text.startswith("*"):
-                    self._is_saved = False
-                    self.logger.debug("🔓 새로운 Secret Key 입력 감지 - 편집 모드로 전환")
-            elif sender == self.access_key_input:
+        if sender == self.secret_key_input:
+            # Secret Key 입력 시 편집 모드로 전환
+            current_text = self.secret_key_input.text().strip()
+            if current_text and not current_text.startswith("●"):  # 보안: ● 문자로 저장된 키 표시
+                self._is_editing_mode = True
                 self._is_saved = False
-                self.logger.debug("🔓 Access Key 편집 감지 - 편집 모드로 전환")
+                self.logger.debug("🔓 Secret Key 편집 모드 전환")
+        elif sender == self.access_key_input:
+            # Access Key 편집 감지
+            self._is_saved = False
+            self.logger.debug("🔓 Access Key 편집 감지")
 
     def _toggle_key_visibility(self, state):
-        """키 표시/숨김 토글"""
+        """키 표시/숨김 토글 - UI 전용 기능 (보안 강화)"""
         if state == Qt.CheckState.Checked.value:
-            # 키 표시 상태일 때 실제 secret key 보여주기
-            if hasattr(self, '_actual_secret_key') and self._actual_secret_key:
-                self.secret_key_input.setText(self._actual_secret_key)
+            # 키 표시: 현재 입력 중인 텍스트만 보여줌
             self.secret_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.logger.debug("🔓 Secret Key 표시 모드 활성화 (편집 중 텍스트만)")
         else:
-            # 키 숨김 상태일 때 * 문자로 변경
-            if hasattr(self, '_actual_secret_key') and self._actual_secret_key:
-                self.secret_key_input.setText("*" * len(self._actual_secret_key))
+            # 키 숨김: 표준 암호 모드
             self.secret_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-
-    def _secure_get_decrypted_keys(self):
-        """
-        보안 기능: 암호화된 키 파일에서 복호화하여 반환
-
-        Returns:
-            tuple: (access_key, secret_key) 또는 (None, None)
-        """
-        try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
-
-            if not api_keys_path.exists():
-                return None, None
-
-            # UTF-8 인코딩으로 파일 읽기
-            with open(api_keys_path, "r", encoding='utf-8') as f:
-                settings = json.load(f)
-
-            access_key = None
-            secret_key = None
-
-            if "access_key" in settings:
-                access_key = self.fernet.decrypt(settings["access_key"].encode('utf-8')).decode('utf-8')
-            if "secret_key" in settings:
-                secret_key = self.fernet.decrypt(settings["secret_key"].encode('utf-8')).decode('utf-8')
-
-            return access_key, secret_key
-
-        except Exception as e:
-            self.logger.error(f"API 키 복호화 중 오류: {e}")
-            QMessageBox.warning(
-                self,
-                "복호화 오류",
-                f"API 키 설정을 읽는 중 오류가 발생했습니다:\n{str(e)}"
-            )
-            return None, None
+            self.logger.debug("🔒 Secret Key 숨김 모드 활성화")
 
     def load_settings(self):
-        """설정 파일에서 API 키 로드"""
+        """설정 파일에서 API 키 로드 - ApiKeyService 사용 (tuple 처리 수정)"""
         try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
-
-            if not api_keys_path.exists():
-                self.logger.debug("API 키 파일이 존재하지 않습니다.")
+            if self.api_key_service is None:
+                self.logger.warning("⚠️ ApiKeyService가 None이어서 설정을 로드할 수 없습니다")
                 return
 
-            # UTF-8 인코딩으로 파일 읽기
-            with open(api_keys_path, "r", encoding='utf-8') as f:
-                settings = json.load(f)
+            api_keys = self.api_key_service.load_api_keys()
 
-            if "access_key" in settings:
-                access_key = self.fernet.decrypt(settings["access_key"].encode()).decode()
+            if not api_keys or not any(api_keys):
+                self.logger.debug("저장된 API 키가 없습니다.")
+                return
+
+            # Tuple 형태로 반환됨: (access_key, secret_key, trade_permission)
+            access_key, secret_key, trade_permission = api_keys
+
+            # Access Key 로드
+            if access_key:
                 self.access_key_input.setText(access_key)
 
-            if "secret_key" in settings:
-                secret_key = self.fernet.decrypt(settings["secret_key"].encode()).decode()
-                # 보안: 실제 키를 메모리에 보관하고 UI에는 * 표시
-                self._actual_secret_key = secret_key
-                self.secret_key_input.setText("*" * len(secret_key))
-                self._is_saved = True  # 로드된 상태는 저장된 상태로 간주
+            # Secret Key 로드 - 보안: 마스킹 처리
+            if secret_key:
+                # 실제 키 길이에 따른 마스킹 적용
+                mask_length = len(secret_key)
+                self.secret_key_input.setText("●" * mask_length)
+                self._is_saved = True  # 저장된 상태로 표시
+                self._is_editing_mode = False
 
-            if "trade_permission" in settings:
-                self.trade_permission_checkbox.setChecked(settings["trade_permission"])
+            # Trade Permission 설정
+            self.trade_permission_checkbox.setChecked(trade_permission)
 
-            self.logger.debug("API 키 설정 로드 완료")
+            self.logger.debug("API 키 설정 로드 완료 (보안 마스킹 적용)")
 
         except Exception as e:
             self.logger.error(f"API 키 로드 중 오류: {e}")
@@ -286,60 +235,66 @@ class ApiKeyManagerSecure(QWidget):
         self.save_api_keys()
 
     def save_api_keys(self):
-        """API 키 저장 - 보안 경로 사용"""
+        """API 키 저장 - ApiKeyService 사용"""
         try:
+            if self.api_key_service is None:
+                QMessageBox.warning(self, "서비스 오류", "API 키 서비스가 초기화되지 않았습니다.")
+                return
+
             access_key = self.access_key_input.text().strip()
             secret_key_input = self.secret_key_input.text().strip()
 
-            # Secret key가 *로 표시된 경우 실제 저장된 값을 사용
-            if secret_key_input.startswith("*") and hasattr(self, '_actual_secret_key'):
-                secret_key = self._actual_secret_key
-            else:
-                secret_key = secret_key_input
-                # 🔒 보안: 새 키 저장 시에만 _actual_secret_key 업데이트
-                self._actual_secret_key = secret_key
-
             # 입력 검증
-            if not access_key or not secret_key:
-                QMessageBox.warning(self, "입력 오류", "Access Key와 Secret Key를 모두 입력해주세요.")
+            if not access_key:
+                QMessageBox.warning(self, "입력 오류", "Access Key를 입력해주세요.")
                 return
 
-            # 보안 경로에 저장
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
+            # Secret Key 처리 - 보안 강화
+            if not secret_key_input:
+                QMessageBox.warning(self, "입력 오류", "Secret Key를 입력해주세요.")
+                return
+            elif secret_key_input.startswith("●"):
+                # 마스킹된 기존 키: 변경되지 않음
+                if not self._is_editing_mode:
+                    self.logger.info("기존 Secret Key 유지 (변경 없음)")
+                    return
+                else:
+                    QMessageBox.warning(self, "입력 오류", "새로운 Secret Key를 입력해주세요.")
+                    return
+            else:
+                # 새로운 Secret Key 입력
+                secret_key = secret_key_input
 
-            # 키 암호화
-            encrypted_access_key = self.fernet.encrypt(access_key.encode()).decode()
-            encrypted_secret_key = self.fernet.encrypt(secret_key.encode()).decode()
+            # ApiKeyService를 사용하여 저장
+            success = self.api_key_service.save_api_keys(
+                access_key=access_key,
+                secret_key=secret_key,
+                trade_permission=self.trade_permission_checkbox.isChecked()
+            )
 
-            # 설정 저장
-            settings = {
-                "access_key": encrypted_access_key,
-                "secret_key": encrypted_secret_key,
-                "trade_permission": self.trade_permission_checkbox.isChecked()
-            }
+            if not success:
+                QMessageBox.warning(self, "저장 오류", "API 키 저장에 실패했습니다.")
+                return
 
-            # UTF-8 인코딩으로 파일 저장
-            with open(api_keys_path, "w", encoding='utf-8') as f:
-                json.dump(settings, f, indent=2, ensure_ascii=False)
-
-            # UI 업데이트: Secret Key를 * 표시로 변경
-            if not secret_key_input.startswith("*"):
-                self.secret_key_input.setText("*" * len(secret_key))
-                self._is_saved = True
+            # UI 업데이트: Secret Key를 실제 길이에 맞춰 마스킹 표시로 변경
+            self.secret_key_input.setText("●" * len(secret_key))
+            self._is_saved = True
+            self._is_editing_mode = False
 
             QMessageBox.information(
                 self,
                 "저장 완료",
-                f"API 키가 안전하게 저장되었습니다.\n저장 위치: {api_keys_path.parent}"
+                "API 키가 안전하게 저장되었습니다."
             )
 
             # 보안: 사용된 평문 키를 메모리에서 즉시 삭제
             access_key = ""
             secret_key = ""
+            secret_key_input = ""
             gc.collect()
 
             self.settings_changed.emit()
-            self.logger.info("API 키 저장 완료")
+            self.logger.info("API 키 저장 완료 (ApiKeyService 사용)")
 
             # 저장 후 자동으로 API 연결 테스트 수행 (조용한 모드)
             self.logger.info("저장 후 자동 API 연결 테스트 시작")
@@ -354,50 +309,89 @@ class ApiKeyManagerSecure(QWidget):
             )
 
     def test_api_keys(self, silent=False):
-        """API 키 테스트
+        """API 키 테스트 - ApiKeyService 사용 (tuple 처리 수정)
 
         Args:
             silent (bool): True인 경우 성공/실패 메시지 팝업을 표시하지 않음
         """
-        # 보안 강화: 저장된 키를 임시 로드하여 테스트
-        access_key, secret_key = self._secure_get_decrypted_keys()
-
-        # UI에서 새로 입력된 키가 있는지 확인
-        access_key_input = self.access_key_input.text().strip()
-        secret_key_input = self.secret_key_input.text().strip()
-
-        # 새로 입력된 키가 있으면 우선 사용
-        if access_key_input and not access_key_input.startswith("*"):
-            access_key = access_key_input
-        if secret_key_input and not secret_key_input.startswith("*"):
-            secret_key = secret_key_input
-        elif secret_key_input.startswith("*") and hasattr(self, '_actual_secret_key') and self._actual_secret_key:
-            secret_key = self._actual_secret_key
-
-        # 입력 검증
-        if not access_key or not secret_key:
-            if not silent:
-                QMessageBox.warning(self, "입력 오류", "Access Key와 Secret Key를 모두 입력해주세요.")
-            self.logger.warning("API 테스트 실패 - Access Key 또는 Secret Key가 비어있음")
-            self.api_status_changed.emit(False)
-            return
-
         try:
-            from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
-            api = UpbitAPI(access_key, secret_key)
-            accounts = api.get_account()
+            if self.api_key_service is None:
+                if not silent:
+                    QMessageBox.warning(self, "서비스 오류", "API 키 서비스가 초기화되지 않았습니다.")
+                self.api_status_changed.emit(False)
+                return
 
-            # 보안: API 호출 후 민감한 데이터를 메모리에서 즉시 삭제
-            access_key = ""
-            secret_key = ""
-            gc.collect()
+            # 현재 입력된 키 가져오기
+            access_key = self.access_key_input.text().strip()
+            secret_key_input = self.secret_key_input.text().strip()
 
-            if accounts:
+            # 입력 검증
+            if not access_key:
+                if not silent:
+                    QMessageBox.warning(self, "입력 오류", "Access Key를 입력해주세요.")
+                self.logger.warning("API 테스트 실패 - Access Key가 비어있음")
+                self.api_status_changed.emit(False)
+                return
+
+            # Secret Key 처리 - 마스킹된 경우 저장된 키 사용
+            if secret_key_input.startswith("●") and self._is_saved:
+                # 저장된 키 로드
+                api_keys = self.api_key_service.load_api_keys()
+                if api_keys and len(api_keys) >= 2:
+                    _, secret_key, _ = api_keys
+                    if not secret_key:
+                        if not silent:
+                            QMessageBox.warning(self, "키 오류", "저장된 Secret Key를 찾을 수 없습니다.")
+                        self.api_status_changed.emit(False)
+                        return
+                else:
+                    if not silent:
+                        QMessageBox.warning(self, "키 오류", "저장된 Secret Key를 찾을 수 없습니다.")
+                    self.api_status_changed.emit(False)
+                    return
+            else:
+                # 새로 입력된 키 사용
+                secret_key = secret_key_input
+                if not secret_key:
+                    if not silent:
+                        QMessageBox.warning(self, "입력 오류", "Secret Key를 입력해주세요.")
+                    self.logger.warning("API 테스트 실패 - Secret Key가 비어있음")
+                    self.api_status_changed.emit(False)
+                    return
+
+            # API 연결 테스트 수행 - tuple 반환 처리
+            test_result = self.api_key_service.test_api_connection(access_key, secret_key)
+
+            # Tuple 형태로 반환됨: (success, message, account_info)
+            success, message, account_info = test_result
+
+            if success:
+                # KRW 잔고 정보 추출 - ApiKeyService 반환 형식에 맞춤
                 krw_balance = 0
-                for acc in accounts:
-                    if acc.get('currency') == 'KRW':
-                        krw_balance = float(acc.get('balance', 0))
-                        break
+                self.logger.debug(f"🔍 account_info 타입: {type(account_info)}")
+                self.logger.debug(f"🔍 account_info 내용: {account_info}")
+
+                if account_info and isinstance(account_info, dict):
+                    # ApiKeyService가 반환하는 새로운 형식 처리
+                    if 'krw_balance' in account_info:
+                        krw_balance = float(account_info.get('krw_balance', 0))
+                        self.logger.debug(f"🔍 KRW 잔고 발견 (새 형식): {krw_balance}")
+                    else:
+                        # 기존 accounts 배열 형식도 지원 (호환성)
+                        accounts = account_info.get('accounts', [])
+                        self.logger.debug(f"🔍 accounts 개수: {len(accounts)}")
+
+                        for account in accounts:
+                            currency = account.get('currency', '')
+                            balance = account.get('balance', '0')
+                            self.logger.debug(f"🔍 계좌: {currency} = {balance}")
+
+                            if currency == 'KRW':
+                                krw_balance = float(balance)
+                                self.logger.debug(f"🔍 KRW 잔고 발견 (기존 형식): {krw_balance}")
+                                break
+                else:
+                    self.logger.warning(f"⚠️ account_info가 dict가 아니거나 None: {type(account_info)}")
 
                 if not silent:
                     QMessageBox.information(
@@ -405,7 +399,6 @@ class ApiKeyManagerSecure(QWidget):
                         "테스트 성공",
                         f"API 키가 정상적으로 작동하며 서버에 연결되었습니다.\n\n조회된 잔고(KRW) 금액: {krw_balance:,.0f} 원"
                     )
-
                 self.logger.info(f"API 연결 테스트 성공 - KRW 잔고: {krw_balance:,.0f} 원")
                 self.api_status_changed.emit(True)
             else:
@@ -413,48 +406,52 @@ class ApiKeyManagerSecure(QWidget):
                     QMessageBox.warning(
                         self,
                         "테스트 실패",
-                        "API 키가 유효하지 않거나 계좌 정보 조회에 실패했습니다.\nAPI 키 권한(계좌 조회) 설정을 확인해주세요."
+                        f"API 키 테스트에 실패했습니다.\n\n오류 메시지: {message}"
                     )
-
-                self.logger.warning("API 연결 테스트 실패 - 계좌 정보 조회 실패")
+                self.logger.warning(f"API 연결 테스트 실패: {message}")
                 self.api_status_changed.emit(False)
 
-        except Exception as api_e:
-            # 보안: 사용 후 민감한 데이터를 메모리에서 즉시 삭제
-            access_key = ""
-            secret_key = ""
-            gc.collect()
-
-            self.logger.error(f"API 테스트 중 오류: {api_e}")
-
+        except Exception as e:
+            self.logger.error(f"API 테스트 중 오류: {e}")
             if not silent:
                 QMessageBox.warning(
                     self,
                     "API 호출 오류",
-                    f"API 테스트 중 오류가 발생했습니다:\n{str(api_e)}"
+                    f"API 테스트 중 오류가 발생했습니다:\n{str(e)}"
                 )
-
             self.api_status_changed.emit(False)
 
     def delete_api_keys(self):
-        """API 키 및 암호화 키 삭제"""
+        """API 키 삭제 - ApiKeyService 사용 (확인 대화상자 추가)"""
         try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            if self.api_key_service is None:
+                QMessageBox.warning(self, "서비스 오류", "API 키 서비스가 초기화되지 않았습니다.")
+                return
 
-            deleted = False
+            # 삭제할 API 키가 있는지 먼저 확인
+            api_keys = self.api_key_service.load_api_keys()
+            if not api_keys or not any(api_keys):
+                QMessageBox.information(self, "알림", "삭제할 API 키가 존재하지 않습니다.")
+                self.logger.debug("삭제할 API 키가 없음")
+                return
 
-            # API 키 파일 삭제
-            if api_keys_path.exists():
-                api_keys_path.unlink()
-                deleted = True
-                self.logger.debug("API 키 파일 삭제 완료")
+            # 사용자 확인 대화상자
+            reply = QMessageBox.question(
+                self,
+                "API 키 삭제 확인",
+                "정말로 저장된 API 키를 삭제하시겠습니까?\n\n"
+                "이 작업은 되돌릴 수 없습니다.\n"
+                "삭제 후에는 새로운 API 키를 다시 입력해야 합니다.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
 
-            # 암호화 키 파일 삭제
-            if encryption_key_path.exists():
-                encryption_key_path.unlink()
-                deleted = True
-                self.logger.debug("암호화 키 파일 삭제 완료")
+            if reply != QMessageBox.StandardButton.Yes:
+                self.logger.debug("사용자가 API 키 삭제를 취소함")
+                return
+
+            # ApiKeyService를 사용하여 삭제
+            success = self.api_key_service.delete_api_keys()
 
             # UI 초기화
             self.access_key_input.clear()
@@ -462,19 +459,20 @@ class ApiKeyManagerSecure(QWidget):
             self.trade_permission_checkbox.setChecked(False)
 
             # 메모리 정리 및 상태 초기화
-            self._actual_secret_key = ""
             self._is_saved = False
+            self._is_editing_mode = False
             gc.collect()
 
             # 결과 메시지
-            if deleted:
-                QMessageBox.information(self, "삭제 완료", "API 키와 암호화 키가 안전하게 삭제되었습니다.")
+            if success:
+                QMessageBox.information(self, "삭제 완료", "API 키가 안전하게 삭제되었습니다.")
+                self.logger.info("API 키 삭제 완료 (ApiKeyService 사용)")
             else:
-                QMessageBox.information(self, "알림", "삭제할 API 키 또는 암호화 키가 존재하지 않습니다.")
+                QMessageBox.warning(self, "삭제 실패", "API 키 삭제에 실패했습니다.")
+                self.logger.error("API 키 삭제 실패")
 
             self.api_status_changed.emit(False)
             self.settings_changed.emit()
-            self.logger.info("API 키 삭제 완료")
 
         except Exception as e:
             self.logger.error(f"API 키 삭제 중 오류: {e}")
@@ -484,5 +482,4 @@ class ApiKeyManagerSecure(QWidget):
                 f"API 키 삭제 중 오류가 발생했습니다:\n{str(e)}"
             )
             # 보안: 오류 발생시에도 메모리 정리
-            self._actual_secret_key = ""
             gc.collect()

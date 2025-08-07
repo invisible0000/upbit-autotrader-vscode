@@ -17,6 +17,9 @@ from PyQt6.QtGui import QIcon, QAction
 # simple_paths 시스템 import
 from config.simple_paths import SimplePaths
 
+# Infrastructure Layer 서비스 인터페이스
+from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
+
 # 공통 위젯 임포트
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
 from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
@@ -570,11 +573,15 @@ class MainWindow(QMainWindow):
                 if self.mvp_container:
                     try:
                         # MVP Container를 통해 Settings Presenter와 View 생성
-                        # SettingsService를 직접 전달
+                        # SettingsService를 직접 전달, parent도 전달
                         settings_view, settings_presenter = self.mvp_container.create_settings_mvp(
-                            settings_service=self.settings_service
+                            settings_service=self.settings_service,
+                            parent=self
                         )
                         screen = settings_view  # View가 실제 QWidget
+
+                        # 참고: parent는 이미 MVP Container에서 설정됨
+                        # screen.setParent(self)  # 불필요
 
                         # Presenter 초기 설정 로드
                         settings_presenter.load_initial_settings()
@@ -586,12 +593,12 @@ class MainWindow(QMainWindow):
                         self._log_llm_report("IL", f"Settings MVP 실패: {type(e).__name__}")
                         # 폴백: 기존 방식
                         from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                        screen = SettingsScreen(settings_service=self.settings_service)
+                        screen = SettingsScreen(settings_service=self.settings_service, parent=self)
                         self._log_warning("⚠️ Settings 기존 방식으로 폴백")
                 else:
                     # MVP Container가 없으면 기존 방식
                     from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                    screen = SettingsScreen(settings_service=self.settings_service)
+                    screen = SettingsScreen(settings_service=self.settings_service, parent=self)
                     self._log_info("SettingsScreen에 SettingsService 주입 완료 (기존 방식)")
                     self._log_llm_report("IL", "SettingsScreen 기존 방식 생성")
 
@@ -1162,88 +1169,59 @@ class MainWindow(QMainWindow):
                 self.status_bar.set_db_status(False)
 
     def _check_initial_api_status(self):
-        """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인"""
+        """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인 - 새로운 정책 적용"""
         try:
-            # simple_paths 시스템 사용
-            paths = SimplePaths()
-            api_keys_path = paths.API_CREDENTIALS_FILE
+            # ApiKeyService를 통한 통합된 API 키 상태 확인
+            from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
+            api_key_service = ApiKeyService()
 
-            # API 키 파일 존재 여부 확인
-            if not os.path.exists(api_keys_path):
-                # API 키 파일이 없는 경우
+            # API 키 로드 시도
+            api_keys = api_key_service.load_api_keys()
+
+            if not api_keys or not any(api_keys):
+                # API 키가 없거나 로드 실패
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(False)
                 self._log_warning("API 키 파일이 없습니다. 설정에서 API 키를 등록해주세요")
                 self._log_llm_report("IL", "API 키 파일 없음")
                 return
 
-            # API 키가 있는 경우 실제 통신 테스트
+            # API 키가 있으면 실제 통신 테스트
+            access_key, secret_key, _ = api_keys
+            if not access_key or not secret_key:
+                # 로드는 되었지만 키가 비어있음
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(False)
+                self._log_warning("API 키 정보가 불완전합니다")
+                self._log_llm_report("IL", "API 키 정보 불완전")
+                return
+
             self._log_info("API 키 파일 발견 - 연결 테스트 중...")
             self._log_llm_report("IL", "API 키 파일 발견, 연결 테스트 시작")
 
-            try:
-                from cryptography.fernet import Fernet
+            # ApiKeyService를 통한 통합된 API 테스트
+            success, message, account_info = api_key_service.test_api_connection(access_key, secret_key)
 
-                # 새로운 secure 위치에서 암호화 키 로드
-                encryption_key_path = paths.SECURE_DIR / "encryption_key.key"
-
-                if not os.path.exists(encryption_key_path):
-                    self._log_error("암호화 키 파일이 없습니다")
-                    self._log_llm_report("IL", "암호화 키 파일 없음")
-                    if hasattr(self, 'status_bar'):
-                        self.status_bar.set_api_status(False)
-                    return
-
-                with open(encryption_key_path, "rb") as key_file:
-                    encryption_key = key_file.read()
-                fernet = Fernet(encryption_key)
-
-                # API 키 복호화
-                with open(api_keys_path, "r", encoding='utf-8') as f:
-                    settings = json.load(f)
-
-                if "access_key" not in settings or "secret_key" not in settings:
-                    self._log_error("API 키 정보가 불완전합니다")
-                    self._log_llm_report("IL", "API 키 정보 불완전")
-                    if hasattr(self, 'status_bar'):
-                        self.status_bar.set_api_status(False)
-                    return
-
-                access_key = fernet.decrypt(settings["access_key"].encode()).decode()
-                secret_key = fernet.decrypt(settings["secret_key"].encode()).decode()
-
-                # 실제 API 통신 테스트
-                from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
-                api = UpbitAPI(access_key, secret_key)
-                accounts = api.get_account()
-
-                # 메모리에서 키 삭제
-                access_key = ""
-                secret_key = ""
-                gc.collect()
-
-                if accounts:
-                    # API 통신 성공
-                    if hasattr(self, 'status_bar'):
-                        self.status_bar.set_api_status(True)
-                    self._log_info("API 연결 테스트 성공 - 정상 연결됨")
-                    self._log_llm_report("IL", "API 연결 테스트 성공")
-                else:
-                    # API 응답이 없음
-                    if hasattr(self, 'status_bar'):
-                        self.status_bar.set_api_status(False)
-                    self._log_error("API 연결 테스트 실패 - 계좌 정보 조회 불가")
-                    self._log_llm_report("IL", "API 연결 테스트 실패: 계좌 정보 조회 불가")
-
-            except Exception as api_e:
-                # API 통신 오류
+            if success:
+                # API 통신 성공
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(True)
+                self._log_info("API 연결 테스트 성공 - 정상 연결됨")
+                self._log_llm_report("IL", "API 연결 테스트 성공")
+            else:
+                # API 통신 실패
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(False)
-                self._log_error(f"API 연결 테스트 실패: {str(api_e)}")
-                self._log_llm_report("IL", f"API 연결 테스트 실패: {type(api_e).__name__}")
-                # 조용한 테스트이므로 사용자에게 팝업은 표시하지 않음
+                self._log_error(f"API 연결 테스트 실패: {message}")
+                self._log_llm_report("IL", "API 연결 테스트 실패: InvalidToken")
 
         except Exception as e:
+            # 전체적인 오류
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_api_status(False)
+            self._log_error(f"API 상태 확인 중 오류: {str(e)}")
+            self._log_llm_report("IL", f"API 상태 확인 오류: {type(e).__name__}")
+            # 조용한 테스트이므로 사용자에게 팝업은 표시하지 않음
             self._log_error(f"초기 API 상태 확인 실패: {e}")
             self._log_llm_report("IL", f"초기 API 상태 확인 실패: {type(e).__name__}")
             # 오류 발생 시 연결 끊김으로 설정

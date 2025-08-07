@@ -176,6 +176,18 @@ def register_ui_services(app_context: ApplicationContext):
             except Exception as e2:
                 print(f"⚠️ MockSettingsService 폴백도 실패: {e2}")
 
+        # ApiKeyService 등록
+        try:
+            from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService, ApiKeyService
+            print("🔧 ApiKeyService 클래스 import 성공")
+            api_key_service = ApiKeyService()
+            print("🔧 ApiKeyService 인스턴스 생성 성공")
+            container.register_singleton(IApiKeyService, api_key_service)
+            print("✅ ApiKeyService 등록 완료")
+        except Exception as e:
+            print(f"⚠️ ApiKeyService 등록 실패: {e}")
+            print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+
         # StyleManager 등록
         try:
             from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager
