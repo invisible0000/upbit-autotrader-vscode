@@ -2,18 +2,20 @@
 API 키 서비스 구현
 
 보안 강화된 API 키 관리를 위한 Infrastructure Layer 서비스
-🔄 DDD Infrastructure Layer paths 적용
+🔄 DDD Infrastructure Layer Repository Pattern 적용
+✅ Task 1.3, 1.4 핵심 기능 집중
 """
 import base64
 import gc
 import json
-import sqlite3
+import os
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple, Dict, Any
 from cryptography.fernet import Fernet
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.configuration import paths
+from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 
 
 class IApiKeyService(ABC):
@@ -53,10 +55,17 @@ class IApiKeyService(ABC):
 class ApiKeyService(IApiKeyService):
     """API 키 서비스 구현체 - Infrastructure Layer"""
 
-    def __init__(self):
-        """ApiKeyService 초기화"""
+    def __init__(self, secure_keys_repository: SecureKeysRepository):
+        """ApiKeyService 초기화 - DDD Repository 패턴 적용
+
+        Args:
+            secure_keys_repository (SecureKeysRepository): 보안 키 저장소 Repository
+        """
         self.logger = create_component_logger("ApiKeyService")
         self.logger.info("🔐 ApiKeyService Infrastructure Layer 초기화 시작")
+
+        # DDD Repository 주입
+        self.secure_keys_repo = secure_keys_repository
 
         # DDD Infrastructure Layer 경로 관리자 사용
         self.paths = paths
@@ -64,19 +73,35 @@ class ApiKeyService(IApiKeyService):
         # 보안 컴포넌트 설정 - 프로그램 시작 시에는 키 생성하지 않음
         self._try_load_existing_encryption_key()
 
+        # TTL 캐싱 시스템 초기화 (Task 2.3)
+        self._api_cache = None  # 캐싱된 API 인스턴스
+        self._cache_timestamp = None  # 캐시 생성 시간
+        self._cache_ttl_seconds = 300  # TTL: 5분 (300초)
+        self._cached_keys_hash = None  # 캐시된 키의 해시값 (변경 감지용)
+
         self.logger.info("✅ ApiKeyService Infrastructure Layer 초기화 완료")
+        self.logger.debug("🕒 TTL 캐싱 시스템 초기화 완료 (TTL: 5분)")
 
     def _try_load_existing_encryption_key(self):
         """
-        기존 암호화 키가 있으면 로드, 없으면 로드하지 않음
+        기존 암호화 키가 있으면 로드 (DB 우선, 파일 폴백)
 
         새로운 정책:
+        - DB에서 암호화 키 우선 검색
         - 프로그램 시작 시에는 암호화 키를 생성하지 않음
         - 저장 시에만 필요에 따라 암호화 키 생성
         - 자격증명과 암호화 키의 일관성 보장
         """
         try:
-            # 보안 디렉토리 확보
+            # 1. DB에서 암호화 키 먼저 검색
+            db_key = self._load_encryption_key_from_db()
+            if db_key is not None:
+                self.encryption_key = db_key
+                self.fernet = Fernet(self.encryption_key)
+                self.logger.debug("✅ DB에서 암호화 키 로드 완료")
+                return
+
+            # 2. 보안 디렉토리 확보 (폴백용)
             encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
             self.logger.debug(f"🔑 암호화 키 경로: {encryption_key_path}")
 
@@ -85,13 +110,13 @@ class ApiKeyService(IApiKeyService):
                 self.logger.debug(f"🔐 보안 디렉토리 생성: {self.paths.SECURE_DIR}")
                 self.paths.SECURE_DIR.mkdir(parents=True, exist_ok=True)
 
-            # 기존 암호화 키가 있으면 로드
+            # 3. 레거시 파일 키 로드 (폴백)
             if encryption_key_path.exists():
-                self.logger.debug(f"🔑 기존 암호화 키 로드 중: {encryption_key_path}")
+                self.logger.debug(f"🔑 레거시 파일 키 로드 중: {encryption_key_path}")
                 with open(encryption_key_path, "rb") as key_file:
                     self.encryption_key = key_file.read()
                 self.fernet = Fernet(self.encryption_key)
-                self.logger.debug(f"✅ 암호화 키 로드 완료: {encryption_key_path}")
+                self.logger.debug(f"✅ 레거시 파일 키 로드 완료: {encryption_key_path}")
             else:
                 # 암호화 키가 없으면 초기화하지 않음
                 self.logger.debug("🔑 암호화 키 없음 - 저장 시 생성될 예정")
@@ -268,7 +293,7 @@ class ApiKeyService(IApiKeyService):
             return None, None, False
 
     def test_api_connection(self, access_key: str, secret_key: str) -> Tuple[bool, str, Dict[str, Any]]:
-        """API 연결 테스트
+        """API 연결 테스트 - 실제 업비트 API 호출
 
         Args:
             access_key: 업비트 Access Key
@@ -277,48 +302,71 @@ class ApiKeyService(IApiKeyService):
         Returns:
             Tuple[bool, str, Dict[str, Any]]: (success, message, account_info)
         """
+        client = None
+        loop = None
+
         try:
-            if not access_key or not secret_key:
-                return False, "Access Key 또는 Secret Key가 비어있습니다.", {}
+            import asyncio
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
 
-            # API 연결 테스트
-            from upbit_auto_trading.data_layer.collectors.upbit_api import UpbitAPI
-            api = UpbitAPI(access_key, secret_key)
-            accounts = api.get_account()
+            self.logger.info("🔍 실제 업비트 API 연결 테스트 시작")
 
-            # 보안: API 호출 후 민감한 데이터를 메모리에서 즉시 삭제
-            access_key = ""
-            secret_key = ""
-            gc.collect()
+            # UpbitClient 생성
+            client = UpbitClient(access_key=access_key, secret_key=secret_key)
 
-            if accounts:
-                krw_balance = 0
-                for acc in accounts:
-                    if acc.get('currency') == 'KRW':
-                        krw_balance = float(acc.get('balance', 0))
-                        break
+            # 비동기 계좌 정보 조회
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
-                account_info = {
-                    "krw_balance": krw_balance,
-                    "account_count": len(accounts)
-                }
+            try:
+                # 컨텍스트 매니저를 사용하여 클라이언트 자동 정리
+                async def test_connection():
+                    async with client:
+                        return await client.get_accounts()
 
-                message = f"API 키가 정상적으로 작동하며 서버에 연결되었습니다.\n조회된 잔고(KRW): {krw_balance:,.0f} 원"
-                self.logger.info(f"API 연결 테스트 성공 - KRW 잔고: {krw_balance:,.0f} 원")
+                accounts = loop.run_until_complete(test_connection())
+
+                # 계좌 정보 처리
+                account_info = {}
+                total_krw = 0.0
+
+                for account in accounts:
+                    currency = account.get('currency', '')
+                    balance = float(account.get('balance', 0))
+                    locked = float(account.get('locked', 0))
+
+                    if currency == 'KRW':
+                        total_krw = balance + locked
+
+                    account_info[currency] = {
+                        'balance': balance,
+                        'locked': locked,
+                        'total': balance + locked
+                    }
+
+                self.logger.info(f"✅ API 연결 성공 - 총 {len(accounts)}개 계좌")
+                self.logger.info(f"💰 총 KRW 잔고: {total_krw:,.0f}원")
+
+                message = f"API 연결 성공 (총 {len(accounts)}개 계좌, KRW: {total_krw:,.0f}원)"
                 return True, message, account_info
-            else:
-                message = "API 키가 유효하지 않거나 계좌 정보 조회에 실패했습니다.\nAPI 키 권한(계좌 조회) 설정을 확인해주세요."
-                self.logger.warning("API 연결 테스트 실패 - 계좌 정보 조회 실패")
-                return False, message, {}
+
+            finally:
+                if loop:
+                    loop.close()
 
         except Exception as e:
-            # 보안: 사용 후 민감한 데이터를 메모리에서 즉시 삭제
-            access_key = ""
-            secret_key = ""
-            gc.collect()
+            error_msg = f"API 연결 실패: {str(e)}"
+            self.logger.error(f"❌ {error_msg}")
+            return False, error_msg, {}
 
-            self.logger.error(f"API 테스트 중 오류: {e}")
-            return False, f"API 테스트 중 오류가 발생했습니다:\n{str(e)}", {}
+        finally:
+            # 명시적 클라이언트 정리 (컨텍스트 매니저가 실패한 경우를 위한 백업)
+            if client:
+                try:
+                    if loop and not loop.is_closed():
+                        loop.run_until_complete(client.close())
+                except Exception as cleanup_error:
+                    self.logger.debug(f"클라이언트 정리 중 오류 (무시 가능): {cleanup_error}")
 
     def delete_api_keys(self) -> bool:
         """API 키 및 암호화 키 삭제
@@ -391,135 +439,80 @@ class ApiKeyService(IApiKeyService):
         except Exception:
             return 72  # 기본값
 
-    # ===== DB 기반 암호화 키 관리 메서드들 =====
+    # ===== DB 기반 암호화 키 관리 메서드들 (DDD Repository 패턴) =====
 
     def _save_encryption_key_to_db(self, key_data: bytes) -> bool:
         """
-        암호화 키를 settings.sqlite3 DB에 저장
+        암호화 키를 settings.sqlite3 DB에 저장 (Repository 패턴)
 
         Args:
             key_data (bytes): 저장할 암호화 키 데이터 (32바이트)
 
         Returns:
             bool: 저장 성공 여부
-
-        Raises:
-            sqlite3.Error: DB 작업 실패 시
-            ValueError: 잘못된 키 데이터 시
         """
         if not key_data or not isinstance(key_data, bytes):
             raise ValueError("암호화 키 데이터가 올바르지 않습니다")
 
         try:
-            # DB 경로 얻기
-            db_path = self.paths.get_db_path('settings')
-            self.logger.debug(f"🔗 DB 경로: {db_path}")
+            success = self.secure_keys_repo.save_key("encryption", key_data)
+            if success:
+                self.logger.info("✅ 암호화 키 DB 저장 완료 (Repository)")
+            return success
 
-            with sqlite3.connect(str(db_path)) as conn:
-                cursor = conn.cursor()
-
-                # 암호화 키 저장 (기존 키 교체)
-                cursor.execute("""
-                    INSERT OR REPLACE INTO secure_keys (key_type, key_value)
-                    VALUES (?, ?)
-                """, ("encryption", key_data))
-
-                conn.commit()
-                self.logger.info("✅ 암호화 키 DB 저장 완료")
-                return True
-
-        except sqlite3.Error as e:
-            self.logger.error(f"❌ DB 키 저장 실패: {e}")
-            raise
         except Exception as e:
-            self.logger.error(f"❌ 키 저장 중 예상치 못한 오류: {e}")
+            self.logger.error(f"❌ DB 키 저장 실패 (Repository): {e}")
             raise
 
     def _load_encryption_key_from_db(self) -> Optional[bytes]:
         """
-        settings.sqlite3 DB에서 암호화 키 로드
+        settings.sqlite3 DB에서 암호화 키 로드 (Repository 패턴)
 
         Returns:
             Optional[bytes]: 암호화 키 데이터 (없으면 None)
-
-        Raises:
-            sqlite3.Error: DB 작업 실패 시
         """
         try:
-            # DB 경로 얻기
-            db_path = self.paths.get_db_path('settings')
+            key_data = self.secure_keys_repo.load_key("encryption")
 
-            with sqlite3.connect(str(db_path)) as conn:
-                cursor = conn.cursor()
+            if key_data:
+                self.logger.debug("✅ DB에서 암호화 키 로드 완료 (Repository)")
+            else:
+                self.logger.debug("🔑 DB에 암호화 키 없음 (Repository)")
 
-                # 암호화 키 조회
-                cursor.execute("""
-                    SELECT key_value FROM secure_keys
-                    WHERE key_type = ?
-                """, ("encryption",))
+            return key_data
 
-                result = cursor.fetchone()
-
-                if result:
-                    self.logger.debug("✅ DB에서 암호화 키 로드 완료")
-                    return result[0]
-                else:
-                    self.logger.debug("🔑 DB에 암호화 키 없음")
-                    return None
-
-        except sqlite3.Error as e:
-            self.logger.error(f"❌ DB 키 로드 실패: {e}")
-            raise
         except Exception as e:
-            self.logger.error(f"❌ 키 로드 중 예상치 못한 오류: {e}")
+            self.logger.error(f"❌ DB 키 로드 실패 (Repository): {e}")
             raise
 
     def _delete_encryption_key_from_db(self) -> bool:
         """
-        settings.sqlite3 DB에서 암호화 키 삭제
+        settings.sqlite3 DB에서 암호화 키 삭제 (Repository 패턴)
 
         Returns:
             bool: 삭제 성공 여부 (없어도 True)
         """
         try:
-            # DB 경로 얻기
-            db_path = self.paths.get_db_path('settings')
+            success = self.secure_keys_repo.delete_key("encryption")
 
-            with sqlite3.connect(str(db_path)) as conn:
-                cursor = conn.cursor()
+            if success:
+                self.logger.info("✅ DB에서 암호화 키 삭제 완료 (Repository)")
 
-                # 암호화 키 삭제
-                cursor.execute("""
-                    DELETE FROM secure_keys WHERE key_type = ?
-                """, ("encryption",))
+            return success
 
-                deleted_count = cursor.rowcount
-                conn.commit()
-
-                if deleted_count > 0:
-                    self.logger.info(f"✅ DB에서 암호화 키 삭제 완료 ({deleted_count}개)")
-                else:
-                    self.logger.debug("🔑 DB에 삭제할 암호화 키 없음")
-
-                return True
-
-        except sqlite3.Error as e:
-            self.logger.error(f"❌ DB 키 삭제 실패: {e}")
-            return False
         except Exception as e:
-            self.logger.error(f"❌ 키 삭제 중 예상치 못한 오류: {e}")
+            self.logger.error(f"❌ DB 키 삭제 실패 (Repository): {e}")
             return False
 
     def _encryption_key_exists_in_db(self) -> bool:
         """
-        DB에 암호화 키가 존재하는지 확인
+        DB에 암호화 키가 존재하는지 확인 (Repository 패턴)
 
         Returns:
             bool: 암호화 키 존재 여부
         """
         try:
-            key_data = self._load_encryption_key_from_db()
-            return key_data is not None
+            return self.secure_keys_repo.key_exists("encryption")
         except Exception:
             return False
 
@@ -551,6 +544,10 @@ class ApiKeyService(IApiKeyService):
 
             # 삭제 실행
             result = self._execute_deletion()
+
+            # TTL 캐시 무효화 (Task 2.3)
+            self.invalidate_api_cache()
+
             self.logger.info(f"✅ 스마트 삭제 완료: {result}")
             return result
 
@@ -712,6 +709,8 @@ class ApiKeyService(IApiKeyService):
             success, save_message = self._create_and_save_new_credentials(access_key, secret_key)
 
             if success:
+                # TTL 캐시 무효화 (Task 2.3)
+                self.invalidate_api_cache()
                 self.logger.info("✅ 깔끔한 재생성 완료")
                 return True, save_message
             else:
@@ -747,8 +746,6 @@ class ApiKeyService(IApiKeyService):
             self.logger.info("🔑 새로운 암호화 키 생성 및 자격증명 저장 시작")
 
             # 새 암호화 키 생성
-            import os
-            import base64
             raw_key = os.urandom(32)  # 32바이트 원시 키
             new_encryption_key = base64.urlsafe_b64encode(raw_key)  # URL-safe Base64 인코딩
 
@@ -779,164 +776,263 @@ class ApiKeyService(IApiKeyService):
                 pass
             return False, f"새 자격증명 생성 중 오류: {str(e)}"
 
-    # ========================================
-    # Task 2.1: 기본 마이그레이션 시스템 (새로운 접근)
-    # ========================================
+    # ===== Task 1.3: 상황별 스마트 삭제 로직 =====
 
-    def _detect_legacy_encryption_file(self) -> bool:
+    # ===== Task 2.3: TTL 기반 API 인스턴스 캐싱 =====
+
+    def get_cached_api_instance(self):
         """
-        Task 2.1.1: 레거시 암호화 키 파일 감지
+        TTL 기반 캐싱된 API 인스턴스 반환 (5분 TTL)
 
-        새로운 접근 방법:
-        - 파일 존재 여부만 체크하는 단순한 감지 로직
-        - 복잡한 파일 읽기나 검증은 다음 단계에서 처리
-        - 에러 시 안전하게 False 반환 (마이그레이션 불필요로 간주)
+        성능 최적화를 위한 API 인스턴스 캐싱:
+        - TTL: 5분 (보안-성능 균형점)
+        - 키 변경 감지: 자동 캐시 무효화
+        - 80% 성능 향상 목표
 
         Returns:
-            bool: 레거시 파일 존재 여부
+            Optional[UpbitClient]: 캐싱된 API 인스턴스 (유효한 경우)
+            None: 캐시 없음/만료/키 변경됨
+
+        Infrastructure Layer 패턴:
+        - Repository를 통한 키 로드
+        - Infrastructure 로깅 활용
+        - DDD 경계 준수
         """
         try:
-            # 레거시 암호화 키 파일 경로: config/secure/encryption_key.key
-            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            self.logger.debug("🔍 캐싱된 API 인스턴스 요청")
 
-            self.logger.debug(f"🔍 레거시 파일 감지: {legacy_key_path}")
+            # 1. 캐시 유효성 검사
+            if not self._is_cache_valid():
+                self.logger.debug("⏰ 캐시 무효 - 새로 생성 필요")
+                return None
 
-            # 단순한 파일 존재 여부만 체크
-            exists = legacy_key_path.exists()
+            # 2. 유효한 캐시 반환
+            if self._api_cache is not None:
+                self.logger.debug("✅ 유효한 캐시 발견 - 반환")
+                return self._api_cache
 
-            if exists:
-                self.logger.info(f"📁 레거시 암호화 키 파일 발견: {legacy_key_path}")
+            self.logger.debug("❓ 캐시 상태 불명 - None 반환")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"❌ 캐싱된 API 인스턴스 조회 실패: {e}")
+            return None
+
+    def cache_api_instance(self):
+        """
+        현재 API 키로 새 인스턴스를 생성하고 캐싱
+
+        캐싱 프로세스:
+        1. 현재 API 키 로드 (복호화)
+        2. UpbitClient 인스턴스 생성
+        3. TTL과 키 해시값 설정
+        4. 캐시 저장
+
+        Returns:
+            Optional[UpbitClient]: 새로 생성되고 캐싱된 API 인스턴스
+            None: 키 없음/오류
+        """
+        try:
+            self.logger.debug("🔧 새 API 인스턴스 생성 및 캐싱 시작")
+
+            # 1. 현재 API 키 로드
+            access_key, secret_key, trade_permission = self.load_api_keys()
+
+            if not access_key or not secret_key:
+                self.logger.warning("⚠️ API 키 없음 - 캐싱 불가")
+                return None
+
+            # 2. UpbitClient 인스턴스 생성 (DDD Infrastructure Layer)
+            from upbit_auto_trading.infrastructure.external_apis.upbit import UpbitClient
+            api_instance = UpbitClient(access_key, secret_key)
+
+            # 3. 캐시 메타데이터 설정
+            import time
+            import hashlib
+
+            current_time = time.time()
+            keys_string = f"{access_key}:{secret_key}"
+            keys_hash = hashlib.sha256(keys_string.encode()).hexdigest()[:16]
+
+            # 4. 캐시 저장
+            self._api_cache = api_instance
+            self._cache_timestamp = current_time
+            self._cached_keys_hash = keys_hash
+
+            self.logger.info(f"✅ API 인스턴스 캐싱 완료 (TTL: {self._cache_ttl_seconds}초)")
+            self.logger.debug(f"🔑 키 해시: {keys_hash}")
+
+            return api_instance
+
+        except Exception as e:
+            self.logger.error(f"❌ API 인스턴스 캐싱 실패: {e}")
+            return None
+
+    def invalidate_api_cache(self) -> None:
+        """
+        API 캐시 수동 무효화
+
+        호출 시점:
+        - 새로운 API 키 저장 시
+        - API 키 삭제 시
+        - 수동 캐시 정리 시
+
+        Infrastructure Layer 패턴:
+        - 메모리 정리
+        - 가비지 컬렉션 유도
+        - 로깅을 통한 추적
+        """
+        try:
+            self.logger.debug("🧹 API 캐시 수동 무효화 시작")
+
+            # 캐시 존재 여부 확인
+            cache_existed = self._api_cache is not None
+
+            # 캐시 정리
+            self._api_cache = None
+            self._cache_timestamp = None
+            self._cached_keys_hash = None
+
+            # 메모리 정리 (선택적)
+            if cache_existed:
+                gc.collect()
+                self.logger.info("✅ API 캐시 무효화 완료")
             else:
-                self.logger.debug(f"📁 레거시 암호화 키 파일 없음: {legacy_key_path}")
-
-            return exists
+                self.logger.debug("ℹ️ 무효화할 캐시가 없음")
 
         except Exception as e:
-            # 모든 에러는 False 반환 (안전한 처리)
-            self.logger.debug(f"⚠️ 레거시 파일 감지 중 오류 (안전하게 False 반환): {e}")
-            return False
+            self.logger.error(f"❌ API 캐시 무효화 실패: {e}")
 
-    def _read_file_key_safely(self) -> bytes | None:
+    def _is_cache_valid(self) -> bool:
         """
-        Task 2.1.2: 레거시 암호화 키 파일 안전 읽기
+        캐시 유효성 검사 (TTL + 키 변경 감지)
 
-        새로운 접근 방법:
-        - 정상적인 레거시 파일에서 키 데이터를 안전하게 읽기
-        - 손상된 파일이나 예외 상황에서 None 반환
-        - 바이너리 데이터를 그대로 반환 (복호화나 검증은 다음 단계)
+        유효성 조건:
+        1. 캐시 인스턴스 존재
+        2. TTL 미만료 (5분)
+        3. 키 변경 없음 (해시 비교)
 
         Returns:
-            bytes | None: 성공 시 키 데이터, 실패 시 None
+            bool: 캐시 유효 여부
         """
         try:
-            # 레거시 암호화 키 파일 경로
-            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
-
-            self.logger.debug(f"🔍 레거시 파일 읽기: {legacy_key_path}")
-
-            # 파일 존재 여부 확인
-            if not legacy_key_path.exists():
-                self.logger.debug(f"📁 레거시 파일 없음: {legacy_key_path}")
-                return None
-
-            # 파일 크기 확인 (레거시 암호화 키 기본 검증)
-            file_size = legacy_key_path.stat().st_size
-
-            # 레거시 암호화 키 크기 검증
-            # - Base64 인코딩된 32바이트 키: 정확히 44바이트
-            # - 일부 시스템에서 줄바꿈 추가 가능: 44~46바이트
-            if file_size == 0:
-                self.logger.warning(f"⚠️ 빈 레거시 파일: {legacy_key_path}")
-                return None
-
-            if file_size < 32 or file_size > 64:  # 32~64바이트 범위 (여유있게)
-                self.logger.warning(f"⚠️ 비정상적인 레거시 키 파일 크기 ({file_size}바이트, 예상: 44바이트): {legacy_key_path}")
-                return None
-
-            # 파일 읽기
-            key_data = legacy_key_path.read_bytes()
-
-            self.logger.info(f"✅ 레거시 파일 읽기 성공: {len(key_data)}바이트")
-            return key_data
-
-        except PermissionError as e:
-            # 권한 오류는 마이그레이션 불가로 간주
-            self.logger.debug(f"🔒 레거시 파일 접근 권한 없음 (안전하게 None 반환): {e}")
-            return None
-
-        except OSError as e:
-            # 파일 시스템 오류
-            self.logger.debug(f"💾 레거시 파일 읽기 오류 (안전하게 None 반환): {e}")
-            return None
-
-        except Exception as e:
-            # 기타 모든 예외는 안전하게 None 반환
-            self.logger.debug(f"⚠️ 레거시 파일 읽기 중 예상치 못한 오류 (안전하게 None 반환): {e}")
-            return None
-
-    def _migrate_file_key_to_db_simple(self) -> bool:
-        """
-        Task 2.1.3: 3단계 기본 마이그레이션 플로우
-
-        새로운 접근 방법:
-        - 기존 구현된 메서드들을 조합하여 안전한 마이그레이션
-        - 실패 시 원본 파일 보존 (사용자 수동 처리 가능)
-        - DB에 이미 키가 있으면 마이그레이션 스킵
-
-        3단계 플로우:
-        1. 파일감지 (Task 2.1.1)
-        2. 파일읽기 (Task 2.1.2)
-        3. DB저장 (Task 1.2)
-        4. 파일삭제 (새로운 단계)
-
-        Returns:
-            bool: 마이그레이션 성공 여부 (스킵도 성공으로 간주)
-        """
-        try:
-            self.logger.info("🔄 레거시 파일 → DB 마이그레이션 시작")
-
-            # 0단계: DB에 이미 암호화 키가 있는지 확인
-            if self._encryption_key_exists_in_db():
-                self.logger.info("✅ DB에 이미 암호화 키 존재 - 마이그레이션 스킵")
-                return True  # 스킵도 성공으로 간주
-
-            # 1단계: 레거시 파일 감지 (Task 2.1.1 활용)
-            if not self._detect_legacy_encryption_file():
-                self.logger.info("✅ 레거시 파일 없음 - 마이그레이션 불필요")
-                return True  # 마이그레이션 불필요도 성공으로 간주
-
-            # 2단계: 레거시 파일 안전 읽기 (Task 2.1.2 활용)
-            legacy_key_data = self._read_file_key_safely()
-            if legacy_key_data is None:
-                self.logger.warning("⚠️ 레거시 파일 읽기 실패 - 원본 파일 보존")
-                return False  # 읽기 실패는 마이그레이션 실패
-
-            # Base64 디코딩 (레거시 키는 Base64로 저장됨)
-            try:
-                decoded_key = base64.b64decode(legacy_key_data.decode('utf-8').strip())
-                self.logger.debug(f"🔑 레거시 키 디코딩: {len(decoded_key)}바이트")
-            except Exception as e:
-                self.logger.warning(f"⚠️ 레거시 키 Base64 디코딩 실패: {e} - 원본 파일 보존")
+            # 1. 캐시 존재 확인
+            if self._api_cache is None or self._cache_timestamp is None:
+                self.logger.debug("❌ 캐시 미존재")
                 return False
 
-            # 3단계: DB에 암호화 키 저장 (Task 1.2 활용)
-            if not self._save_encryption_key_to_db(decoded_key):
-                self.logger.error("❌ DB 저장 실패 - 원본 파일 보존")
-                return False  # DB 저장 실패
+            # 2. TTL 확인 (5분)
+            import time
+            current_time = time.time()
+            cache_age = current_time - self._cache_timestamp
 
-            # 4단계: 레거시 파일 삭제 (마이그레이션 완료)
-            legacy_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            if cache_age > self._cache_ttl_seconds:
+                self.logger.debug(f"⏰ TTL 만료 ({cache_age:.1f}초 > {self._cache_ttl_seconds}초)")
+                return False
+
+            # 3. 키 변경 감지
             try:
-                legacy_key_path.unlink()
-                self.logger.info(f"✅ 레거시 파일 삭제 완료: {legacy_key_path}")
-            except Exception as e:
-                self.logger.warning(f"⚠️ 레거시 파일 삭제 실패 (수동 삭제 필요): {e}")
-                # 삭제 실패해도 마이그레이션은 성공으로 간주 (DB 저장은 완료됨)
+                access_key, secret_key, _ = self.load_api_keys()
+                if access_key and secret_key:
+                    import hashlib
+                    keys_string = f"{access_key}:{secret_key}"
+                    current_keys_hash = hashlib.sha256(keys_string.encode()).hexdigest()[:16]
 
-            self.logger.info("🎉 레거시 파일 → DB 마이그레이션 완료")
+                    if current_keys_hash != self._cached_keys_hash:
+                        self.logger.debug("🔑 API 키 변경 감지 - 캐시 무효화")
+                        return False
+                else:
+                    self.logger.debug("❌ 현재 키 로드 실패 - 캐시 무효화")
+                    return False
+
+            except Exception as key_check_error:
+                self.logger.warning(f"⚠️ 키 변경 감지 실패: {key_check_error}")
+                return False
+
+            # 4. 모든 조건 통과
+            self.logger.debug(f"✅ 캐시 유효 (남은 시간: {self._cache_ttl_seconds - cache_age:.1f}초)")
             return True
 
         except Exception as e:
-            # 예상치 못한 오류 시 안전한 실패
-            self.logger.error(f"❌ 마이그레이션 중 예상치 못한 오류: {e}")
+            self.logger.error(f"❌ 캐시 유효성 검사 실패: {e}")
             return False
+
+    def get_or_create_api_instance(self):
+        """
+        캐시된 API 인스턴스 반환 또는 새로 생성
+
+        고수준 편의 메서드:
+        1. 캐시 확인 → 있으면 반환
+        2. 캐시 없음 → 새로 생성하고 캐싱
+
+        Returns:
+            Optional[UpbitClient]: API 인스턴스 (캐시됨 또는 새로 생성됨)
+            None: 키 없음/오류
+
+        사용 예시:
+            api = service.get_or_create_api_instance()
+            if api:
+                accounts = api.get_accounts()
+        """
+        try:
+            # 1. 캐시 확인
+            cached_api = self.get_cached_api_instance()
+            if cached_api is not None:
+                self.logger.debug("💨 캐시에서 API 인스턴스 반환")
+                return cached_api
+
+            # 2. 새로 생성
+            self.logger.debug("🔧 새 API 인스턴스 생성")
+            new_api = self.cache_api_instance()
+            return new_api
+
+        except Exception as e:
+            self.logger.error(f"❌ API 인스턴스 가져오기/생성 실패: {e}")
+            return None
+
+    def clear_cache(self) -> None:
+        """
+        캐시 완전 정리 (테스트/디버깅용)
+
+        invalidate_api_cache()의 별칭 메서드
+        테스트 코드에서 명확한 의도 표현용
+        """
+        self.invalidate_api_cache()
+
+    def get_cache_status(self) -> dict:
+        """
+        캐시 상태 정보 반환 (디버깅/모니터링용)
+
+        Returns:
+            dict: 캐시 상태 정보
+            - cached: 캐시 존재 여부
+            - valid: 캐시 유효 여부
+            - age_seconds: 캐시 나이 (초)
+            - ttl_seconds: TTL 설정값
+            - keys_hash: 키 해시값 (마스킹됨)
+        """
+        try:
+            import time
+
+            status = {
+                'cached': self._api_cache is not None,
+                'valid': self._is_cache_valid(),
+                'age_seconds': None,
+                'ttl_seconds': self._cache_ttl_seconds,
+                'keys_hash': None
+            }
+
+            if self._cache_timestamp is not None:
+                status['age_seconds'] = time.time() - self._cache_timestamp
+
+            if self._cached_keys_hash is not None:
+                # 키 해시 마스킹 (보안)
+                status['keys_hash'] = f"{self._cached_keys_hash[:4]}****{self._cached_keys_hash[-4:]}"
+
+            return status
+
+        except Exception as e:
+            self.logger.error(f"❌ 캐시 상태 조회 실패: {e}")
+            return {'error': str(e)}
+
+    # ===== Task 1.3: 상황별 스마트 삭제 로직 =====

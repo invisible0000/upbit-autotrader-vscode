@@ -1173,7 +1173,14 @@ class MainWindow(QMainWindow):
         try:
             # ApiKeyService를 통한 통합된 API 키 상태 확인
             from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
-            api_key_service = ApiKeyService()
+            from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
+            from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
+            from upbit_auto_trading.infrastructure.configuration import paths
+
+            # DatabaseManager 생성 후 Repository 주입으로 ApiKeyService 생성
+            db_manager = DatabaseManager({"settings": str(paths.SETTINGS_DB)})
+            repo = SqliteSecureKeysRepository(db_manager)
+            api_key_service = ApiKeyService(repo)
 
             # API 키 로드 시도
             api_keys = api_key_service.load_api_keys()

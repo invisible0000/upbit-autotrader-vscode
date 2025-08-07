@@ -26,11 +26,13 @@ import logging
 from upbit_auto_trading.domain.repositories.strategy_repository import StrategyRepository
 from upbit_auto_trading.domain.repositories.trigger_repository import TriggerRepository
 from upbit_auto_trading.domain.repositories.settings_repository import SettingsRepository
+from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 
 # Infrastructure 구현체들
 from upbit_auto_trading.infrastructure.repositories.sqlite_strategy_repository import SqliteStrategyRepository
 from upbit_auto_trading.infrastructure.repositories.sqlite_trigger_repository import SqliteTriggerRepository
 from upbit_auto_trading.infrastructure.repositories.sqlite_settings_repository import SqliteSettingsRepository
+from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
 from upbit_auto_trading.infrastructure.database.database_manager import (
     DatabaseConnectionProvider
 )
@@ -82,6 +84,7 @@ class RepositoryContainer:
         self._strategy_repository: Optional[StrategyRepository] = None
         self._trigger_repository: Optional[TriggerRepository] = None
         self._settings_repository: Optional[SettingsRepository] = None
+        self._secure_keys_repository: Optional[SecureKeysRepository] = None
 
         # Mock Repository 오버라이드 (테스트용)
         self._mock_repositories: Dict[str, Any] = {}
@@ -139,6 +142,24 @@ class RepositoryContainer:
             self._logger.debug("🔧 SqliteSettingsRepository 인스턴스 생성")
 
         return self._settings_repository
+
+    def get_secure_keys_repository(self) -> SecureKeysRepository:
+        """
+        Secure Keys Repository 반환 (보안 키 관리)
+
+        Returns:
+            SecureKeysRepository: 보안 키 도메인 Repository 인터페이스
+        """
+        # Mock Repository 확인
+        if 'secure_keys' in self._mock_repositories:
+            return self._mock_repositories['secure_keys']
+
+        # Lazy Loading
+        if self._secure_keys_repository is None:
+            self._secure_keys_repository = SqliteSecureKeysRepository(self._db_manager)  # type: ignore
+            self._logger.debug("🔧 SqliteSecureKeysRepository 인스턴스 생성")
+
+        return self._secure_keys_repository
 
     def get_market_data_repository(self):
         """
@@ -235,6 +256,8 @@ class RepositoryContainer:
                 status['active_repositories'].append('settings')
             if self._strategy_repository is not None:
                 status['active_repositories'].append('strategy')
+            if self._secure_keys_repository is not None:
+                status['active_repositories'].append('secure_keys')
 
             from datetime import datetime
             status['timestamp'] = datetime.now().isoformat()

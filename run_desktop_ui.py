@@ -86,7 +86,7 @@ def create_application_context() -> ApplicationContext:
         raise
 
 
-def register_ui_services(app_context: ApplicationContext):
+def register_ui_services(app_context: ApplicationContext, repository_container=None):
     """UI 전용 서비스들을 DI Container에 등록"""
     try:
         container = app_context.container
@@ -176,17 +176,29 @@ def register_ui_services(app_context: ApplicationContext):
             except Exception as e2:
                 print(f"⚠️ MockSettingsService 폴백도 실패: {e2}")
 
-        # ApiKeyService 등록
-        try:
-            from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService, ApiKeyService
-            print("🔧 ApiKeyService 클래스 import 성공")
-            api_key_service = ApiKeyService()
-            print("🔧 ApiKeyService 인스턴스 생성 성공")
-            container.register_singleton(IApiKeyService, api_key_service)
-            print("✅ ApiKeyService 등록 완료")
-        except Exception as e:
-            print(f"⚠️ ApiKeyService 등록 실패: {e}")
-            print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+        # ApiKeyService 등록 (Repository Container 기반 DDD 패턴)
+        if repository_container:
+            try:
+                from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService, ApiKeyService
+                print("🔧 ApiKeyService 클래스 import 성공")
+
+                # Repository Container에서 SecureKeysRepository 가져오기
+                secure_keys_repo = repository_container.get_secure_keys_repository()
+                print("🔧 SecureKeysRepository 인스턴스 해결 성공")
+
+                # Repository 의존성 주입하여 ApiKeyService 생성
+                api_key_service = ApiKeyService(secure_keys_repo)
+                print("🔧 ApiKeyService 인스턴스 생성 성공 (Repository 주입)")
+
+                # DI Container에 등록
+                container.register_singleton(IApiKeyService, api_key_service)
+                print("✅ ApiKeyService 등록 완료 (DDD Repository 패턴)")
+            except Exception as e:
+                print(f"⚠️ ApiKeyService 등록 실패: {e}")
+                print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+                traceback.print_exc()
+        else:
+            print("⚠️ Repository Container가 없어서 ApiKeyService를 등록할 수 없습니다")
 
         # StyleManager 등록
         try:
@@ -250,19 +262,30 @@ def setup_application() -> tuple[QApplication, ApplicationContext]:
     # 1. ApplicationContext 초기화
     app_context = create_application_context()
 
-    # 2. UI 서비스 등록
-    register_ui_services(app_context)
+    # 2. Repository Container 초기화 (DDD Infrastructure Layer)
+    try:
+        from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+        repository_container = RepositoryContainer()
+        print("✅ Repository Container 초기화 완료")
+    except Exception as e:
+        print(f"⚠️ Repository Container 초기화 실패: {e}")
+        repository_container = None
 
-    # 3. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
+    # 3. UI 서비스 등록 (Repository Container 전달)
+    register_ui_services(app_context, repository_container)
+
+    # 4. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
     try:
         from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
-        from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
 
-        # Repository Container 생성
-        repository_container = RepositoryContainer()
-
-        # Application Service Container 생성
-        app_service_container = ApplicationServiceContainer(repository_container)
+        # Application Service Container 생성 (이미 생성된 Repository Container 사용)
+        if repository_container:
+            app_service_container = ApplicationServiceContainer(repository_container)
+        else:
+            # 폴백: 새로운 Repository Container 생성
+            from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+            repository_container = RepositoryContainer()
+            app_service_container = ApplicationServiceContainer(repository_container)
 
         # 전역 Application Container 설정
         set_application_container(app_service_container)

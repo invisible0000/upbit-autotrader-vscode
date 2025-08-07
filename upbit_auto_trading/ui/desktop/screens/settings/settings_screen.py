@@ -297,6 +297,14 @@ class SettingsScreen(QWidget):
             else:
                 self.logger.warning("⚠️ UISettings가 UISettings 타입이 아닙니다 (폴백 위젯 사용 중)")
 
+            # API Key Manager의 상태 변경 시그널을 상위로 중계
+            from upbit_auto_trading.ui.desktop.screens.settings.api_key_manager_secure import ApiKeyManagerSecure
+            if isinstance(self.api_key_manager, ApiKeyManagerSecure):
+                self.api_key_manager.api_status_changed.connect(self._on_api_key_manager_status_changed)
+                self.logger.info("✅ ApiKeyManagerSecure api_status_changed 시그널 중계 연결 완료")
+            else:
+                self.logger.warning("⚠️ ApiKeyManagerSecure가 올바른 타입이 아닙니다 (폴백 위젯 사용 중)")
+
         except Exception as e:
             self.logger.error(f"❌ 하위 위젯 시그널 중계 연결 실패: {e}")
 
@@ -309,6 +317,11 @@ class SettingsScreen(QWidget):
         """UISettings에서 설정 변경 시그널을 받아서 상위로 중계"""
         self.logger.debug("🔄 UISettings에서 설정 변경 시그널 수신하여 중계")
         self.settings_changed.emit()
+
+    def _on_api_key_manager_status_changed(self, connected: bool):
+        """ApiKeyManagerSecure에서 API 상태 변경 시그널을 받아서 상위로 중계"""
+        self.logger.info(f"🔄 ApiKeyManagerSecure에서 API 상태 변경 시그널 수신하여 중계: {'연결됨' if connected else '연결 끊김'}")
+        self.api_status_changed.emit(connected)
 
     # ISettingsView 인터페이스 구현 메서드들
 
