@@ -38,6 +38,9 @@ class StrategyManagementScreen(QWidget):
         self.setWindowTitle("📊 매매 전략 관리")
         self.logger = get_integrated_logger("StrategyManagement")
 
+        # MVP Container 저장용
+        self.mvp_container = None
+
         # LLM_REPORT 초기화 보고
         self._log_llm_report("StrategyScreen_초기화", "시작", "전략 관리 화면 생성")
 
@@ -45,6 +48,11 @@ class StrategyManagementScreen(QWidget):
 
         # LLM_REPORT 완료 보고
         self._log_llm_report("StrategyScreen_초기화", "완료", "4개 탭 구성 완료")
+
+    def set_mvp_container(self, mvp_container):
+        """MVP Container 설정 (Main Window에서 주입)"""
+        self.mvp_container = mvp_container
+        self.logger.info("✅ MVP Container 주입 완료 - 전략 메이커 탭에 적용 예정")
 
     def _log_llm_report(self, operation: str, status: str, details: str = "") -> None:
         """LLM 에이전트 구조화된 보고"""
@@ -96,14 +104,31 @@ class StrategyManagementScreen(QWidget):
             return self.create_fallback_screen("트리거 빌더 로딩 실패")
 
     def create_strategy_maker_tab(self):
-        """전략 메이커 탭 생성 - 실제 매매 전략 생성"""
-        self._log_llm_report("StrategyMaker_탭_생성", "시작", "전략 메이커 컴포넌트 로딩")
+        """전략 메이커 탭 생성 - MVP 패턴 적용 (TASK-13)"""
+        self._log_llm_report("StrategyMaker_탭_생성", "시작", "MVP 패턴 기반 전략 메이커 로딩")
 
         try:
-            from .strategy_maker import StrategyMaker
-            tab = StrategyMaker()
-            self._log_llm_report("StrategyMaker_탭_생성", "성공", "전략 메이커 UI 초기화 완료")
-            return tab
+            # MVP Container가 있으면 MVP 패턴 사용
+            if self.mvp_container:
+                try:
+                    presenter, view = self.mvp_container.create_strategy_maker_mvp()
+                    self._log_llm_report("StrategyMaker_탭_생성", "MVP_성공", "MVP 패턴 적용 완료")
+                    return view
+                except Exception as mvp_error:
+                    self.logger.warning(f"MVP 패턴 적용 실패, 기존 방식 사용: {mvp_error}")
+                    self._log_llm_report("StrategyMaker_탭_생성", "MVP_실패", f"폴백: {str(mvp_error)}")
+
+            # 폴백: 기존 전략 메이커 사용
+            try:
+                from .strategy_maker import StrategyMaker
+                tab = StrategyMaker()
+                self._log_llm_report("StrategyMaker_탭_생성", "기존_방식_성공", "전략 메이커 UI 초기화 완료")
+                return tab
+            except ImportError as import_error:
+                self.logger.error(f"기존 전략 메이커 로드 실패: {import_error}")
+                self._log_llm_report("StrategyMaker_탭_생성", "실패", f"Import 오류: {str(import_error)}")
+                return self.create_fallback_screen("전략 메이커 로딩 실패")
+
         except Exception as e:
             self.logger.error(f"전략 메이커 탭 생성 실패: {e}")
             self._log_llm_report("StrategyMaker_탭_생성", "실패", f"오류: {str(e)}")

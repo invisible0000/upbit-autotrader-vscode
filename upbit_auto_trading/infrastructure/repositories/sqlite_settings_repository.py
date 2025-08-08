@@ -381,3 +381,112 @@ class SqliteSettingsRepository(SettingsRepository):
                 len(str(value)) for value in self._cache.values()
             )
         }
+
+    # ===================================
+    # 누락된 추상 메서드 구현 (스텁)
+    # ===================================
+
+    def get_app_settings(self) -> Dict[str, Any]:
+        """앱 설정 전체 조회"""
+        # TODO: cfg_app_settings 테이블 구현 필요
+        return {}
+
+    def get_available_categories(self) -> Dict[str, List[str]]:
+        """사용 가능한 카테고리 목록 조회"""
+        return {
+            'purpose': ['trend', 'momentum', 'volatility', 'volume', 'price'],
+            'chart': ['overlay', 'subplot'],
+            'comparison': [
+                'price_comparable', 'percentage_comparable', 'zero_centered',
+                'volume_comparable', 'volatility_comparable'
+            ]
+        }
+
+    def get_category_metadata(self, category_type: str, category_key: str) -> Optional[Dict[str, Any]]:
+        """카테고리 메타데이터 조회"""
+        return {
+            'type': category_type,
+            'key': category_key,
+            'description': f'{category_type} 카테고리의 {category_key}'
+        }
+
+    def get_comparison_groups(self) -> Dict[str, Dict[str, Any]]:
+        """비교 그룹 정보 조회"""
+        return {
+            'price_comparable': {'variables': ['SMA', 'EMA', 'price'], 'description': '가격 비교 가능'},
+            'percentage_comparable': {'variables': ['RSI', 'STOCH', 'CCI'], 'description': '백분율 비교 가능'},
+            'zero_centered': {'variables': ['MACD', 'MACD_signal'], 'description': '영점 중심'},
+            'volume_comparable': {'variables': ['volume', 'OBV'], 'description': '거래량 비교 가능'},
+            'volatility_comparable': {'variables': ['ATR', 'BB_width'], 'description': '변동성 비교 가능'}
+        }
+
+    def get_parameter_definition(self, variable_id: str, parameter_name: str) -> Optional[Dict[str, Any]]:
+        """파라미터 정의 조회"""
+        return None
+
+    def get_parameter_help_text(self, variable_id: str, parameter_name: str) -> Optional[str]:
+        """파라미터 도움말 텍스트 조회"""
+        return None
+
+    def get_required_parameters(self, variable_id: str) -> List[str]:
+        """필수 파라미터 목록 조회"""
+        return []
+
+    def get_system_settings(self) -> Dict[str, Any]:
+        """시스템 설정 조회"""
+        return {}
+
+    def get_variable_help_text(self, variable_id: str) -> Optional[str]:
+        """변수 도움말 텍스트 조회"""
+        return None
+
+    def get_variable_placeholder_text(self, variable_id: str, parameter_name: Optional[str] = None) -> Optional[str]:
+        """변수 플레이스홀더 텍스트 조회"""
+        return None
+
+    def get_variable_source(self, variable_id: str) -> Optional[str]:
+        """변수 소스 정보 조회"""
+        return 'database'
+
+    def get_variables_count(self) -> int:
+        """총 변수 개수 조회"""
+        return len(self.get_trading_variables())
+
+    def get_variables_count_by_category(self, purpose_category: str) -> int:
+        """카테고리별 변수 개수 조회"""
+        return len(self.get_trading_variables_by_category(purpose_category))
+
+    def is_variable_active(self, variable_id: str) -> bool:
+        """변수 활성화 상태 확인"""
+        return self.find_trading_variable_by_id(variable_id) is not None
+
+    def requires_parameters(self, variable_id: str) -> bool:
+        """파라미터 필요 여부 확인"""
+        return len(self.get_required_parameters(variable_id)) > 0
+
+    def search_variables(self, query: str) -> List[TradingVariable]:
+        """변수 검색"""
+        all_variables = self.get_trading_variables()
+        query_lower = query.lower()
+        return [
+            var for var in all_variables
+            if query_lower in var.variable_id.lower() or query_lower in var.display_name.lower()
+        ]
+
+    def get_compatibility_rules(self) -> ComparisonGroupRules:
+        """호환성 규칙 조회 - get_comparison_group_rules 위임"""
+        return self.get_comparison_group_rules()
+
+    def is_variable_compatible_with(self, variable_id1: str, variable_id2: str) -> bool:
+        """변수 간 호환성 확인"""
+        # 간단한 구현: 같은 comparison_group이면 호환
+        var1 = self.find_trading_variable_by_id(variable_id1)
+        var2 = self.find_trading_variable_by_id(variable_id2)
+
+        if not var1 or not var2:
+            self._logger.debug(f"🔍 호환성 검증 실패: 변수 조회 불가 ({variable_id1}, {variable_id2})")
+            return False
+
+        is_compatible = var1.comparison_group == var2.comparison_group
+        self._logger.debug(f"🔍 호환성 검증: {variable_id1} ↔ {variable_id2} = {is_compatible}")
+        return is_compatible

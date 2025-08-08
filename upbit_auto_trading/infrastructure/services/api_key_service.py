@@ -16,6 +16,7 @@ from cryptography.fernet import Fernet
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.configuration import paths
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
+from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import mark_api_success, mark_api_failure
 
 
 class IApiKeyService(ABC):
@@ -347,6 +348,7 @@ class ApiKeyService(IApiKeyService):
                 self.logger.info(f"✅ API 연결 성공 - 총 {len(accounts)}개 계좌")
                 self.logger.info(f"💰 총 KRW 잔고: {total_krw:,.0f}원")
 
+                mark_api_success()  # API 성공 기록
                 message = f"API 연결 성공 (총 {len(accounts)}개 계좌, KRW: {total_krw:,.0f}원)"
                 return True, message, account_info
 
@@ -355,6 +357,7 @@ class ApiKeyService(IApiKeyService):
                     loop.close()
 
         except Exception as e:
+            mark_api_failure()  # API 실패 기록
             error_msg = f"API 연결 실패: {str(e)}"
             self.logger.error(f"❌ {error_msg}")
             return False, error_msg, {}

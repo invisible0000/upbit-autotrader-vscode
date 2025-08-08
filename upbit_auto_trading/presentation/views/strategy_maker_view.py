@@ -13,19 +13,21 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from upbit_auto_trading.presentation.interfaces.view_interfaces import IStrategyMakerView
 from upbit_auto_trading.presentation.presenters.strategy_maker_presenter import StrategyMakerPresenter
 from upbit_auto_trading.ui.desktop.common.components import (
     PrimaryButton, SecondaryButton, DangerButton,
-    StyledLineEdit, StyledComboBox
+    StyledLineEdit
 )
 
 
-class StrategyMakerView(QWidget, IStrategyMakerView):
+# PyQt6와 Protocol 기반 인터페이스 사용 (메타클래스 충돌 방지)
+class StrategyMakerView(QWidget):
     """전략 메이커 Passive View
 
     MVP 패턴의 Passive View로 구현된 전략 메이커 UI입니다.
     모든 비즈니스 로직은 Presenter에 위임하고, 순수한 표시/입력 기능만 담당합니다.
+
+    Note: IStrategyMakerView Protocol을 구조적으로 구현합니다.
     """
 
     def __init__(self, presenter: StrategyMakerPresenter, parent=None):

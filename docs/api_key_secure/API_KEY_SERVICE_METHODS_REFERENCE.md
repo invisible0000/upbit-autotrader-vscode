@@ -33,10 +33,11 @@
 - **라인**: 248
 
 #### 1.4 `test_api_connection(self, access_key: str, secret_key: str) -> Tuple[bool, str, Dict[str, Any]]`
-- **목적**: API 연결 테스트 (현재 미구현)
+- **목적**: API 연결 테스트 ✅ **구현됨** (Task 2.6 모니터링 통합)
 - **반환**: `(success, message, account_info)`
-- **상태**: 향후 Infrastructure Layer UpbitClient 사용 예정
-- **라인**: 286
+- **모니터링**: SimpleFailureMonitor 통합 (성공/실패 자동 기록)
+- **Infrastructure**: UpbitClient 사용, aiohttp 세션 관리
+- **라인**: 296
 
 #### 1.5 `delete_api_keys(self) -> bool`
 - **목적**: API 키 및 암호화 키 삭제 (기본 버전)
@@ -304,6 +305,14 @@ service.clear_cache()
 - `get_or_create_api_instance()`: 통합 메서드 (권장)
 - `_is_cache_valid()`: TTL + 키 변경 감지
 - **성능**: 83.7% 향상 달성
+
+### ✅ **Task 2.6**: API 모니터링 시스템 통합
+- `test_api_connection()`: SimpleFailureMonitor 통합
+- **모니터링 범위**: UpbitClient 4개 메서드 + ApiKeyService
+- **성능**: 호출당 0.0005ms (0.0025% 오버헤드)
+- **UI 컴포넌트**: ClickableApiStatus 위젯 (10초 쿨다운)
+- **완료율**: 80% (5단계 중 4단계 완료)
+- **참조 문서**: `API_MONITORING_SYSTEM_REFERENCE.md`
 
 ---
 

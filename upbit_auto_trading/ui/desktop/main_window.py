@@ -302,6 +302,9 @@ class MainWindow(QMainWindow):
             self.status_bar = StatusBar()
         self.setStatusBar(self.status_bar)
 
+        # API 새로고침 시그널 연결
+        self.status_bar.api_refresh_requested.connect(self._on_api_refresh_requested)
+
         # 초기 API 연결 상태 확인
         self._check_initial_api_status()
 
@@ -525,25 +528,18 @@ class MainWindow(QMainWindow):
                 screen = AssetScreenerScreen()
 
             elif screen_name == "매매전략 관리":
-                # MVP 패턴 기반 전략 관리 화면 사용 (TASK-13)
-                if self.mvp_container:
-                    try:
-                        # MVP 패턴으로 전략 관리 화면 생성
-                        presenter, view = self.mvp_container.create_strategy_maker_mvp()
-                        screen = view
-                        self._log_info("✅ MVP 패턴 전략 관리 화면 생성 완료")
-                        self._log_llm_report("MVP", "전략관리 화면 MVP 패턴 적용 성공")
-                    except Exception as e:
-                        self._log_warning(f"⚠️ MVP 패턴 전략 관리 화면 생성 실패, 기존 방식 사용: {e}")
-                        # 폴백: 기존 전략 관리 화면 사용
-                        from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
-                        screen = StrategyManagementScreen()
-                        self._log_llm_report("MVP", f"전략관리 MVP 폴백: {type(e).__name__}")
+                # 기존 탭 구조 유지하면서 전략 메이커 탭에만 MVP 패턴 적용 (TASK-13)
+                from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
+                screen = StrategyManagementScreen()
+
+                # MVP Container를 전략 관리 화면에 전달 (전략 메이커 탭에서 사용)
+                if self.mvp_container and hasattr(screen, 'set_mvp_container'):
+                    screen.set_mvp_container(self.mvp_container)
+                    self._log_info("✅ 기존 탭 구조 유지하며 MVP Container 주입 완료")
+                    self._log_llm_report("MVP", "전략관리 화면 탭 구조 유지 + MVP 패턴 적용")
                 else:
-                    # MVP Container가 없으면 기존 방식 사용
-                    from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
-                    screen = StrategyManagementScreen()
-                    self._log_info("MVP Container 없음, 기존 전략 관리 화면 사용")
+                    self._log_info("기존 전략 관리 화면 사용 (탭 구조 유지)")
+                    self._log_llm_report("MVP", "전략관리 화면 기존 방식 사용")
 
                 # 백테스팅 요청 시그널 연결 (시그널이 있는 경우)
                 if hasattr(screen, 'backtest_requested'):
@@ -1089,6 +1085,171 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_error(f"API 상태 업데이트 실패: {e}")
             self._log_llm_report("IL", f"API 상태 업데이트 실패: {type(e).__name__}")
+
+    def _on_api_refresh_requested(self):
+        """API 상태 새로고침 요청 처리"""
+        try:
+            self._log_info("사용자가 API 상태 새로고침을 요청했습니다")
+            self._log_llm_report("IL", "API 수동 새로고침 요청")
+
+            # 상태바에 확인 중 표시
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_api_status(None)  # 확인 중 상태
+
+            # 백그라운드에서 API 연결 테스트 수행
+            self._perform_background_api_test()
+
+        except Exception as e:
+            self._log_error(f"API 새로고침 요청 처리 실패: {e}")
+            self._log_llm_report("IL", f"API 새로고침 실패: {type(e).__name__}")
+
+    def _perform_background_api_test(self):
+        """백그라운드에서 API 연결 테스트 수행"""
+        try:
+            self._log_info("사용자 요청으로 API 연결 상태 확인 중...")
+
+            # DI Container가 있는 경우 API 키 서비스를 통한 실제 연결 테스트
+            if self.di_container:
+                try:
+                    api_service = self.di_container.resolve(IApiKeyService)
+                    if api_service:
+                        # 실제 API 연결 테스트 수행
+                        try:
+                            # API 키 로드
+                            api_keys = api_service.load_api_keys()
+
+                            if not api_keys or not any(api_keys):
+                                # API 키가 없음
+                                if hasattr(self, 'status_bar'):
+                                    self.status_bar.set_api_status(False)
+                                self._log_warning("API 키가 설정되지 않았습니다")
+
+                                from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                                mark_api_failure()
+                                return
+
+                            # API 키가 있으면 실제 통신 테스트
+                            access_key, secret_key, _ = api_keys
+                            if not access_key or not secret_key:
+                                # 키가 불완전함
+                                if hasattr(self, 'status_bar'):
+                                    self.status_bar.set_api_status(False)
+                                self._log_warning("API 키 정보가 불완전합니다")
+
+                                from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                                mark_api_failure()
+                                return
+
+                            # test_api_connection 메서드 사용 (올바른 메서드명)
+                            success, message, account_info = api_service.test_api_connection(access_key, secret_key)
+
+                            # 상태바 업데이트
+                            if hasattr(self, 'status_bar'):
+                                self.status_bar.set_api_status(success)
+
+                            # 모니터링에 결과 기록
+                            from upbit_auto_trading.infrastructure.monitoring import mark_api_success, mark_api_failure
+                            if success:
+                                mark_api_success()
+                                self._log_info(f"✅ API 연결 테스트 성공: {message}")
+                            else:
+                                mark_api_failure()
+                                self._log_warning(f"❌ API 연결 테스트 실패: {message}")
+                            return
+
+                        except Exception as e:
+                            # API 테스트 중 예외 발생
+                            self._log_error(f"API 연결 테스트 중 오류: {e}")
+
+                            # 실패 상태로 설정
+                            if hasattr(self, 'status_bar'):
+                                self.status_bar.set_api_status(False)
+
+                            # 모니터링에 실패 기록
+                            from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                            mark_api_failure()
+                            return
+
+                    else:
+                        self._log_warning("DI Container에서 API 키 서비스를 resolve할 수 없습니다")
+
+                except Exception as e:
+                    self._log_error(f"DI Container를 통한 API 서비스 resolve 실패: {e}")            # 폴백: 직접 ApiKeyService 생성하여 테스트
+            self._log_info("DI Container 실패, 직접 API 키 서비스 생성으로 폴백")
+            try:
+                from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
+                from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
+                from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
+                from upbit_auto_trading.infrastructure.configuration import paths
+
+                # DatabaseManager 생성 후 Repository 주입으로 ApiKeyService 생성
+                db_manager = DatabaseManager({"settings": str(paths.SETTINGS_DB)})
+                repo = SqliteSecureKeysRepository(db_manager)
+                api_key_service = ApiKeyService(repo)
+
+                # API 키 로드 및 테스트
+                api_keys = api_key_service.load_api_keys()
+
+                if not api_keys or not any(api_keys):
+                    # API 키가 없음
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(False)
+                    self._log_warning("API 키가 설정되지 않았습니다")
+
+                    from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                    mark_api_failure()
+                    return
+
+                # API 키가 있으면 실제 통신 테스트
+                access_key, secret_key, _ = api_keys
+                if not access_key or not secret_key:
+                    # 키가 불완전함
+                    if hasattr(self, 'status_bar'):
+                        self.status_bar.set_api_status(False)
+                    self._log_warning("API 키 정보가 불완전합니다")
+
+                    from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                    mark_api_failure()
+                    return
+
+                # 실제 API 테스트
+                success, message, account_info = api_key_service.test_api_connection(access_key, secret_key)
+
+                # 상태바 업데이트
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(success)
+
+                # 모니터링에 결과 기록
+                from upbit_auto_trading.infrastructure.monitoring import mark_api_success, mark_api_failure
+                if success:
+                    mark_api_success()
+                    self._log_info(f"✅ API 연결 테스트 성공: {message}")
+                else:
+                    mark_api_failure()
+                    self._log_warning(f"❌ API 연결 테스트 실패: {message}")
+
+            except Exception as e:
+                # 폴백도 실패
+                self._log_error(f"폴백 API 테스트도 실패: {e}")
+
+                # 실패 상태로 설정
+                if hasattr(self, 'status_bar'):
+                    self.status_bar.set_api_status(False)
+
+                # 모니터링에 실패 기록
+                from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+                mark_api_failure()
+
+        except Exception as e:
+            self._log_error(f"백그라운드 API 테스트 실패: {e}")
+
+            # 예외 발생 시 연결 끊김 상태로 설정
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_api_status(False)
+
+            # 모니터링에 실패 기록
+            from upbit_auto_trading.infrastructure.monitoring import mark_api_failure
+            mark_api_failure()
 
     def _on_db_status_changed(self, connected):
         """DB 연결 상태 변경 시 호출되는 메서드"""

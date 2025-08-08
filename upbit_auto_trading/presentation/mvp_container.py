@@ -136,27 +136,44 @@ class MVPContainer:
             tuple: (presenter, view) 튜플
         """
         from upbit_auto_trading.presentation.views.strategy_maker_view import StrategyMakerView
+        from upbit_auto_trading.presentation.presenters.strategy_maker_presenter import StrategyMakerPresenter
 
-        # Presenter 팩토리 함수 생성
-        presenter_factory = self.create_strategy_maker_presenter()
+        logger = create_component_logger("MVPContainer")
 
-        # View를 먼저 생성하고 Presenter에 연결하는 방식으로 순환 의존성 해결
-        def create_mvp_pair():
-            # 임시 Presenter (View 없이)
-            temp_presenter = StrategyMakerPresenter(
-                view=None,  # 나중에 설정
-                strategy_service=self._app_container.get_strategy_service()
+        try:
+            # Strategy Service 확보
+            strategy_service = self._app_container.get_strategy_service()
+            logger.info("📋 StrategyApplicationService 확보 완료")
+
+            # MVP 패턴: View 없이 Presenter 생성 후 연결하는 방식
+            # 1. MockView로 임시 초기화 (타입 안전성 확보)
+            class DummyView:
+                """MVP 초기화용 임시 View"""
+                def __getattr__(self, name):
+                    return lambda *args, **kwargs: None
+
+            dummy_view = DummyView()
+
+            # 2. Presenter 생성 (dummy_view로 초기화)
+            presenter = StrategyMakerPresenter(
+                view=dummy_view,  # type: ignore
+                strategy_service=strategy_service
             )
+            logger.info("🎭 StrategyMakerPresenter 생성 완료")
 
-            # View 생성 (Presenter와 연결)
-            view = StrategyMakerView(presenter=temp_presenter)
+            # 3. 실제 View 생성 (Presenter와 연결)
+            view = StrategyMakerView(presenter=presenter)
+            logger.info("🖼️ StrategyMakerView 생성 완료")
 
-            # Presenter에 View 연결
-            temp_presenter._view = view
+            # 4. Presenter에 실제 View 연결 (순환 의존성 해결)
+            presenter._view = view
+            logger.info("🔗 MVP 패턴 Presenter-View 연결 완료")
 
-            return temp_presenter, view
+            return presenter, view
 
-        return create_mvp_pair()
+        except Exception as e:
+            logger.error(f"❌ Strategy Maker MVP 생성 실패: {e}")
+            raise RuntimeError(f"Strategy Maker MVP 생성 중 오류 발생: {e}") from e
 
     def create_settings_mvp(self, settings_service=None, parent=None):
         """설정 MVP 조합 생성

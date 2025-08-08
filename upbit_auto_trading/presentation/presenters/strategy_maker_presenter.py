@@ -6,7 +6,7 @@ Strategy Maker Presenter - MVP 패턴
 UI는 순수한 표시/입력 기능만 담당하도록 분리합니다.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 
 from upbit_auto_trading.presentation.interfaces.view_interfaces import IStrategyMakerView
@@ -24,11 +24,11 @@ class StrategyMakerPresenter:
     - UI 로직과 비즈니스 로직의 완전한 분리
     """
 
-    def __init__(self, view: IStrategyMakerView, strategy_service: StrategyApplicationService):
+    def __init__(self, view: Optional[IStrategyMakerView], strategy_service: StrategyApplicationService):
         """Presenter 초기화
 
         Args:
-            view: 전략 메이커 View 인터페이스
+            view: 전략 메이커 View 인터페이스 (MVP 패턴에서 나중에 설정 가능)
             strategy_service: 전략 관리 Application Service
         """
         self._view = view
@@ -41,6 +41,10 @@ class StrategyMakerPresenter:
 
         Application Service에서 전략 목록을 조회하고 View에 표시합니다.
         """
+        if not self._view:
+            self._logger.warning("View가 연결되지 않음, 전략 목록 로드 중단")
+            return
+
         try:
             self._view.show_loading("전략 목록을 불러오는 중...")
 
@@ -57,8 +61,9 @@ class StrategyMakerPresenter:
             self._logger.info(f"전략 목록 로드 완료: {len(strategies)}개")
 
         except Exception as e:
-            self._view.hide_loading()
-            self._view.display_error_message(f"전략 목록 로드 실패: {str(e)}")
+            if self._view:
+                self._view.hide_loading()
+                self._view.display_error_message(f"전략 목록 로드 실패: {str(e)}")
             self._logger.error(f"전략 목록 로드 실패: {e}", exc_info=True)
 
     def save_strategy(self) -> None:

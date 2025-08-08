@@ -6,6 +6,7 @@ from datetime import datetime
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_private_client import UpbitPrivateClient
 from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import ApiClientError
+from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import mark_api_success, mark_api_failure
 
 
 class UpbitClient:
@@ -46,7 +47,13 @@ class UpbitClient:
     async def get_candles_minutes(self, market: str, unit: int = 1,
                                   to: Optional[str] = None, count: int = 200) -> List[Dict[str, Any]]:
         """분봉 캔들 조회"""
-        return await self.public.get_candles_minutes(market, unit, to, count)
+        try:
+            result = await self.public.get_candles_minutes(market, unit, to, count)
+            mark_api_success()  # API 성공 기록
+            return result
+        except Exception:
+            mark_api_failure()  # API 실패 기록
+            raise
 
     async def get_candles_days(self, market: str, to: Optional[str] = None,
                                count: int = 200, converting_price_unit: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -65,11 +72,23 @@ class UpbitClient:
 
     async def get_orderbook(self, markets: List[str]) -> List[Dict[str, Any]]:
         """호가 정보 조회"""
-        return await self.public.get_orderbook(markets)
+        try:
+            result = await self.public.get_orderbook(markets)
+            mark_api_success()  # API 성공 기록
+            return result
+        except Exception:
+            mark_api_failure()  # API 실패 기록
+            raise
 
     async def get_tickers(self, markets: List[str]) -> List[Dict[str, Any]]:
         """현재가 정보 조회"""
-        return await self.public.get_tickers(markets)
+        try:
+            result = await self.public.get_tickers(markets)
+            mark_api_success()  # API 성공 기록
+            return result
+        except Exception:
+            mark_api_failure()  # API 실패 기록
+            raise
 
     async def get_trades_ticks(self, market: str, to: Optional[str] = None,
                                count: int = 200, cursor: Optional[str] = None,
@@ -87,8 +106,14 @@ class UpbitClient:
 
     async def get_accounts(self) -> List[Dict[str, Any]]:
         """계좌 정보 조회"""
-        self.requires_private_access()
-        return await self.private.get_accounts()
+        try:
+            self.requires_private_access()
+            result = await self.private.get_accounts()
+            mark_api_success()  # API 성공 기록
+            return result
+        except Exception as e:
+            mark_api_failure()  # API 실패 기록
+            raise
 
     async def get_account_balance(self, currency: str) -> Optional[Dict[str, Any]]:
         """특정 화폐 잔고 조회"""

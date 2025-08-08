@@ -9,13 +9,13 @@ from typing import Optional
 
 class ThemeNotifier(QObject):
     """전역 테마 변경 알림을 담당하는 클래스"""
-    
+
     # 테마 변경 신호
     theme_changed = pyqtSignal(bool)  # True: 다크 테마, False: 라이트 테마
-    
+
     def __init__(self):
         super().__init__()
-    
+
     def is_dark_theme(self) -> bool:
         """현재 다크 테마인지 확인"""
         try:
@@ -29,7 +29,7 @@ class ThemeNotifier(QObject):
                 return is_dark
             except Exception as e:
                 print(f"⚠️ StyleManager 접근 실패: {e}")
-            
+
             # 2. QApplication palette 방식 (백업) - 주석 처리
             # app = QApplication.instance()
             # if app:
@@ -40,7 +40,7 @@ class ThemeNotifier(QObject):
         except Exception as e:
             print(f"⚠️ 테마 감지 실패: {e}")
         return False
-    
+
     def notify_theme_changed(self):
         """테마 변경 알림 발송"""
         # StyleManager에서 직접 현재 테마 상태 가져오기
@@ -76,16 +76,21 @@ def apply_matplotlib_theme_simple():
     try:
         import matplotlib.pyplot as plt
         import matplotlib as mpl
-        
+        import logging
+
+        # matplotlib 로깅 레벨을 WARNING으로 설정하여 디버그 출력 억제
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+        logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+
         notifier = get_theme_notifier()
         is_dark = notifier.is_dark_theme()
-        
+
         # 한글 폰트 설정 (경고 메시지 방지)
         try:
             import matplotlib.font_manager as fm
             # 시스템에서 사용 가능한 한글 폰트 찾기
-            font_list = [font.name for font in fm.fontManager.ttflist 
-                        if 'Gothic' in font.name or 'Malgun' in font.name or '맑은' in font.name]
+            font_list = [font.name for font in fm.fontManager.ttflist
+                         if 'Gothic' in font.name or 'Malgun' in font.name or '맑은' in font.name]
             if font_list:
                 mpl.rcParams['font.family'] = font_list[0]
             else:
@@ -93,7 +98,7 @@ def apply_matplotlib_theme_simple():
                 mpl.rcParams['font.family'] = 'sans-serif'
         except Exception:
             pass
-        
+
         if is_dark:
             print("🎨 다크 테마 적용: matplotlib 'dark_background' 스타일")
             plt.style.use('dark_background')
@@ -118,6 +123,6 @@ def apply_matplotlib_theme_simple():
             mpl.rcParams['text.color'] = 'black'
             mpl.rcParams['figure.facecolor'] = 'white'  # 그림 배경
             mpl.rcParams['axes.facecolor'] = 'white'    # 축 배경
-            
+
     except Exception as e:
         print(f"⚠️ matplotlib 테마 적용 실패: {e}")

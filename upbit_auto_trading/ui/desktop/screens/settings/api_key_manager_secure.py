@@ -138,6 +138,7 @@ class ApiKeyManagerSecure(QWidget):
         # 테스트 버튼
         self.test_button = QPushButton("테스트")
         self.test_button.setObjectName("button-test-api-keys")
+        self.test_button.setToolTip("저장된 API 키로 연결 테스트를 수행합니다.\n(입력 박스 값이 아닌 저장된 키만 사용)")
         button_layout.addWidget(self.test_button)
 
         # 삭제 버튼
@@ -206,6 +207,7 @@ class ApiKeyManagerSecure(QWidget):
 
             if not api_keys or not any(api_keys):
                 self.logger.debug("저장된 API 키가 없습니다.")
+                self._update_button_states(has_saved_keys=False)
                 return
 
             # Tuple 형태로 반환됨: (access_key, secret_key, trade_permission)
@@ -226,15 +228,41 @@ class ApiKeyManagerSecure(QWidget):
             # Trade Permission 설정
             self.trade_permission_checkbox.setChecked(trade_permission)
 
+            # 버튼 상태 업데이트
+            self._update_button_states(has_saved_keys=True)
+
             self.logger.debug("API 키 설정 로드 완료 (보안 마스킹 + 캐싱 최적화)")
 
         except Exception as e:
             self.logger.error(f"API 키 로드 중 오류: {e}")
+            self._update_button_states(has_saved_keys=False)
             QMessageBox.warning(
                 self,
                 "로드 오류",
                 f"API 키 설정을 읽는 중 오류가 발생했습니다:\n{str(e)}"
             )
+
+    def _update_button_states(self, has_saved_keys: bool):
+        """버튼 상태 업데이트 - 새로운 정책 반영
+
+        Args:
+            has_saved_keys (bool): 저장된 키 존재 여부
+        """
+        # 테스트 버튼: 저장된 키가 있을 때만 활성화
+        self.test_button.setEnabled(has_saved_keys)
+
+        # 삭제 버튼: 저장된 키가 있을 때만 활성화
+        self.delete_button.setEnabled(has_saved_keys)
+
+        # 저장 버튼: 항상 활성화 (새로운 키 입력용)
+        self.save_button.setEnabled(True)
+
+        if has_saved_keys:
+            self.test_button.setToolTip("저장된 API 키로 연결 테스트를 수행합니다.")
+        else:
+            self.test_button.setToolTip("저장된 API 키가 없습니다. 먼저 키를 입력하고 저장해주세요.")
+
+        self.logger.debug(f"🔘 버튼 상태 업데이트: 테스트={has_saved_keys}, 삭제={has_saved_keys}")
 
     def save_settings(self):
         """외부 호출용 저장 함수"""
@@ -319,6 +347,9 @@ class ApiKeyManagerSecure(QWidget):
                 secret_key_input = ""
                 gc.collect()
 
+                # 버튼 상태 업데이트 (저장 완료 후)
+                self._update_button_states(has_saved_keys=True)
+
                 self.settings_changed.emit()
 
                 # 저장 후 자동으로 API 연결 테스트 수행 (조용한 모드)
@@ -341,12 +372,13 @@ class ApiKeyManagerSecure(QWidget):
             )
 
     def test_api_keys(self, silent=False):
-        """API 키 테스트 - 보안 강화된 버전
+        """API 키 테스트 - 저장된 키만 사용하는 새로운 정책
 
-        보안 정책:
-        1. 입력 필드와 저장된 키 간 일관성 검증
-        2. 혼합 키 조합 방지
-        3. 명시적인 키 소스 선택
+        새로운 보안 정책:
+        1. 테스트 버튼은 저장된 인증 정보만 사용
+        2. 입력 박스의 값은 절대 사용하지 않음
+        3. 저장된 정보가 없으면 테스트 불가
+        4. 입력 박스는 표시용도만
 
         Args:
             silent (bool): True인 경우 성공/실패 메시지 팝업을 표시하지 않음
@@ -358,72 +390,37 @@ class ApiKeyManagerSecure(QWidget):
                 self.api_status_changed.emit(False)
                 return
 
-            # 현재 입력 상태 분석
-            access_key_input = self.access_key_input.text().strip()
-            secret_key_input = self.secret_key_input.text().strip()
+            # 🔒 새로운 정책: 저장된 키 존재 여부만 확인
+            if not self.api_key_service.has_valid_keys():
+                if not silent:
+                    QMessageBox.warning(self, "테스트 불가",
+                        "저장된 API 키가 없습니다.\n\n"
+                        "먼저 API 키를 입력하고 저장 버튼을 눌러주세요.")
+                self.logger.warning("🔒 테스트 실패: 저장된 API 키 없음")
+                self.api_status_changed.emit(False)
+                return
 
-            # 🔒 보안 검증: 키 소스 일관성 확인
-            has_saved_keys = self._is_saved and self.api_key_service.has_valid_keys()
-            is_secret_masked = secret_key_input.startswith("●")
+            # 저장된 키만 사용 (입력 박스 값 무시)
+            saved_keys = self.api_key_service.load_api_keys()
+            if not saved_keys or len(saved_keys) < 2:
+                if not silent:
+                    QMessageBox.warning(self, "키 오류", "저장된 API 키를 불러올 수 없습니다.")
+                self.logger.error("🔒 테스트 실패: 저장된 키 로드 실패")
+                self.api_status_changed.emit(False)
+                return
 
-            # 시나리오 1: 새로운 키 입력 (저장하지 않은 상태)
-            if not has_saved_keys or not is_secret_masked:
-                # 둘 다 새로 입력되어야 함
-                if not access_key_input:
-                    if not silent:
-                        QMessageBox.warning(self, "입력 오류", "Access Key를 입력해주세요.")
-                    self.logger.warning("🔒 보안 검증 실패: Access Key 없음")
-                    self.api_status_changed.emit(False)
-                    return
+            access_key, secret_key, _ = saved_keys
 
-                if not secret_key_input or is_secret_masked:
-                    if not silent:
-                        QMessageBox.warning(self, "입력 오류",
-                            "Secret Key를 입력해주세요.\n\n보안상 새로운 Access Key와 함께 Secret Key도 다시 입력해야 합니다.")
-                    self.logger.warning("🔒 보안 검증 실패: Secret Key 불완전")
-                    self.api_status_changed.emit(False)
-                    return
+            if not access_key or not secret_key:
+                if not silent:
+                    QMessageBox.warning(self, "키 오류", "저장된 API 키가 불완전합니다.")
+                self.logger.error("🔒 테스트 실패: 저장된 키 불완전")
+                self.api_status_changed.emit(False)
+                return
 
-                # 새로 입력된 키 사용
-                access_key = access_key_input
-                secret_key = secret_key_input
-                self.logger.info("🔒 보안 검증: 새로운 키 조합 테스트")
-
-            # 시나리오 2: 저장된 키 사용 (Access Key도 저장된 것과 일치해야 함)
-            else:
-                # 저장된 키 로드
-                saved_keys = self.api_key_service.load_api_keys()
-                if not saved_keys or len(saved_keys) < 2:
-                    if not silent:
-                        QMessageBox.warning(self, "키 오류", "저장된 API 키를 찾을 수 없습니다.")
-                    self.logger.error("🔒 보안 검증 실패: 저장된 키 없음")
-                    self.api_status_changed.emit(False)
-                    return
-
-                saved_access_key, saved_secret_key, _ = saved_keys
-
-                # 🔒 핵심 보안 검증: Access Key 일치 확인
-                if access_key_input != saved_access_key:
-                    if not silent:
-                        QMessageBox.warning(self, "보안 오류",
-                            "입력된 Access Key가 저장된 키와 다릅니다.\n\n"
-                            "보안상 다음 중 하나를 선택하세요:\n"
-                            "1. 새로운 키 조합을 테스트하려면 Secret Key도 함께 입력\n"
-                            "2. 저장된 키를 테스트하려면 Access Key를 원래대로 복원")
-                    self.logger.warning("🔒 보안 검증 실패: Access Key 불일치 - 혼합 키 조합 방지")
-                    self.api_status_changed.emit(False)
-                    return
-
-                # 저장된 키 사용
-                access_key = saved_access_key
-                secret_key = saved_secret_key
-                self.logger.info("🔒 보안 검증: 저장된 키 조합 테스트")
-
-            # API 연결 테스트 수행
-            self.logger.info(f"🔍 API 테스트 시작 - Access Key: {access_key[:10]}...")
-            test_result = self.api_key_service.test_api_connection(access_key, secret_key)
-
-            # Tuple 형태로 반환됨: (success, message, account_info)
+            # 저장된 키로만 API 테스트 수행
+            self.logger.info(f"� 저장된 키로 API 테스트 시작 - Access Key: {access_key[:10]}...")
+            test_result = self.api_key_service.test_api_connection(access_key, secret_key)            # Tuple 형태로 반환됨: (success, message, account_info)
             success, message, account_info = test_result
 
             if success:
@@ -523,6 +520,9 @@ class ApiKeyManagerSecure(QWidget):
                 self._is_saved = False
                 self._is_editing_mode = False
                 gc.collect()
+
+                # 버튼 상태 업데이트 (삭제 완료 후)
+                self._update_button_states(has_saved_keys=False)
 
                 self.api_status_changed.emit(False)
                 self.settings_changed.emit()

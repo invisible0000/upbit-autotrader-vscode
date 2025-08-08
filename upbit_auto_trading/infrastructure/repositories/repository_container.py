@@ -28,6 +28,9 @@ from upbit_auto_trading.domain.repositories.trigger_repository import TriggerRep
 from upbit_auto_trading.domain.repositories.settings_repository import SettingsRepository
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 
+# Domain Services
+from upbit_auto_trading.domain.services.strategy_compatibility_service import StrategyCompatibilityService
+
 # Infrastructure 구현체들
 from upbit_auto_trading.infrastructure.repositories.sqlite_strategy_repository import SqliteStrategyRepository
 from upbit_auto_trading.infrastructure.repositories.sqlite_trigger_repository import SqliteTriggerRepository
@@ -85,6 +88,9 @@ class RepositoryContainer:
         self._trigger_repository: Optional[TriggerRepository] = None
         self._settings_repository: Optional[SettingsRepository] = None
         self._secure_keys_repository: Optional[SecureKeysRepository] = None
+
+        # Domain Services (Lazy Loading용)
+        self._compatibility_service: Optional[StrategyCompatibilityService] = None
 
         # Mock Repository 오버라이드 (테스트용)
         self._mock_repositories: Dict[str, Any] = {}
@@ -190,6 +196,26 @@ class RepositoryContainer:
         # TODO: SqliteBacktestRepository 구현
         self._logger.warning("⚠️ Backtest Repository는 추후 구현 예정")
         raise NotImplementedError("Backtest Repository는 Phase 4에서 구현 예정")
+
+    def get_compatibility_service(self) -> StrategyCompatibilityService:
+        """
+        Strategy Compatibility Service 반환
+
+        Returns:
+            StrategyCompatibilityService: 전략 호환성 검증 Domain Service
+        """
+        # Mock Service 확인
+        if 'compatibility' in self._mock_repositories:
+            return self._mock_repositories['compatibility']
+
+        # Lazy Loading
+        if self._compatibility_service is None:
+            # SettingsRepository를 dependency로 주입
+            settings_repo = self.get_settings_repository()
+            self._compatibility_service = StrategyCompatibilityService(settings_repository=settings_repo)
+            self._logger.info("✅ StrategyCompatibilityService 초기화 완료")
+
+        return self._compatibility_service
 
     # ===================================
     # 테스트 지원 메서드들
