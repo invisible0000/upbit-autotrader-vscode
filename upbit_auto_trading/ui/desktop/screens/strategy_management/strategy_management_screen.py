@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 # 리팩토링된 트리거 빌더 시스템 import
 try:
@@ -36,7 +36,8 @@ class StrategyManagementScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("📊 매매 전략 관리")
-        self.logger = get_integrated_logger("StrategyManagement")
+        # IL 스마트 로깅 초기화
+        self.logger = create_component_logger("StrategyManagement")
 
         # MVP Container 저장용
         self.mvp_container = None

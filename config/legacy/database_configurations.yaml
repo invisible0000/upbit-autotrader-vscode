@@ -1,0 +1,21 @@
+market_data:
+  created_at: '2025-08-08T17:38:42.903379'
+  database_path: D:\projects\upbit-autotrader-vscode\data\market_data.sqlite3
+  database_type: market_data
+  is_active: true
+  source_path: null
+  updated_at: '2025-08-08T17:38:42.904617'
+settings:
+  created_at: '2025-08-08T18:17:11.442825'
+  database_path: d:\projects\upbit-autotrader-vscode\data\settings.sqlite3
+  database_type: settings
+  is_active: true
+  source_path: null
+  updated_at: '2025-08-08T18:17:11.444571'
+strategies:
+  created_at: '2025-08-08T17:38:42.892344'
+  database_path: D:\projects\upbit-autotrader-vscode\data\strategies.sqlite3
+  database_type: strategies
+  is_active: true
+  source_path: null
+  updated_at: '2025-08-08T17:38:42.893234'

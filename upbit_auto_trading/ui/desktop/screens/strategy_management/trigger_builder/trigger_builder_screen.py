@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QTreeWidgetItem, QListWidgetItem, QTreeWidget, QLineEdit, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 # matplotlib 관련 import (차트용)
 try:
@@ -118,7 +118,7 @@ class TriggerBuilderScreen(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("🎯 트리거 빌더 v2.0 (완전 리팩토링)")
-        self.logger = get_integrated_logger("TriggerBuilder")
+        self.logger = create_component_logger("TriggerBuilder")
 
         # LLM_REPORT 초기화 보고
         self._log_llm_report("TriggerBuilder_초기화", "시작", "컴포넌트 기반 트리거 빌더 생성")

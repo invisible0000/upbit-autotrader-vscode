@@ -34,6 +34,13 @@ $env:UPBIT_LOG_SCOPE='verbose'             # 로그 레벨 제어
 $env:UPBIT_COMPONENT_FOCUS='ComponentName' # 특정 컴포넌트 집중
 ```
 
+#### 파일명 일관성 유지 (필수 규칙)
+**기존 기능을 교체할 시 파일명 연속성을 유지합니다.**
+- 기존 파일을 `{original_name}_legacy.py` 또는 `{original_name}_backup.py`로 백업
+- 새 구현체는 **원래 파일명을 그대로 사용**
+- 임시 파일명 (`simple_`, `new_`, `temp_` 등) 사용 금지
+- 파일명 변경으로 인한 import 경로 혼란 방지
+
 ### 2. DDD 아키텍처 준수
 
 #### 4계층 구조 엄격 준수

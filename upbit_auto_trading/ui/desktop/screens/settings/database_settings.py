@@ -13,9 +13,10 @@ import os
 import json
 import shutil
 import yaml
+import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QMessageBox,
@@ -27,6 +28,28 @@ from PyQt6.QtGui import QFont, QIcon
 
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+
+# DDD Services
+from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
+from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
+    FileSystemDatabaseConfigurationRepository
+)
+
+# MVP Pattern Integration
+from upbit_auto_trading.ui.desktop.screens.settings.interfaces.database_config_view_interface import (
+    IDatabaseConfigView, IDatabaseConfigViewEvents
+)
+from upbit_auto_trading.ui.desktop.screens.settings.presenters.database_config_presenter import (
+    DatabaseConfigPresenter
+)
+
+# Application Layer Integration
+from upbit_auto_trading.application.services.database_configuration_app_service import (
+    DatabaseConfigurationAppService
+)
+from upbit_auto_trading.infrastructure.repositories.database_config_repository import (
+    DatabaseConfigRepository
+)
 
 # DatabaseManager 임포트
 try:
@@ -58,23 +81,18 @@ except ImportError as e:
     StyledLineEdit = QLineEdit
     StyledButton = QPushButton
 
-# simple_paths 시스템 임포트
-try:
-    from upbit_auto_trading.config.simple_paths import SimplePaths
-    IMPORT_SUCCESS = True
-except ImportError as import_error:
-    print(f"❌ [ERROR] simple_paths import 실패: {import_error}")
-    IMPORT_SUCCESS = False
+# simple_paths 시스템 - 이미 상단에서 import됨
+IMPORT_SUCCESS = True
 
-    # 백업용 더미 클래스
-    class SimplePaths:
-        def __init__(self):
-            from pathlib import Path
-            self.DATA_DIR = Path("data")
-            self.SETTINGS_DB = self.DATA_DIR / "settings.sqlite3"
-            self.STRATEGIES_DB = self.DATA_DIR / "strategies.sqlite3"
-            self.MARKET_DATA_DB = self.DATA_DIR / "market_data.sqlite3"
-            self.BACKUPS_DIR = Path("backups")
+# 백업용 더미 클래스 (사용되지 않음)
+class SimplePaths:
+    def __init__(self):
+        from pathlib import Path
+        self.DATA_DIR = Path("data")
+        self.SETTINGS_DB = self.DATA_DIR / "settings.sqlite3"
+        self.STRATEGIES_DB = self.DATA_DIR / "strategies.sqlite3"
+        self.MARKET_DATA_DB = self.DATA_DIR / "market_data.sqlite3"
+        self.BACKUPS_DIR = Path("backups")
 
 
 class DatabaseSwitchWorker(QThread):
@@ -176,8 +194,13 @@ class DatabaseSwitchWorker(QThread):
             self.finished.emit(False, f"데이터베이스 교체 중 오류 발생: {str(e)}")
 
 
-class DatabaseSettings(QWidget):
-    """데이터베이스 설정 위젯 클래스 - Infrastructure Layer v4.0 통합"""
+class DatabaseSettings(QWidget, IDatabaseConfigView, IDatabaseConfigViewEvents):
+    """
+    데이터베이스 설정 위젯 클래스 - MVP 패턴 통합
+
+    Infrastructure Layer v4.0과 DDD 아키텍처를 통합한 데이터베이스 설정 UI입니다.
+    MVP 패턴을 사용하여 Presenter와 연결됩니다.
+    """
 
     # 설정 변경 시그널
     settings_changed = pyqtSignal()
@@ -189,20 +212,27 @@ class DatabaseSettings(QWidget):
     db_status_changed = pyqtSignal(bool)  # True: 연결됨, False: 연결 끊김
 
     def __init__(self, parent=None):
-        """초기화 - Infrastructure Layer v4.0 통합"""
+        """초기화 - MVP 패턴 및 DDD 아키텍처 통합"""
         super().__init__(parent)
         self.setObjectName("widget-database-settings")
 
         # Infrastructure Layer Enhanced Logging v4.0 초기화
         self.logger = create_component_logger("DatabaseSettings")
-        self.logger.info("💾 데이터베이스 설정 위젯 초기화 시작")
+        self.logger.info("💾 데이터베이스 설정 위젯 초기화 시작 (MVP 패턴)")
 
-        # simple_paths 시스템 사용
-        self.paths = SimplePaths()
+        # DDD Application Layer 초기화
+        self._init_ddd_components()
+
+        # DDD 서비스 초기화
+        repository = FileSystemDatabaseConfigurationRepository()
+        self.db_path_service = DatabasePathService(repository)
+
+        # 현재 설정 로드
+        current_paths = self.db_path_service.get_all_paths()
         self.current_config = {
-            'settings_db': str(self.paths.SETTINGS_DB),
-            'strategies_db': str(self.paths.STRATEGIES_DB),
-            'market_data_db': str(self.paths.MARKET_DATA_DB)
+            'settings_db': current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'),
+            'strategies_db': current_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3'),
+            'market_data_db': current_paths.get('market_data', 'd:/projects/upbit-autotrader-vscode/data/market_data.sqlite3')
         }
         self.pending_config = {}
         self.switch_worker = None
@@ -216,7 +246,64 @@ class DatabaseSettings(QWidget):
         # Infrastructure Layer 연동 상태 보고 (UI 요소 생성 후)
         self._report_to_infrastructure()
 
-        self.logger.info("✅ 데이터베이스 설정 위젯 초기화 완료")
+        self.logger.info("✅ 데이터베이스 설정 위젯 초기화 완료 (MVP 패턴)")
+
+    def _init_ddd_components(self):
+        """DDD 컴포넌트 완전 초기화"""
+        try:
+            self.logger.info("🏗️ DDD 컴포넌트 초기화 시작...")
+
+            # Repository 초기화
+            from upbit_auto_trading.infrastructure.repositories.database_config_repository import (
+                DatabaseConfigRepository
+            )
+            repository = DatabaseConfigRepository()
+
+            # Use Cases 초기화
+            from upbit_auto_trading.application.use_cases.database_configuration.database_profile_management_use_case import (
+                DatabaseProfileManagementUseCase
+            )
+            from upbit_auto_trading.application.use_cases.database_configuration.database_backup_management_use_case import (
+                DatabaseBackupManagementUseCase
+            )
+            from upbit_auto_trading.application.use_cases.database_configuration.database_validation_use_case import (
+                DatabaseValidationUseCase
+            )
+            from upbit_auto_trading.application.use_cases.database_configuration.database_status_query_use_case import (
+                DatabaseStatusQueryUseCase
+            )
+
+            profile_management_uc = DatabaseProfileManagementUseCase(repository)
+            backup_management_uc = DatabaseBackupManagementUseCase(repository)
+            validation_uc = DatabaseValidationUseCase(repository)
+            status_query_uc = DatabaseStatusQueryUseCase(repository)
+
+            # Application Service 초기화
+            from upbit_auto_trading.application.services.database_configuration_app_service import (
+                DatabaseConfigurationAppService
+            )
+            self._app_service = DatabaseConfigurationAppService(
+                profile_management_use_case=profile_management_uc,
+                backup_management_use_case=backup_management_uc,
+                validation_use_case=validation_uc,
+                status_query_use_case=status_query_uc
+            )
+
+            # MVP Presenter 초기화
+            from upbit_auto_trading.ui.desktop.screens.settings.presenters.database_config_presenter import (
+                DatabaseConfigPresenter
+            )
+            self._presenter = DatabaseConfigPresenter(self._app_service, self)
+
+            self.logger.info("✅ DDD 컴포넌트 완전 초기화 완료")
+            self._ddd_initialized = True
+
+        except Exception as e:
+            self.logger.error(f"❌ DDD 컴포넌트 초기화 실패: {e}")
+            # 호환성을 위해 더미 객체 설정
+            self._app_service = None
+            self._presenter = None
+            self._ddd_initialized = False
 
     def _report_to_infrastructure(self):
         """Infrastructure Layer v4.0에 상태 보고"""
@@ -614,11 +701,19 @@ class DatabaseSettings(QWidget):
             # simple_paths 기반 설정 표시
             import sqlite3
 
+            # 현재 경로 정보 가져오기
+            current_paths = self.db_path_service.get_all_paths()
+
+            # 기본 경로들
+            settings_path = current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')
+            strategies_path = current_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3')
+            market_data_path = current_paths.get('market_data', 'd:/projects/upbit-autotrader-vscode/data/market_data.sqlite3')
+
             # 각 데이터베이스 상태 확인 및 표시
             databases = [
-                ("Settings", self.paths.SETTINGS_DB, self.current_settings_label),
-                ("Strategies", self.paths.STRATEGIES_DB, self.current_strategies_label),
-                ("Market Data", self.paths.MARKET_DATA_DB, self.current_market_data_label)
+                ("Settings", Path(settings_path), self.current_settings_label),
+                ("Strategies", Path(strategies_path), self.current_strategies_label),
+                ("Market Data", Path(market_data_path), self.current_market_data_label)
             ]
 
             db_connected = False  # 전체 DB 연결 상태
@@ -653,9 +748,12 @@ class DatabaseSettings(QWidget):
             self.db_status_changed.emit(db_connected)
 
             # 새 파일 선택 입력란에 현재 경로 표시
-            self.settings_path_edit.setText(str(self.paths.SETTINGS_DB))
-            self.strategies_path_edit.setText(str(self.paths.STRATEGIES_DB))
-            self.market_data_path_edit.setText(str(self.paths.MARKET_DATA_DB))
+            current_paths = self.db_path_service.get_all_paths()
+            default_base = 'd:/projects/upbit-autotrader-vscode/data'
+
+            self.settings_path_edit.setText(current_paths.get('settings', f'{default_base}/settings.sqlite3'))
+            self.strategies_path_edit.setText(current_paths.get('strategies', f'{default_base}/strategies.sqlite3'))
+            self.market_data_path_edit.setText(current_paths.get('market_data', f'{default_base}/market_data.sqlite3'))
 
             # 버튼 상태 업데이트
             self._check_apply_button_state()
@@ -679,3 +777,242 @@ class DatabaseSettings(QWidget):
     def save_settings(self):
         """설정 저장 (호환성을 위한 메서드)"""
         self.settings_changed.emit()
+
+    # === IDatabaseConfigView 인터페이스 구현 ===
+
+    def update_configuration_display(self, config: Dict[str, Any]) -> None:
+        """설정 데이터를 UI에 표시"""
+        try:
+            self.logger.debug("🔄 설정 화면 업데이트")
+
+            # 현재 설정 업데이트
+            if 'profiles' in config:
+                profiles = config['profiles']
+                for db_type in ['settings', 'strategies', 'market_data']:
+                    if db_type in profiles:
+                        profile = profiles[db_type]
+                        file_path = profile.get('file_path', '')
+
+                        # UI 입력란 업데이트
+                        if db_type == 'settings':
+                            self.settings_path_edit.setText(file_path)
+                        elif db_type == 'strategies':
+                            self.strategies_path_edit.setText(file_path)
+                        elif db_type == 'market_data':
+                            self.market_data_path_edit.setText(file_path)
+
+            # 화면 새로고침
+            self.refresh_display()
+
+        except Exception as e:
+            self.logger.error(f"❌ 설정 화면 업데이트 실패: {e}")
+
+    def update_status_display(self, status: Dict[str, Any]) -> None:
+        """상태 정보를 UI에 표시"""
+        try:
+            self.logger.debug("📊 상태 표시 업데이트")
+
+            # 현재 상태 정보 업데이트
+            if 'databases' in status:
+                db_status = status['databases']
+                for db_type, db_info in db_status.items():
+                    is_healthy = db_info.get('is_healthy', False)
+                    response_time = db_info.get('response_time_ms', 0)
+
+                    # 상태 라벨 업데이트
+                    status_text = f"{'✅' if is_healthy else '❌'} {db_type} " \
+                                 f"({response_time:.1f}ms)" if is_healthy else f"({db_info.get('error', '오류')})"
+
+                    if db_type == 'settings':
+                        self.current_settings_label.setText(status_text)
+                    elif db_type == 'strategies':
+                        self.current_strategies_label.setText(status_text)
+                    elif db_type == 'market_data':
+                        self.current_market_data_label.setText(status_text)
+
+        except Exception as e:
+            self.logger.error(f"❌ 상태 표시 업데이트 실패: {e}")
+
+    def update_backup_list(self, backups: List[Dict[str, Any]]) -> None:
+        """백업 목록을 UI에 표시"""
+        # TODO: 백업 목록 UI 구현 시 추가
+        self.logger.debug(f"📋 백업 목록 업데이트: {len(backups)}개")
+
+    def show_progress(self, message: str) -> None:
+        """진행상황 표시"""
+        if hasattr(self, 'progress_bar') and hasattr(self, 'status_label'):
+            self.progress_bar.setVisible(True)
+            self.status_label.setText(message)
+            self.progress_bar.setRange(0, 0)  # 무한 진행바
+
+    def hide_progress(self) -> None:
+        """진행상황 숨기기"""
+        if hasattr(self, 'progress_bar') and hasattr(self, 'status_label'):
+            self.progress_bar.setVisible(False)
+            self.status_label.setText("준비됨")
+
+    def update_progress(self, percentage: int, message: str = "") -> None:
+        """진행률 업데이트"""
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(percentage)
+
+        if message and hasattr(self, 'status_label'):
+            self.status_label.setText(message)
+
+    def show_success_message(self, title: str, message: str) -> None:
+        """성공 메시지 표시"""
+        QMessageBox.information(self, title, message)
+
+    def show_error_message(self, title: str, message: str) -> None:
+        """에러 메시지 표시"""
+        QMessageBox.critical(self, title, message)
+
+    def show_warning_message(self, title: str, message: str) -> None:
+        """경고 메시지 표시"""
+        QMessageBox.warning(self, title, message)
+
+    def show_info_message(self, title: str, message: str) -> None:
+        """정보 메시지 표시"""
+        QMessageBox.information(self, title, message)
+
+    def show_confirmation_dialog(self, title: str, message: str) -> bool:
+        """확인 대화상자 표시"""
+        reply = QMessageBox.question(
+            self, title, message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+    def get_current_form_data(self) -> Dict[str, Any]:
+        """현재 폼의 데이터 반환"""
+        return {
+            'settings_db': self.settings_path_edit.text(),
+            'strategies_db': self.strategies_path_edit.text(),
+            'market_data_db': self.market_data_path_edit.text(),
+        }
+
+    def clear_form(self) -> None:
+        """폼 데이터 초기화"""
+        self.settings_path_edit.clear()
+        self.strategies_path_edit.clear()
+        self.market_data_path_edit.clear()
+
+    def set_form_data(self, data: Dict[str, Any]) -> None:
+        """폼에 데이터 설정"""
+        if 'settings_db' in data:
+            self.settings_path_edit.setText(str(data['settings_db']))
+        if 'strategies_db' in data:
+            self.strategies_path_edit.setText(str(data['strategies_db']))
+        if 'market_data_db' in data:
+            self.market_data_path_edit.setText(str(data['market_data_db']))
+
+    def enable_controls(self, enabled: bool = True) -> None:
+        """UI 컨트롤 활성화/비활성화"""
+        if hasattr(self, 'apply_button'):
+            self.apply_button.setEnabled(enabled)
+        if hasattr(self, 'backup_button'):
+            self.backup_button.setEnabled(enabled)
+        if hasattr(self, 'restore_button'):
+            self.restore_button.setEnabled(enabled)
+
+    def set_read_only(self, read_only: bool = True) -> None:
+        """읽기 전용 모드 설정"""
+        self.settings_path_edit.setReadOnly(read_only)
+        self.strategies_path_edit.setReadOnly(read_only)
+        self.market_data_path_edit.setReadOnly(read_only)
+
+    def refresh_display(self) -> None:
+        """화면 새로고침"""
+        self.load_current_settings()
+
+    def show_file_selector(self, title: str, file_filter: str = "") -> str:
+        """파일 선택 대화상자 표시"""
+        dialog = QFileDialog()
+        file_path, _ = dialog.getOpenFileName(
+            self, title, "", file_filter or "SQLite 파일 (*.sqlite3);;모든 파일 (*)"
+        )
+        return file_path
+
+    def show_directory_selector(self, title: str) -> str:
+        """디렉토리 선택 대화상자 표시"""
+        dialog = QFileDialog()
+        directory = dialog.getExistingDirectory(self, title)
+        return directory
+
+    # === IDatabaseConfigViewEvents 인터페이스 구현 ===
+
+    def on_load_configuration_requested(self) -> None:
+        """설정 로드 요청"""
+        if self._presenter:
+            # MVP 패턴 사용
+            asyncio.create_task(self._presenter.load_configuration())
+        else:
+            # 기존 시스템 사용
+            self.load_current_settings()
+
+    def on_save_configuration_requested(self, config_data: Dict[str, Any]) -> None:
+        """설정 저장 요청"""
+        if self._presenter:
+            # MVP 패턴 사용
+            asyncio.create_task(self._presenter.save_configuration(config_data))
+        else:
+            # 기존 시스템 사용
+            self.settings_changed.emit()
+
+    def on_reset_configuration_requested(self) -> None:
+        """설정 초기화 요청"""
+        self.clear_form()
+        self.refresh_display()
+
+    def on_switch_profile_requested(self, database_type: str, new_path: str) -> None:
+        """프로필 전환 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.switch_database_profile(database_type, new_path))
+
+    def on_create_profile_requested(self, profile_data: Dict[str, Any]) -> None:
+        """프로필 생성 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.create_database_profile(profile_data))
+
+    def on_delete_profile_requested(self, profile_id: str) -> None:
+        """프로필 삭제 요청"""
+        # TODO: 프로필 삭제 구현
+        pass
+
+    def on_create_backup_requested(self, database_type: str) -> None:
+        """백업 생성 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.create_backup(database_type))
+
+    def on_restore_backup_requested(self, backup_id: str) -> None:
+        """백업 복원 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.restore_backup(backup_id))
+
+    def on_delete_backup_requested(self, backup_id: str) -> None:
+        """백업 삭제 요청"""
+        # TODO: 백업 삭제 구현
+        pass
+
+    def on_list_backups_requested(self, database_type: str = None) -> None:
+        """백업 목록 조회 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.list_backups(database_type))
+
+    def on_validate_database_requested(self, database_type: str) -> None:
+        """데이터베이스 검증 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.validate_database(database_type))
+
+    def on_refresh_status_requested(self) -> None:
+        """상태 새로고침 요청"""
+        if self._presenter:
+            asyncio.create_task(self._presenter.refresh_status())
+        else:
+            self.refresh_display()
+
+    def on_test_connection_requested(self, database_type: str) -> None:
+        """연결 테스트 요청"""
+        # TODO: 연결 테스트 구현
+        pass

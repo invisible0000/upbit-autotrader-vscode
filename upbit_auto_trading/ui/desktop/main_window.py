@@ -14,9 +14,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSettings, QSize, QPoint
 from PyQt6.QtGui import QIcon, QAction
 
-# simple_paths 시스템 import
-from config.simple_paths import SimplePaths
-
 # Infrastructure Layer 서비스 인터페이스
 from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
 
@@ -1180,10 +1177,19 @@ class MainWindow(QMainWindow):
                 from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
                 from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
                 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
-                from upbit_auto_trading.infrastructure.configuration import paths
+                from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
+                from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
+                    FileSystemDatabaseConfigurationRepository
+                )
+
+                # DDD 서비스를 통한 설정 DB 경로 가져오기
+                repository = FileSystemDatabaseConfigurationRepository()
+                db_path_service = DatabasePathService(repository)
+                current_paths = db_path_service.get_all_paths()
+                settings_db_path = current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')
 
                 # DatabaseManager 생성 후 Repository 주입으로 ApiKeyService 생성
-                db_manager = DatabaseManager({"settings": str(paths.SETTINGS_DB)})
+                db_manager = DatabaseManager({"settings": settings_db_path})
                 repo = SqliteSecureKeysRepository(db_manager)
                 api_key_service = ApiKeyService(repo)
 
@@ -1267,11 +1273,20 @@ class MainWindow(QMainWindow):
             self._log_llm_report("IL", f"DB 상태 업데이트 실패: {type(e).__name__}")
 
     def _check_initial_db_status(self):
-        """애플리케이션 시작 시 DB 연결 상태 확인"""
+        """애플리케이션 시작 시 DB 연결 상태 확인 - DDD 서비스 활용"""
         try:
-            # simple_paths 시스템 사용
-            paths = SimplePaths()
-            db_path = paths.SETTINGS_DB
+            # DDD 서비스를 통한 DB 경로 가져오기
+            from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
+            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
+                FileSystemDatabaseConfigurationRepository
+            )
+
+            repository = FileSystemDatabaseConfigurationRepository()
+            db_path_service = DatabasePathService(repository)
+            current_paths = db_path_service.get_all_paths()
+
+            from pathlib import Path
+            db_path = Path(current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'))
 
             db_connected = False
             show_warning = False
@@ -1285,7 +1300,6 @@ class MainWindow(QMainWindow):
                 self._log_llm_report("IL", f"DB 파일 없음: {db_path.name}")
             else:
                 try:
-                    import sqlite3
                     # 실제 DB 연결 테스트
                     with sqlite3.connect(str(db_path)) as conn:
                         cursor = conn.cursor()
@@ -1330,16 +1344,25 @@ class MainWindow(QMainWindow):
                 self.status_bar.set_db_status(False)
 
     def _check_initial_api_status(self):
-        """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인 - 새로운 정책 적용"""
+        """애플리케이션 시작 시 API 키 존재 여부 및 연결 상태 확인 - DDD 서비스 활용"""
         try:
             # ApiKeyService를 통한 통합된 API 키 상태 확인
             from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
             from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
             from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
-            from upbit_auto_trading.infrastructure.configuration import paths
+            from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
+            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
+                FileSystemDatabaseConfigurationRepository
+            )
+
+            # DDD 서비스를 통한 설정 DB 경로 가져오기
+            repository = FileSystemDatabaseConfigurationRepository()
+            db_path_service = DatabasePathService(repository)
+            current_paths = db_path_service.get_all_paths()
+            settings_db_path = current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')
 
             # DatabaseManager 생성 후 Repository 주입으로 ApiKeyService 생성
-            db_manager = DatabaseManager({"settings": str(paths.SETTINGS_DB)})
+            db_manager = DatabaseManager({"settings": settings_db_path})
             repo = SqliteSecureKeysRepository(db_manager)
             api_key_service = ApiKeyService(repo)
 

@@ -6,9 +6,8 @@ import os
 import traceback
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMessageBox
-
-# Infrastructure Layer import
 from upbit_auto_trading.infrastructure.dependency_injection.app_context import ApplicationContext, ApplicationContextError
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
@@ -91,58 +90,12 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
     try:
         container = app_context.container
 
-        # Infrastructure 통합 로깅 시스템 사용 + Enhanced v4.0 활성화
+        # Infrastructure 통합 로깅 시스템 사용
         print("🔧 Infrastructure 통합 로깅 시스템 연계...")
-        try:
-            # Enhanced Logging Service v4.0 활성화 시도
-            try:
-                from upbit_auto_trading.infrastructure.logging.services.enhanced_logging_service import EnhancedLoggingService
-                from upbit_auto_trading.infrastructure.logging.configuration.enhanced_config import EnhancedLoggingConfig
 
-                # Enhanced Config 생성
-                enhanced_config = EnhancedLoggingConfig.from_environment()
-                enhanced_service = EnhancedLoggingService(enhanced_config)
-
-                print("🚀 Enhanced Logging Service v4.0 활성화됨")
-
-                # DI Container에 Enhanced Service 등록
-                from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import ILoggingService
-                container.register_singleton(ILoggingService, enhanced_service)
-
-                # SystemStatusTracker로 상태 보고
-                try:
-                    from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
-                    tracker = SystemStatusTracker()
-                    tracker.update_component_status(
-                        "EnhancedLoggingService",
-                        "OK",
-                        "Enhanced Logging v4.0 시스템 활성화됨",
-                        version="4.0",
-                        features_enabled=["briefing", "dashboard", "performance"]
-                    )
-                    print("📊 SystemStatusTracker에 Enhanced Logging 상태 보고 완료")
-                except Exception as tracker_e:
-                    print(f"⚠️ SystemStatusTracker 연동 실패: {tracker_e}")
-
-                print("✅ Infrastructure Enhanced Logging v4.0 시스템 연계 완료")
-
-            except ImportError as enhanced_e:
-                print(f"⚠️ Enhanced Logging v4.0 모듈 없음, 기본 Infrastructure 로깅 사용: {enhanced_e}")
-                # ApplicationContext에서 이미 등록된 ILoggingService 활용
-                from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import ILoggingService
-                logging_service = container.resolve(ILoggingService)
-                print("✅ Infrastructure 기본 로깅 시스템 연계 완료")
-
-            # 기존 LoggerFactory 호환성을 위한 추가 등록
-            from upbit_auto_trading.logging import LoggerFactory
-            container.register_singleton(LoggerFactory, LoggerFactory())
-            print("✅ 기존 LoggerFactory 호환성 등록 완료")
-
-        except Exception as e:
-            print(f"⚠️ Infrastructure 로깅 연계 실패, 기존 방식 사용: {e}")
-            # 폴백: 기존 로깅 시스템
-            from upbit_auto_trading.logging import LoggerFactory
-            container.register_singleton(LoggerFactory, LoggerFactory())
+        # ApplicationContext에서 이미 등록된 ILoggingService 활용
+        print("✅ Infrastructure 기본 로깅 시스템 연계 완료")
+        print("✅ Infrastructure Layer 로깅 통합 완료")
 
         # Configuration 서비스 등록 (ApplicationContext에서 이미 생성된 것 활용)
         try:

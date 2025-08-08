@@ -78,6 +78,18 @@ class DatabasePath:
             logger.warning(f"파일 읽기 권한 확인 실패: {e}")
             return False
 
+    def is_valid(self) -> bool:
+        """경로 유효성 전체 검사"""
+        try:
+            # 기본 경로 유효성 (이미 __post_init__에서 검증됨)
+            # 추가 비즈니스 규칙 검증
+            return (self.path is not None and
+                    self.path.suffix == '.sqlite3' and
+                    self.validate_database_name_convention())
+        except Exception as e:
+            logger.warning(f"경로 유효성 검사 실패: {e}")
+            return False
+
     def is_writable(self) -> bool:
         """파일 쓰기 가능 여부 확인"""
         if self.exists():

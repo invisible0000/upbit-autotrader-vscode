@@ -8,9 +8,9 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QPushButton,
 from PyQt6.QtCore import pyqtSignal, Qt
 
 # 디버그 로깅 시스템
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-logger = get_integrated_logger("SimulationControl")
+logger = create_component_logger("SimulationControl")
 
 # DataSourceSelectorWidget import - 올바른 경로 사용
 try:

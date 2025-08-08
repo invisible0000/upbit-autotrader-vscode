@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, Callable
 import uuid
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 # 새로운 분리된 DomainEventPublisher를 import
 from .domain_event_publisher import (
@@ -20,7 +20,7 @@ from .domain_event_publisher import (
 # dataclass 기반 DomainEvent를 기본으로 사용
 from .base_domain_event import DomainEvent
 
-logger = get_integrated_logger("DomainEvent")
+logger = create_component_logger("DomainEvent")
 
 
 # 편의 함수들 (하위 호환성 유지)

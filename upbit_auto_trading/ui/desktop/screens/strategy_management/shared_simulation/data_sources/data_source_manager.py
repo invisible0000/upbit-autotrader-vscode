@@ -9,8 +9,8 @@ from enum import Enum
 
 # 디버그 로거 import
 try:
-    from upbit_auto_trading.logging import get_integrated_logger
-    logger = get_integrated_logger("DataSourceManager")
+    from upbit_auto_trading.infrastructure.logging import create_component_logger
+    logger = create_component_logger("DataSourceManager")
 except ImportError:
     # 폴백: 기본 logging 사용
     logger = logging.getLogger("DataSourceManager")

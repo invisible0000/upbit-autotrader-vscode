@@ -20,10 +20,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from config.simple_paths import SimplePaths
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-logger = get_integrated_logger("DatabaseSettings")
+logger = create_component_logger("DatabaseSettings")
 
 
 class DatabaseSettings(QWidget):
@@ -33,7 +33,7 @@ class DatabaseSettings(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.paths = SimplePaths()
+        self.paths = infrastructure_paths
         self._setup_ui()
         self._update_database_info()
 

@@ -5,7 +5,9 @@ Clean Architecture Infrastructure Layer의 핵심 통합 컴포넌트
 
 from typing import Optional, Any
 import logging
+import sqlite3
 from pathlib import Path
+from datetime import datetime
 
 from upbit_auto_trading.infrastructure.config.models.config_models import ApplicationConfig
 from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
@@ -226,10 +228,202 @@ class ApplicationContext:
             self._logger.warning(f"환경별 로깅 설정 실패: {e}")
 
     def _register_database_services(self) -> None:
-        """데이터베이스 관련 서비스 등록"""
-        # DatabaseManager 등록 (향후 구현)
-        # 현재는 placeholder로 남겨둠
-        self._logger.debug("데이터베이스 서비스 등록 (placeholder)")
+        """데이터베이스 관련 서비스 등록 및 시스템 필수 검증"""
+        try:
+            self._logger.info("🔍 시스템 필수 데이터베이스 검증 시작")
+
+            # 1. 데이터베이스 검증 Use Case 등록
+            from upbit_auto_trading.application.use_cases.database_configuration.\
+                database_validation_use_case import DatabaseValidationUseCase
+            from upbit_auto_trading.infrastructure.repositories.\
+                database_config_repository import DatabaseConfigRepository
+
+            # Repository 인스턴스 생성 및 등록
+            db_repo = DatabaseConfigRepository()
+            validation_use_case = DatabaseValidationUseCase(db_repo)
+
+            # 컨테이너에 등록
+            self._container.register_singleton(DatabaseValidationUseCase, validation_use_case)
+
+            # 2. 시스템 필수 DB 검증 실행
+            self._validate_system_databases(validation_use_case)
+
+            self._logger.info("✅ 데이터베이스 서비스 등록 및 검증 완료")
+
+        except Exception as e:
+            self._logger.error(f"❌ 데이터베이스 서비스 등록 실패: {e}")
+            # 시스템 필수 DB가 문제가 있으면 애플리케이션을 시작할 수 없음
+            raise ApplicationContextError(f"필수 데이터베이스 검증 실패: {e}") from e
+
+    def _validate_system_databases(self, validation_use_case: Any) -> None:
+        """시스템 필수 데이터베이스 검증 및 복구"""
+        self._logger.info("📊 필수 데이터베이스 파일 무결성 검증 중...")
+
+        try:
+            # 필수 DB 경로들 확인
+            from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
+
+            critical_databases = {
+                'settings': infrastructure_paths.SETTINGS_DB,
+                'strategies': infrastructure_paths.STRATEGIES_DB,
+                'market_data': infrastructure_paths.MARKET_DATA_DB
+            }
+
+            failed_databases = []
+
+            for db_name, db_path in critical_databases.items():
+                try:
+                    # 기본 파일 존재 확인
+                    if not Path(db_path).exists():
+                        self._logger.warning(f"⚠️ {db_name} DB 파일 없음: {db_path}")
+                        self._create_default_database(db_name, db_path)
+                        continue
+
+                    # SQLite 무결성 검증
+                    if not self._verify_sqlite_integrity(db_path):
+                        self._logger.error(f"❌ {db_name} DB 손상 감지: {db_path}")
+                        self._handle_corrupted_database(db_name, db_path)
+                        failed_databases.append(db_name)
+                        continue
+
+                    self._logger.info(f"✅ {db_name} DB 무결성 검증 완료")
+
+                except Exception as db_error:
+                    self._logger.error(f"❌ {db_name} DB 검증 실패: {db_error}")
+                    failed_databases.append(db_name)
+
+            # 복구 불가능한 DB가 있으면 시스템 시작 중단
+            if failed_databases:
+                raise ApplicationContextError(
+                    f"필수 데이터베이스 검증 실패: {', '.join(failed_databases)}. "
+                    f"시스템을 시작할 수 없습니다."
+                )
+
+        except Exception as e:
+            self._logger.error(f"❌ 시스템 DB 검증 중 오류: {e}")
+            raise
+
+    def _verify_sqlite_integrity(self, db_path: str) -> bool:
+        """SQLite 데이터베이스 무결성 검증"""
+        try:
+            with sqlite3.connect(db_path, timeout=5.0) as conn:
+                cursor = conn.cursor()
+
+                # PRAGMA integrity_check 실행
+                cursor.execute("PRAGMA integrity_check")
+                result = cursor.fetchone()
+
+                if result and result[0] == "ok":
+                    return True
+                else:
+                    self._logger.error(f"무결성 검사 실패: {result}")
+                    return False
+
+        except Exception as e:
+            self._logger.error(f"SQLite 검증 실패: {e}")
+            return False
+
+    def _create_default_database(self, db_name: str, db_path: str) -> None:
+        """기본 데이터베이스 생성"""
+        self._logger.info(f"🔧 {db_name} 기본 DB 생성 중: {db_path}")
+
+        try:
+            # 디렉토리 생성
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
+            # 기본 DB 스키마 생성
+            if db_name == 'settings':
+                self._create_settings_schema(db_path)
+            elif db_name == 'strategies':
+                self._create_strategies_schema(db_path)
+            elif db_name == 'market_data':
+                self._create_market_data_schema(db_path)
+
+            self._logger.info(f"✅ {db_name} 기본 DB 생성 완료")
+
+        except Exception as e:
+            self._logger.error(f"❌ {db_name} DB 생성 실패: {e}")
+            raise
+
+    def _handle_corrupted_database(self, db_name: str, db_path: str) -> None:
+        """손상된 데이터베이스 처리"""
+        self._logger.warning(f"🔧 {db_name} 손상된 DB 복구 시도: {db_path}")
+
+        try:
+            # 손상된 파일 백업
+            backup_path = f"{db_path}.corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            Path(db_path).rename(backup_path)
+            self._logger.info(f"📦 손상된 DB 백업 완료: {backup_path}")
+
+            # 새 DB 생성
+            self._create_default_database(db_name, db_path)
+
+        except Exception as e:
+            self._logger.error(f"❌ {db_name} DB 복구 실패: {e}")
+            raise
+
+    def _create_settings_schema(self, db_path: str) -> None:
+        """설정 DB 스키마 생성"""
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            # 기본 테이블들 생성
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    access_key TEXT NOT NULL,
+                    secret_key TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            conn.commit()
+
+    def _create_strategies_schema(self, db_path: str) -> None:
+        """전략 DB 스키마 생성"""
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS strategies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    description TEXT,
+                    config TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            conn.commit()
+
+    def _create_market_data_schema(self, db_path: str) -> None:
+        """시장 데이터 DB 스키마 생성"""
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS market_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    timestamp TIMESTAMP NOT NULL,
+                    price REAL,
+                    volume REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            conn.commit()
 
     def _register_api_services(self) -> None:
         """API 클라이언트 서비스 등록"""

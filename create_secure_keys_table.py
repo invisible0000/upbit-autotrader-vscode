@@ -5,7 +5,7 @@ Task 1.1.2: 기본 스키마 구현
 """
 
 import sqlite3
-from config.simple_paths import paths
+from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("SecureKeysTableCreation")
@@ -15,7 +15,7 @@ def main():
     """secure_keys 테이블 및 인덱스 생성"""
     try:
         # DB 연결
-        db_path = paths.get_db_path('settings')
+        db_path = infrastructure_paths.get_db_path('settings')
         logger.info(f"🔗 DB 경로: {db_path}")
 
         with sqlite3.connect(str(db_path)) as conn:

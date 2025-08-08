@@ -39,7 +39,7 @@ try:
     )
     from upbit_auto_trading.components.core.global_db_manager import GlobalDBManager
     from upbit_auto_trading.components.core.condition_storage import ConditionStorage
-    from upbit_auto_trading.logging import get_integrated_logger
+    from upbit_auto_trading.infrastructure.logging import create_component_logger
 except ImportError as e:
     print(f"❌ 모듈 임포트 실패: {e}")
     print("🔍 대체 방법으로 기본 테스트를 실행합니다...")
@@ -53,7 +53,7 @@ except ImportError as e:
     ConditionStorage = None
     get_logger = lambda name: type('Logger', (), {'info': print, 'error': print, 'warning': print})()
 
-logger = get_integrated_logger("SuperDBDebugPathMapping")
+logger = create_component_logger("SuperDBDebugPathMapping")
 
 
 class SuperDBDebugPathMapping:

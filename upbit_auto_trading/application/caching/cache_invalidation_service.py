@@ -5,7 +5,7 @@
 
 from typing import Dict, List, Optional
 import asyncio
-from ...logging import get_integrated_logger
+from ...infrastructure.logging import create_component_logger
 
 
 class CacheKey:
@@ -57,7 +57,7 @@ class CacheInvalidationService:
 
     def __init__(self):
         """서비스 초기화"""
-        self._logger = get_integrated_logger("CacheInvalidationService")
+        self._logger = create_component_logger("CacheInvalidationService")
         self._invalidation_rules: Dict[str, List[str]] = {}
         self._setup_invalidation_rules()
 

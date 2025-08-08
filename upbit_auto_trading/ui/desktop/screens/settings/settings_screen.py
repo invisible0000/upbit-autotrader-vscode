@@ -108,11 +108,11 @@ class SettingsScreen(QWidget):
         try:
             # 실제 설정 위젯들 import 및 생성
             from upbit_auto_trading.ui.desktop.screens.settings.api_key_manager_secure import ApiKeyManagerSecure
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettings
+            from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_tab_widget import DatabaseTabWidget
             from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettings
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettings
 
-            self.logger.info("📦 설정 위젯 모듈들 import 성공")
+            self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")
 
             # DI 컨테이너에서 ApiKeyService 가져오기
             api_key_service = None
@@ -163,8 +163,8 @@ class SettingsScreen(QWidget):
             self.api_key_manager = ApiKeyManagerSecure(self, api_key_service=api_key_service)
             self.logger.debug("🔑 API 키 관리자 생성 완료")
 
-            self.database_settings = DatabaseSettings(self)
-            self.logger.debug("💾 데이터베이스 설정 생성 완료")
+            self.database_settings = DatabaseTabWidget(self)
+            self.logger.debug("💾 데이터베이스 설정 생성 완료 (DDD MVP 패턴 적용)")
 
             self.notification_settings = NotificationSettings(self)
             self.logger.debug("🔔 알림 설정 생성 완료")

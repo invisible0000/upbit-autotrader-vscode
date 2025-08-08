@@ -16,7 +16,7 @@ from .backtest_event_handlers import (
 from ..notifications.notification_service import NotificationService
 from ..caching.cache_invalidation_service import CacheInvalidationService
 from ...domain.events.base_domain_event import DomainEvent
-from ...logging import get_integrated_logger
+from ...infrastructure.logging import create_component_logger
 
 
 class CacheInvalidationHandler(BaseEventHandler):
@@ -110,7 +110,7 @@ class EventHandlerRegistry:
         """
         self._notification_service = notification_service
         self._cache_service = cache_service
-        self._logger = get_integrated_logger("EventHandlerRegistry")
+        self._logger = create_component_logger("EventHandlerRegistry")
 
         # 이벤트 타입별 핸들러 매핑
         self._handlers: Dict[str, List[BaseEventHandler]] = {}

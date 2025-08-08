@@ -13,9 +13,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 
 # 디버그 로깅 시스템
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-logger = get_integrated_logger("TriggerList")
+logger = create_component_logger("TriggerList")
 
 # 조건 저장/로드 모듈
 try:
@@ -530,7 +530,7 @@ class TriggerListWidget(QWidget):
                 if hasattr(self, 'condition_storage') and self.condition_storage:
                     success, message, condition_id = self.condition_storage.save_condition(condition_data)
                     if success:
-                        logger.success(f"직접 저장 성공: {message}")
+                        logger.info(f"✅ 직접 저장 성공: {message}")
                         QMessageBox.information(self, "✅ 저장 완료", f"트리거가 저장되었습니다: {message}")
                         self.refresh_list()  # 목록 새로고침
                         return
@@ -732,7 +732,7 @@ class TriggerListWidget(QWidget):
                                    f"새 이름: '{new_name}'\n"
                                    f"필요한 수정을 한 후 '편집 저장'을 눌러 저장하세요.")
 
-            logger.success(f"트리거 복사 완료: {original_name} → {new_name}")
+            logger.info(f"✅ 트리거 복사 완료: {original_name} → {new_name}")
 
         except Exception as e:
             logger.error(f"트리거 복사 실패: {e}")
@@ -789,7 +789,7 @@ class TriggerListWidget(QWidget):
 
                     if success:
                         QMessageBox.information(self, "✅ 삭제 완료", f"'{condition_name}' 트리거가 삭제되었습니다.")
-                        logger.success(f"트리거 삭제 완료: {condition_name}")
+                        logger.info(f"✅ 트리거 삭제 완료: {condition_name}")
 
                         # UI 업데이트
                         logger.debug("트리거 목록 새로고침 시작...")

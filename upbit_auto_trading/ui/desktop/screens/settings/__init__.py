@@ -10,12 +10,12 @@
 # 메인 설정 화면 (MVP 패턴 적용)
 from .settings_screen import SettingsScreen
 from .api_key_manager_secure import ApiKeyManagerSecure as ApiKeyManager
-from .database_settings import DatabaseSettings
+# from .database_settings import DatabaseSettings  # 메타클래스 충돌로 주석 처리
 from .notification_settings import NotificationSettings
 
 __all__ = [
     'SettingsScreen',
     'ApiKeyManager',
-    'DatabaseSettings',
+    # 'DatabaseSettings',  # 메타클래스 충돌로 제거
     'NotificationSettings'
 ]

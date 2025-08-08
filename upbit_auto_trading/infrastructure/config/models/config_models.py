@@ -23,6 +23,11 @@ class DatabaseConfig:
     wal_mode: bool = True
     backup_enabled: bool = True
     backup_interval_hours: int = 24
+    use_dynamic_paths: bool = True  # DDD 기반 동적 경로 사용 여부
+    config_source: str = "config/database_config.yaml"  # DDD 설정 파일 경로
+    fallback_settings_db: str = "data/settings.sqlite3"  # 폴백 경로들
+    fallback_strategies_db: str = "data/strategies.sqlite3"
+    fallback_market_data_db: str = "data/market_data.sqlite3"
 
     def __post_init__(self):
         """경로 검증 및 절대경로 변환 (인메모리 DB 제외)"""

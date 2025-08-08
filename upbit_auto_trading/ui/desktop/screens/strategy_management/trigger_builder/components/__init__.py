@@ -2,7 +2,7 @@
 Trigger Builder Components - 완전 독립화된 구조
 
 Core Components: TriggerBuilder 전용
-Shared Components: 공유 컴포넌트  
+Shared Components: 공유 컴포넌트
 Legacy Components: 기존 컴포넌트들
 """
 
@@ -29,14 +29,8 @@ except ImportError as e:
     print(f"⚠️ Shared 컴포넌트 로드 실패: {e}")
     SHARED_COMPONENTS_AVAILABLE = False
 
-# Legacy Components (renamed to _legacy)
-try:
-    from .data_source_manager_legacy import get_data_source_manager
-    from .data_source_selector_legacy import DataSourceSelectorWidget
-    LEGACY_COMPONENTS_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️ Legacy 컴포넌트 로드 실패: {e}")
-    LEGACY_COMPONENTS_AVAILABLE = False
+# Legacy Components - 제거됨 (Infrastructure Layer로 통합)
+LEGACY_COMPONENTS_AVAILABLE = False
 
 # 안전한 exports
 __all__ = []
@@ -56,12 +50,9 @@ if SHARED_COMPONENTS_AVAILABLE:
         'get_variable_registry',
         'check_compatibility'
         # Note: simulation_engines moved to shared_simulation
+        # Legacy components removed - migrated to Infrastructure Layer
     ])
 
-if LEGACY_COMPONENTS_AVAILABLE:
-    __all__.extend([
-        'get_data_source_manager',
-        'DataSourceSelectorWidget'
-    ])
+# 레거시 컴포넌트는 제거됨
 
 print(f"✅ TriggerBuilder Components 로드 완료: {len(__all__)}개 컴포넌트")

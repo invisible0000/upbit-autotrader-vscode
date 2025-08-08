@@ -10,9 +10,9 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
 # 디버그 로깅 시스템
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-logger = get_integrated_logger("TriggerDetail")
+logger = create_component_logger("TriggerDetail")
 
 
 class TriggerDetailWidget(QWidget):

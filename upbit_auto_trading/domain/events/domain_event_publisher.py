@@ -7,7 +7,7 @@ from typing import List, Callable, Dict, Type, Any, Optional
 from threading import Lock
 import asyncio
 
-from upbit_auto_trading.logging import get_integrated_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 # Forward reference로 순환 import 해결
 from typing import TYPE_CHECKING
@@ -41,7 +41,7 @@ class DomainEventPublisher:
         self._enabled = True
 
         # 로거
-        self.logger = get_integrated_logger("DomainEventPublisher")
+        self.logger = create_component_logger("DomainEventPublisher")
 
     def subscribe(self, event_type: Type[Any], handler: EventHandler) -> None:
         """동기 이벤트 핸들러 등록"""
@@ -229,7 +229,7 @@ def get_domain_event_publisher() -> DomainEventPublisher:
     global _domain_event_publisher
     if _domain_event_publisher is None:
         _domain_event_publisher = DomainEventPublisher()
-        logger = get_integrated_logger("DomainEventPublisher")
+        logger = create_component_logger("DomainEventPublisher")
         logger.info("전역 도메인 이벤트 게시자 초기화 완료")
     return _domain_event_publisher
 
@@ -240,5 +240,5 @@ def reset_domain_event_publisher() -> None:
     if _domain_event_publisher is not None:
         _domain_event_publisher.clear_handlers()
     _domain_event_publisher = None
-    logger = get_integrated_logger("DomainEventPublisher")
+    logger = create_component_logger("DomainEventPublisher")
     logger.info("전역 도메인 이벤트 게시자 재설정 완료")

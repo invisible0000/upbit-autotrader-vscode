@@ -120,8 +120,8 @@ class ApplicationServiceContainer:
         domain_publisher.subscribe_global_async(event_registry.handle_event)
 
         # 로깅
-        import logging
-        logger = logging.getLogger(__name__)
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        logger = create_component_logger("ApplicationContainer")
         logger.info("이벤트 시스템 통합 초기화 완료: DomainEventPublisher ↔ EventHandlerRegistry")
 
     def clear_cache(self) -> None:

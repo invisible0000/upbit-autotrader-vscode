@@ -1,10 +1,18 @@
 # Upbit Auto Trading System - Base Configuration
 
 # 데이터베이스 설정 (3-DB 아키텍처)
+# DDD 시스템과 통합: database_config.yaml에서 동적 경로 로드
 database:
-  settings_db_path: "data/settings.sqlite3"
-  strategies_db_path: "data/strategies.sqlite3"
-  market_data_db_path: "data/market_data.sqlite3"
+  # 동적 경로 설정 - DDD DatabasePathService에서 관리
+  use_dynamic_paths: true
+  config_source: "config/database_config.yaml"
+
+  # 기본 경로 (DDD 시스템 미사용 시 폴백) - 테스트용으로 수정
+  fallback_settings_db: "data/settings.sqlite3"
+  fallback_strategies_db: "data/strategies.sqlite3"
+  fallback_market_data_db: "data/market_data.sqlite3"
+
+  # 연결 설정
   connection_timeout: 30
   max_connections: 10
   wal_mode: true
