@@ -219,9 +219,15 @@ class DatabaseSettingsPresenter:
                                     # 백업 파일 상태 검증
                                     status = self._validate_backup_file(file_path)
 
-                                    # 저장된 설명 조회, 없으면 기본값 사용
+                                    # 저장된 설명 조회 (없어도 기본값으로 덮어쓰지 않음)
                                     saved_description = self.get_backup_description(filename)
-                                    description = saved_description if saved_description else f"{db_type} 데이터베이스 백업"
+
+                                    # 메타데이터에 설명이 없으면 기본값을 표시만 하고 저장하지는 않음
+                                    if saved_description:
+                                        description = saved_description
+                                    else:
+                                        # 표시용 기본값 (메타데이터에 저장하지 않음)
+                                        description = f"{db_type} 데이터베이스 백업"
 
                                     backup_files.append({
                                         'backup_id': filename,
@@ -272,8 +278,6 @@ class DatabaseSettingsPresenter:
         try:
             self.logger.info(f"📦 백업 생성 시작 (안전한 백업): {database_type}")
 
-            from datetime import datetime
-
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             # 원본 DB 파일 경로
@@ -312,6 +316,9 @@ class DatabaseSettingsPresenter:
             # 백업 파일 검증
             if backup_path.exists() and backup_path.stat().st_size > 0:
                 self.logger.info(f"✅ 백업 생성 성공: {backup_filename} ({backup_path.stat().st_size} bytes)")
+
+                # 백업 타입별 기본 설명 설정 (메타데이터 업데이트)
+                self._set_backup_description_by_type(backup_filename, "수동생성")
 
                 # UI 업데이트
                 if hasattr(self.view, 'show_info_message'):
@@ -438,6 +445,13 @@ class DatabaseSettingsPresenter:
 
             # 파일 삭제
             backup_file_path.unlink()
+
+            # 메타데이터에서도 해당 항목 제거
+            metadata = self._load_backup_metadata()
+            if backup_id in metadata:
+                del metadata[backup_id]
+                self._save_backup_metadata(metadata)
+                self.logger.info(f"✅ 백업 메타데이터 정리 완료: {backup_id}")
 
             self.logger.info(f"✅ 백업 삭제 성공: {backup_id}")
 
@@ -612,26 +626,22 @@ class DatabaseSettingsPresenter:
             return False
 
     def _validate_backup_file(self, file_path: Path) -> str:
-        """백업 파일 상태 검증 - DDD Domain Service 활용"""
+        """백업 파일 상태 검증 - 파일 잠금 방지를 위한 경량 검증"""
         try:
             # 파일 크기 확인 (최소 4KB 이상)
             if file_path.stat().st_size < 4096:
                 return "ERROR"
 
-            # SQLite 파일 헤더 확인
+            # SQLite 파일 헤더 확인만 수행 (연결 생성 없이)
             with open(file_path, 'rb') as f:
                 header = f.read(16)
                 if not header.startswith(b'SQLite format 3\x00'):
                     return "CORRUPTED"
 
-            # Domain Service를 통한 SQLite 구조 검증
-            from upbit_auto_trading.domain.database_configuration.services.database_backup_service import DatabaseBackupService
-            backup_service = DatabaseBackupService()
-
-            if backup_service._verify_sqlite_structure(file_path):
-                return "COMPLETED"
-            else:
-                return "CORRUPTED"
+            # SQLite 연결 생성하지 않고 헤더 검증만으로 충분
+            # 백업 파일은 이미 검증된 원본에서 복사된 것이므로
+            # 파일 잠금을 유발하는 무결성 검사 생략
+            return "COMPLETED"
 
         except Exception:
             return "ERROR"
@@ -809,3 +819,41 @@ class DatabaseSettingsPresenter:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
         except Exception as e:
             self.logger.error(f"❌ 백업 메타데이터 저장 실패: {e}")
+
+    def _set_backup_description_by_type(self, backup_filename: str, backup_type: str) -> None:
+        """백업 타입에 따른 기본 설명 설정 (기존 설명이 없는 경우에만)"""
+        try:
+            # 메타데이터 로드
+            metadata = self._load_backup_metadata()
+
+            # 기존 설명이 있으면 덮어쓰지 않음
+            if backup_filename in metadata:
+                existing_description = metadata[backup_filename].get('description', '')
+                if existing_description and not existing_description.startswith('[수동생성]'):
+                    # 사용자가 이미 편집한 설명이 있으면 보존
+                    self.logger.info(f"✅ 기존 설명 보존: {backup_filename} -> {existing_description}")
+                    return
+
+            # 기본 설명 생성
+            db_type = backup_filename.split('_backup_')[0]
+
+            type_descriptions = {
+                "수동생성": f"[수동생성] {db_type} 데이터베이스 백업",
+                "복원생성": f"[복원생성] {db_type} 복원 전 안전 백업",
+                "경로변경": f"[경로변경] {db_type} 경로 변경 전 안전 백업"
+            }
+
+            default_description = type_descriptions.get(backup_type, f"{db_type} 데이터베이스 백업")
+
+            # 메타데이터 업데이트 (새로운 항목이거나 기본 설명인 경우에만)
+            metadata[backup_filename] = {
+                "description": default_description,
+                "backup_type": backup_type,
+                "updated_at": datetime.now().isoformat()
+            }
+            self._save_backup_metadata(metadata)
+
+            self.logger.info(f"✅ 백업 설명 설정: {backup_filename} -> {default_description}")
+
+        except Exception as e:
+            self.logger.error(f"❌ 백업 설명 설정 실패: {e}")

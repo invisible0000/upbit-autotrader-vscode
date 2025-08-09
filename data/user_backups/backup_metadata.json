@@ -1,18 +1,66 @@
 {
   "settings_backup_20250809_150419.sqlite3": {
     "description": "테스트 설명 01",
-    "updated_at": "2025-08-09T15:38:08.212397"
+    "updated_at": "2025-08-09T16:50:27.885366"
   },
   "settings_backup_20250809_150416.sqlite3": {
-    "description": "settings 데이터베이스 백업",
-    "updated_at": "2025-08-09T15:38:08.220751"
+    "description": " 설명 편집 테스트 01",
+    "updated_at": "2025-08-09T16:57:52.370291"
   },
   "settings_backup_20250809_081256.sqlite3": {
-    "description": "settings 데이터베이스 백업",
-    "updated_at": "2025-08-09T15:38:08.228287"
+    "description": " 설명 편집 테스트 02",
+    "updated_at": "2025-08-09T17:03:22.945615"
   },
   "settings_backup_20250809_153804.sqlite3": {
     "description": "settings 데이터베이스 백업",
-    "updated_at": "2025-08-09T15:38:08.202089"
+    "updated_at": "2025-08-09T16:05:28.443215"
+  },
+  "settings_backup_20250809_160543.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:14:15.954660"
+  },
+  "settings_backup_20250809_161422.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:14:24.902546"
+  },
+  "settings_backup_20250809_161432.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:14:33.896376"
+  },
+  "strategies_backup_20250809_150432.sqlite3": {
+    "description": "strategies 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:49:42.178130"
+  },
+  "strategies_backup_20250809_150429.sqlite3": {
+    "description": "strategies 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:49:42.189306"
+  },
+  "strategies_backup_20250809_002008.sqlite3": {
+    "description": "strategies 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:49:42.199732"
+  },
+  "strategies_backup_20250809_163654.sqlite3": {
+    "description": "[수동생성] strategies 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:49:42.164178"
+  },
+  "market_data_backup_20250809_150439.sqlite3": {
+    "description": "market_data 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:38:47.580256"
+  },
+  "market_data_backup_20250809_150437.sqlite3": {
+    "description": "market_data 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:38:47.588815"
+  },
+  "market_data_backup_20250809_085921.sqlite3": {
+    "description": "market_data 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:38:47.598390"
+  },
+  "market_data_backup_20250809_163708.sqlite3": {
+    "description": "[수동생성] market_data 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:38:47.568797"
+  },
+  "settings_backup_20250809_163814.sqlite3": {
+    "description": "[수동생성] settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T16:50:27.871752"
   }
 }

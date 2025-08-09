@@ -258,6 +258,10 @@ class DatabaseReplacementUseCase:
             # 파일 복사
             shutil.copy2(current_file, backup_path)
 
+            # 백업 메타데이터 설정 (타입별 자동 설명)
+            backup_type = "복원생성" if "restore" in request.safety_backup_suffix else "경로변경"
+            self._set_backup_metadata(backup_filename, backup_type)
+
             self.logger.info(f"✅ 안전 백업 생성 완료: {backup_filename}")
             return str(backup_path)
 
@@ -311,3 +315,47 @@ class DatabaseReplacementUseCase:
         except Exception as e:
             self.logger.error(f"❌ 교체 작업 실패: {e}")
             return {'success': False, 'error': str(e)}
+
+    def _set_backup_metadata(self, backup_filename: str, backup_type: str) -> None:
+        """백업 메타데이터 설정"""
+        try:
+            import json
+            import os
+
+            # 메타데이터 파일 경로
+            metadata_path = Path("data/user_backups/backup_metadata.json")
+            metadata = {}
+
+            # 기존 메타데이터 로드
+            if metadata_path.exists():
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+
+            # 백업 ID 생성 (확장자 제거)
+            backup_id = backup_filename.replace('.sqlite3', '')
+
+            # 타입별 설명 생성
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            type_descriptions = {
+                "복원생성": f"[복원생성] 복원 전 안전 백업 - {timestamp}",
+                "경로변경": f"[경로변경] 경로 변경 전 안전 백업 - {timestamp}",
+                "수동생성": f"[수동생성] 수동 백업 - {timestamp}"
+            }
+
+            # 메타데이터 업데이트
+            metadata[backup_id] = {
+                "description": type_descriptions.get(backup_type, f"{backup_type} - {timestamp}"),
+                "backup_type": backup_type,
+                "updated_at": timestamp
+            }
+
+            # 메타데이터 저장
+            os.makedirs(metadata_path.parent, exist_ok=True)
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+            self.logger.info(f"✅ 백업 메타데이터 설정: {backup_type} - {backup_id}")
+
+        except Exception as e:
+            self.logger.error(f"❌ 백업 메타데이터 설정 실패: {e}")
+            # 메타데이터 설정 실패는 백업 프로세스를 중단하지 않음

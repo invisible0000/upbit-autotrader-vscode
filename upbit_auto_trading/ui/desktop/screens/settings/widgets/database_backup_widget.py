@@ -175,8 +175,11 @@ class DatabaseBackupWidget(QWidget):
     def _on_database_changed(self):
         """데이터베이스 콤보박스 변경 시 호출"""
         self._logger.info(f"🔄 데이터베이스 선택 변경: {self.db_combo.currentText()}")
-        # 선택된 데이터베이스에 따라 백업 목록 필터링
-        self._filter_backup_list()
+        
+        # 백업 목록 새로고침 요청 (MVP 패턴 준수)
+        self.refresh_backups_requested.emit()
+        
+        # 선택된 데이터베이스에 따라 백업 목록 필터링은 새로고침 완료 후 자동으로 적용됨
 
     def _on_restore_backup(self):
         """복원 버튼 클릭"""
@@ -273,6 +276,9 @@ class DatabaseBackupWidget(QWidget):
     def _update_table_with_data(self, backup_data: List[Dict[str, Any]]):
         """테이블을 특정 백업 데이터로 업데이트"""
         try:
+            # 테이블 업데이트 중 시그널 차단 (메타데이터 덮어쓰기 방지)
+            self.backup_table.blockSignals(True)
+
             self.backup_table.setRowCount(len(backup_data))
 
             for row, backup in enumerate(backup_data):
@@ -319,7 +325,11 @@ class DatabaseBackupWidget(QWidget):
                 self.backup_table.setItem(row, 4, item)
 
                 # 설명 (5번 컬럼) - 편집 가능하게 설정
-                description = backup.get('description', f"{backup.get('database_type', 'Unknown')} 데이터베이스 백업")
+                # 백업 데이터에서 가져온 설명을 그대로 사용 (기본값으로 대체하지 않음)
+                description = backup.get('description', '')
+                if not description:
+                    # 설명이 없을 때만 기본값 표시 (메타데이터에는 저장하지 않음)
+                    description = f"{backup.get('database_type', 'Unknown')} 데이터베이스 백업"
                 item = QTableWidgetItem(str(description))
                 # 설명 열은 편집 가능하게 유지 (편집 불가 플래그 제거)
                 self.backup_table.setItem(row, 5, item)
@@ -333,6 +343,9 @@ class DatabaseBackupWidget(QWidget):
 
         except Exception as e:
             self._logger.error(f"❌ 백업 테이블 업데이트 실패: {e}")
+        finally:
+            # 시그널 다시 활성화 (try/except와 상관없이 실행)
+            self.backup_table.blockSignals(False)
 
     def update_backup_list(self, backup_data: List[Dict[str, Any]]):
         """백업 목록 업데이트 - 전체 데이터 저장 후 필터링 적용"""
