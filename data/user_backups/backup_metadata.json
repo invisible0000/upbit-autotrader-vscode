@@ -104,5 +104,15 @@
     "description": "[수동생성] settings 데이터베이스 백업",
     "backup_type": "수동생성",
     "updated_at": "2025-08-10T07:35:32.510347"
+  },
+  "settings_backup_20250810_081252.sqlite3": {
+    "description": "[수동생성] settings 데이터베이스 백업",
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-10T08:12:52.689555"
+  },
+  "settings_backup_20250810_081302.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-10T08:13:02.546893"
   }
 }

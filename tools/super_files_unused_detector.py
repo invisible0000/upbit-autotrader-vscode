@@ -660,8 +660,9 @@ def main():
     )
 
     if safe_candidates:
-        print(f"\n🗑️ 안전한 제거 후보 (신뢰도 순, 상위 {min(10, len(safe_candidates))}개):")
-        for i, candidate in enumerate(safe_candidates[:10], 1):
+        show_count = min(20, len(safe_candidates))  # 20개로 확장
+        print(f"\n🗑️ 안전한 제거 후보 (신뢰도 순, 상위 {show_count}개):")
+        for i, candidate in enumerate(safe_candidates[:show_count], 1):
             confidence = candidate['analysis_confidence'] * 100
             print(f"  {i}. {candidate['path']}")
             print(f"     타입: {candidate['file_type']}, 크기: {candidate['size']}B, 신뢰도: {confidence:.1f}%")
