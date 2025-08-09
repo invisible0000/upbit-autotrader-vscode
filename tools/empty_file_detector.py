@@ -243,25 +243,93 @@ class EmptyFileDetector:
                 print(f"  {time_key}: {count}개 파일")
 
     def generate_cleanup_commands(self):
-        """정리 명령어 생성"""
+        """레거시 폴더로 이동 명령어 생성"""
         safe_files = [f for f in self.empty_files if f.deletion_safety == "SAFE"]
 
         if not safe_files:
-            print(f"\n💡 안전한 삭제 후보가 없습니다.")
+            print("\n💡 안전한 이동 후보가 없습니다.")
             return
 
-        print(f"\n🛠️ 안전한 파일 삭제 명령어:")
+        # 타임스탬프 생성
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        legacy_dir = f"legacy/empty_files_cleanup_{timestamp}"
+
+        print("\n🛠️ 안전한 파일 레거시 이동 명령어:")
+        print(f"# 레거시 폴더: {legacy_dir}")
         print(f"# PowerShell 명령어 (안전한 {len(safe_files)}개 파일)")
 
+        # 레거시 폴더 생성 명령
+        print("\n# 1. 레거시 폴더 생성")
+        print(f'New-Item -ItemType Directory -Path "{legacy_dir}" -Force')
+
+        # 개별 파일 이동 명령
+        print("\n# 2. 개별 파일 이동:")
         for file_info in safe_files:
             rel_path = file_info.relative_path.replace('\\', '/')
-            print(f'Remove-Item "{rel_path}" -Force  # {file_info.directory_type}')
+            file_name = Path(rel_path).name
+            target_path = f"{legacy_dir}/{file_name}"
+            print(f'Move-Item "{rel_path}" "{target_path}" -Force  # {file_info.directory_type}')
 
-        print(f"\n# 또는 일괄 삭제:")
+        # 일괄 이동 명령
+        print("\n# 3. 또는 일괄 이동:")
         safe_paths = [f'"{f.relative_path.replace(chr(92), "/")}"' for f in safe_files]
         paths_str = ", ".join(safe_paths)
+        print(f'$legacyDir = "{legacy_dir}"')
+        print("New-Item -ItemType Directory -Path $legacyDir -Force | Out-Null")
         print(f"$safeFiles = @({paths_str})")
-        print(f"$safeFiles | ForEach-Object {{ Remove-Item $_ -Force; Write-Host \"삭제됨: $_\" }}")
+        print("$safeFiles | ForEach-Object { ")
+        print("    $fileName = Split-Path $_ -Leaf")
+        print("    $targetPath = Join-Path $legacyDir $fileName")
+        print("    Move-Item $_ $targetPath -Force")
+        print("    Write-Host \"이동됨: $_ → $targetPath\" -ForegroundColor Green")
+        print("}")
+
+        # 확인 명령
+        print("\n# 4. 이동 확인:")
+        print(f'Get-ChildItem "{legacy_dir}" | Select-Object Name, Length, LastWriteTime')
+
+    def move_safe_files_to_legacy(self):
+        """실제로 안전한 파일들을 레거시 폴더로 이동"""
+        safe_files = [f for f in self.empty_files if f.deletion_safety == "SAFE"]
+
+        if not safe_files:
+            print("\n💡 이동할 안전한 파일이 없습니다.")
+            return False
+
+        # 타임스탬프 생성
+        from datetime import datetime
+        import shutil
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        legacy_dir = Path(f"legacy/empty_files_cleanup_{timestamp}")
+
+        try:
+            # 레거시 폴더 생성
+            legacy_dir.mkdir(parents=True, exist_ok=True)
+            print(f"📁 레거시 폴더 생성: {legacy_dir}")
+
+            # 파일 이동
+            moved_count = 0
+            for file_info in safe_files:
+                source = Path(file_info.relative_path)
+                target = legacy_dir / source.name
+
+                if source.exists():
+                    shutil.move(str(source), str(target))
+                    print(f"✅ 이동: {source} → {target}")
+                    moved_count += 1
+                else:
+                    print(f"⚠️ 파일 없음: {source}")
+
+            print(f"\n🎉 완료: {moved_count}개 파일이 레거시 폴더로 이동되었습니다.")
+            print(f"📂 레거시 위치: {legacy_dir}")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 이동 중 오류 발생: {e}")
+            return False
 
 def main():
     target_path = sys.argv[1] if len(sys.argv) > 1 else "upbit_auto_trading"
@@ -274,6 +342,15 @@ def main():
     detector.scan_empty_files()
     detector.print_analysis_report()
     detector.generate_cleanup_commands()
+
+    # 추가 옵션: 실제 이동 실행
+    if len(sys.argv) > 2 and sys.argv[2] == "--execute":
+        print("\n🚀 실제 파일 이동을 시작합니다...")
+        if detector.move_safe_files_to_legacy():
+            print("✅ 파일 이동이 완료되었습니다.")
+        else:
+            print("❌ 파일 이동에 실패했습니다.")
+
 
 if __name__ == "__main__":
     main()
