@@ -99,5 +99,10 @@
     "description": "[수동생성] settings 데이터베이스 백업",
     "backup_type": "수동생성",
     "updated_at": "2025-08-09T22:12:45.256744"
+  },
+  "settings_backup_20250810_073532.sqlite3": {
+    "description": "[수동생성] settings 데이터베이스 백업",
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-10T07:35:32.510347"
   }
 }
