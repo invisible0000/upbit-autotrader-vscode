@@ -40,7 +40,6 @@ import os
 import json
 import subprocess
 import platform
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
@@ -49,6 +48,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
     DatabasePathService
 )
+from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import (
     DatabaseInfoDto, DatabaseStatusDto
 )
@@ -74,6 +74,7 @@ class DatabaseSettingsPresenter:
 
         # DDD 도메인 서비스 초기화 (싱글톤 사용)
         self.db_path_service = DatabasePathService()  # 싱글톤이므로 Repository 자동 생성
+        self.health_service = DatabaseHealthService()  # Application Service 추가
         # self.unified_config = UnifiedConfigService()  # 현재 사용하지 않음
 
         # 통합 Use Case는 필요할 때 지연 로딩 (Private 변수)
@@ -409,12 +410,42 @@ class DatabaseSettingsPresenter:
                     success_msg += f"📁 복원 전 상태는 '{safety_filename}'에 백업되었습니다."
 
                 if hasattr(self.view, 'show_info_message'):
-                    self.view.show_info_message("복원 완료", success_msg)
+                    # 메시지 박스 표시 후 콜백으로 새로고침 실행
+                    try:
+                        from PyQt6.QtWidgets import QMessageBox
+                        from PyQt6.QtCore import QTimer
 
-                # UI 새로고침
-                if hasattr(self.view, 'refresh_backup_list'):
-                    self.view.refresh_backup_list()
-                self.load_database_info()
+                        # 메시지 박스 생성
+                        msg_box = QMessageBox()
+                        msg_box.setWindowTitle("복원 완료")
+                        msg_box.setText(success_msg)
+                        msg_box.setIcon(QMessageBox.Icon.Information)
+                        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+                        # 메시지 박스가 닫힌 후 새로고침 실행하는 함수
+                        def on_message_finished():
+                            # UI 새로고침
+                            if hasattr(self.view, 'refresh_backup_list'):
+                                self.view.refresh_backup_list()
+                            self.load_database_info()
+
+                        # 메시지 박스 완료 후 새로고침 실행
+                        msg_box.finished.connect(lambda: QTimer.singleShot(100, on_message_finished))
+                        msg_box.exec()
+
+                    except Exception as msg_error:
+                        self.logger.warning(f"⚠️ 메시지 박스 처리 중 오류: {msg_error}")
+                        # 기본 메시지로 대체
+                        self.view.show_info_message("복원 완료", success_msg)
+                        # 즉시 새로고침
+                        if hasattr(self.view, 'refresh_backup_list'):
+                            self.view.refresh_backup_list()
+                        self.load_database_info()
+                else:
+                    # show_info_message가 없으면 바로 새로고침
+                    if hasattr(self.view, 'refresh_backup_list'):
+                        self.view.refresh_backup_list()
+                    self.load_database_info()
 
                 return True
             else:
@@ -541,7 +572,9 @@ class DatabaseSettingsPresenter:
                 if hasattr(self.view, 'show_info_message'):
                     self.view.show_info_message("경로 변경 완료", success_msg)
 
-                # UI 새로고침
+                # UI 새로고침 - 백업 목록과 상태 모두 업데이트
+                if hasattr(self.view, 'refresh_backup_list'):
+                    self.view.refresh_backup_list()
                 self.load_database_info()
 
                 return True
@@ -556,49 +589,39 @@ class DatabaseSettingsPresenter:
             return False
 
     def _get_detailed_database_status(self, paths: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
-        """데이터베이스 상세 상태 검증"""
+        """데이터베이스 상세 상태 검증 - DatabaseHealthService 사용"""
         detailed_status = {}
 
         for db_type, db_path in paths.items():
-            status = {
-                'is_healthy': False,
-                'response_time_ms': 0.0,
-                'file_size_mb': 0.0,
-                'error_message': '',
-                'last_checked': datetime.now().isoformat()
-            }
-
             try:
-                db_path_obj = Path(db_path)
+                # DatabaseHealthService를 통한 전문적인 상태 검사
+                status_info = self.health_service._check_single_database(db_type, db_path)
 
-                if not db_path_obj.exists():
-                    status['error_message'] = '파일 없음'
-                    detailed_status[db_type] = status
-                    continue
+                # 표준 형식으로 변환
+                detailed_status[db_type] = {
+                    'is_healthy': status_info.get('is_healthy', False),
+                    'response_time_ms': status_info.get('response_time_ms', 0.0),
+                    'file_size_mb': status_info.get('file_size_mb', 0.0),
+                    'error_message': status_info.get('error_message', ''),
+                    'table_count': status_info.get('table_count', 0),
+                    'has_secure_keys': status_info.get('has_secure_keys', False),
+                    'last_checked': datetime.now().strftime('%H:%M:%S')
+                }
 
-                # 파일 크기 확인
-                file_size_bytes = db_path_obj.stat().st_size
-                status['file_size_mb'] = file_size_bytes / (1024 * 1024)
-
-                # 파일 존재 및 크기 확인으로 헬스체크 대체 (DDD 준수)
-                start_time = time.time()
-                try:
-                    # 파일 헤더 확인으로 SQLite 파일 유효성 검증
-                    with open(db_path_obj, 'rb') as f:
-                        header = f.read(16)
-                        if header.startswith(b'SQLite format 3\x00'):
-                            status['is_healthy'] = True
-                        else:
-                            status['error_message'] = "Invalid SQLite file format"
-                    end_time = time.time()
-                    status['response_time_ms'] = (end_time - start_time) * 1000
-                except Exception as read_error:
-                    status['error_message'] = f"File read error: {str(read_error)[:50]}"
+                self.logger.debug(f"✅ {db_type} DB 상태 검사 완료: {status_info.get('is_healthy', False)}")
 
             except Exception as e:
-                status['error_message'] = str(e)[:100] + '...' if len(str(e)) > 100 else str(e)
-
-            detailed_status[db_type] = status
+                self.logger.warning(f"⚠️ {db_type} DB 상태 검사 실패: {e}")
+                # 기본 오류 상태
+                detailed_status[db_type] = {
+                    'is_healthy': False,
+                    'response_time_ms': 0.0,
+                    'file_size_mb': 0.0,
+                    'error_message': f'상태 검사 실패: {str(e)}',
+                    'table_count': 0,
+                    'has_secure_keys': False,
+                    'last_checked': datetime.now().strftime('%H:%M:%S')
+                }
 
         return detailed_status
 
@@ -780,10 +803,18 @@ class DatabaseSettingsPresenter:
             return "데이터베이스 백업"
 
     def refresh_status(self) -> None:
-        """상태 새로고침"""
+        """상태 새로고침 - 백업 목록과 상태 모두 업데이트"""
         try:
             self.logger.info("🔄 데이터베이스 상태 새로고침 시작")
+
+            # 상태 정보 로드
             self.load_database_info()
+
+            # 백업 목록도 함께 새로고침
+            if hasattr(self.view, 'refresh_backup_list'):
+                self.view.refresh_backup_list()
+                self.logger.debug("✅ 백업 목록 새로고침 완료")
+
             self.logger.info("✅ 데이터베이스 상태 새로고침 완료")
         except Exception as e:
             self.logger.error(f"❌ 상태 새로고침 실패: {e}")

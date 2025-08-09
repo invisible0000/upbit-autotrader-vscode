@@ -16,7 +16,7 @@ Infrastructure Layer Enhanced Logging v4.0 시스템과 완전히 통합되었�
 from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel,
-    QPushButton, QSpacerItem, QSizePolicy, QMessageBox
+    QSpacerItem, QSizePolicy, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -138,7 +138,8 @@ class SettingsScreen(QWidget):
                     search_count += 1
 
                 self.logger.debug(f"🔍 최종 main_window: {type(main_window).__name__ if main_window else 'None'}")
-                self.logger.debug(f"🔍 부모 탐색 결과: {search_count}번 탐색 후 {'성공' if main_window and hasattr(main_window, 'di_container') else '실패'}")
+                success_msg = '성공' if main_window and hasattr(main_window, 'di_container') else '실패'
+                self.logger.debug(f"🔍 부모 탐색 결과: {search_count}번 탐색 후 {success_msg}")
 
                 if main_window and hasattr(main_window, 'di_container'):
                     di_container = getattr(main_window, 'di_container', None)
@@ -157,7 +158,9 @@ class SettingsScreen(QWidget):
                     current = original_parent
                     depth = 0
                     while current and depth < 10:
-                        parent_chain.append(f"[{depth}] {type(current).__name__} (id: {id(current)}, hasattr di_container: {hasattr(current, 'di_container')})")
+                        has_di = hasattr(current, 'di_container')
+                        parent_info = f"[{depth}] {type(current).__name__} (id: {id(current)}, hasattr di_container: {has_di})"
+                        parent_chain.append(parent_info)
                         current = current.parent()
                         depth += 1
                     self.logger.debug(f"🔍 부모 체인 상세: {' -> '.join(parent_chain) if parent_chain else 'Empty'}")
@@ -274,6 +277,10 @@ class SettingsScreen(QWidget):
         main_layout.addWidget(self.tab_widget)
         self.logger.info(f"📂 탭 위젯 완성: {self.tab_widget.count()}개 탭")
 
+        # 탭 변경 시그널 연결 - 자동 새로고침
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
+        self.logger.debug("🔄 탭 변경 시그널 연결 완료")
+
         # 버튼 레이아웃
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(0, 10, 0, 0)
@@ -363,6 +370,66 @@ class SettingsScreen(QWidget):
         """특정 탭으로 이동"""
         if 0 <= index < self.tab_widget.count():
             self.tab_widget.setCurrentIndex(index)
+
+    def _on_tab_changed(self, index: int) -> None:
+        """탭 변경 시 자동 새로고침 - UX 편의 기능"""
+        try:
+            tab_names = ["UI 설정", "API 키", "데이터베이스", "알림"]
+            tab_name = tab_names[index] if 0 <= index < len(tab_names) else f"탭 {index}"
+
+            self.logger.debug(f"🔄 탭 변경 감지: {tab_name} (인덱스: {index})")
+
+            # 각 탭별 자동 새로고침 처리
+            if index == 0:  # UI 설정 탭
+                self.logger.debug("🎨 UI 설정 탭 선택 - 자동 새로고침 시작")
+                ui_settings = getattr(self, 'ui_settings', None)
+                if ui_settings and hasattr(ui_settings, 'load_settings'):
+                    try:
+                        ui_settings.load_settings()
+                        self.logger.debug("✅ UI 설정 상태 자동 새로고침 완료")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ UI 설정 새로고침 실패: {e}")
+
+            elif index == 1:  # API 키 탭
+                self.logger.debug("🔑 API 키 탭 선택 - 자동 새로고침 시작")
+                api_key_manager = getattr(self, 'api_key_manager', None)
+                if api_key_manager and hasattr(api_key_manager, 'load_settings'):
+                    try:
+                        api_key_manager.load_settings()
+                        self.logger.debug("✅ API 키 상태 자동 새로고침 완료")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ API 키 새로고침 실패: {e}")
+
+            elif index == 2:  # 데이터베이스 탭
+                self.logger.debug("� 데이터베이스 탭 선택 - 자동 새로고침 시작")
+                if hasattr(self, 'database_settings'):
+                    try:
+                        # Presenter를 통한 새로고침 (MVP 패턴)
+                        presenter = getattr(self.database_settings, 'presenter', None)
+                        if presenter and hasattr(presenter, 'refresh_status'):
+                            presenter.refresh_status()
+                            self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (Presenter)")
+                        # View 직접 새로고침 (폴백)
+                        elif hasattr(self.database_settings, 'refresh_display'):
+                            getattr(self.database_settings, 'refresh_display')()
+                            self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (View)")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
+
+            elif index == 3:  # 알림 탭
+                self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
+                notification_settings = getattr(self, 'notification_settings', None)
+                if notification_settings and hasattr(notification_settings, 'load_settings'):
+                    try:
+                        getattr(notification_settings, 'load_settings')()
+                        self.logger.debug("✅ 알림 설정 자동 새로고침 완료")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
+
+            self.logger.info(f"✅ {tab_name} 탭 자동 새로고침 처리 완료")
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ 탭 변경 시 자동 새로고침 실패: {e}")
 
     # 기존 호환성을 위한 메서드들 (Presenter가 호출)
 

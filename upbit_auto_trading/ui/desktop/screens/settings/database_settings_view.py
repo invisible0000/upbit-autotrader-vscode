@@ -8,8 +8,8 @@ View와 Presenter를 분리하여 비즈니스 로직과 UI를 깔끔하게 분�
 from typing import Dict
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QMessageBox, QGroupBox,
-    QProgressBar, QFrame, QGridLayout
+    QPushButton, QMessageBox, QGroupBox,
+    QFrame, QGridLayout
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -18,6 +18,7 @@ from upbit_auto_trading.ui.desktop.screens.settings.presenters.database_settings
 from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_status_widget import DatabaseStatusWidget
 from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_backup_widget import DatabaseBackupWidget
 from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_path_selector import DatabasePathSelector
+from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_task_progress_widget import DatabaseTaskProgressWidget
 
 
 class DatabaseSettingsView(QWidget):
@@ -163,29 +164,19 @@ class DatabaseSettingsView(QWidget):
         grid_layout.addWidget(group, row, col)
 
     def _create_progress_section_grid(self, grid_layout, row, col):
-        """작업 진행 상황 (우측 하단)"""
-        group = QGroupBox("⏳ 작업 진행 상황")
-        layout = QVBoxLayout(group)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(4)
+        """작업 진행 상황 (우측 하단) - 새로운 전용 위젯 사용"""
+        # 새로운 작업 진행 상황 위젯 생성
+        self.progress_widget = DatabaseTaskProgressWidget()
 
-        # 진행 상황 표시
-        self.progress_label = QLabel("")
-        self.progress_label.setStyleSheet("color: #666666; font-size: 11px;")
-        self.progress_label.setVisible(False)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setMaximumHeight(20)
-
-        layout.addWidget(self.progress_label)
-        layout.addWidget(self.progress_bar)
-
-        grid_layout.addWidget(group, row, col)
+        # 그리드에 추가
+        grid_layout.addWidget(self.progress_widget, row, col)
 
     def _connect_signals(self):
         """시그널 연결 - Presenter와 연결"""
-        # 상태 위젯에서 새로고침 버튼 가져오기
+        # 상태 위젯의 새로고침 시그널 연결
+        self.status_widget.refresh_requested.connect(self.presenter.refresh_status)
+
+        # 상태 위젯에서 새로고침 버튼 가져오기 (레거시 호환)
         refresh_btn = getattr(self.status_widget, 'refresh_btn', None)
         if refresh_btn:
             refresh_btn.clicked.connect(self.presenter.refresh_status)
@@ -227,21 +218,25 @@ class DatabaseSettingsView(QWidget):
                 if backup_result:
                     self.logger.info(f"✅ {database_type} 백업 완료")
                     self.show_progress(f"{database_type} 백업 완료!", 100)
+                    # 작업 완료 처리
+                    if hasattr(self, 'progress_widget'):
+                        self.progress_widget.complete_task(True, f"{database_type} 백업이 성공적으로 생성되었습니다.")
                     self.show_info_message("백업 완료", f"{database_type} 백업이 성공적으로 생성되었습니다.")
                 else:
                     self.logger.error(f"❌ {database_type} 백업 실패")
+                    # 작업 실패 처리
+                    if hasattr(self, 'progress_widget'):
+                        self.progress_widget.complete_task(False, f"{database_type} 백업 생성에 실패했습니다.")
                     self.show_error_message("백업 실패", f"{database_type} 백업 생성에 실패했습니다.")
-
-                # 2초 후 진행상황 숨김
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(2000, self.hide_progress)
 
                 # 백업 목록 자동 새로고침
                 self._on_refresh_backups()
 
             except Exception as e:
                 self.logger.error(f"❌ 백업 실패: {e}")
-                self.hide_progress()
+                # 작업 실패 처리
+                if hasattr(self, 'progress_widget'):
+                    self.progress_widget.complete_task(False, f"백업 중 오류 발생: {str(e)}")
                 self.show_error_message("백업 실패", f"{database_type} 백업 중 오류가 발생했습니다: {str(e)}")
         else:
             self.logger.error("❌ Presenter가 연결되지 않았습니다")
@@ -252,15 +247,31 @@ class DatabaseSettingsView(QWidget):
         """백업 복원 요청 - Presenter에게 위임"""
         self.logger.info(f"🔄 백업 복원 요청: {backup_id}")
 
+        # 진행 상황 표시 시작
+        self.show_progress("백업 복원 진행 중...")
+        self.progress_widget.start_task(f"백업 복원: {backup_id}")
+
         # Presenter의 메서드를 호출 (아직 구현 안됨 - 다음 단계에서 추가)
-        if hasattr(self.presenter, 'restore_database_backup'):
-            success = self.presenter.restore_database_backup(backup_id)
-            if success:
-                self.logger.info(f"✅ 백업 복원 성공: {backup_id}")
+        try:
+            if hasattr(self.presenter, 'restore_database_backup'):
+                self.progress_widget.update_progress(50, "백업 파일 복원 중...")
+                success = self.presenter.restore_database_backup(backup_id)
+
+                if success:
+                    self.logger.info(f"✅ 백업 복원 성공: {backup_id}")
+                    self.progress_widget.complete_task(True, "백업이 성공적으로 복원되었습니다")
+                    # 상태 새로고침
+                    if hasattr(self.presenter, 'refresh_status'):
+                        self.presenter.refresh_status()
+                else:
+                    self.logger.error(f"❌ 백업 복원 실패: {backup_id}")
+                    self.progress_widget.complete_task(False, "백업 복원 중 오류가 발생했습니다")
             else:
-                self.logger.error(f"❌ 백업 복원 실패: {backup_id}")
-        else:
-            self.logger.warning("⚠️ Presenter에 restore_database_backup 메서드가 없음")
+                self.logger.warning("⚠️ Presenter에 restore_database_backup 메서드가 없음")
+                self.progress_widget.complete_task(False, "복원 기능이 아직 구현되지 않았습니다")
+        except Exception as e:
+            self.logger.error(f"❌ 백업 복원 예외 발생: {e}")
+            self.progress_widget.complete_task(False, f"복원 중 오류 발생: {str(e)}")
 
     def _on_delete_backup_requested(self, backup_id: str):
         """백업 삭제 요청 - Presenter에게 위임"""
@@ -290,15 +301,21 @@ class DatabaseSettingsView(QWidget):
                 self.backup_widget.update_backup_list(backup_list)
                 self.logger.info(f"✅ 백업 목록 새로고침 완료: {len(backup_list)}개")
 
+                # 작업 완료 처리
+                if hasattr(self, 'progress_widget'):
+                    self.progress_widget.complete_task(True, f"백업 목록 새로고침 완료: {len(backup_list)}개")
+
             except Exception as e:
                 self.logger.error(f"❌ 백업 목록 새로고침 실패: {e}")
+                # 작업 실패 처리
+                if hasattr(self, 'progress_widget'):
+                    self.progress_widget.complete_task(False, f"백업 목록 새로고침 실패: {str(e)}")
                 self.show_error_message("새로고침 실패", f"백업 목록 새로고침 중 오류가 발생했습니다: {str(e)}")
         else:
             self.logger.warning("⚠️ Presenter 또는 backup_widget 없음")
-
-        # 1초 후 진행상황 숨김
-        from PyQt6.QtCore import QTimer
-        QTimer.singleShot(1000, self.hide_progress)
+            # 작업 실패 처리
+            if hasattr(self, 'progress_widget'):
+                self.progress_widget.complete_task(False, "시스템 오류: Presenter 없음")
 
     def _on_description_updated(self, backup_id: str, new_description: str):
         """백업 설명 업데이트 처리"""
@@ -353,14 +370,18 @@ class DatabaseSettingsView(QWidget):
                 if success:
                     self.logger.info(f"✅ {database_type} 경로 변경 완료")
                     self.show_progress(f"{database_type} 경로 변경 완료!", 100)
+                    # 작업 완료 처리
+                    if hasattr(self, 'progress_widget'):
+                        self.progress_widget.complete_task(True, f"{database_type} 경로가 성공적으로 변경되었습니다.")
 
-                    # 2초 후 진행상황 숨김 및 상태 새로고침
+                    # 상태 새로고침
                     from PyQt6.QtCore import QTimer
-                    QTimer.singleShot(2000, self.hide_progress)
-                    QTimer.singleShot(2500, self.presenter.load_database_info)
+                    QTimer.singleShot(1000, self.presenter.load_database_info)
                 else:
                     self.logger.error(f"❌ {database_type} 경로 변경 실패")
-                    self.hide_progress()
+                    # 작업 실패 처리
+                    if hasattr(self, 'progress_widget'):
+                        self.progress_widget.complete_task(False, f"{database_type} 경로 변경에 실패했습니다.")
 
                     # 🚨 사용자에게 명확한 경고 메시지 표시
                     self.show_error_message(
@@ -407,16 +428,19 @@ class DatabaseSettingsView(QWidget):
             self.status_widget.update_status(status)
 
     def show_progress(self, message: str, value: int = 0) -> None:
-        """진행상황 표시"""
-        self.progress_label.setText(message)
-        self.progress_bar.setValue(value)
-        self.progress_label.setVisible(True)
-        self.progress_bar.setVisible(True)
+        """진행상황 표시 - 새로운 위젯 방식"""
+        if hasattr(self, 'progress_widget'):
+            if value == 0:
+                # 작업 시작
+                self.progress_widget.start_task(message)
+            else:
+                # 진행 상황 업데이트
+                self.progress_widget.update_progress(value, message)
 
     def hide_progress(self) -> None:
-        """진행상황 숨김"""
-        self.progress_label.setVisible(False)
-        self.progress_bar.setVisible(False)
+        """진행상황 숨김 - 새로운 위젯 방식"""
+        if hasattr(self, 'progress_widget'):
+            self.progress_widget.reset_progress()
 
     def show_validation_result(self, results: list) -> None:
         """검증 결과 표시"""

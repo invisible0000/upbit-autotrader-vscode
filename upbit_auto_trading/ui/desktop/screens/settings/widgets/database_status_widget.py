@@ -188,14 +188,20 @@ class DatabaseStatusWidget(QWidget):
             status_label.setText("❌ 연결 실패")
 
             # 에러 유형별 상세 정보
-            if "secure_keys" in error_message:
+            if "테이블이 없음" in error_message and db_type == 'market_data':
+                # Market Data DB는 아직 개발되지 않았으므로 특별 처리
+                status_label.setText("⏳ 개발 예정")
+                detail_label.setText("시장 데이터 수집 기능 개발 예정")
+                frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #fff3cd; }}")  # 경고 색상
+            elif "secure_keys" in error_message:
                 detail_label.setText("보안 키 테이블 누락 - DB 교체 필요")
+                frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #ffeaea; }}")
             elif "파일" in error_message or "File" in error_message:
                 detail_label.setText("DB 파일 손상 - 백업에서 복원 필요")
+                frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #ffeaea; }}")
             else:
                 detail_label.setText(error_message or "연결 실패")
-
-            frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #ffeaea; }}")
+                frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #ffeaea; }}")
 
     def get_status_data(self) -> Dict[str, Any]:
         """현재 상태 데이터 반환"""

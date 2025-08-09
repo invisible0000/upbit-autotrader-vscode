@@ -39,10 +39,6 @@
     "description": "strategies 데이터베이스 백업",
     "updated_at": "2025-08-09T16:49:42.199732"
   },
-  "strategies_backup_20250809_163654.sqlite3": {
-    "description": "[수동생성] strategies 데이터베이스 백업",
-    "updated_at": "2025-08-09T16:49:42.164178"
-  },
   "market_data_backup_20250809_150439.sqlite3": {
     "description": "market_data 데이터베이스 백업",
     "updated_at": "2025-08-09T16:38:47.580256"
@@ -59,8 +55,44 @@
     "description": "[수동생성] market_data 데이터베이스 백업",
     "updated_at": "2025-08-09T16:38:47.568797"
   },
-  "settings_backup_20250809_163814.sqlite3": {
+  "settings_backup_20250809_180853.sqlite3": {
     "description": "[수동생성] settings 데이터베이스 백업",
-    "updated_at": "2025-08-09T16:50:27.871752"
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-09T18:08:53.064742"
+  },
+  "strategies_backup_20250809_191747.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-09T19:17:47.219532"
+  },
+  "strategies_backup_20250809_191810.sqlite3": {
+    "description": "[수동생성] strategies 데이터베이스 백업",
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-09T19:18:10.142132"
+  },
+  "market_data_backup_20250809_191824.sqlite3": {
+    "description": "[수동생성] market_data 데이터베이스 백업",
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-09T19:18:24.415701"
+  },
+  "market_data_backup_20250809_191835.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-09T19:18:35.140051"
+  },
+  "strategies_backup_20250809_191851.sqlite3": {
+    "description": "[경로변경] 경로 변경 전 안전 백업",
+    "backup_type": "경로변경",
+    "updated_at": "2025-08-09T19:18:51.550848"
+  },
+  "market_data_backup_20250809_191927.sqlite3": {
+    "description": "[경로변경] 경로 변경 전 안전 백업",
+    "backup_type": "경로변경",
+    "updated_at": "2025-08-09T19:19:27.847768"
+  },
+  "settings_backup_20250809_201051.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-09T20:10:51.382679"
   }
 }

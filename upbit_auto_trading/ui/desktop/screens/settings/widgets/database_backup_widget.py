@@ -175,10 +175,10 @@ class DatabaseBackupWidget(QWidget):
     def _on_database_changed(self):
         """데이터베이스 콤보박스 변경 시 호출"""
         self._logger.info(f"🔄 데이터베이스 선택 변경: {self.db_combo.currentText()}")
-        
+
         # 백업 목록 새로고침 요청 (MVP 패턴 준수)
         self.refresh_backups_requested.emit()
-        
+
         # 선택된 데이터베이스에 따라 백업 목록 필터링은 새로고침 완료 후 자동으로 적용됨
 
     def _on_restore_backup(self):
