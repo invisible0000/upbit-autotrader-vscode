@@ -9,12 +9,13 @@ Features:
 - 연결 상태, 응답 시간, 파일 크기 등
 - 테마 시스템 완전 통합
 - 상태별 색상 및 아이콘 표시
+- DB 재연결 및 새로고침 기능
 """
 
 from typing import Dict, Any, Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QFrame, QProgressBar
+    QFrame, QProgressBar, QPushButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -31,6 +32,8 @@ class DatabaseStatusWidget(QWidget):
 
     # 상태 클릭 시그널 (상세 정보 요청)
     status_clicked = pyqtSignal(str)  # database_type
+    # 재연결 요청 시그널
+    refresh_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -43,12 +46,16 @@ class DatabaseStatusWidget(QWidget):
         self._setup_ui()
 
     def _setup_ui(self):
-        """UI 구성 - 중복 제목 제거로 공간 확보"""
+        """UI 구성 - 새로고침 버튼 추가"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # 제목 제거 - 그룹박스에 이미 있음
+        # 새로고침 버튼 추가
+        refresh_button = QPushButton("🔄 상태 새로고침")
+        refresh_button.setObjectName("button-refresh-status")
+        refresh_button.clicked.connect(self.refresh_requested.emit)
+        layout.addWidget(refresh_button)
 
         # 구분선
         line = QFrame()
@@ -97,8 +104,10 @@ class DatabaseStatusWidget(QWidget):
         detail_label.setObjectName(f"label-detail-{db_type}")
         layout.addWidget(detail_label)
 
-        # 프레임 클릭 이벤트
-        frame.mousePressEvent = lambda event, dt=db_type: self.status_clicked.emit(dt)
+        # 프레임 클릭 이벤트 - 올바른 시그니처 사용
+        def on_frame_click(a0):
+            self.status_clicked.emit(db_type)
+        frame.mousePressEvent = on_frame_click
 
         # 라벨 참조 저장
         self._database_labels[db_type] = {
@@ -130,8 +139,8 @@ class DatabaseStatusWidget(QWidget):
             self._logger.error(f"❌ 상태 업데이트 실패: {e}")
 
     def _update_database_status(self, db_type: str, db_status: Optional[Dict[str, Any]],
-                               labels: Dict[str, Any]) -> None:
-        """개별 데이터베이스 상태 업데이트"""
+                                labels: Dict[str, Any]) -> None:
+        """개별 데이터베이스 상태 업데이트 - 상세 정보 포함"""
         frame = labels['frame']
         status_label = labels['status']
         detail_label = labels['detail']
@@ -147,16 +156,45 @@ class DatabaseStatusWidget(QWidget):
         response_time = db_status.get('response_time_ms', 0)
         file_size_mb = db_status.get('file_size_mb', 0)
         error_message = db_status.get('error_message', '')
+        table_count = db_status.get('table_count', 0)
+        last_check = db_status.get('last_check_time', '')
+        has_secure_keys = db_status.get('has_secure_keys', False)
 
         if is_healthy:
-            # 정상 상태
-            status_label.setText("✅ 정상")
-            detail_label.setText(f"{response_time:.1f}ms | {file_size_mb:.1f}MB")
+            # 정상 상태 - 상세 정보 표시
+            status_label.setText("✅ 정상 연결")
+
+            # 테이블 정보와 보안 키 상태 포함
+            detail_parts = [
+                f"{response_time:.1f}ms",
+                f"{file_size_mb:.1f}MB",
+                f"{table_count}개 테이블"
+            ]
+
+            if db_type == 'settings':
+                # 암호화 키 상태를 더 명확하게 표시
+                if has_secure_keys:
+                    detail_parts.append("🔐 암호키있음")
+                else:
+                    detail_parts.append("⚠️ 암호키없음")  # 실제 암호화 키가 없는 상태
+
+            if last_check:
+                detail_parts.append(f"검사: {last_check}")
+
+            detail_label.setText(" | ".join(detail_parts))
             frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #e8f5e8; }}")
         else:
-            # 오류 상태
-            status_label.setText("❌ 오류")
-            detail_label.setText(error_message or "연결 실패")
+            # 오류 상태 - 더 명확한 에러 표시
+            status_label.setText("❌ 연결 실패")
+
+            # 에러 유형별 상세 정보
+            if "secure_keys" in error_message:
+                detail_label.setText("보안 키 테이블 누락 - DB 교체 필요")
+            elif "파일" in error_message or "File" in error_message:
+                detail_label.setText("DB 파일 손상 - 백업에서 복원 필요")
+            else:
+                detail_label.setText(error_message or "연결 실패")
+
             frame.setStyleSheet(f"#frame-db-status-{db_type} {{ background-color: #ffeaea; }}")
 
     def get_status_data(self) -> Dict[str, Any]:

@@ -17,6 +17,9 @@ from PyQt6.QtGui import QIcon, QAction
 # Infrastructure Layer 서비스 인터페이스
 from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
 
+# Application Layer 서비스
+from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
+
 # 공통 위젯 임포트
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
 from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
@@ -173,6 +176,16 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self._log_warning(f"⚠️ ThemeService DI 주입 실패, 기존 방식 사용: {e}")
                 self._log_llm_report("IL", f"ThemeService DI 실패: {type(e).__name__}")
+
+        # DatabaseHealthService 초기화 (최소 구현)
+        self.db_health_service = None
+        try:
+            # DatabaseHealthService 생성 (최소 구현)
+            self.db_health_service = DatabaseHealthService()
+            self._log_info("✅ DatabaseHealthService 초기화 완료 (최소 구현)")
+
+        except Exception as e:
+            self._log_warning(f"⚠️ DatabaseHealthService 초기화 실패: {e}")
 
         # 화면 캐시 (지연 로딩용)
         self._screen_cache = {}
@@ -1273,6 +1286,60 @@ class MainWindow(QMainWindow):
             self._log_llm_report("IL", f"DB 상태 업데이트 실패: {type(e).__name__}")
 
     def _check_initial_db_status(self):
+        """애플리케이션 시작 시 DB 연결 상태 확인 - DatabaseHealthService 활용"""
+        try:
+            if self.db_health_service:
+                # 새로운 DatabaseHealthService 사용
+                self._log_info("🔍 DatabaseHealthService를 통한 DB 건강 검사 시작")
+
+                # 비동기 호출을 동기적으로 처리 (startup 시점이므로 안전)
+                import asyncio
+
+                # 기존 이벤트 루프가 있는지 확인
+                try:
+                    loop = asyncio.get_running_loop()
+                    # 이미 실행 중인 루프가 있으면 태스크로 스케줄링
+                    task = loop.create_task(self._async_check_db_health())
+                    self._log_info("📅 기존 이벤트 루프에 DB 건강 검사 태스크 스케줄링")
+                except RuntimeError:
+                    # 실행 중인 루프가 없으면 새로 실행
+                    db_is_healthy = asyncio.run(self.db_health_service.check_startup_health())
+                    self._update_db_status_display(db_is_healthy)
+
+            else:
+                # 폴백: 기존 방식 사용
+                self._log_warning("⚠️ DatabaseHealthService 없음, 기존 방식으로 DB 상태 확인")
+                self._check_db_status_legacy()
+
+        except Exception as e:
+            self._log_error(f"❌ DB 상태 확인 실패: {e}")
+            # 오류 발생 시 연결 끊김으로 설정
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_db_status(False)
+
+    async def _async_check_db_health(self):
+        """비동기 DB 건강 검사"""
+        try:
+            db_is_healthy = await self.db_health_service.check_startup_health()
+            self._update_db_status_display(db_is_healthy)
+        except Exception as e:
+            self._log_error(f"❌ 비동기 DB 건강 검사 실패: {e}")
+            self._update_db_status_display(False)
+
+    def _update_db_status_display(self, is_healthy: bool):
+        """DB 상태를 StatusBar에 반영"""
+        try:
+            if hasattr(self, 'status_bar'):
+                self.status_bar.set_db_status(is_healthy)
+                status_text = "연결됨" if is_healthy else "고장남"
+                self._log_info(f"📊 DB 상태 업데이트: {status_text}")
+                self._log_llm_report("IL", f"DB 상태 확인 완료: {is_healthy}")
+            else:
+                self._log_warning("⚠️ StatusBar 없음 - DB 상태 표시 불가")
+        except Exception as e:
+            self._log_error(f"❌ DB 상태 표시 실패: {e}")
+
+    def _check_db_status_legacy(self):
         """애플리케이션 시작 시 DB 연결 상태 확인 - DDD 서비스 활용"""
         try:
             # DDD 서비스를 통한 DB 경로 가져오기

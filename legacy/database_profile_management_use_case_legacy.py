@@ -25,16 +25,8 @@ from upbit_auto_trading.domain.exceptions.domain_exceptions import DomainExcepti
 class DatabaseProfileManagementUseCase:
     """데이터베이스 프로필 관리 Use Case"""
 
-    def __init__(self, repository: Optional[IDatabaseConfigRepository] = None):
-        if repository is None:
-            # 기본 Repository 생성 (향후 DI Container로 교체)
-            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                FileSystemDatabaseConfigurationRepository
-            )
-            # 타입 체크 무시 (실제로는 interface 호환됨)
-            repository = FileSystemDatabaseConfigurationRepository()  # type: ignore
-
-        self._repository = repository  # type: ignore
+    def __init__(self, repository: IDatabaseConfigRepository):
+        self._repository = repository
         self._logger = create_component_logger("DatabaseProfileManagement")
 
     async def create_profile(self, request: CreateProfileRequestDto) -> DatabaseProfileDto:

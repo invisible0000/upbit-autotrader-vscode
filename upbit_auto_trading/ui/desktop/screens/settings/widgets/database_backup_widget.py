@@ -36,6 +36,7 @@ class DatabaseBackupWidget(QWidget):
     restore_backup_requested = pyqtSignal(str)  # backup_id
     delete_backup_requested = pyqtSignal(str)  # backup_id
     refresh_backups_requested = pyqtSignal()
+    description_updated = pyqtSignal(str, str)  # backup_id, new_description
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -155,6 +156,10 @@ class DatabaseBackupWidget(QWidget):
         self.delete_btn.clicked.connect(self._on_delete_backup)
 
         self.backup_table.itemSelectionChanged.connect(self._on_selection_changed)
+        self.backup_table.itemChanged.connect(self._on_item_changed)
+
+        # 데이터베이스 콤보박스 변경 시그널 연결
+        self.db_combo.currentTextChanged.connect(self._on_database_changed)
 
     def _on_create_backup(self):
         """백업 생성 버튼 클릭"""
@@ -166,6 +171,12 @@ class DatabaseBackupWidget(QWidget):
     def _on_refresh_backups(self):
         """새로고침 버튼 클릭"""
         self.refresh_backups_requested.emit()
+
+    def _on_database_changed(self):
+        """데이터베이스 콤보박스 변경 시 호출"""
+        self._logger.info(f"🔄 데이터베이스 선택 변경: {self.db_combo.currentText()}")
+        # 선택된 데이터베이스에 따라 백업 목록 필터링
+        self._filter_backup_list()
 
     def _on_restore_backup(self):
         """복원 버튼 클릭"""
@@ -220,65 +231,123 @@ class DatabaseBackupWidget(QWidget):
             self.restore_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
 
-    def update_backup_list(self, backup_data: List[Dict[str, Any]]):
-        """백업 목록 업데이트"""
+    def _on_item_changed(self, item: QTableWidgetItem):
+        """테이블 아이템 변경 시 호출 - 설명 열 편집 처리"""
         try:
-            self._backup_data = backup_data
+            # 설명 열(5번)만 편집 허용
+            if item.column() == 5:
+                row = item.row()
+                backup_id_item = self.backup_table.item(row, 0)
+                if backup_id_item:
+                    backup_id = backup_id_item.text()
+                    new_description = item.text()
+
+                    self._logger.info(f"📝 백업 설명 변경: {backup_id} -> {new_description}")
+
+                    # Presenter에 설명 변경 요청
+                    self.description_updated.emit(backup_id, new_description)
+
+        except Exception as e:
+            self._logger.error(f"❌ 아이템 변경 처리 실패: {e}")
+
+    def _filter_backup_list(self):
+        """선택된 데이터베이스에 따라 백업 목록 필터링"""
+        if not self._backup_data:
+            return
+
+        # 선택된 데이터베이스 타입 추출
+        selected_text = self.db_combo.currentText()
+        selected_db_type = selected_text.split(" - ")[0]
+
+        # 필터링된 백업 데이터
+        filtered_data = []
+        for backup in self._backup_data:
+            if backup.get('database_type') == selected_db_type:
+                filtered_data.append(backup)
+
+        self._logger.info(f"📋 백업 목록 필터링: {selected_db_type} -> {len(filtered_data)}개 항목")
+
+        # 테이블 업데이트 (필터링된 데이터로)
+        self._update_table_with_data(filtered_data)
+
+    def _update_table_with_data(self, backup_data: List[Dict[str, Any]]):
+        """테이블을 특정 백업 데이터로 업데이트"""
+        try:
             self.backup_table.setRowCount(len(backup_data))
 
             for row, backup in enumerate(backup_data):
-                # 백업 ID
-                self.backup_table.setItem(row, 0, QTableWidgetItem(
-                    backup.get('backup_id', '')[:8] + '...'  # 앞 8자리만 표시
-                ))
+                # 백업 ID (0번 컬럼) - 전체 텍스트 표시 (잘림 없음)
+                backup_id = backup.get('backup_id', 'N/A')
+                item = QTableWidgetItem(str(backup_id))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                # 툴팁으로 전체 텍스트 표시
+                item.setToolTip(str(backup_id))
+                self.backup_table.setItem(row, 0, item)
 
-                # 데이터베이스 타입
-                self.backup_table.setItem(row, 1, QTableWidgetItem(
-                    backup.get('source_database_type', '')
-                ))
+                # 데이터베이스 (1번 컬럼) - database_type 사용
+                database = backup.get('database_type', 'N/A')
+                item = QTableWidgetItem(str(database))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.backup_table.setItem(row, 1, item)
 
-                # 생성일시
-                created_at = backup.get('created_at', '')
-                if created_at:
-                    try:
-                        dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                        formatted_date = dt.strftime('%Y-%m-%d %H:%M')
-                    except:
-                        formatted_date = created_at
+                # 생성일시 (2번 컬럼) - creation_time 사용
+                creation_time = backup.get('creation_time')
+                if creation_time:
+                    # datetime 객체를 문자열로 변환
+                    created_at = creation_time.strftime("%Y-%m-%d %H:%M:%S")
                 else:
-                    formatted_date = '알 수 없음'
+                    created_at = 'N/A'
+                item = QTableWidgetItem(str(created_at))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.backup_table.setItem(row, 2, item)
 
-                self.backup_table.setItem(row, 2, QTableWidgetItem(formatted_date))
-
-                # 파일 크기
-                file_size = backup.get('file_size_bytes', 0)
-                if file_size > 0:
-                    size_mb = file_size / (1024 * 1024)
+                # 크기 (3번 컬럼) - file_size (bytes)를 MB로 변환
+                file_size_bytes = backup.get('file_size', 0)
+                if file_size_bytes > 0:
+                    size_mb = file_size_bytes / (1024 * 1024)
                     size_text = f"{size_mb:.1f} MB"
                 else:
-                    size_text = '알 수 없음'
+                    size_text = "0 MB"
+                item = QTableWidgetItem(size_text)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.backup_table.setItem(row, 3, item)
 
-                self.backup_table.setItem(row, 3, QTableWidgetItem(size_text))
+                # 상태 (4번 컬럼)
+                status = backup.get('status', 'COMPLETED')
+                item = QTableWidgetItem(str(status))
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.backup_table.setItem(row, 4, item)
 
-                # 상태
-                status = backup.get('status', '')
-                status_icons = {
-                    'PENDING': '⏳',
-                    'IN_PROGRESS': '🔄',
-                    'COMPLETED': '✅',
-                    'FAILED': '❌'
-                }
-                status_text = f"{status_icons.get(status, '❓')} {status}"
-                self.backup_table.setItem(row, 4, QTableWidgetItem(status_text))
+                # 설명 (5번 컬럼) - 편집 가능하게 설정
+                description = backup.get('description', f"{backup.get('database_type', 'Unknown')} 데이터베이스 백업")
+                item = QTableWidgetItem(str(description))
+                # 설명 열은 편집 가능하게 유지 (편집 불가 플래그 제거)
+                self.backup_table.setItem(row, 5, item)
 
-                # 설명
-                description = backup.get('description', '')
-                self.backup_table.setItem(row, 5, QTableWidgetItem(description))
+            # 선택 상태 초기화
+            self._selected_backup_id = None
+            self.restore_btn.setEnabled(False)
+            self.delete_btn.setEnabled(False)
 
-            self._logger.info(f"📋 백업 목록 업데이트 완료: {len(backup_data)}개")
+            self._logger.debug(f"📊 백업 테이블 업데이트 완료: {len(backup_data)}개 항목")
+
+        except Exception as e:
+            self._logger.error(f"❌ 백업 테이블 업데이트 실패: {e}")
+
+    def update_backup_list(self, backup_data: List[Dict[str, Any]]):
+        """백업 목록 업데이트 - 전체 데이터 저장 후 필터링 적용"""
+        try:
+            # 전체 백업 데이터 저장
+            self._backup_data = backup_data
+            self._logger.info(f"📋 백업 데이터 업데이트: {len(backup_data)}개 항목")
+
+            # 현재 선택된 데이터베이스에 따라 필터링 적용
+            self._filter_backup_list()
 
         except Exception as e:
             self._logger.error(f"❌ 백업 목록 업데이트 실패: {e}")
+            # 에러 발생 시 빈 테이블로 초기화
+            self.backup_table.setRowCount(0)
 
     def clear_backup_list(self):
         """백업 목록 초기화"""

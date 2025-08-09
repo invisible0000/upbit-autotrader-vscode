@@ -2,7 +2,14 @@
 설정 화면 - MVP 패턴 + Infrastructure Layer v4.0 통합
 
 DDD 아키텍처와 MVP 패턴을 적용한 설정 관리 UI입니다.
-View는 순수하게 UI 표시만 담당하고, 모든 비즈니스 로직은 Presenter에서 처리합니다.
+View는 순수하게 UI 표시만        try:
+            # 실제 설정 위젯들 import 및 생성
+            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.database_settings_view import DatabaseSettingsView
+            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
+
+            self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")든 비즈니스 로직은 Presenter에서 처리합니다.
 Infrastructure Layer Enhanced Logging v4.0 시스템과 완전히 통합되었습니다.
 """
 
@@ -107,10 +114,10 @@ class SettingsScreen(QWidget):
 
         try:
             # 실제 설정 위젯들 import 및 생성
-            from upbit_auto_trading.ui.desktop.screens.settings.api_key_manager_secure import ApiKeyManagerSecure
-            from upbit_auto_trading.ui.desktop.screens.settings.widgets.database_tab_widget import DatabaseTabWidget
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettings
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettings
+            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.database_settings_view import DatabaseSettingsView
+            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
 
             self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")
 
@@ -163,8 +170,9 @@ class SettingsScreen(QWidget):
             self.api_key_manager = ApiKeyManagerSecure(self, api_key_service=api_key_service)
             self.logger.debug("🔑 API 키 관리자 생성 완료")
 
-            self.database_settings = DatabaseTabWidget(self)
-            self.logger.debug("💾 데이터베이스 설정 생성 완료 (DDD MVP 패턴 적용)")
+            # 데이터베이스 설정 View 사용 (MVP 패턴 이미 적용됨)
+            self.database_settings = DatabaseSettingsView(self)
+            self.logger.debug("💾 데이터베이스 설정 생성 완료 (DatabaseSettingsView - MVP 적용)")
 
             self.notification_settings = NotificationSettings(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
@@ -287,7 +295,7 @@ class SettingsScreen(QWidget):
         # 하위 위젯들의 시그널을 상위로 중계
         try:
             # UI Settings의 테마 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettings
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
             if isinstance(self.ui_settings, UISettings):
                 self.ui_settings.theme_changed.connect(self._on_ui_settings_theme_changed)
                 self.logger.info("✅ UISettings theme_changed 시그널 중계 연결 완료")
@@ -298,7 +306,7 @@ class SettingsScreen(QWidget):
                 self.logger.warning("⚠️ UISettings가 UISettings 타입이 아닙니다 (폴백 위젯 사용 중)")
 
             # API Key Manager의 상태 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.api_key_manager_secure import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
             if isinstance(self.api_key_manager, ApiKeyManagerSecure):
                 self.api_key_manager.api_status_changed.connect(self._on_api_key_manager_status_changed)
                 self.logger.info("✅ ApiKeyManagerSecure api_status_changed 시그널 중계 연결 완료")

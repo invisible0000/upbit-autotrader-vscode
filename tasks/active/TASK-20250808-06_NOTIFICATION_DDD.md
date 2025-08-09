@@ -263,7 +263,7 @@ trade_notifications:
       - amount_gte: 10000  # 1만원 이상
     channels: ["desktop", "email"]
     priority: "HIGH"
-    
+
   - name: "손익 목표 달성"
     type: "PROFIT_TARGET_REACHED"
     conditions:
@@ -281,7 +281,7 @@ system_notifications:
       - duration_gte: 30  # 30초 이상 끊김
     channels: ["desktop", "email"]
     priority: "HIGH"
-    
+
   - name: "보안 이벤트"
     type: "SECURITY_EVENT"
     conditions:
@@ -298,7 +298,7 @@ schedule_settings:
       start: "09:00"
       end: "15:30"
       days: ["MON", "TUE", "WED", "THU", "FRI"]
-      
+
   frequency_limits:
     - rule_type: "PRICE_ALERT"
       max_per_hour: 5

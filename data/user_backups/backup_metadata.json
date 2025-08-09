@@ -1,0 +1,18 @@
+{
+  "settings_backup_20250809_150419.sqlite3": {
+    "description": "테스트 설명 01",
+    "updated_at": "2025-08-09T15:38:08.212397"
+  },
+  "settings_backup_20250809_150416.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T15:38:08.220751"
+  },
+  "settings_backup_20250809_081256.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T15:38:08.228287"
+  },
+  "settings_backup_20250809_153804.sqlite3": {
+    "description": "settings 데이터베이스 백업",
+    "updated_at": "2025-08-09T15:38:08.202089"
+  }
+}

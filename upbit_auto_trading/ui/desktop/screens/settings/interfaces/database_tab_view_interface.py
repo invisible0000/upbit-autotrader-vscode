@@ -43,3 +43,7 @@ class IDatabaseTabView(Protocol):
     def show_info_message(self, title: str, message: str) -> None:
         """정보 메시지 표시"""
         ...
+
+    def refresh_backup_list(self) -> None:
+        """백업 목록 새로고침"""
+        ...

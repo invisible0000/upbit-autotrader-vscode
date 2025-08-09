@@ -39,7 +39,7 @@ class ApiKeyManagerSecure(QWidget):
         # ApiKeyService 의존성 주입
         self.api_key_service = api_key_service
         if self.api_key_service is None:
-            self.logger.error("❌ ApiKeyService가 None으로 전달됨 - 의존성 주입 실패")
+            self.logger.warning("⚠️ ApiKeyService가 None으로 전달됨 - 테스트 모드에서 실행 중")
         else:
             self.logger.info(f"✅ ApiKeyService 의존성 주입 성공: {type(self.api_key_service).__name__}")
 
