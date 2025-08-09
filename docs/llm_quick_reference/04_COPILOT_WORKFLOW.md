@@ -174,6 +174,11 @@ pytest tests/domain/ -v
 pytest tests/application/ -v
 pytest tests/infrastructure/ -v
 
+# 데이터베이스 설정 UI 확인 방법
+# 1. python run_desktop_ui.py 실행
+# 2. 설정 메뉴 클릭
+# 3. 데이터베이스 탭에서 실시간 상태, 백업 관리, 경로 변경 기능 확인
+
 # 로깅 시스템 테스트
 $env:UPBIT_CONSOLE_OUTPUT='true'; $env:UPBIT_LOG_SCOPE='verbose'
 ```

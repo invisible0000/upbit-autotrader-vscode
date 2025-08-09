@@ -177,6 +177,13 @@ class SettingsScreen(QWidget):
             self.database_settings = DatabaseSettingsView(self)
             self.logger.debug("💾 데이터베이스 설정 생성 완료 (DatabaseSettingsView - MVP 적용)")
 
+            # 환경 관리 위젯 추가 (프로파일 + 환경변수 통합)
+            from upbit_auto_trading.ui.desktop.screens.settings.widgets.environment_management_widget import (
+                EnvironmentManagementWidget
+            )
+            self.environment_management = EnvironmentManagementWidget(self)
+            self.logger.debug("🌍 환경 관리 통합 위젯 생성 완료")
+
             self.notification_settings = NotificationSettings(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
 
@@ -198,6 +205,7 @@ class SettingsScreen(QWidget):
             # 폴백: 간단한 더미 위젯들로 대체
             self.api_key_manager = QWidget()
             self.database_settings = QWidget()
+            self.environment_management = QWidget()
             self.notification_settings = QWidget()
             self.ui_settings = QWidget()
 
@@ -205,6 +213,7 @@ class SettingsScreen(QWidget):
             widgets_info = [
                 (self.api_key_manager, "API 키 관리"),
                 (self.database_settings, "데이터베이스 설정"),
+                (self.environment_management, "환경 관리"),
                 (self.notification_settings, "알림 설정"),
                 (self.ui_settings, "UI 설정")
             ]
@@ -269,6 +278,10 @@ class SettingsScreen(QWidget):
         # 데이터베이스 탭
         self.tab_widget.addTab(self.database_settings, "데이터베이스")
         self.logger.debug("💾 데이터베이스 탭 추가 완료")
+
+        # 환경 관리 탭 (프로파일 + 환경변수 통합)
+        self.tab_widget.addTab(self.environment_management, "환경 관리")
+        self.logger.debug("🌍 환경 관리 탭 추가 완료")
 
         # 알림 탭
         self.tab_widget.addTab(self.notification_settings, "알림")
@@ -374,7 +387,7 @@ class SettingsScreen(QWidget):
     def _on_tab_changed(self, index: int) -> None:
         """탭 변경 시 자동 새로고침 - UX 편의 기능"""
         try:
-            tab_names = ["UI 설정", "API 키", "데이터베이스", "알림"]
+            tab_names = ["UI 설정", "API 키", "데이터베이스", "환경 관리", "알림"]
             tab_name = tab_names[index] if 0 <= index < len(tab_names) else f"탭 {index}"
 
             self.logger.debug(f"🔄 탭 변경 감지: {tab_name} (인덱스: {index})")
@@ -401,7 +414,7 @@ class SettingsScreen(QWidget):
                         self.logger.warning(f"⚠️ API 키 새로고침 실패: {e}")
 
             elif index == 2:  # 데이터베이스 탭
-                self.logger.debug("� 데이터베이스 탭 선택 - 자동 새로고침 시작")
+                self.logger.debug("💾 데이터베이스 탭 선택 - 자동 새로고침 시작")
                 if hasattr(self, 'database_settings'):
                     try:
                         # Presenter를 통한 새로고침 (MVP 패턴)
@@ -416,7 +429,17 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
 
-            elif index == 3:  # 알림 탭
+            elif index == 3:  # 환경 관리 탭
+                self.logger.debug("🌍 환경 관리 탭 선택 - 자동 새로고침 시작")
+                environment_management = getattr(self, 'environment_management', None)
+                if environment_management and hasattr(environment_management, 'refresh_display'):
+                    try:
+                        environment_management.refresh_display()
+                        self.logger.debug("✅ 환경 관리 상태 자동 새로고침 완료")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ 환경 관리 새로고침 실패: {e}")
+
+            elif index == 4:  # 알림 탭
                 self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
                 notification_settings = getattr(self, 'notification_settings', None)
                 if notification_settings and hasattr(notification_settings, 'load_settings'):

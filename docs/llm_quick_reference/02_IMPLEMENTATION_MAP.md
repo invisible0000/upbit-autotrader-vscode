@@ -16,6 +16,14 @@
 - **시스템 안전성 검사**: SystemSafetyCheckUseCase 연동
 - **검증 상태**: pytest 테스트 완료, UI 통합 완료
 
+### 🎨 데이터베이스 설정 UI 시스템 (완전 구현)
+**DatabaseSettingsView** → `ui/desktop/screens/settings/database_settings_view.py`
+- **MVP 패턴 완전 적용**: DatabaseSettingsPresenter와 완전 연동
+- **실시간 상태 모니터링**: DatabaseStatusWidget 통합
+- **백업 관리**: DatabaseBackupWidget으로 생성/복원/삭제
+- **경로 관리**: DatabasePathSelector로 동적 경로 변경
+- **검증 상태**: 현재 운영 중, 2x2 그리드 레이아웃, 완전 기능
+
 ### 🔧 Infrastructure Repository 시스템
 **SqliteStrategyRepository** → `infrastructure/repositories/sqlite_strategy_repository.py`
 - **CRUD 연산**: 전략 생성/조회/수정/삭제 완성
@@ -54,7 +62,7 @@
 
 ---
 
-## 🔄 진행중인 기능들
+### 🔄 진행중인 기능들
 
 ### 🎯 트리거 빌더 시스템
 **TriggerBuilderWidget** → `ui/desktop/screens/strategy_management/trigger_builder/`
@@ -123,7 +131,11 @@
 ### 🎨 Presentation Components (presentation/)
 | 컴포넌트명 | 위치 | 핵심 기능 | MVP 적용 |
 |-----------|------|----------|---------|
-| `SettingsPresenter` | presenters/L12 | 설정 관리 Presenter | ✅ 완성 |
+| `DatabaseSettingsPresenter` | database_settings_presenter.py | 데이터베이스 설정 MVP | ✅ 완성 |
+| `DatabaseSettingsView` | database_settings_view.py | 데이터베이스 설정 View | ✅ 완성 |
+| `DatabaseStatusWidget` | widgets/database_status_widget.py | DB 상태 모니터링 | ✅ 완성 |
+| `DatabaseBackupWidget` | widgets/database_backup_widget.py | 백업 관리 | ✅ 완성 |
+| `DatabasePathSelector` | widgets/database_path_selector.py | 경로 선택 | ✅ 완성 |
 | `StrategyMakerPresenter` | presenters/ | 전략 생성 Presenter | 🔄 진행중 |
 | `TriggerBuilderPresenter` | presenters/ | 트리거 Presenter | 🔄 진행중 |
 | `BacktestPresenter` | presenters/ | 백테스팅 Presenter | ⏳ 계획됨 |
@@ -168,13 +180,14 @@ strategy_repo = container.get_strategy_repository()
 |-----|-------|---------------|----------|
 | **Domain** | 95% | Services, Entities, Events | Value Objects 완성 |
 | **Infrastructure** | 90% | Repository, Logging, Database | External APIs 구현 |
-| **Application** | 85% | Core Use Cases, DTOs | 전략 실행 Use Cases |
-| **Presentation** | 70% | MVP Container, Core Presenters | 전체 화면 MVP 적용 |
+| **Application** | 88% | Core Use Cases, DTOs, Database Health Service | 전략 실행 Use Cases |
+| **Presentation** | 85% | Database Settings MVP 완성, 주요 위젯들 완성 | 전체 화면 MVP 적용 |
 
 ### 🎯 다음 스프린트 우선순위
 1. **트리거 빌더 UI 통합** (진행중) - 7규칙 전략 완성을 위한 핵심
 2. **전략 실행 Use Case** (계획됨) - 실제 매매 기능의 시작점
-3. **나머지 화면 MVP 적용** (계획됨) - 아키텍처 일관성 확보
+3. **API 키 설정 MVP 적용** (계획됨) - 설정 화면 완전 통합
+4. **나머지 화면 MVP 적용** (계획됨) - 아키텍처 일관성 확보
 
 ---
 
