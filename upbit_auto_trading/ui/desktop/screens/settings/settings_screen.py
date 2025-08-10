@@ -114,7 +114,9 @@ class SettingsScreen(QWidget):
             # 실제 설정 위젯들 import 및 생성
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
+            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings.views.notification_settings_view import (
+                NotificationSettingsView as NotificationSettings
+            )
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsManager
 
             self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")
