@@ -115,7 +115,7 @@ class SettingsScreen(QWidget):
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
             from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsManager
 
             self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")
 
@@ -185,14 +185,18 @@ class SettingsScreen(QWidget):
             self.notification_settings = NotificationSettings(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
 
-            # UISettings에 SettingsService 의존성 주입
+            # UI 설정 매니저 생성 (DDD+MVP 구조)
             if self.settings_service is None:
                 self.logger.error("❌ SettingsScreen에서 SettingsService가 None - MainWindow에서 주입 실패")
             else:
                 self.logger.info(f"✅ SettingsScreen에서 SettingsService 확인됨: {type(self.settings_service).__name__}")
 
-            self.ui_settings = UISettings(self, settings_service=self.settings_service)
-            self.logger.debug("🎨 UI 설정 생성 완료 (SettingsService 주입)")
+            ui_settings_manager = UISettingsManager(self, settings_service=self.settings_service)
+            self.ui_settings = ui_settings_manager.get_widget()  # MVP View 반환
+            self.logger.debug("🎨 UI 설정 생성 완료 (DDD+MVP 구조)")
+
+            # UISettingsManager 참조 보관 (시그널 연결용)
+            self._ui_settings_manager = ui_settings_manager
 
             self.logger.info("✅ 모든 실제 설정 위젯들 생성 완료 (Infrastructure Layer 연동)")
 
@@ -301,7 +305,7 @@ class SettingsScreen(QWidget):
         spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         button_layout.addItem(spacer)
 
-        # 저장 버튼 제거 (UISettings에서 자체 처리하므로 불필요)
+        # 저장 버튼 제거 (UISettingsManager에서 자체 처리하므로 불필요)
         # 참고: 배치 저장 방식으로 변경됨에 따라 각 탭에서 자체 저장 버튼 관리
         self.logger.debug("💾 설정 화면 하단 저장 버튼 제거 (탭별 자체 관리)")
 
@@ -312,16 +316,15 @@ class SettingsScreen(QWidget):
         """View 내부 시그널 연결 (Presenter와 연결은 별도)"""
         # 하위 위젯들의 시그널을 상위로 중계
         try:
-            # UI Settings의 테마 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
-            if isinstance(self.ui_settings, UISettings):
-                self.ui_settings.theme_changed.connect(self._on_ui_settings_theme_changed)
-                self.logger.info("✅ UISettings theme_changed 시그널 중계 연결 완료")
+            # UI Settings의 테마 변경 시그널을 상위로 중계 (DDD+MVP 구조)
+            if hasattr(self, '_ui_settings_manager'):
+                self._ui_settings_manager.theme_changed.connect(self._on_ui_settings_theme_changed)
+                self.logger.info("✅ UISettingsManager theme_changed 시그널 중계 연결 완료")
 
-                self.ui_settings.settings_changed.connect(self._on_ui_settings_settings_changed)
-                self.logger.info("✅ UISettings settings_changed 시그널 중계 연결 완료")
+                self._ui_settings_manager.settings_changed.connect(self._on_ui_settings_settings_changed)
+                self.logger.info("✅ UISettingsManager settings_changed 시그널 중계 연결 완료")
             else:
-                self.logger.warning("⚠️ UISettings가 UISettings 타입이 아닙니다 (폴백 위젯 사용 중)")
+                self.logger.warning("⚠️ UISettingsManager가 초기화되지 않았습니다")
 
             # API Key Manager의 상태 변경 시그널을 상위로 중계
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
@@ -335,13 +338,13 @@ class SettingsScreen(QWidget):
             self.logger.error(f"❌ 하위 위젯 시그널 중계 연결 실패: {e}")
 
     def _on_ui_settings_theme_changed(self, theme_value: str):
-        """UISettings에서 테마 변경 시그널을 받아서 상위로 중계"""
-        self.logger.info(f"🔄 UISettings에서 테마 변경 시그널 수신하여 중계: {theme_value}")
+        """UISettingsManager에서 테마 변경 시그널을 받아서 상위로 중계"""
+        self.logger.info(f"🔄 UISettingsManager에서 테마 변경 시그널 수신하여 중계: {theme_value}")
         self.theme_changed.emit(theme_value)
 
     def _on_ui_settings_settings_changed(self):
-        """UISettings에서 설정 변경 시그널을 받아서 상위로 중계"""
-        self.logger.debug("🔄 UISettings에서 설정 변경 시그널 수신하여 중계")
+        """UISettingsManager에서 설정 변경 시그널을 받아서 상위로 중계"""
+        self.logger.debug("🔄 UISettingsManager에서 설정 변경 시그널 수신하여 중계")
         self.settings_changed.emit()
 
     def _on_api_key_manager_status_changed(self, connected: bool):
