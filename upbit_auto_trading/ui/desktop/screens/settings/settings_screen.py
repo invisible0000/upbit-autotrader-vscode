@@ -2,15 +2,13 @@
 설정 화면 - MVP 패턴 + Infrastructure Layer v4.0 통합
 
 DDD 아키텍처와 MVP 패턴을 적용한 설정 관리 UI입니다.
-View는 순수하게 UI 표시만        try:
-            # 실제 설정 위젯들 import 및 생성
-            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings_view import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
-
-            self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")든 비즈니스 로직은 Presenter에서 처리합니다.
+View는 순수하게 UI 표시만 담당하고, 모든 비즈니스 로직은 Presenter에서 처리합니다.
 Infrastructure Layer Enhanced Logging v4.0 시스템과 완전히 통합되었습니다.
+
+Phase 2 마이그레이션 적용:
+- API 설정: api_settings/ 폴더 구조 (DDD + MVP 패턴)
+- Database 설정: database_settings/ 폴더 구조 (Phase 1 완료)
+- Environment 로깅: environment_logging/ 폴더 구조 (기존 완료)
 """
 
 from datetime import datetime
@@ -114,8 +112,8 @@ class SettingsScreen(QWidget):
 
         try:
             # 실제 설정 위젯들 import 및 생성
-            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings_view import DatabaseSettingsView
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
             from upbit_auto_trading.ui.desktop.screens.settings.notification_settings_view import NotificationSettings
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings_view import UISettings
 
@@ -326,7 +324,7 @@ class SettingsScreen(QWidget):
                 self.logger.warning("⚠️ UISettings가 UISettings 타입이 아닙니다 (폴백 위젯 사용 중)")
 
             # API Key Manager의 상태 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.api_key_settings_view import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
             if isinstance(self.api_key_manager, ApiKeyManagerSecure):
                 self.api_key_manager.api_status_changed.connect(self._on_api_key_manager_status_changed)
                 self.logger.info("✅ ApiKeyManagerSecure api_status_changed 시그널 중계 연결 완료")

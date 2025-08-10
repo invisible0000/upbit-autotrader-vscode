@@ -9,7 +9,7 @@
 
 # 메인 설정 화면 (MVP 패턴 적용)
 from .settings_screen import SettingsScreen
-from .api_key_settings_view import ApiKeyManagerSecure as ApiKeyManager
+from .api_settings import ApiKeyManagerSecure as ApiKeyManager
 # from .database_settings import DatabaseSettings  # 메타클래스 충돌로 주석 처리
 from .notification_settings_view import NotificationSettings
 

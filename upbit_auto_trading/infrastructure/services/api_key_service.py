@@ -806,7 +806,7 @@ class ApiKeyService(IApiKeyService):
 
             # 1. 캐시 유효성 검사
             if not self._is_cache_valid():
-                self.logger.debug("⏰ 캐시 무효 - 새로 생성 필요")
+                self.logger.debug("🔄 캐시 없음/만료 - 새 인스턴스 생성 필요")
                 return None
 
             # 2. 유효한 캐시 반환
@@ -921,7 +921,7 @@ class ApiKeyService(IApiKeyService):
         try:
             # 1. 캐시 존재 확인
             if self._api_cache is None or self._cache_timestamp is None:
-                self.logger.debug("❌ 캐시 미존재")
+                self.logger.debug("ℹ️ 캐시 없음 (정상)")
                 return False
 
             # 2. TTL 확인 (5분)
