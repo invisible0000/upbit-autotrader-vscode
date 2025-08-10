@@ -9,6 +9,9 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from upbit_auto_trading.infrastructure.dependency_injection.app_context import ApplicationContext, ApplicationContextError
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
+# MainApp 전용 로거 (콘솔 출력은 UPBIT_CONSOLE_OUTPUT 환경변수로 제어)
+logger = create_component_logger("MainApp")
+
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -74,14 +77,14 @@ def create_application_context() -> ApplicationContext:
         # 컨텍스트 초기화
         app_context.initialize()
 
-        print(f"✅ ApplicationContext 초기화 완료 (환경: {environment})")
+        logger.info(f"✅ ApplicationContext 초기화 완료 (환경: {environment})")
         return app_context
 
     except ApplicationContextError as e:
-        print(f"❌ ApplicationContext 초기화 실패: {e}")
+        logger.error(f"❌ ApplicationContext 초기화 실패: {e}")
         raise
     except Exception as e:
-        print(f"❌ 예상치 못한 오류: {e}")
+        logger.error(f"❌ 예상치 못한 오류: {e}")
         raise
 
 
@@ -91,11 +94,11 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
         container = app_context.container
 
         # Infrastructure 통합 로깅 시스템 사용
-        print("🔧 Infrastructure 통합 로깅 시스템 연계...")
+        logger.info("🔧 Infrastructure 통합 로깅 시스템 연계...")
 
         # ApplicationContext에서 이미 등록된 ILoggingService 활용
-        print("✅ Infrastructure 기본 로깅 시스템 연계 완료")
-        print("✅ Infrastructure Layer 로깅 통합 완료")
+        logger.info("✅ Infrastructure 기본 로깅 시스템 연계 완료")
+        logger.info("✅ Infrastructure Layer 로깅 통합 완료")
 
         # Configuration 서비스 등록 (ApplicationContext에서 이미 생성된 것 활용)
         try:
@@ -103,107 +106,107 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
             # ApplicationContext 내부의 ConfigLoader 대신 새로 생성해서 등록
             config_loader_instance = ConfigLoader(app_context._config_dir)
             container.register_singleton(ConfigLoader, config_loader_instance)
-            print("✅ ConfigurationService 등록 완료")
+            logger.info("✅ ConfigurationService 등록 완료")
         except Exception as e:
-            print(f"⚠️ ConfigurationService 등록 실패: {e}")
+            logger.warning(f"⚠️ ConfigurationService 등록 실패: {e}")
 
         # SettingsService 등록
-        print("🔧 SettingsService 등록 시작...")
+        logger.info("🔧 SettingsService 등록 시작...")
         try:
             from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService, SettingsService
-            print("🔧 SettingsService 클래스 import 성공")
+            logger.info("🔧 SettingsService 클래스 import 성공")
             config_loader_instance = container.resolve(ConfigLoader)
-            print("🔧 ConfigLoader 인스턴스 해결 성공")
+            logger.info("🔧 ConfigLoader 인스턴스 해결 성공")
             settings_service = SettingsService(config_loader_instance)
-            print("🔧 SettingsService 인스턴스 생성 성공")
+            logger.info("🔧 SettingsService 인스턴스 생성 성공")
             container.register_singleton(ISettingsService, settings_service)
-            print("✅ SettingsService 등록 완료")
+            logger.info("✅ SettingsService 등록 완료")
         except Exception as e:
-            print(f"⚠️ SettingsService 등록 실패: {e}")
-            print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+            logger.warning(f"⚠️ SettingsService 등록 실패: {e}")
+            logger.warning(f"    오류 상세: {type(e).__name__}: {str(e)}")
             # MockSettingsService로 폴백
             try:
                 from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService, MockSettingsService
                 container.register_singleton(ISettingsService, MockSettingsService())
-                print("✅ MockSettingsService 폴백 등록 완료")
+                logger.info("✅ MockSettingsService 폴백 등록 완료")
             except Exception as e2:
-                print(f"⚠️ MockSettingsService 폴백도 실패: {e2}")
+                logger.warning(f"⚠️ MockSettingsService 폴백도 실패: {e2}")
 
         # ApiKeyService 등록 (Repository Container 기반 DDD 패턴)
         if repository_container:
             try:
                 from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService, ApiKeyService
-                print("🔧 ApiKeyService 클래스 import 성공")
+                logger.info("🔧 ApiKeyService 클래스 import 성공")
 
                 # Repository Container에서 SecureKeysRepository 가져오기
                 secure_keys_repo = repository_container.get_secure_keys_repository()
-                print("🔧 SecureKeysRepository 인스턴스 해결 성공")
+                logger.info("🔧 SecureKeysRepository 인스턴스 해결 성공")
 
                 # Repository 의존성 주입하여 ApiKeyService 생성
                 api_key_service = ApiKeyService(secure_keys_repo)
-                print("🔧 ApiKeyService 인스턴스 생성 성공 (Repository 주입)")
+                logger.info("🔧 ApiKeyService 인스턴스 생성 성공 (Repository 주입)")
 
                 # DI Container에 등록
                 container.register_singleton(IApiKeyService, api_key_service)
-                print("✅ ApiKeyService 등록 완료 (DDD Repository 패턴)")
+                logger.info("✅ ApiKeyService 등록 완료 (DDD Repository 패턴)")
             except Exception as e:
-                print(f"⚠️ ApiKeyService 등록 실패: {e}")
-                print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+                logger.warning(f"⚠️ ApiKeyService 등록 실패: {e}")
+                logger.warning(f"    오류 상세: {type(e).__name__}: {str(e)}")
                 traceback.print_exc()
         else:
-            print("⚠️ Repository Container가 없어서 ApiKeyService를 등록할 수 없습니다")
+            logger.warning("⚠️ Repository Container가 없어서 ApiKeyService를 등록할 수 없습니다")
 
         # StyleManager 등록
         try:
             from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager
             container.register_singleton(StyleManager, StyleManager())
-            print("✅ StyleManager 서비스 등록 완료")
+            logger.info("✅ StyleManager 서비스 등록 완료")
         except ImportError as e:
-            print(f"⚠️ StyleManager 로드 실패: {e}")
+            logger.warning(f"⚠️ StyleManager 로드 실패: {e}")
 
         # ThemeService 등록 (Infrastructure Layer 기반)
-        print("🔧 ThemeService 등록 시작...")
+        logger.info("🔧 ThemeService 등록 시작...")
         try:
             from upbit_auto_trading.infrastructure.services.theme_service import IThemeService, ThemeService
-            print("🔧 ThemeService 클래스 import 성공")
+            logger.info("🔧 ThemeService 클래스 import 성공")
             settings_service_instance = container.resolve(ISettingsService)
             style_manager_instance = container.resolve(StyleManager)
-            print("🔧 SettingsService 및 StyleManager 의존성 해결 성공")
+            logger.info("🔧 SettingsService 및 StyleManager 의존성 해결 성공")
             theme_service = ThemeService(settings_service_instance, style_manager_instance)
-            print("🔧 ThemeService 인스턴스 생성 성공")
+            logger.info("🔧 ThemeService 인스턴스 생성 성공")
             container.register_singleton(IThemeService, theme_service)
-            print("✅ ThemeService 등록 완료")
+            logger.info("✅ ThemeService 등록 완료")
         except Exception as e:
-            print(f"⚠️ ThemeService 등록 실패: {e}")
-            print(f"    오류 상세: {type(e).__name__}: {str(e)}")
+            logger.warning(f"⚠️ ThemeService 등록 실패: {e}")
+            logger.warning(f"    오류 상세: {type(e).__name__}: {str(e)}")
             # MockThemeService로 폴백
             try:
                 from upbit_auto_trading.infrastructure.services.theme_service import IThemeService, MockThemeService
                 container.register_singleton(IThemeService, MockThemeService())
-                print("✅ MockThemeService 폴백 등록 완료")
+                logger.info("✅ MockThemeService 폴백 등록 완료")
             except Exception as e2:
-                print(f"⚠️ MockThemeService 폴백도 실패: {e2}")
+                logger.warning(f"⚠️ MockThemeService 폴백도 실패: {e2}")
 
         # NavigationBar 등록
         try:
             from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
             container.register_transient(NavigationBar)
-            print("✅ NavigationBar 서비스 등록 완료")
+            logger.info("✅ NavigationBar 서비스 등록 완료")
         except ImportError as e:
-            print(f"⚠️ NavigationBar 로드 실패: {e}")
+            logger.warning(f"⚠️ NavigationBar 로드 실패: {e}")
 
         # StatusBar 등록
         try:
             from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
             container.register_transient(StatusBar)
-            print("✅ StatusBar 서비스 등록 완료")
+            logger.info("✅ StatusBar 서비스 등록 완료")
         except ImportError as e:
-            print(f"⚠️ StatusBar 로드 실패: {e}")
+            logger.warning(f"⚠️ StatusBar 로드 실패: {e}")
 
-        print("✅ UI 서비스 등록 완료")
+        logger.info("✅ UI 서비스 등록 완료")
 
     except Exception as e:
-        print(f"❌ UI 서비스 등록 실패: {e}")
+        logger.error(f"❌ UI 서비스 등록 실패: {e}")
         raise
 
 
@@ -219,9 +222,9 @@ def setup_application() -> tuple[QApplication, ApplicationContext]:
     try:
         from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
         repository_container = RepositoryContainer()
-        print("✅ Repository Container 초기화 완료")
+        logger.info("✅ Repository Container 초기화 완료")
     except Exception as e:
-        print(f"⚠️ Repository Container 초기화 실패: {e}")
+        logger.warning(f"⚠️ Repository Container 초기화 실패: {e}")
         repository_container = None
 
     # 3. UI 서비스 등록 (Repository Container 전달)
@@ -243,10 +246,10 @@ def setup_application() -> tuple[QApplication, ApplicationContext]:
         # 전역 Application Container 설정
         set_application_container(app_service_container)
 
-        print("✅ Application Service Container 초기화 완료")
+        logger.info("✅ Application Service Container 초기화 완료")
     except Exception as e:
-        print(f"⚠️ Application Service Container 초기화 실패: {e}")
-        print(f"   상세: {type(e).__name__}: {str(e)}")
+        logger.warning(f"⚠️ Application Service Container 초기화 실패: {e}")
+        logger.warning(f"   상세: {type(e).__name__}: {str(e)}")
         # Mock Container로 폴백 (나중에 구현 가능)
 
     return app, app_context
@@ -267,7 +270,7 @@ def run_application() -> int:
         main_window = MainWindow(app_context.container)
         main_window.show()
 
-        print("✅ 애플리케이션 시작됨 (Infrastructure Layer 기반)")
+        logger.info("✅ 애플리케이션 시작됨 (Infrastructure Layer 기반)")
 
         # Enhanced Logging v4.0 Dashboard 업데이트
         try:
@@ -276,9 +279,9 @@ def run_application() -> int:
             dashboard_data = dashboard_service.update_dashboard([
                 f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - MainApp - INFO - 애플리케이션 시작됨 (Infrastructure Layer v4.0 기반)"
             ])
-            print("✅ Dashboard updated: logs/llm_agent_dashboard.json")
+            logger.info("✅ Dashboard updated: logs/llm_agent_dashboard.json")
         except Exception as dashboard_e:
-            print(f"⚠️ Dashboard 업데이트 실패: {dashboard_e}")
+            logger.warning(f"⚠️ Dashboard 업데이트 실패: {dashboard_e}")
 
         # 애플리케이션 이벤트 루프 시작
         exit_code = app.exec()
@@ -286,12 +289,12 @@ def run_application() -> int:
         return exit_code
 
     except ApplicationContextError as e:
-        print(f"❌ Infrastructure Layer 초기화 실패: {e}")
+        logger.error(f"❌ Infrastructure Layer 초기화 실패: {e}")
         QMessageBox.critical(None, "시스템 오류", f"Infrastructure Layer 초기화에 실패했습니다:\n{e}")
         return 1
 
     except Exception as e:
-        print(f"❌ 애플리케이션 실행 중 오류: {e}")
+        logger.error(f"❌ 애플리케이션 실행 중 오류: {e}")
         traceback.print_exc()
         QMessageBox.critical(None, "애플리케이션 오류", f"애플리케이션 시작에 실패했습니다:\n{e}")
         return 1
@@ -305,14 +308,14 @@ def run_application() -> int:
 
             if app_context:
                 app_context.dispose()
-                print("✅ ApplicationContext 정리 완료")
+                logger.info("✅ ApplicationContext 정리 완료")
 
             if app:
                 app.quit()
-                print("✅ 애플리케이션 정상 종료")
+                logger.info("✅ 애플리케이션 정상 종료")
 
         except Exception as cleanup_error:
-            print(f"⚠️ 정리 작업 중 오류: {cleanup_error}")
+            logger.warning(f"⚠️ 정리 작업 중 오류: {cleanup_error}")
 
         # DB 연결 강제 정리
         try:
@@ -323,7 +326,7 @@ def run_application() -> int:
             gc.collect()
 
             # SQLite 연결 강제 정리 (필요시)
-            print("🔧 리소스 정리 완료")
+            logger.info("🔧 리소스 정리 완료")
 
         except Exception:
             pass

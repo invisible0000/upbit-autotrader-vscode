@@ -136,9 +136,13 @@ class ApiSettingsView(QWidget):
                     self.connection_widget.update_connection_status(test_success, test_message)
 
                     if test_success:
-                        self.logger.info(f"✅ 초기 연결 상태 확인 성공: {test_message}")
+                        # 로그용으로 줄바꿈 문자 제거
+                        log_message = test_message.replace('\n', ' ').replace('  ', ' ')
+                        self.logger.info(f"✅ 초기 연결 상태 확인 성공: {log_message}")
                     else:
-                        self.logger.warning(f"⚠️ 초기 연결 상태 확인 실패: {test_message}")
+                        # 로그용으로 줄바꿈 문자 제거
+                        log_message = test_message.replace('\n', ' ').replace('  ', ' ')
+                        self.logger.warning(f"⚠️ 초기 연결 상태 확인 실패: {log_message}")
 
                 except Exception as e:
                     self.logger.warning(f"⚠️ 초기 연결 상태 확인 중 오류: {e}")

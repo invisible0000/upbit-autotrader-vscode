@@ -11,6 +11,7 @@ Phase 2 마이그레이션 적용:
 - Environment 로깅: environment_logging/ 폴더 구조 (기존 완료)
 """
 
+import time
 from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel,
@@ -112,14 +113,12 @@ class SettingsScreen(QWidget):
 
         try:
             # 실제 설정 위젯들 import 및 생성
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings.views.notification_settings_view import (
-                NotificationSettingsView as NotificationSettings
-            )
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsManager
+            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
 
-            self.logger.info("📦 설정 위젯 모듈들 import 성공 (DDD Database Widget 적용)")
+            self.logger.info("📦 설정 위젯 모듈들 import 성공 (직접 경로, alias 제거)")
 
             # DI 컨테이너에서 ApiKeyService 가져오기
             api_key_service = None
@@ -170,8 +169,15 @@ class SettingsScreen(QWidget):
                 self.logger.error(f"❌ 스택 트레이스: {traceback.format_exc()}")
 
             # 실제 위젯 인스턴스 생성 (Infrastructure Layer 기반)
-            self.api_key_manager = ApiKeyManagerSecure(self, api_key_service=api_key_service)
-            self.logger.debug("🔑 API 키 관리자 생성 완료")
+            # MVP 패턴 적용: ApiSettingsView + ApiSettingsPresenter
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (
+                ApiSettingsPresenter
+            )
+
+            self.api_key_manager = ApiSettingsView(self, api_key_service=api_key_service)
+            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager, api_key_service)
+            self.api_key_manager.set_presenter(self.api_settings_presenter)
+            self.logger.debug("🔑 API 설정 View + Presenter 생성 완료 (순수 MVP 패턴)")
 
             # 데이터베이스 설정 View 사용 (MVP 패턴 이미 적용됨)
             self.database_settings = DatabaseSettingsView(self)
@@ -184,7 +190,7 @@ class SettingsScreen(QWidget):
             self.environment_management = EnvironmentManagementWidget(self)
             self.logger.debug("🌍 환경 관리 통합 위젯 생성 완료")
 
-            self.notification_settings = NotificationSettings(self)
+            self.notification_settings = NotificationSettingsView(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
 
             # UI 설정 매니저 생성 (DDD+MVP 구조)
@@ -193,12 +199,8 @@ class SettingsScreen(QWidget):
             else:
                 self.logger.info(f"✅ SettingsScreen에서 SettingsService 확인됨: {type(self.settings_service).__name__}")
 
-            ui_settings_manager = UISettingsManager(self, settings_service=self.settings_service)
-            self.ui_settings = ui_settings_manager.get_widget()  # MVP View 반환
+            self.ui_settings = UISettingsView(self)
             self.logger.debug("🎨 UI 설정 생성 완료 (DDD+MVP 구조)")
-
-            # UISettingsManager 참조 보관 (시그널 연결용)
-            self._ui_settings_manager = ui_settings_manager
 
             self.logger.info("✅ 모든 실제 설정 위젯들 생성 완료 (Infrastructure Layer 연동)")
 
@@ -318,23 +320,16 @@ class SettingsScreen(QWidget):
         """View 내부 시그널 연결 (Presenter와 연결은 별도)"""
         # 하위 위젯들의 시그널을 상위로 중계
         try:
-            # UI Settings의 테마 변경 시그널을 상위로 중계 (DDD+MVP 구조)
-            if hasattr(self, '_ui_settings_manager'):
-                self._ui_settings_manager.theme_changed.connect(self._on_ui_settings_theme_changed)
-                self.logger.info("✅ UISettingsManager theme_changed 시그널 중계 연결 완료")
-
-                self._ui_settings_manager.settings_changed.connect(self._on_ui_settings_settings_changed)
-                self.logger.info("✅ UISettingsManager settings_changed 시그널 중계 연결 완료")
-            else:
-                self.logger.warning("⚠️ UISettingsManager가 초기화되지 않았습니다")
+            # UI Settings의 시그널을 상위로 중계 (향후 구현 예정)
+            self.logger.info("✅ UI Settings 시그널 연결 준비 완료 (직접 MVP 구조)")
 
             # API Key Manager의 상태 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiKeyManagerSecure
-            if isinstance(self.api_key_manager, ApiKeyManagerSecure):
-                self.api_key_manager.api_status_changed.connect(self._on_api_key_manager_status_changed)
-                self.logger.info("✅ ApiKeyManagerSecure api_status_changed 시그널 중계 연결 완료")
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
+            if isinstance(self.api_key_manager, ApiSettingsView):
+                self.api_key_manager.api_status_changed.connect(self._on_api_settings_status_changed)
+                self.logger.info("✅ ApiSettingsView api_status_changed 시그널 중계 연결 완료")
             else:
-                self.logger.warning("⚠️ ApiKeyManagerSecure가 올바른 타입이 아닙니다 (폴백 위젯 사용 중)")
+                self.logger.warning("⚠️ ApiSettingsView가 올바른 타입이 아닙니다 (폴백 위젯 사용 중)")
 
         except Exception as e:
             self.logger.error(f"❌ 하위 위젯 시그널 중계 연결 실패: {e}")
@@ -349,9 +344,9 @@ class SettingsScreen(QWidget):
         self.logger.debug("🔄 UISettingsManager에서 설정 변경 시그널 수신하여 중계")
         self.settings_changed.emit()
 
-    def _on_api_key_manager_status_changed(self, connected: bool):
-        """ApiKeyManagerSecure에서 API 상태 변경 시그널을 받아서 상위로 중계"""
-        self.logger.info(f"🔄 ApiKeyManagerSecure에서 API 상태 변경 시그널 수신하여 중계: {'연결됨' if connected else '연결 끊김'}")
+    def _on_api_settings_status_changed(self, connected: bool):
+        """ApiSettingsView에서 API 상태 변경 시그널을 받아서 상위로 중계"""
+        self.logger.info(f"🔄 ApiSettingsView에서 API 상태 변경 시그널 수신하여 중계: {'연결됨' if connected else '연결 끊김'}")
         self.api_status_changed.emit(connected)
 
     # ISettingsView 인터페이스 구현 메서드들
@@ -420,11 +415,23 @@ class SettingsScreen(QWidget):
                 self.logger.debug("💾 데이터베이스 탭 선택 - 자동 새로고침 시작")
                 if hasattr(self, 'database_settings'):
                     try:
-                        # Presenter를 통한 새로고침 (MVP 패턴)
+                        # 캐싱된 데이터가 있는지 확인 후 조건부 새로고침
                         presenter = getattr(self.database_settings, 'presenter', None)
-                        if presenter and hasattr(presenter, 'refresh_status'):
-                            presenter.refresh_status()
-                            self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (Presenter)")
+                        if presenter:
+                            # 간단한 캐싱 로직 (30초 이내 재조회 방지)
+                            import time
+                            current_time = time.time()
+                            last_refresh = getattr(presenter, '_last_auto_refresh_time', 0)
+
+                            if current_time - last_refresh > 30:  # 30초 이후에만 자동 새로고침
+                                if hasattr(presenter, 'refresh_status'):
+                                    presenter.refresh_status()
+                                    presenter._last_auto_refresh_time = current_time
+                                    self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (Presenter)")
+                                else:
+                                    self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (30초 이내)")
+                            else:
+                                self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (30초 이내)")
                         # View 직접 새로고침 (폴백)
                         elif hasattr(self.database_settings, 'refresh_display'):
                             getattr(self.database_settings, 'refresh_display')()

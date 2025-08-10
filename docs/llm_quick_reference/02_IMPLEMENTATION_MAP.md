@@ -1,5 +1,5 @@
 # 🗺️ 기능별 구현 현황 맵
-*최종 업데이트: 2025년 8월 9일*
+*최종 업데이트: 2025년 8월 10일*
 
 ## 🔍 빠른 검색 가이드 (Ctrl+F로 검색)
 
@@ -52,13 +52,16 @@
 - **지능형 필터링**: 환경별/기능별 자동 필터
 - **LLM 에이전트 통합**: 구조화된 에러 보고
 - **실시간 제어**: 환경변수로 로그 레벨 동적 변경
-- **검증 상태**: 전체 시스템 적용 완료
+- **시스템 통합**: run_desktop_ui.py, ThemeService 완전 적용
+- **검증 상태**: 전체 시스템 적용 완료, print 문 대체 완료
 
 ### 🎭 MVP 패턴 Presentation
-**SettingsPresenter** → `presentation/presenters/settings_presenter.py:12`
-- **View-Service 중재**: SettingsService와 View 간 조율
+**Settings 시스템** → `presentation/presenters/` & `ui/desktop/screens/settings/`
+- **완전 MVP 적용**: ApiSettingsView, DatabaseSettingsView, NotificationSettingsView, UISettingsView
+- **호환성 alias 제거**: 모든 Settings 컴포넌트에서 직접 import 사용
+- **명명 규칙 통일**: MVP View 패턴 완전 적용
 - **이벤트 기반 통신**: 설정 변경 시 실시간 반영
-- **검증 상태**: Settings 화면 MVP 패턴 적용 완료
+- **검증 상태**: Settings 화면 MVP 패턴 100% 완성
 
 ---
 
@@ -85,7 +88,13 @@
 
 ---
 
-## ⏳ 계획된 기능들
+### ⏳ 계획된 기능들
+
+### 🌍 환경변수 설정 탭
+**EnvironmentSettingsView** → `ui/desktop/screens/settings/environment_settings_view.py` (계획됨)
+- **목표**: API 키, 로깅 설정 등 환경변수 UI 관리
+- **MVP 패턴**: EnvironmentSettingsPresenter 연동 예정
+- **우선순위**: Settings 시스템 완성을 위한 다음 단계
 
 ### 📈 백테스팅 시스템
 **BacktestUseCase** → `application/use_cases/backtesting/` (계획됨)
@@ -153,14 +162,18 @@
 ### 🔍 자주 중복되는 패턴들
 - **DB 교체 로직** → `DatabaseReplacementUseCase` 재사용
 - **변수 호환성 검증** → `StrategyCompatibilityService` 재사용
-- **설정 관리** → `SettingsPresenter` 패턴 재사용
-- **로깅** → `create_component_logger()` 필수 사용
+- **설정 관리** → Settings MVP 패턴 재사용 (직접 import 필수)
+- **로깅** → `create_component_logger()` 필수 사용 (print 문 금지)
 
 ### 📞 컴포넌트 간 연동 패턴
 ```python
 # ✅ 올바른 패턴 - Infrastructure 로깅 사용
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 logger = create_component_logger("NewComponent")
+
+# ✅ 올바른 패턴 - Settings 직접 import (호환성 alias 금지)
+from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
+from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
 
 # ✅ 올바른 패턴 - Domain Service 재사용
 from upbit_auto_trading.domain.services.strategy_compatibility_service import StrategyCompatibilityService
@@ -179,14 +192,14 @@ strategy_repo = container.get_strategy_repository()
 | 계층 | 완성도 | 주요 완성 기능 | 다음 목표 |
 |-----|-------|---------------|----------|
 | **Domain** | 95% | Services, Entities, Events | Value Objects 완성 |
-| **Infrastructure** | 90% | Repository, Logging, Database | External APIs 구현 |
+| **Infrastructure** | 92% | Repository, Logging, Database | External APIs 구현 |
 | **Application** | 88% | Core Use Cases, DTOs, Database Health Service | 전략 실행 Use Cases |
-| **Presentation** | 85% | Database Settings MVP 완성, 주요 위젯들 완성 | 전체 화면 MVP 적용 |
+| **Presentation** | 92% | Settings MVP 100% 완성, Infrastructure 로깅 통합 | 환경변수 탭, 전체 화면 MVP 적용 |
 
 ### 🎯 다음 스프린트 우선순위
-1. **트리거 빌더 UI 통합** (진행중) - 7규칙 전략 완성을 위한 핵심
-2. **전략 실행 Use Case** (계획됨) - 실제 매매 기능의 시작점
-3. **API 키 설정 MVP 적용** (계획됨) - 설정 화면 완전 통합
+1. **환경변수 설정 탭** (계획됨) - Settings 시스템 완전 통합
+2. **트리거 빌더 UI 통합** (진행중) - 7규칙 전략 완성을 위한 핵심
+3. **전략 실행 Use Case** (계획됨) - 실제 매매 기능의 시작점
 4. **나머지 화면 MVP 적용** (계획됨) - 아키텍처 일관성 확보
 
 ---

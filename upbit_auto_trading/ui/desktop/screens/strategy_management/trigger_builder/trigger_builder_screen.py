@@ -174,10 +174,7 @@ class TriggerBuilderScreen(QWidget):
 
     def _log_llm_report(self, operation: str, status: str, details: str = "") -> None:
         """LLM 에이전트 구조화된 보고"""
-        if self.logger:
-            self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
-        else:
-            print(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
+        self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
 
     def ensure_style_inheritance(self):
         """메인 애플리케이션의 스타일 상속 보장"""
@@ -383,13 +380,13 @@ class TriggerBuilderScreen(QWidget):
         try:
             if hasattr(self, 'trigger_list_widget'):
                 self.trigger_list_widget.load_trigger_list()
-                print("✅ TriggerListWidget을 통한 트리거 목록 로드 완료")
+                self.logger.info("✅ TriggerListWidget을 통한 트리거 목록 로드 완료")
                 self._log_llm_report("트리거_목록_로드", "성공", "TriggerListWidget 위임 완료")
             else:
-                print("⚠️ TriggerListWidget을 찾을 수 없습니다")
+                self.logger.warning("⚠️ TriggerListWidget을 찾을 수 없습니다")
                 self._log_llm_report("트리거_목록_로드", "실패", "TriggerListWidget 없음")
         except Exception as e:
-            print(f"❌ 트리거 목록 로드 실패: {e}")
+            self.logger.error(f"❌ 트리거 목록 로드 실패: {e}")
             self._log_llm_report("트리거_목록_로드", "오류", f"예외: {str(e)}")
 
     def on_trigger_selected(self, item, column):
@@ -399,9 +396,9 @@ class TriggerBuilderScreen(QWidget):
             if condition:
                 self.selected_condition = condition
                 self.update_trigger_detail(condition)
-                print(f"✅ 트리거 선택: {condition.get('name', 'Unknown')}")
+                self.logger.info(f"✅ 트리거 선택: {condition.get('name', 'Unknown')}")
         except Exception as e:
-            print(f"❌ 트리거 선택 처리 실패: {e}")
+            self.logger.error(f"❌ 트리거 선택 처리 실패: {e}")
 
     def update_trigger_detail(self, condition):
         """트리거 상세정보 업데이트 - 위젯 메소드 호출, 폴백 제거"""
@@ -413,11 +410,11 @@ class TriggerBuilderScreen(QWidget):
         try:
             if hasattr(self, 'condition_dialog') and hasattr(self.condition_dialog, 'load_condition'):
                 self.condition_dialog.load_condition(condition_data)
-                print(f"✅ 편집용 조건 로드 완료: {condition_data.get('name', 'Unknown')}")
+                self.logger.info(f"✅ 편집용 조건 로드 완료: {condition_data.get('name', 'Unknown')}")
             else:
                 QMessageBox.warning(self, "⚠️ 경고", "조건 빌더를 찾을 수 없습니다.")
         except Exception as e:
-            print(f"❌ 편집용 조건 로드 실패: {e}")
+            self.logger.error(f"❌ 편집용 조건 로드 실패: {e}")
             QMessageBox.critical(self, "❌ 오류", f"조건 로드 중 오류가 발생했습니다:\n{e}")
 
     def cancel_edit_mode(self):
@@ -431,12 +428,12 @@ class TriggerBuilderScreen(QWidget):
                 # 조건 빌더 완전 초기화
                 if hasattr(self.condition_dialog, 'clear_all_inputs'):
                     self.condition_dialog.clear_all_inputs()
-                    print("✅ 조건 빌더 초기화 완료")
+                    self.logger.info("✅ 조건 빌더 초기화 완료")
 
-            print("✅ 편집 모드 취소 완료")
+            self.logger.info("✅ 편집 모드 취소 완료")
 
         except Exception as e:
-            print(f"❌ 편집 모드 취소 실패: {e}")
+            self.logger.error(f"❌ 편집 모드 취소 실패: {e}")
             QMessageBox.critical(self, "❌ 오류", f"편집 모드 취소 중 오류가 발생했습니다:\n{e}")
 
     def on_edit_mode_changed(self, is_edit_mode: bool):
@@ -451,10 +448,10 @@ class TriggerBuilderScreen(QWidget):
                 if hasattr(self.condition_dialog, 'edit_mode_changed'):
                     self.condition_dialog.edit_mode_changed.emit(is_edit_mode)
 
-            print(f"✅ 편집 모드 변경: {'편집 모드' if is_edit_mode else '일반 모드'}")
+            self.logger.info(f"✅ 편집 모드 변경: {'편집 모드' if is_edit_mode else '일반 모드'}")
 
         except Exception as e:
-            print(f"❌ 편집 모드 변경 처리 실패: {e}")
+            self.logger.error(f"❌ 편집 모드 변경 처리 실패: {e}")
 
     # 트리거 관리 메서드들
     # def new_trigger(self):
@@ -476,24 +473,24 @@ class TriggerBuilderScreen(QWidget):
                 if hasattr(self.condition_dialog, 'save_condition'):
                     self.condition_dialog.save_condition()
                     self.load_trigger_list()  # 저장 후 리스트 새로고침
-                    print("✅ 트리거 저장 완료")
+                    self.logger.info("✅ 트리거 저장 완료")
                 else:
                     QMessageBox.information(self, "💾 저장", "조건 빌더에서 트리거를 저장해주세요.")
             else:
                 QMessageBox.information(self, "💾 저장", "조건 빌더를 먼저 설정해주세요.")
         except Exception as e:
-            print(f"❌ 트리거 저장 실패: {e}")
+            self.logger.error(f"❌ 트리거 저장 실패: {e}")
             QMessageBox.critical(self, "❌ 오류", f"트리거 저장 중 오류가 발생했습니다:\n{e}")
 
     def on_condition_saved(self, condition_data):
         """조건 저장 완료 시그널 처리 - 트리거 리스트 새로고침"""
         try:
-            print(f"✅ 조건 저장 시그널 수신: {condition_data.get('name', 'Unknown')}")
+            self.logger.info(f"✅ 조건 저장 시그널 수신: {condition_data.get('name', 'Unknown')}")
             # 트리거 리스트 새로고침
             self.load_trigger_list()
-            print("✅ 트리거 리스트 새로고침 완료")
+            self.logger.info("✅ 트리거 리스트 새로고침 완료")
         except Exception as e:
-            print(f"❌ 조건 저장 시그널 처리 실패: {e}")
+            self.logger.error(f"❌ 조건 저장 시그널 처리 실패: {e}")
 
     def cancel_edit_trigger(self):
         """편집 취소 - 원본 기능"""
@@ -501,10 +498,10 @@ class TriggerBuilderScreen(QWidget):
             if hasattr(self, 'condition_dialog'):
                 if hasattr(self.condition_dialog, 'clear_all_inputs'):
                     self.condition_dialog.clear_all_inputs()
-                print("✅ 편집 취소")
+                self.logger.info("✅ 편집 취소")
             QMessageBox.information(self, "❌ 취소", "편집이 취소되었습니다.")
         except Exception as e:
-            print(f"❌ 편집 취소 실패: {e}")
+            self.logger.error(f"❌ 편집 취소 실패: {e}")
 
     def edit_trigger(self):
         """트리거 편집"""
@@ -515,11 +512,11 @@ class TriggerBuilderScreen(QWidget):
 
             if hasattr(self, 'condition_dialog'):
                 self.condition_dialog.load_condition(self.selected_condition)
-                print(f"✅ 트리거 편집 모드: {self.selected_condition.get('name', 'Unknown')}")
+                self.logger.info(f"✅ 트리거 편집 모드: {self.selected_condition.get('name', 'Unknown')}")
             else:
                 QMessageBox.information(self, "ℹ️ 알림", "조건 빌더를 사용하여 트리거를 편집하세요.")
         except Exception as e:
-            print(f"❌ 트리거 편집 실패: {e}")
+            self.logger.error(f"❌ 트리거 편집 실패: {e}")
 
     def delete_trigger(self):
         """트리거 삭제 완료 시그널 처리 - TriggerListWidget에서 이미 삭제 완료"""

@@ -2,7 +2,7 @@
 
 > **목적**: Infrastructure Layer Repository 구현 시 일관된 용어 사용을 위한 Domain 용어 통일
 > **대상**: LLM 에이전트, 개발자, 설계자
-> **갱신**: 2025-08-05
+> **갱신**: 2025-08-10
 > **적용범위**: Domain Layer, Infrastructure Layer, Application Layer
 
 ## 📋 목차
@@ -51,6 +51,15 @@
 | Purpose Category | `purpose_category` | `tv_trading_variables.purpose_category` | 목적별 분류 (trend, momentum, volatility) |
 | Chart Category | `chart_category` | `tv_trading_variables.chart_category` | 차트 표시 분류 (overlay, subplot) |
 | Comparison Group | `comparison_group` | `tv_trading_variables.comparison_group` | 호환성 그룹 (price_comparable, percentage_comparable) |
+
+### ⚙️ Settings (설정)
+| **도메인 용어** | **코드명** | **UI 컴포넌트** | **설명** |
+|:-------------|:----------|:------------|:--------|
+| API Settings | `ApiSettings` | `ApiSettingsView` | API 키 및 연결 설정 |
+| Database Settings | `DatabaseSettings` | `DatabaseSettingsView` | 데이터베이스 경로 및 관리 설정 |
+| Notification Settings | `NotificationSettings` | `NotificationSettingsView` | 알림 및 메시지 설정 |
+| UI Settings | `UISettings` | `UISettingsView` | 사용자 인터페이스 설정 |
+| Environment Settings | `EnvironmentSettings` | `EnvironmentSettingsView` | 환경변수 및 로깅 설정 (계획됨) |
 
 ---
 
@@ -101,6 +110,13 @@
 | Trigger Evaluation Service | `TriggerEvaluationService` | 트리거 평가 서비스 | 시장 데이터 기반 조건 평가 |
 | Normalization Service | `NormalizationService` | 데이터 정규화 서비스 | 지표값 정규화 처리 |
 | Business Logic Adapter | `BusinessLogicAdapter` | 비즈니스 로직 어댑터 | 기존 로직과 Domain 연결 |
+
+### 🏗️ Infrastructure Services
+| **도메인 용어** | **클래스명** | **역할** | **설명** |
+|:-------------|:----------|:--------|:----------|
+| Component Logger | `create_component_logger()` | 로깅 시스템 | Infrastructure 표준 로깅 (print 문 대체) |
+| Theme Service | `ThemeService` | 테마 관리 서비스 | UI 테마 및 스타일 관리 |
+| Application Context | `ApplicationContext` | DI 컨테이너 | 서비스 등록 및 의존성 주입 |
 
 ---
 
@@ -249,6 +265,17 @@
 | Query Executor | `DatabaseManager.execute_query()` | 쿼리 실행 | 안전한 파라미터화 쿼리 |
 | Transaction Manager | `DatabaseManager.transaction()` | 트랜잭션 관리 | Context Manager 패턴 |
 
+### 🎭 Presentation Layer (MVP Pattern)
+| **용어** | **클래스명** | **역할** | **설명** |
+|:--------|:----------|:--------|:--------|
+| Settings MVP | `*SettingsView` | MVP 패턴 View | Settings 화면 MVP 적용 (완성) |
+| API Settings View | `ApiSettingsView` | API 설정 화면 | API 키 관리 UI |
+| Database Settings View | `DatabaseSettingsView` | DB 설정 화면 | DB 경로, 백업 관리 UI |
+| Notification Settings View | `NotificationSettingsView` | 알림 설정 화면 | 알림 관리 UI |
+| UI Settings View | `UISettingsView` | UI 설정 화면 | 테마, 레이아웃 설정 UI |
+| Settings Presenter | `*SettingsPresenter` | MVP 패턴 Presenter | View-Service 중재 |
+| Direct Import | 직접 import | 호환성 alias 금지 | 모든 Settings 컴포넌트 직접 import 필수 |
+
 ---
 
 ## 🔄 용어 변환 매핑표
@@ -296,6 +323,9 @@
 - **문서 업데이트**: 새로운 용어 추가 시 이 문서 갱신
 - **Domain Events 활용**: 상태 변경 시 적절한 도메인 이벤트 발행
 - **Mock 패턴**: Domain 구현 전 Infrastructure 호환성을 위한 Mock 사용
+- **Infrastructure 로깅 사용**: `create_component_logger()` 필수 사용
+- **MVP 패턴 적용**: Settings 시스템처럼 View와 Presenter 분리
+- **직접 import**: 호환성 alias 금지, 명시적 import 사용
 
 ### ❌ DON'T (금지사항)
 - **혼용 금지**: `Strategy` ↔ `전략` ↔ `strategy` 혼용
@@ -304,6 +334,8 @@
 - **레거시 용어**: 사용하지 않는 테이블/컬럼 참조
 - **하드코딩 Entity**: Mock 대신 실제 Entity 하드코딩 (Domain 미완성 시)
 - **도메인 규칙 우회**: Repository에서 도메인 로직 처리
+- **print 문 사용**: Infrastructure 로깅 시스템 대신 print 문 사용 금지
+- **호환성 alias 사용**: 투명성 저해, 직접 import 필수
 
 ---
 

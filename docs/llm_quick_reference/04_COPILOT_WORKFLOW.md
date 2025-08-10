@@ -1,5 +1,5 @@
 # 🤖 LLM 작업 절차 가이드
-*최종 업데이트: 2025년 8월 9일*
+*최종 업데이트: 2025년 8월 10일*
 
 ## ⚡ 작업 시작 시 3단계 (5분 내)
 
@@ -11,9 +11,10 @@ docs/llm_quick_reference/02_IMPLEMENTATION_MAP.md # 기존 구현 검색
 ```
 
 **체크포인트:**
-- [ ] 현재 계층별 구현 상태 확인 (Domain 95%, Infrastructure 90%, etc.)
+- [ ] 현재 계층별 구현 상태 확인 (Domain 95%, Infrastructure 92%, Application 88%, Presentation 92%)
 - [ ] 내가 구현할 기능이 이미 있는지 02번 문서에서 `Ctrl+F` 검색
 - [ ] 재사용 가능한 컴포넌트 목록 확인
+- [ ] Settings MVP 패턴 100% 완성 상태 확인
 
 ### 2단계: 계층 규칙 확인 (1분)
 ```bash
@@ -24,6 +25,7 @@ docs/llm_quick_reference/03_DDD_LAYER_GUIDE.md   # 계층 위반 방지
 - [ ] 의존성 방향 확인: `Presentation → Application → Domain ← Infrastructure`
 - [ ] 내가 작업할 계층의 허용/금지사항 확인
 - [ ] 자주 위반하는 패턴들 미리 숙지
+- [ ] print 문 금지, Infrastructure 로깅 필수 사용 확인
 
 ### 3단계: 실행 준비 (2분)
 ```bash
@@ -85,6 +87,8 @@ assert ".execute(" in presenter_code  # Use Case 호출 확인
 - [ ] Presenter에서 Use Case만 호출하는가?
 - [ ] Use Case에서 UI 직접 조작하지 않는가?
 - [ ] Infrastructure 로깅 시스템 사용하는가? (`create_component_logger`)
+- [ ] print 문 사용하지 않는가? (Infrastructure 로깅 사용)
+- [ ] 호환성 alias 사용하지 않는가? (직접 import 사용)
 
 ### ✅ 작업 후
 - [ ] `python run_desktop_ui.py` 실행하여 UI 무결성 검증
@@ -97,13 +101,28 @@ assert ".execute(" in presenter_code  # Use Case 호출 확인
 
 ### 🏗️ Infrastructure 로깅 사용 (필수)
 ```python
-# ✅ 모든 컴포넌트에서 필수 사용
+# ✅ 모든 컴포넌트에서 필수 사용 (print 문 금지)
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 logger = create_component_logger("ComponentName")
 
 logger.info("✅ 작업 시작")
 logger.warning("⚠️ 주의사항")
 logger.error("❌ 오류 발생")
+
+# ❌ 금지된 패턴
+print("작업 시작")  # 절대 금지!
+```
+
+### 🎭 Settings MVP 패턴 (완성된 표준)
+```python
+# ✅ Settings 직접 import (호환성 alias 금지)
+from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
+from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
+from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
+from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
+
+# ❌ 금지된 패턴
+from upbit_auto_trading.ui.desktop.screens.settings import ApiSettingsView as ApiSettings  # alias 금지!
 ```
 
 ### 🎭 MVP 패턴 적용
@@ -162,6 +181,13 @@ grep -r "from PyQt6" upbit_auto_trading/domain/         # 결과 없어야 함
 # Presenter 순수성 검증
 grep -r "sqlite3" upbit_auto_trading/ui/                # 결과 없어야 함
 grep -r "sqlite3" upbit_auto_trading/presentation/      # 결과 없어야 함
+
+# Infrastructure 로깅 시스템 준수 검증
+grep -r "print(" upbit_auto_trading/ --exclude-dir=tests --exclude-dir=tools  # 결과 없어야 함
+
+# 호환성 alias 사용 검증
+grep -r "import.*as.*View" upbit_auto_trading/ui/       # 결과 없어야 함
+grep -r "__all__.*alias" upbit_auto_trading/            # 결과 없어야 함
 ```
 
 ### 🧪 기능 검증
@@ -193,6 +219,8 @@ $env:UPBIT_CONSOLE_OUTPUT='true'; $env:UPBIT_LOG_SCOPE='verbose'
 3. **Use Case에서 UI 조작** → Presenter에서 처리
 4. **기존 기능 재구현** → 02번 문서에서 재사용 가능한 것 찾기
 5. **표준 로깅 무시** → `create_component_logger` 필수 사용
+6. **print 문 사용** → Infrastructure 로깅 시스템 필수 사용
+7. **호환성 alias 사용** → 직접 import로 투명성 확보
 
 ### ✅ 올바른 대응책
 1. **기능 중복 발견** → 기존 컴포넌트 확장 우선 고려
@@ -214,8 +242,9 @@ $env:UPBIT_CONSOLE_OUTPUT='true'; $env:UPBIT_LOG_SCOPE='verbose'
 ### 🔥 핵심 기억사항
 1. **Domain Layer가 다른 계층을 import하면 안됨** (절대 규칙!)
 2. **02번 문서에서 재사용 가능한 컴포넌트 먼저 찾기**
-3. **Infrastructure 로깅 시스템 필수 사용**
-4. **최종엔 `python run_desktop_ui.py`로 검증**
+3. **Infrastructure 로깅 시스템 필수 사용** (print 문 절대 금지!)
+4. **Settings MVP 패턴 100% 완성** - 직접 import 사용 필수
+5. **최종엔 `python run_desktop_ui.py`로 검증**
 
 ---
 

@@ -18,11 +18,7 @@ Architecture:
 from .views.database_settings_view import DatabaseSettingsView
 from .presenters.database_settings_presenter import DatabaseSettingsPresenter
 
-# 호환성 alias (settings_screen.py에서 사용)
-DatabaseSettings = DatabaseSettingsView
-
 __all__ = [
     'DatabaseSettingsView',
-    'DatabaseSettingsPresenter',
-    'DatabaseSettings'
+    'DatabaseSettingsPresenter'
 ]

@@ -7,6 +7,7 @@ Infrastructure Layer 기반 테마 관리를 제공합니다.
 from typing import Protocol
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService
 from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
 
@@ -45,6 +46,7 @@ class ThemeService(QObject):
         super().__init__()
         self.settings_service = settings_service
         self.style_manager = style_manager
+        self.logger = create_component_logger("ThemeService")
 
         # 초기 테마 로드 및 적용
         self._load_and_apply_theme()
@@ -61,10 +63,10 @@ class ThemeService(QObject):
             else:
                 self.style_manager.set_theme(Theme.LIGHT)
 
-            print(f"✅ ThemeService: 설정에서 테마 로드 및 적용 완료 - {theme_name}")
+            self.logger.info(f"✅ ThemeService: 설정에서 테마 로드 및 적용 완료 - {theme_name}")
 
         except Exception as e:
-            print(f"⚠️ ThemeService: 테마 로드 실패, 기본 테마 사용 - {e}")
+            self.logger.warning(f"⚠️ ThemeService: 테마 로드 실패, 기본 테마 사용 - {e}")
             self.style_manager.set_theme(Theme.LIGHT)
 
     def get_current_theme(self) -> str:
@@ -89,11 +91,11 @@ class ThemeService(QObject):
             # theme_notifier에도 알림
             self._notify_theme_changed()
 
-            print(f"✅ ThemeService: 테마 변경 및 저장 완료 - {theme}")
+            self.logger.info(f"✅ ThemeService: 테마 변경 및 저장 완료 - {theme}")
             return True
 
         except Exception as e:
-            print(f"❌ ThemeService: 테마 설정 실패 - {e}")
+            self.logger.error(f"❌ ThemeService: 테마 설정 실패 - {e}")
             return False
 
     def toggle_theme(self) -> str:
@@ -111,10 +113,10 @@ class ThemeService(QObject):
         try:
             self.style_manager.apply_theme()
             self._notify_theme_changed()
-            print(f"✅ ThemeService: 현재 테마 재적용 완료 - {self.get_current_theme()}")
+            self.logger.info(f"✅ ThemeService: 현재 테마 재적용 완료 - {self.get_current_theme()}")
             return True
         except Exception as e:
-            print(f"❌ ThemeService: 테마 재적용 실패 - {e}")
+            self.logger.error(f"❌ ThemeService: 테마 재적용 실패 - {e}")
             return False
 
     def connect_theme_changed(self, callback) -> bool:
@@ -123,7 +125,7 @@ class ThemeService(QObject):
             self.theme_changed.connect(callback)
             return True
         except Exception as e:
-            print(f"❌ ThemeService: 시그널 연결 실패 - {e}")
+            self.logger.error(f"❌ ThemeService: 시그널 연결 실패 - {e}")
             return False
 
     def _notify_theme_changed(self):
@@ -132,9 +134,9 @@ class ThemeService(QObject):
             from upbit_auto_trading.ui.desktop.common.theme_notifier import get_theme_notifier
             theme_notifier = get_theme_notifier()
             theme_notifier.notify_theme_changed()
-            print("✅ ThemeService: theme_notifier에 테마 변경 알림 완료")
+            self.logger.info("✅ ThemeService: theme_notifier에 테마 변경 알림 완료")
         except Exception as e:
-            print(f"⚠️ ThemeService: theme_notifier 알림 실패 - {e}")
+            self.logger.warning(f"⚠️ ThemeService: theme_notifier 알림 실패 - {e}")
 
 
 class MockThemeService:
@@ -142,24 +144,25 @@ class MockThemeService:
 
     def __init__(self):
         self._current_theme = "light"
+        self.logger = create_component_logger("MockThemeService")
 
     def get_current_theme(self) -> str:
         return self._current_theme
 
     def set_theme(self, theme: str) -> bool:
         self._current_theme = theme
-        print(f"🧪 MockThemeService: 테마 설정 - {theme}")
+        self.logger.info(f"🧪 MockThemeService: 테마 설정 - {theme}")
         return True
 
     def toggle_theme(self) -> str:
         self._current_theme = "dark" if self._current_theme == "light" else "light"
-        print(f"🧪 MockThemeService: 테마 전환 - {self._current_theme}")
+        self.logger.info(f"🧪 MockThemeService: 테마 전환 - {self._current_theme}")
         return self._current_theme
 
     def apply_current_theme(self) -> bool:
-        print(f"🧪 MockThemeService: 테마 적용 - {self._current_theme}")
+        self.logger.info(f"🧪 MockThemeService: 테마 적용 - {self._current_theme}")
         return True
 
     def connect_theme_changed(self, callback) -> bool:
-        print("🧪 MockThemeService: 시그널 연결")
+        self.logger.info("🧪 MockThemeService: 시그널 연결")
         return True

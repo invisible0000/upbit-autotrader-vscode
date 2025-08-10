@@ -286,7 +286,9 @@ class ApiSettingsPresenter:
                 else:
                     self.logger.warning(f"⚠️ account_info가 dict가 아니거나 None: {type(account_info)}")
 
+                # UI용 메시지 (줄바꿈 포함)
                 success_message = f"API 키가 정상적으로 작동하며 서버에 연결되었습니다.\n\n조회된 잔고(KRW) 금액: {krw_balance:,.0f} 원"
+                # 로그용 메시지 (줄바꿈 없이)
                 self.logger.info(f"API 연결 테스트 성공 - KRW 잔고: {krw_balance:,.0f} 원")
                 return True, success_message
             else:

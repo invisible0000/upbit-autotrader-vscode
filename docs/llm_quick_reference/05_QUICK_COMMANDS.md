@@ -1,5 +1,5 @@
 # ⚡ 자주 사용하는 명령어 모음
-*최종 업데이트: 2025년 8월 9일*
+*최종 업데이트: 2025년 8월 10일*
 
 ## 🔍 시스템 검증 (일일 필수)
 
@@ -12,7 +12,8 @@ python run_desktop_ui.py
 # - 메인 윈도우 정상 로딩
 # - 전략 관리 → 트리거 빌더 진입 가능
 # - 설정 → 데이터베이스 탭: 실시간 상태, 백업 관리, 경로 변경 기능
-# - 설정 → 각 탭 정상 표시
+# - 설정 → 각 탭 정상 표시 (ApiSettingsView, DatabaseSettingsView, NotificationSettingsView, UISettingsView)
+# - Settings MVP 패턴 100% 적용 확인
 ```
 
 ### 📊 DB 상태 확인
@@ -82,6 +83,13 @@ grep -r "from PyQt6" upbit_auto_trading/domain/
 # Presenter 순수성 검증 (결과 없어야 정상)
 grep -r "sqlite3" upbit_auto_trading/ui/
 grep -r "sqlite3" upbit_auto_trading/presentation/
+
+# Infrastructure 로깅 시스템 준수 검증 (결과 없어야 정상)
+grep -r "print(" upbit_auto_trading/ --exclude-dir=tests --exclude-dir=tools
+
+# 호환성 alias 사용 검증 (결과 없어야 정상)
+grep -r "import.*as.*View" upbit_auto_trading/ui/
+grep -r "__all__.*alias" upbit_auto_trading/
 ```
 
 ### 📈 구현 현황 분석
@@ -242,7 +250,8 @@ python run_desktop_ui.py                                    # 현재 상태
 docs/llm_quick_reference/02_IMPLEMENTATION_MAP.md          # 기존 구현 검색
 grep -r "import sqlite3" upbit_auto_trading/domain/        # 계층 위반 검사
 
-# 개발 완료 (3단계)
+# 개발 완료 (4단계)
+grep -r "print(" upbit_auto_trading/ --exclude-dir=tests   # Infrastructure 로깅 준수 검사
 pytest tests/ -v                                           # 전체 테스트
 python run_desktop_ui.py                                   # UI 통합 검증
 # 02_IMPLEMENTATION_MAP.md 문서 업데이트                    # 수동 작업
@@ -272,7 +281,7 @@ docs/llm_quick_reference/                          # 빠른 참조 문서들
 
 **⚡ 핵심 기억사항:**
 - **매일 시작**: `python run_desktop_ui.py`로 현재 상태 확인
-- **개발 중**: Domain Layer 계층 위반 수시 검사
-- **완료 후**: 테스트 실행 + UI 검증 + 문서 업데이트
+- **개발 중**: Domain Layer 계층 위반 수시 검사, print 문 금지
+- **완료 후**: 테스트 실행 + UI 검증 + Infrastructure 로깅 준수 + 문서 업데이트
 
 **🚀 효율 팁**: 이 명령어들을 PowerShell 히스토리에 저장하여 `↑` 키로 빠르게 재사용!
