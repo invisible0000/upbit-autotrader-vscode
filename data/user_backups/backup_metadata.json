@@ -55,11 +55,6 @@
     "description": "[수동생성] market_data 데이터베이스 백업",
     "updated_at": "2025-08-09T16:38:47.568797"
   },
-  "settings_backup_20250809_180853.sqlite3": {
-    "description": "[수동생성] settings 데이터베이스 백업",
-    "backup_type": "수동생성",
-    "updated_at": "2025-08-09T18:08:53.064742"
-  },
   "strategies_backup_20250809_191747.sqlite3": {
     "description": "[복원생성] 복원 전 안전 백업",
     "backup_type": "복원생성",
@@ -90,29 +85,14 @@
     "backup_type": "경로변경",
     "updated_at": "2025-08-09T19:19:27.847768"
   },
-  "settings_backup_20250809_201051.sqlite3": {
-    "description": "[복원생성] 복원 전 안전 백업",
-    "backup_type": "복원생성",
-    "updated_at": "2025-08-09T20:10:51.382679"
-  },
-  "settings_backup_20250809_221245.sqlite3": {
-    "description": "[수동생성] settings 데이터베이스 백업",
-    "backup_type": "수동생성",
-    "updated_at": "2025-08-09T22:12:45.256744"
-  },
-  "settings_backup_20250810_073532.sqlite3": {
-    "description": "[수동생성] settings 데이터베이스 백업",
-    "backup_type": "수동생성",
-    "updated_at": "2025-08-10T07:35:32.510347"
-  },
-  "settings_backup_20250810_081252.sqlite3": {
-    "description": "[수동생성] settings 데이터베이스 백업",
-    "backup_type": "수동생성",
-    "updated_at": "2025-08-10T08:12:52.689555"
-  },
   "settings_backup_20250810_081302.sqlite3": {
     "description": "[복원생성] 복원 전 안전 백업",
     "backup_type": "복원생성",
     "updated_at": "2025-08-10T08:13:02.546893"
+  },
+  "settings_backup_20250810_102915.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-10T10:29:15.910638"
   }
 }
