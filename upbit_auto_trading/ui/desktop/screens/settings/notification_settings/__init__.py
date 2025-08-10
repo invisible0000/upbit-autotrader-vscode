@@ -7,7 +7,11 @@
 from .views.notification_settings_view import NotificationSettingsView
 from .presenters.notification_settings_presenter import NotificationSettingsPresenter
 
+# 호환성 alias (settings_screen.py에서 사용)
+NotificationSettings = NotificationSettingsView
+
 __all__ = [
     'NotificationSettingsView',
-    'NotificationSettingsPresenter'
+    'NotificationSettingsPresenter',
+    'NotificationSettings'
 ]

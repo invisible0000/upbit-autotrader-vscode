@@ -104,5 +104,20 @@
     "description": "[복원생성] 복원 전 안전 백업",
     "backup_type": "복원생성",
     "updated_at": "2025-08-10T11:56:22.198781"
+  },
+  "settings_backup_20250810_131242.sqlite3": {
+    "description": "[수동생성] settings 데이터베이스 백업",
+    "backup_type": "수동생성",
+    "updated_at": "2025-08-10T13:12:42.246807"
+  },
+  "settings_backup_20250810_131250.sqlite3": {
+    "description": "[복원생성] 복원 전 안전 백업",
+    "backup_type": "복원생성",
+    "updated_at": "2025-08-10T13:12:50.137246"
+  },
+  "settings_backup_20250810_131302.sqlite3": {
+    "description": "[경로변경] 경로 변경 전 안전 백업",
+    "backup_type": "경로변경",
+    "updated_at": "2025-08-10T13:13:02.092420"
   }
 }

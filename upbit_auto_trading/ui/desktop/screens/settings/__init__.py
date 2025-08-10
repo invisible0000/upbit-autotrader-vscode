@@ -10,8 +10,8 @@
 # 메인 설정 화면 (MVP 패턴 적용)
 from .settings_screen import SettingsScreen
 from .api_settings import ApiKeyManagerSecure as ApiKeyManager
-from .database_settings.views.database_settings_view import DatabaseSettingsView as DatabaseSettings
-from .notification_settings.views.notification_settings_view import NotificationSettingsView as NotificationSettings
+from .database_settings import DatabaseSettings
+from .notification_settings import NotificationSettings
 
 __all__ = [
     'SettingsScreen',
