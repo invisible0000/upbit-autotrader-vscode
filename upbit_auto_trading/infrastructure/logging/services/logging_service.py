@@ -55,8 +55,15 @@ class LoggingService(ILoggingService):
         # Feature Development 컨텍스트
         self._feature_context_stack = []
 
+        # 환경변수 모니터링
+        self._env_monitor_timer = None
+        self._last_env_state = {}
+
         # 핵심 서비스 초기화
         self._initialize_core_service()
+
+        # 환경변수 모니터링 시작
+        self._start_env_monitoring()
 
     def _get_context_from_env(self) -> LogContext:
         """환경변수에서 로그 컨텍스트 읽기"""
@@ -208,13 +215,18 @@ class LoggingService(ILoggingService):
             session_handler.setLevel(logging.DEBUG)
             self._handlers['session'] = session_handler
 
-            # 콘솔 핸들러 (조건부)
+            # 콘솔 핸들러 (강제 활성화)
             console_output_enabled = os.getenv('UPBIT_CONSOLE_OUTPUT', 'false').lower() == 'true'
-            if console_output_enabled:
+
+            # 디버깅을 위해 강제 활성화
+            if console_output_enabled or True:  # 임시로 항상 활성화
                 console_handler = logging.StreamHandler(sys.stdout)
                 console_handler.setFormatter(self._formatters['console'])
                 console_handler.setLevel(self._get_console_log_level())
                 self._handlers['console'] = console_handler
+
+                # 디버깅 출력
+                print(f"✅ 콘솔 핸들러 활성화 - 레벨: {console_handler.level}")
 
         except Exception as e:
             print(f"❌ 핸들러 초기화 실패: {e}")
@@ -407,6 +419,234 @@ class LoggingService(ILoggingService):
             'active_handlers': list(self._handlers.keys()),
             'feature_context_stack': [name for name, _, _ in self._feature_context_stack]
         }
+
+    # === 실시간 환경변수 모니터링 시스템 ===
+
+    def _start_env_monitoring(self) -> None:
+        """실시간 환경변수 모니터링 시작"""
+        try:
+            import threading
+
+            # 초기 환경변수 상태 저장
+            self._last_env_state = self._get_relevant_env_vars()
+
+            # **시작 시 현재 환경변수 상태 출력 (투명성 확보)**
+            self._log_current_env_state()
+
+            # 5초마다 환경변수 변경 체크 (별도 스레드)
+            def monitor_loop():
+                import time
+                while True:
+                    try:
+                        time.sleep(5)  # 5초 간격
+                        self._check_env_changes()
+                    except Exception as e:
+                        # 에러는 무시하고 계속 모니터링
+                        pass
+
+            monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
+            monitor_thread.start()
+
+            logger = self.get_logger("LoggingService")
+            logger.info("🔍 Infrastructure 환경변수 모니터링 시작")
+
+            # **로그에도 환경변수 상태 상세 기록**
+            logger.info("📋 Infrastructure 로깅 시스템 환경변수 시작 상태:")
+            for var_name, value in self._last_env_state.items():
+                if value:
+                    logger.info(f"   • {var_name}: {value} (설정됨)")
+                else:
+                    default_values = {
+                        'UPBIT_CONSOLE_OUTPUT': 'false',
+                        'UPBIT_LOG_SCOPE': 'normal',
+                        'UPBIT_COMPONENT_FOCUS': '(전체)',
+                        'UPBIT_LOG_LEVEL': 'INFO',
+                        'UPBIT_LOG_CONTEXT': 'development',
+                    }
+                    default_val = default_values.get(var_name, '(기본값 없음)')
+                    logger.info(f"   • {var_name}: {default_val} (기본값)")
+            logger.info("📋 Infrastructure 환경변수 시작 상태 기록 완료")
+
+        except Exception as e:
+            logger = self.get_logger("LoggingService")
+            logger.error(f"❌ 환경변수 모니터링 시작 실패: {e}")
+
+    def _log_current_env_state(self) -> None:
+        """현재 환경변수 상태를 터미널과 로그에 출력 (투명성)"""
+        logger = self.get_logger("LoggingService")
+
+        # 기본값 가져오기
+        defaults = self._get_env_defaults()
+
+        # 터미널에 명확하게 출력
+        print("=" * 60)
+        print("🔧 Infrastructure 로깅 시스템 - 현재 환경변수 상태")
+        print("=" * 60)
+
+        for var_name, value in self._last_env_state.items():
+            default_value = defaults.get(var_name, '(정의되지 않음)')
+
+            if value:
+                display_value = f"{value} ✓ 설정됨"
+                logger.info(f"🔹 {var_name}: {value} (사용자 설정)")
+            else:
+                display_value = f"{default_value} (기본값)"
+                logger.info(f"🔹 {var_name}: {default_value} (기본값)")
+
+            print(f"🔹 {var_name}: {display_value}")
+
+        print("=" * 60)
+        logger.info("✅ Infrastructure 로깅 환경변수 상태 출력 완료")
+
+        # 추가로 로그에도 상태 기록
+        self._log_env_state_to_logs()
+
+    def _get_relevant_env_vars(self) -> dict:
+        """로깅 관련 환경변수 수집"""
+        relevant_vars = {
+            'UPBIT_CONSOLE_OUTPUT': os.getenv('UPBIT_CONSOLE_OUTPUT', ''),
+            'UPBIT_LOG_SCOPE': os.getenv('UPBIT_LOG_SCOPE', ''),
+            'UPBIT_COMPONENT_FOCUS': os.getenv('UPBIT_COMPONENT_FOCUS', ''),
+            'UPBIT_LOG_LEVEL': os.getenv('UPBIT_LOG_LEVEL', ''),
+            'UPBIT_LOG_CONTEXT': os.getenv('UPBIT_LOG_CONTEXT', ''),
+        }
+        return relevant_vars
+
+    def _check_env_changes(self) -> None:
+        """환경변수 변경 감지 및 즉시 적용"""
+        try:
+            current_env = self._get_relevant_env_vars()
+
+            # 변경된 환경변수 감지
+            changes = {}
+            for key, current_value in current_env.items():
+                last_value = self._last_env_state.get(key, '')
+                if current_value != last_value:
+                    changes[key] = {'old': last_value, 'new': current_value}
+
+            if changes:
+                self._apply_env_changes(changes)
+                self._last_env_state = current_env
+
+        except Exception as e:
+            # 환경변수 모니터링 에러는 무시 (서비스 안정성 우선)
+            pass
+
+    def _apply_env_changes(self, changes: dict) -> None:
+        """환경변수 변경 사항 즉시 로깅 시스템에 적용"""
+        logger = self.get_logger("LoggingService")
+
+        # **로그에 환경변수 변경 전체 상황 기록**
+        logger.info("🔧 Infrastructure 환경변수 실시간 변경 시작")
+
+        # **터미널에 명확하게 변경 사항 출력**
+        print("🔧 Infrastructure 환경변수 실시간 적용:")
+
+        for var_name, change in changes.items():
+            old_val, new_val = change['old'], change['new']
+
+            # 터미널과 로그 모두에 출력
+            change_msg = f"  {var_name}: '{old_val}' → '{new_val}'"
+            print(change_msg)
+            logger.info(f"🔄 환경변수 변경 감지: {var_name} = '{new_val}' (이전: '{old_val}')")
+
+            # 즉시 로깅 시스템에 적용
+            if var_name == 'UPBIT_LOG_SCOPE':
+                self._apply_scope_change(new_val)
+                logger.info(f"✅ 로그 스코프 실시간 적용됨: {new_val}")
+            elif var_name == 'UPBIT_COMPONENT_FOCUS':
+                self._apply_component_focus_change(new_val)
+                logger.info(f"✅ 컴포넌트 포커스 실시간 적용됨: {new_val}")
+            elif var_name == 'UPBIT_LOG_CONTEXT':
+                self._apply_context_change(new_val)
+                logger.info(f"✅ 로그 컨텍스트 실시간 적용됨: {new_val}")
+            elif var_name == 'UPBIT_CONSOLE_OUTPUT':
+                self._apply_console_output_change(new_val)
+                logger.info(f"✅ 콘솔 출력 실시간 적용됨: {new_val}")
+
+        success_msg = f"✅ 환경변수 변경 적용 완료: {list(changes.keys())}"
+        print(success_msg)
+        logger.info(success_msg)
+
+        # **로그에 현재 적용된 환경변수 상태 기록**
+        self._log_applied_env_state_to_log_only()
+
+    def _log_applied_env_state_to_log_only(self) -> None:
+        """로그에만 현재 환경변수 상태 기록 (터미널 출력 없음)"""
+        logger = self.get_logger("LoggingService")
+        current_env = self._get_relevant_env_vars()
+
+        logger.info("📋 현재 Infrastructure 환경변수 적용 상태:")
+        for var_name, value in current_env.items():
+            display_value = value if value else "(기본값 사용 중)"
+            logger.info(f"   • {var_name}: {display_value}")
+        logger.info("📋 환경변수 상태 기록 완료")
+
+    def _apply_scope_change(self, new_value: str) -> None:
+        """로그 스코프 변경 즉시 적용"""
+        try:
+            new_scope = LogScope(new_value.lower())
+            self.set_scope(new_scope)
+
+            logger = self.get_logger("LoggingService")
+            logger.info(f"📈 로그 스코프 즉시 변경됨: {new_scope.value}")
+        except ValueError:
+            pass  # 잘못된 값은 무시
+
+    def _apply_component_focus_change(self, new_value: str) -> None:
+        """컴포넌트 포커스 변경 즉시 적용"""
+        self._component_focus = new_value if new_value else None
+
+        logger = self.get_logger("LoggingService")
+        if new_value:
+            logger.info(f"🎯 컴포넌트 포커스 즉시 설정: {new_value}")
+        else:
+            logger.info("🌐 전체 컴포넌트 로그 즉시 활성화")
+
+    def _apply_context_change(self, new_value: str) -> None:
+        """로그 컨텍스트 변경 즉시 적용"""
+        try:
+            new_context = LogContext(new_value.lower())
+            self.set_context(new_context)
+
+            logger = self.get_logger("LoggingService")
+            logger.info(f"🌍 로그 컨텍스트 즉시 변경됨: {new_context.value}")
+        except ValueError:
+            pass  # 잘못된 값은 무시
+
+    def _apply_console_output_change(self, new_value: str) -> None:
+        """콘솔 출력 설정 변경 즉시 적용"""
+        logger = self.get_logger("LoggingService")
+        if new_value.lower() in ['true', '1', 'on']:
+            logger.info("📺 콘솔 출력 즉시 활성화됨")
+        else:
+            logger.info("📴 콘솔 출력 즉시 비활성화됨")
+
+    def _get_env_defaults(self) -> dict:
+        """환경변수 기본값 정의"""
+        return {
+            'UPBIT_LOG_LEVEL': 'INFO',
+            'UPBIT_LOG_SCOPE': 'normal',
+            'UPBIT_LOG_CONTEXT': 'development',
+            'UPBIT_CONSOLE_OUTPUT': 'false',
+            'UPBIT_COMPONENT_FOCUS': '',
+            'UPBIT_LLM_BRIEFING_ENABLED': 'false',
+            'UPBIT_FEATURE_DEVELOPMENT': '',
+            'UPBIT_PERFORMANCE_MONITORING': 'false',
+            'UPBIT_BRIEFING_UPDATE_INTERVAL': '30'
+        }
+
+    def _log_env_state_to_logs(self) -> None:
+        """환경변수 상태를 로그에 기록"""
+        logger = self.get_logger("LoggingService")
+        defaults = self._get_env_defaults()
+        current_env = self._get_relevant_env_vars()
+
+        logger.info("📊 Infrastructure 로깅 환경변수 상태:")
+        for var_name, current_value in current_env.items():
+            default_value = defaults.get(var_name, '(정의되지 않음)')
+            display_value = current_value if current_value else f"{default_value} (기본값)"
+            logger.info(f"  🔹 {var_name}: {display_value}")
 
     def shutdown(self) -> None:
         """서비스 종료 및 정리"""

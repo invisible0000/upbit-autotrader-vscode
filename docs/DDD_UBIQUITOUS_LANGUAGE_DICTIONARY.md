@@ -59,7 +59,29 @@
 | Database Settings | `DatabaseSettings` | `DatabaseSettingsView` | 데이터베이스 경로 및 관리 설정 |
 | Notification Settings | `NotificationSettings` | `NotificationSettingsView` | 알림 및 메시지 설정 |
 | UI Settings | `UISettings` | `UISettingsView` | 사용자 인터페이스 설정 |
-| Environment Settings | `EnvironmentSettings` | `EnvironmentSettingsView` | 환경변수 및 로깅 설정 (계획됨) |
+| Environment Settings | `EnvironmentSettings` | `EnvironmentSettingsView` | 환경변수 및 로깅 설정 (구현 완료) |
+
+### 🔧 Environment & Logging Configuration
+| **도메인 용어** | **환경변수** | **config YAML 키** | **설명** |
+|:-------------|:----------|:------------|:--------|
+| Console Output | `UPBIT_CONSOLE_OUTPUT` | `console_enabled` | 콘솔 로그 출력 여부 |
+| Log Level | `UPBIT_LOG_LEVEL` | `level` | 로그 레벨 (DEBUG, INFO, WARNING, ERROR) |
+| Log Context | `UPBIT_LOG_CONTEXT` | `context` | 로그 컨텍스트 (development, production, testing) |
+| Log Scope | `UPBIT_LOG_SCOPE` | `scope` | 로그 범위 (normal, verbose, debug) |
+| Component Focus | `UPBIT_COMPONENT_FOCUS` | `component_focus` | 특정 컴포넌트 집중 모니터링 |
+| LLM Briefing | `UPBIT_LLM_BRIEFING_ENABLED` | `llm_briefing_enabled` | LLM 에이전트 브리핑 활성화 |
+| Feature Development | `UPBIT_FEATURE_DEVELOPMENT` | `feature_development` | 기능 개발 컨텍스트 |
+| Performance Monitoring | `UPBIT_PERFORMANCE_MONITORING` | `performance_monitoring` | 성능 모니터링 활성화 |
+| Briefing Update Interval | `UPBIT_BRIEFING_UPDATE_INTERVAL` | `briefing_update_interval` | 브리핑 업데이트 간격 (초) |
+
+### 📁 Configuration Profile Management
+| **도메인 용어** | **클래스명** | **파일 패턴** | **설명** |
+|:-------------|:----------|:------------|:--------|
+| Config Profile | `ConfigProfile` | `config.{profile}.yaml` | 환경별 설정 프로파일 |
+| Profile Loader | `ConfigProfileLoader` | - | YAML 프로파일 로더 |
+| Profile Switcher | `ProfileSwitcher` | - | 프로파일 기반 환경변수 적용 |
+| Profile Service | `ConfigProfileService` | - | 프로파일 관리 통합 서비스 |
+| Profile Switch Result | `ProfileSwitchResult` | - | 프로파일 전환 결과 (성공/실패, 오류 메시지) |
 
 ---
 

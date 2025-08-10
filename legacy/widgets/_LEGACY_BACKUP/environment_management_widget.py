@@ -1,5 +1,8 @@
 """
-환경 관리 위젯 - 환경 프로파일 및 환경변수 통합 관리
+환경 관리 위젯 - 환경 프로파일 및 환경변수 통합 관리 (LEGACY)
+
+TASK-20250809-01에 따라 environment_logging/ 폴더의
+EnvironmentLoggingWidget으로 교체됨.
 
 이 위젯은 EnvironmentProfileWidget과 EnvironmentVariablesWidget을
 하나의 탭에서 통합 관리할 수 있도록 컨테이너 역할을 합니다.

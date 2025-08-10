@@ -17,6 +17,11 @@ logging:
   file_backup_count: 10            # 많은 백업 파일 보관
   context: "production"             # 프로덕션 컨텍스트
   scope: "normal"                   # 표준 로그 스코프
+  component_focus: ""               # 전체 컴포넌트 모니터링
+  llm_briefing_enabled: false       # 프로덕션에서는 LLM 브리핑 비활성화
+  feature_development: ""           # 기능 개발 컨텍스트 비활성화
+  performance_monitoring: true      # 프로덕션 성능 모니터링 필수
+  briefing_update_interval: 30      # 안정적인 브리핑 간격 (30초)
 
 # 매매 설정 오버라이드 (실거래 주의)
 trading:

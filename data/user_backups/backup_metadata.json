@@ -1,8 +1,4 @@
 {
-  "settings_backup_20250809_150419.sqlite3": {
-    "description": "테스트 설명 01",
-    "updated_at": "2025-08-09T16:50:27.885366"
-  },
   "settings_backup_20250809_150416.sqlite3": {
     "description": " 설명 편집 테스트 01",
     "updated_at": "2025-08-09T16:57:52.370291"
@@ -85,39 +81,19 @@
     "backup_type": "경로변경",
     "updated_at": "2025-08-09T19:19:27.847768"
   },
-  "settings_backup_20250810_081302.sqlite3": {
-    "description": "[복원생성] 복원 전 안전 백업",
-    "backup_type": "복원생성",
-    "updated_at": "2025-08-10T08:13:02.546893"
-  },
-  "settings_backup_20250810_102915.sqlite3": {
-    "description": "[복원생성] 복원 전 안전 백업",
-    "backup_type": "복원생성",
-    "updated_at": "2025-08-10T10:29:15.910638"
-  },
   "settings_backup_20250810_115615.sqlite3": {
     "description": "[수동생성] settings 데이터베이스 백업",
     "backup_type": "수동생성",
     "updated_at": "2025-08-10T11:56:15.904789"
   },
-  "settings_backup_20250810_115622.sqlite3": {
-    "description": "[복원생성] 복원 전 안전 백업",
-    "backup_type": "복원생성",
-    "updated_at": "2025-08-10T11:56:22.198781"
-  },
-  "settings_backup_20250810_131242.sqlite3": {
+  "settings_backup_20250810_200821.sqlite3": {
     "description": "[수동생성] settings 데이터베이스 백업",
     "backup_type": "수동생성",
-    "updated_at": "2025-08-10T13:12:42.246807"
+    "updated_at": "2025-08-10T20:08:21.196535"
   },
-  "settings_backup_20250810_131250.sqlite3": {
+  "settings_backup_20250810_200828.sqlite3": {
     "description": "[복원생성] 복원 전 안전 백업",
     "backup_type": "복원생성",
-    "updated_at": "2025-08-10T13:12:50.137246"
-  },
-  "settings_backup_20250810_131302.sqlite3": {
-    "description": "[경로변경] 경로 변경 전 안전 백업",
-    "backup_type": "경로변경",
-    "updated_at": "2025-08-10T13:13:02.092420"
+    "updated_at": "2025-08-10T20:08:28.196137"
   }
 }

@@ -55,6 +55,11 @@ class LoggingConfig:
     component_focus: Optional[str] = None  # 특정 컴포넌트만 포커스
     feature_development: Optional[str] = None  # 특정 기능 개발 모드
 
+    # LLM 에이전트 관련 설정
+    llm_briefing_enabled: bool = True  # LLM 에이전트 브리핑 활성화
+    performance_monitoring: bool = False  # 성능 모니터링 활성화
+    briefing_update_interval: int = 5  # 브리핑 업데이트 간격 (초)
+
     @classmethod
     def from_environment(cls) -> 'LoggingConfig':
         """
@@ -99,6 +104,21 @@ class LoggingConfig:
 
         # 기능 개발 모드
         config.feature_development = os.getenv('UPBIT_FEATURE_DEVELOPMENT')
+
+        # LLM 브리핑 설정
+        if llm_briefing := os.getenv('UPBIT_LLM_BRIEFING_ENABLED'):
+            config.llm_briefing_enabled = llm_briefing.lower() == 'true'
+
+        # 성능 모니터링 설정
+        if perf_monitoring := os.getenv('UPBIT_PERFORMANCE_MONITORING'):
+            config.performance_monitoring = perf_monitoring.lower() == 'true'
+
+        # 브리핑 업데이트 간격
+        if briefing_interval := os.getenv('UPBIT_BRIEFING_UPDATE_INTERVAL'):
+            try:
+                config.briefing_update_interval = int(briefing_interval)
+            except ValueError:
+                pass  # 잘못된 값이면 기본값 유지
 
         return config
 
@@ -206,5 +226,8 @@ class LoggingConfig:
             'context': self.context.value,
             'scope': self.scope.value,
             'component_focus': self.component_focus,
-            'feature_development': self.feature_development
+            'feature_development': self.feature_development,
+            'llm_briefing_enabled': self.llm_briefing_enabled,
+            'performance_monitoring': self.performance_monitoring,
+            'briefing_update_interval': self.briefing_update_interval
         }

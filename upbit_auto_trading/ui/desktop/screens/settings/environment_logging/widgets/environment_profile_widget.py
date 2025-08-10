@@ -308,7 +308,15 @@ class EnvironmentProfileWidget(QWidget):
 
     def _on_environment_selection_changed(self, button):
         """환경 선택 변경 처리"""
-        selected_env = button.text().split(' ', 1)[1]  # 아이콘 제거하고 환경명만 추출
+        # 버튼 그룹에서 현재 선택된 버튼의 ID로 환경 확인
+        button_id = self.env_button_group.id(button)
+        environment_names = list(self._environments.keys())
+
+        if 0 <= button_id < len(environment_names):
+            selected_env = environment_names[button_id]
+        else:
+            self._logger.warning(f"⚠️ 잘못된 환경 선택 ID: {button_id}")
+            return
 
         # 현재 환경과 다르면 전환 버튼 활성화
         if selected_env != self._current_environment:
@@ -327,7 +335,15 @@ class EnvironmentProfileWidget(QWidget):
         if not checked_button:
             return
 
-        selected_env = checked_button.text().split(' ', 1)[1]
+        # 버튼 ID로 환경명 확인
+        button_id = self.env_button_group.id(checked_button)
+        environment_names = list(self._environments.keys())
+
+        if 0 <= button_id < len(environment_names):
+            selected_env = environment_names[button_id]
+        else:
+            self._logger.warning(f"⚠️ 잘못된 환경 전환 요청 ID: {button_id}")
+            return
 
         # 확인 다이얼로그
         reply = QMessageBox.question(

@@ -17,6 +17,11 @@ logging:
   console_enabled: false            # 콘솔 출력 비활성화 (테스트 출력 방해 방지)
   context: "testing"                # 테스트 컨텍스트
   scope: "minimal"                  # 최소 로그 스코프
+  component_focus: ""               # 테스트용 전체 컴포넌트
+  llm_briefing_enabled: false       # 테스트에서는 LLM 브리핑 비활성화
+  feature_development: ""           # 기능 개발 컨텍스트 비활성화
+  performance_monitoring: false     # 테스트용 성능 모니터링 비활성화
+  briefing_update_interval: 1       # 테스트용 빠른 간격 (1초)
 
 # 매매 설정 오버라이드
 trading:

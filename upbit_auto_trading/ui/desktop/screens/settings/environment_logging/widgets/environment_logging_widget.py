@@ -1,17 +1,17 @@
 """
-Environment Logging Widget
-==========================
+Event-Driven Environment Logging Widget
+=======================================
 
-환경 프로파일과 로깅 설정, 로그 뷰어를 통합 관리하는 메인 위젯
+Event-Driven Architecture로 전환된 환경 프로파일과 로깅 설정, 로그 뷰어 통합 위젯
 3열 1:1:1 분할 레이아웃으로 사용성 최적화
 
 Features:
 - Environment Profile Management (left 33%)
-- Logging Configuration (center 33%)
-- Real-time Log Viewer (right 33%)
-- Real-time environment switching
-- Infrastructure Layer v4.0 logging integration
-- MVP Pattern implementation
+- Event-Driven Logging Configuration (center 33%)
+- Real-time Event-Driven Log Viewer (right 33%)
+- Event-driven environment switching
+- Infrastructure Layer v4.0 + Event System integration
+- MVP Pattern implementation with Event-Driven Architecture
 """
 
 from typing import Optional
@@ -23,9 +23,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from ..environment_profile_section import EnvironmentProfileSection
-from ..logging_configuration_section import LoggingConfigurationSection
-from .log_viewer_widget import LogViewerWidget
+from .environment_profile_section import EnvironmentProfileSection
 
 
 class EnvironmentLoggingWidget(QWidget):
@@ -111,12 +109,17 @@ class EnvironmentLoggingWidget(QWidget):
         self.environment_section.setObjectName("environment-profile-section")
 
         # 중앙: 로깅 설정 섹션 (33%)
+        from .logging_configuration_section import LoggingConfigurationSection
         self.logging_section = LoggingConfigurationSection()
         self.logging_section.setObjectName("logging-configuration-section")
 
-        # 우측: 실시간 로그 뷰어 (33%)
+        # 우측: 실시간 로그 뷰어 (33%) - 필요 시 시작
+        from .log_viewer_widget import LogViewerWidget
         self.log_viewer_section = LogViewerWidget()
         self.log_viewer_section.setObjectName("log-viewer-section")
+
+        # 로그 뷰어는 처음에는 비활성화 상태로 시작
+        self._log_viewer_activated = False
 
         # 스플리터에 추가
         self.main_splitter.addWidget(self.environment_section)
@@ -241,3 +244,27 @@ class EnvironmentLoggingWidget(QWidget):
     def set_splitter_sizes(self, sizes: list):
         """스플리터 크기 설정"""
         self.main_splitter.setSizes(sizes)
+
+    def activate_log_viewer(self):
+        """로그 뷰어 활성화 (탭이 표시될 때 호출)"""
+        if not self._log_viewer_activated:
+            self._logger.info("🔍 로그 뷰어 활성화 시작...")
+
+            # 로그 뷰어에 활성화 신호 전송
+            if hasattr(self.log_viewer_section, 'start_monitoring'):
+                self.log_viewer_section.start_monitoring()
+
+            self._log_viewer_activated = True
+            self._logger.info("✅ 로그 뷰어 활성화 완료")
+
+    def deactivate_log_viewer(self):
+        """로그 뷰어 비활성화 (탭이 숨겨질 때 호출)"""
+        if self._log_viewer_activated:
+            self._logger.info("🛑 로그 뷰어 비활성화...")
+
+            # 로그 뷰어에 비활성화 신호 전송
+            if hasattr(self.log_viewer_section, 'stop_monitoring'):
+                self.log_viewer_section.stop_monitoring()
+
+            self._log_viewer_activated = False
+            self._logger.info("✅ 로그 뷰어 비활성화 완료")

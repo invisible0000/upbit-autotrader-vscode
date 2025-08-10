@@ -20,7 +20,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from ..widgets.environment_profile_widget import EnvironmentProfileWidget
+from .environment_profile_widget import EnvironmentProfileWidget
 
 
 class EnvironmentProfileSection(QWidget):

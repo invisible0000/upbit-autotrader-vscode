@@ -134,11 +134,22 @@ class ConfigLoader:
                                    environment: Environment) -> ApplicationConfig:
         """딕셔너리에서 ApplicationConfig 객체 생성"""
         try:
+            # LoggingConfig 필드 필터링 (유효한 필드만 전달)
+            logging_data = config_dict.get('logging', {})
+            valid_logging_fields = {
+                'level', 'format', 'file_enabled', 'main_log_path', 'session_log_enabled',
+                'session_log_path', 'llm_log_enabled', 'llm_main_log_path', 'llm_session_log_path',
+                'console_enabled', 'console_level', 'context', 'scope', 'max_log_file_size',
+                'backup_count', 'encoding', 'component_focus', 'feature_development',
+                'llm_briefing_enabled', 'performance_monitoring', 'briefing_update_interval'
+            }
+            filtered_logging_data = {k: v for k, v in logging_data.items() if k in valid_logging_fields}
+
             return ApplicationConfig(
                 environment=environment,
                 database=DatabaseConfig(**config_dict.get('database', {})),
                 upbit_api=UpbitApiConfig(**config_dict.get('upbit_api', {})),
-                logging=LoggingConfig(**config_dict.get('logging', {})),
+                logging=LoggingConfig(**filtered_logging_data),
                 event_bus=EventBusConfig(**config_dict.get('event_bus', {})),
                 trading=TradingConfig(**config_dict.get('trading', {})),
                 ui=UIConfig(**config_dict.get('ui', {}))

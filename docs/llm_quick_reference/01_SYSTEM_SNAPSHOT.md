@@ -2,12 +2,13 @@
 *최종 업데이트: 2025년 8월 10일*
 
 ## ⚡ 30초 요약
-- **아키텍처**: DDD 4계층 (Presentation → Application → Domain ← Infrastructure)
+- **아키텍처**: Hybrid Pattern (DDD 4계층 + Event-Driven Core)
 - **DB**: 3-DB 아키텍처 (settings.sqlite3, strategies.sqlite3, market_data.sqlite3)
 - **UI**: PyQt6 + QSS 테마 시스템
 - **핵심 목표**: 기본 7규칙 전략 완전 구현
 - **로깅**: Infrastructure v4.0 통합 로깅 시스템 (print문 대신 완전 적용)
 - **설정 탭**: MVP 패턴 완전 통일, 호환성 alias 제거 완료
+- **Event-Driven**: 거래/전략/시스템 상태는 Event-Driven, 설정/UI는 MVP
 
 ## 🏗️ 계층별 구현 상태
 
@@ -22,6 +23,7 @@
 - **database/**: DatabaseManager 3-DB 연결 풀링 완성
 - **mappers/**: Entity ↔ Database 변환 with Mock 패턴 완성
 - **logging/**: Infrastructure v4.0 통합 로깅 시스템 완성
+- **events/**: Event-Driven Architecture 완전 구현 (Event Bus, Domain Event Publisher, Event Storage)
 - **테스트**: pytest 기반 34개 테스트 케이스 100% 통과
 
 ### ⚙️ Application Layer: ✅ 88% 완성
@@ -93,7 +95,8 @@
 - **환경변수**: `$env:UPBIT_CONSOLE_OUTPUT='true'` 콘솔 출력 제어
 - **테스트**: 모든 새 기능은 pytest 테스트 케이스 작성 필수
 - **직접 Import**: 실제 클래스명 직접 사용 (별칭 없이)
-- **MVP 패턴**: Presentation Layer는 MVP 패턴 필수 적용
+- **MVP 패턴**: Presentation Layer는 MVP 패턴 필수 적용 (설정/단순 UI)
+- **Event-Driven 패턴**: 거래/전략/시스템 상태는 Event-Driven Architecture 필수 적용
 
 ## 🛠️ 개발 환경 정보
 
@@ -112,15 +115,16 @@ $env:UPBIT_CONSOLE_OUTPUT='true'; $env:UPBIT_LOG_SCOPE='verbose'
 ### 프로젝트 구조 (핵심만)
 ```
 upbit_auto_trading/
-├── domain/           # 💎 순수 비즈니스 로직 (95% 완성)
-├── infrastructure/   # 🔧 외부 시스템 연동 (90% 완성)
-├── application/      # ⚙️ Use Case 조율 (85% 완성)
-└── ui/desktop/       # 🎨 PyQt6 UI (70% 완성)
+├── domain/              # 💎 순수 비즈니스 로직 (95% 완성)
+├── infrastructure/      # 🔧 외부 시스템 연동 + Event System (90% 완성)
+│   └── events/          # 🎭 Event-Driven Architecture (완전 구현)
+├── application/         # ⚙️ Use Case 조율 (85% 완성)
+└── ui/desktop/          # 🎨 PyQt6 UI (70% 완성)
 
-data/                 # 3-DB 아키텍처
-├── settings.sqlite3     # 변수 정의, 파라미터
-├── strategies.sqlite3   # 사용자 전략, 백테스팅 결과
-└── market_data.sqlite3  # 시장 데이터, 지표 캐시
+data/                    # 3-DB 아키텍처
+├── settings.sqlite3        # 변수 정의, 파라미터
+├── strategies.sqlite3      # 사용자 전략, 백테스팅 결과
+└── market_data.sqlite3     # 시장 데이터, 지표 캐시
 ```
 
 ## 📊 핵심 성과 지표

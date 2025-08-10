@@ -61,6 +61,7 @@ class UpbitApiConfig:
 
 
 @dataclass
+@dataclass
 class LoggingConfig:
     """로깅 설정"""
     level: str = "INFO"
@@ -74,6 +75,12 @@ class LoggingConfig:
     scope: str = "normal"         # silent, minimal, normal, verbose, debug_all
     component_focus: Optional[str] = None
 
+    # 새로 추가된 필드들 (프로파일 스위칭을 위해)
+    llm_briefing_enabled: bool = True
+    performance_monitoring: bool = False
+    briefing_update_interval: int = 5
+    feature_development: Optional[str] = None
+
     def __post_init__(self):
         """환경변수에서 로깅 설정 오버라이드"""
         self.context = os.getenv('UPBIT_LOG_CONTEXT', self.context)
@@ -81,6 +88,18 @@ class LoggingConfig:
         self.component_focus = os.getenv('UPBIT_COMPONENT_FOCUS', self.component_focus)
         if os.getenv('UPBIT_CONSOLE_OUTPUT', '').lower() == 'true':
             self.console_enabled = True
+
+        # 새 필드들 환경변수 처리
+        if os.getenv('UPBIT_LLM_BRIEFING_ENABLED'):
+            self.llm_briefing_enabled = os.getenv('UPBIT_LLM_BRIEFING_ENABLED', '').lower() == 'true'
+        if os.getenv('UPBIT_PERFORMANCE_MONITORING'):
+            self.performance_monitoring = os.getenv('UPBIT_PERFORMANCE_MONITORING', '').lower() == 'true'
+        if os.getenv('UPBIT_BRIEFING_UPDATE_INTERVAL'):
+            try:
+                self.briefing_update_interval = int(os.getenv('UPBIT_BRIEFING_UPDATE_INTERVAL', '5'))
+            except ValueError:
+                pass
+        self.feature_development = os.getenv('UPBIT_FEATURE_DEVELOPMENT', self.feature_development)
 
 
 @dataclass

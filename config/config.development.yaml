@@ -14,6 +14,11 @@ logging:
   file_max_size_mb: 50           # 개발환경에서는 작은 로그 파일
   context: "development"          # 개발 컨텍스트
   scope: "verbose"               # 상세 로그 스코프
+  component_focus: ""             # 특정 컴포넌트 집중 (빈 문자열 = 전체)
+  llm_briefing_enabled: true      # LLM 에이전트 브리핑 활성화
+  feature_development: ""         # 기능 개발 컨텍스트
+  performance_monitoring: true    # 개발환경 성능 모니터링
+  briefing_update_interval: 5     # 빠른 브리핑 업데이트 (5초)
 
 # 매매 설정 오버라이드
 trading:

@@ -183,12 +183,16 @@ class SettingsScreen(QWidget):
             self.database_settings = DatabaseSettingsView(self)
             self.logger.debug("💾 데이터베이스 설정 생성 완료 (DatabaseSettingsView - MVP 적용)")
 
-            # 환경 관리 위젯 추가 (프로파일 + 환경변수 통합)
-            from upbit_auto_trading.ui.desktop.screens.settings.widgets.environment_management_widget import (
-                EnvironmentManagementWidget
+            # 환경&로깅 통합 위젯 추가 (TASK-20250809-01 최우선 탭)
+            from upbit_auto_trading.ui.desktop.screens.settings.environment_logging.widgets.environment_logging_widget import (
+                EnvironmentLoggingWidget
             )
-            self.environment_management = EnvironmentManagementWidget(self)
-            self.logger.debug("🌍 환경 관리 통합 위젯 생성 완료")
+            from upbit_auto_trading.ui.desktop.screens.settings.environment_logging.presenters import (
+                EnvironmentLoggingPresenter
+            )
+            self.environment_logging = EnvironmentLoggingWidget(self)
+            self.environment_logging_presenter = EnvironmentLoggingPresenter(self.environment_logging)
+            self.logger.debug("🌍 환경&로깅 통합 위젯 + Presenter 생성 완료 (TASK-20250809-01 최우선)")
 
             self.notification_settings = NotificationSettingsView(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
@@ -208,18 +212,14 @@ class SettingsScreen(QWidget):
             self.logger.error(f"❌ 설정 위젯 생성 실패: {e}")
             self.logger.warning("⚠️ 더미 위젯으로 폴백")
 
-            # 폴백: 간단한 더미 위젯들로 대체
-            self.api_key_manager = QWidget()
-            self.database_settings = QWidget()
-            self.environment_management = QWidget()
-            self.notification_settings = QWidget()
-            self.ui_settings = QWidget()
+            # 환경&로깅 통합 위젯 추가 (TASK-20250809-01 최우선 탭) - 폴백 처리
+            self.environment_logging = QWidget()
 
             # 각 위젯에 임시 레이블 추가
             widgets_info = [
                 (self.api_key_manager, "API 키 관리"),
                 (self.database_settings, "데이터베이스 설정"),
-                (self.environment_management, "환경 관리"),
+                (self.environment_logging, "환경&로깅 통합 (TASK-20250809-01)"),
                 (self.notification_settings, "알림 설정"),
                 (self.ui_settings, "UI 설정")
             ]
@@ -285,9 +285,9 @@ class SettingsScreen(QWidget):
         self.tab_widget.addTab(self.database_settings, "데이터베이스")
         self.logger.debug("💾 데이터베이스 탭 추가 완료")
 
-        # 환경 관리 탭 (프로파일 + 환경변수 통합)
-        self.tab_widget.addTab(self.environment_management, "환경 관리")
-        self.logger.debug("🌍 환경 관리 탭 추가 완료")
+        # 환경&로깅 통합 탭 (TASK-20250809-01 최우선 1순위)
+        self.tab_widget.addTab(self.environment_logging, "환경&로깅")
+        self.logger.debug("🌍 환경&로깅 통합 탭 추가 완료 (TASK-20250809-01 최우선)")
 
         # 알림 탭
         self.tab_widget.addTab(self.notification_settings, "알림")
@@ -385,7 +385,7 @@ class SettingsScreen(QWidget):
     def _on_tab_changed(self, index: int) -> None:
         """탭 변경 시 자동 새로고침 - UX 편의 기능"""
         try:
-            tab_names = ["UI 설정", "API 키", "데이터베이스", "환경 관리", "알림"]
+            tab_names = ["UI 설정", "API 키", "데이터베이스", "환경&로깅", "알림"]
             tab_name = tab_names[index] if 0 <= index < len(tab_names) else f"탭 {index}"
 
             self.logger.debug(f"🔄 탭 변경 감지: {tab_name} (인덱스: {index})")
@@ -439,15 +439,22 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
 
-            elif index == 3:  # 환경 관리 탭
-                self.logger.debug("🌍 환경 관리 탭 선택 - 자동 새로고침 시작")
-                environment_management = getattr(self, 'environment_management', None)
-                if environment_management and hasattr(environment_management, 'refresh_display'):
+            elif index == 3:  # 환경&로깅 탭 (TASK-20250809-01 최우선 + 성능 최적화)
+                self.logger.debug("🌍 환경&로깅 탭 선택 - 로그 뷰어 활성화 시작")
+                environment_logging = getattr(self, 'environment_logging', None)
+                if environment_logging:
                     try:
-                        environment_management.refresh_display()
-                        self.logger.debug("✅ 환경 관리 상태 자동 새로고침 완료")
+                        # 성능 최적화: 로그 뷰어 활성화
+                        if hasattr(environment_logging, 'activate_log_viewer'):
+                            environment_logging.activate_log_viewer()
+                            self.logger.debug("✅ 로그 뷰어 활성화 완료")
+
+                        # 기존 새로고침 기능도 유지
+                        if hasattr(environment_logging, 'refresh_display'):
+                            environment_logging.refresh_display()
+                            self.logger.debug("✅ 환경&로깅 상태 자동 새로고침 완료")
                     except Exception as e:
-                        self.logger.warning(f"⚠️ 환경 관리 새로고침 실패: {e}")
+                        self.logger.warning(f"⚠️ 환경&로깅 탭 활성화 실패: {e}")
 
             elif index == 4:  # 알림 탭
                 self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
@@ -458,6 +465,16 @@ class SettingsScreen(QWidget):
                         self.logger.debug("✅ 알림 설정 자동 새로고침 완료")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
+
+            # 환경&로깅 탭이 아닌 경우 로그 뷰어 비활성화 (리소스 절약)
+            if index != 3:
+                environment_logging = getattr(self, 'environment_logging', None)
+                if environment_logging and hasattr(environment_logging, 'deactivate_log_viewer'):
+                    try:
+                        environment_logging.deactivate_log_viewer()
+                        self.logger.debug("🛑 로그 뷰어 비활성화 (리소스 절약)")
+                    except Exception as e:
+                        self.logger.debug(f"⚠️ 로그 뷰어 비활성화 실패 (무시): {e}")
 
             self.logger.info(f"✅ {tab_name} 탭 자동 새로고침 처리 완료")
 

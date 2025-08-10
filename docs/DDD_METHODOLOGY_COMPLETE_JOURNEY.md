@@ -42,7 +42,7 @@
 - 🏗️ **Clean Architecture** - 계층 분리와 의존성 방향 제어
 - 🔷 **Hexagonal Architecture** - 포트와 어댑터 패턴 (Repository 인터페이스)
 - ⚡ **CQRS (Command Query Responsibility Segregation)** - 명령과 조회 분리
-- 🎭 **Event-Driven Architecture** - 이벤트 기반 설계
+- 🎭 **Event-Driven Architecture** - 이벤트 기반 설계 ⭐**시스템 척추/혈관**
 
 #### **2. 설계 원칙**
 - 🧩 **SOLID Principles** - 단일 책임, 개방-폐쇄, 리스코프 치환, 인터페이스 분리, 의존성 역전

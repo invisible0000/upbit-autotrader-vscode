@@ -5,7 +5,7 @@ database_paths:
     updated_by: DDD_DatabasePathService
   settings:
     path: D:\projects\upbit-autotrader-vscode\data\settings.sqlite3
-    updated_at: '2025-08-10T13:13:04.215615'
+    updated_at: '2025-08-10T20:08:30.276697'
     updated_by: DDD_DatabasePathService
   strategies:
     path: D:\projects\upbit-autotrader-vscode\data\strategies.sqlite3
@@ -17,7 +17,7 @@ databases:
     path: D:\projects\upbit-autotrader-vscode\data\market_data.sqlite3
     source: null
   settings:
-    last_modified: '2025-08-10T13:13:04.196278'
+    last_modified: '2025-08-10T20:08:30.263855'
     path: D:\projects\upbit-autotrader-vscode\data\settings.sqlite3
     source: null
   strategies:
