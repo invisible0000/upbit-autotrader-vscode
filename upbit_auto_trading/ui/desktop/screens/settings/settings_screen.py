@@ -194,6 +194,13 @@ class SettingsScreen(QWidget):
             self.environment_logging_presenter = EnvironmentLoggingPresenter(self.environment_logging)
             self.logger.debug("🌍 환경&로깅 통합 위젯 + Presenter 생성 완료 (TASK-20250809-01 최우선)")
 
+            # Environment Profile 위젯 추가 (Task 3.1-3.2 완료)
+            from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.environment_profile_view import (
+                EnvironmentProfileView
+            )
+            self.environment_profile = EnvironmentProfileView(self)
+            self.logger.debug("⚙️ Environment Profile 위젯 생성 완료 (MVP 패턴 내장, Task 3.1-3.2)")
+
             self.notification_settings = NotificationSettingsView(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
 
@@ -215,11 +222,15 @@ class SettingsScreen(QWidget):
             # 환경&로깅 통합 위젯 추가 (TASK-20250809-01 최우선 탭) - 폴백 처리
             self.environment_logging = QWidget()
 
+            # Environment Profile 위젯 추가 - 폴백 처리
+            self.environment_profile = QWidget()
+
             # 각 위젯에 임시 레이블 추가
             widgets_info = [
                 (self.api_key_manager, "API 키 관리"),
                 (self.database_settings, "데이터베이스 설정"),
                 (self.environment_logging, "환경&로깅 통합 (TASK-20250809-01)"),
+                (self.environment_profile, "Environment Profile (Task 3.1-3.2)"),
                 (self.notification_settings, "알림 설정"),
                 (self.ui_settings, "UI 설정")
             ]
@@ -288,6 +299,10 @@ class SettingsScreen(QWidget):
         # 환경&로깅 통합 탭 (TASK-20250809-01 최우선 1순위)
         self.tab_widget.addTab(self.environment_logging, "환경&로깅")
         self.logger.debug("🌍 환경&로깅 통합 탭 추가 완료 (TASK-20250809-01 최우선)")
+
+        # Environment Profile 탭 (Task 3.1-3.2 완료)
+        self.tab_widget.addTab(self.environment_profile, "프로파일")
+        self.logger.debug("⚙️ Environment Profile 탭 추가 완료 (Task 3.1-3.2)")
 
         # 알림 탭
         self.tab_widget.addTab(self.notification_settings, "알림")
@@ -419,7 +434,6 @@ class SettingsScreen(QWidget):
                         presenter = getattr(self.database_settings, 'presenter', None)
                         if presenter:
                             # 간단한 캐싱 로직 (30초 이내 재조회 방지)
-                            import time
                             current_time = time.time()
                             last_refresh = getattr(presenter, '_last_auto_refresh_time', 0)
 

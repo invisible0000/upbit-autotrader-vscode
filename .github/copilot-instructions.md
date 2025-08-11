@@ -57,15 +57,56 @@ $env:UPBIT_COMPONENT_FOCUS='ComponentName' # 특정 컴포넌트 집중
 
 ### 3. UI 개발 필수 규칙
 
+#### 전역 스타일 관리 시스템 (절대 원칙)
+**모든 UI는 upbit_auto_trading/ui/desktop/common/styles에서 중앙 관리됩니다.**
+```python
+# ✅ DDD+MVP 패턴에서 전역 스타일 사용 (필수)
+from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager
+
+# View Layer (MVP Passive View)
+class EnvironmentProfileView(QWidget):
+    def __init__(self):
+        # 기본 QWidget 스타일 활용 (전역 테마 자동 적용)
+        self.main_splitter = QSplitter()  # 전역 QSplitter 스타일
+
+        # 특수한 경우에만 objectName 설정
+        button.setObjectName("quick_env_button_development")  # 환경별 색상 필요시만
+```
+
+**전역 스타일 디렉토리 구조:**
+```
+upbit_auto_trading/ui/desktop/common/styles/
+├── style_manager.py          # 중앙 스타일 관리자
+├── default_style.qss         # 기본 라이트 테마
+├── dark_style.qss           # 다크 테마
+└── [component]_styles.qss   # 컴포넌트별 확장 스타일 (최소화)
+```
+
+**DDD+MVP 패턴 스타일 적용 원칙:**
+- **View Layer**: 기본 Qt 위젯 스타일 최대 활용
+- **Widget Components**: 표준 objectName 컨벤션 준수
+- **Presenter Layer**: 스타일링 관여 금지 (비즈니스 로직만)
+- **Individual QSS**: 절대 금지 (전역 시스템 일관성 보장)
+
 #### QSS 테마 시스템 (하드코딩 금지)
 ```python
-# ✅ 올바른 방법
+# ✅ 올바른 방법 (DDD+MVP 패턴)
 widget.setObjectName("특정_위젯명")  # QSS 선택자용
+
+# ❌ 절대 금지: 하드코딩된 스타일
+widget.setStyleSheet("background-color: white;")  # 테마 무시
+widget.setStyleSheet("color: #333333;")           # 고정 색상
 
 # ✅ matplotlib 차트 테마 적용 (필수)
 from upbit_auto_trading.ui.desktop.common.theme_notifier import apply_matplotlib_theme_simple
 apply_matplotlib_theme_simple()  # 차트 그리기 전 반드시 호출
 ```
+
+#### 스타일 통일성 보장 원칙
+1. **중앙 집중 관리**: 모든 스타일은 common/styles에서 관리
+2. **테마 일괄 변환**: 라이트/다크 테마 자동 전환 지원
+3. **컴포넌트 확장**: 개별 컴포넌트는 전역 스타일을 확장만 가능
+4. **objectName 표준화**: 표준 네이밍 컨벤션 준수 필수
 
 #### 변수 호환성 3중 카테고리 검증
 - **purpose_category**: trend, momentum, volatility, volume, price
@@ -107,15 +148,43 @@ self._rules.append(rule)
 
 ### 2. UI 스타일링 금지사항
 
-#### 하드코딩된 스타일 금지
+#### UI 스타일링 금지사항
+
+#### 하드코딩된 스타일 금지 (전역 스타일 위반)
 ```python
-# ❌ 금지: 하드코딩된 색상
+# ❌ 금지: 하드코딩된 색상 (전역 테마 시스템 무시)
 widget.setStyleSheet("background-color: white;")
 widget.setStyleSheet("background-color: #2c2c2c;")
+widget.setStyleSheet("color: #333333;")
+
+# ❌ 금지: 컴포넌트별 개별 QSS 파일 생성
+# styles/my_component.qss  # 전역 관리 원칙 위반
+
+# ✅ 필수: 전역 스타일 시스템 사용
+widget.setObjectName("standard_button")  # 표준 objectName
+# common/styles/에서 중앙 관리되는 스타일 적용
 
 # ❌ 금지: 하드코딩된 차트 색상
 ax.plot(data, color='blue')  # 테마 무시
 ax.set_facecolor('white')    # 고정 배경색
+```
+
+#### DDD+MVP 패턴 스타일링 위반 금지
+```python
+# ❌ 금지: Presenter에서 스타일링 관여
+class EnvironmentProfilePresenter:
+    def update_view_style(self):
+        self.view.setStyleSheet("...")  # Presenter는 비즈니스 로직만!
+
+# ❌ 금지: View에서 개별 스타일 파일 로드
+class EnvironmentProfileView(QWidget):
+    def __init__(self):
+        self.load_custom_styles()  # 전역 시스템 무시
+
+# ✅ 필수: View는 기본 Qt 위젯 스타일 활용
+class EnvironmentProfileView(QWidget):
+    def __init__(self):
+        self.main_splitter = QSplitter()  # 전역 QSplitter 스타일 자동 적용
 ```
 
 #### Qt 미지원 CSS 속성 금지
