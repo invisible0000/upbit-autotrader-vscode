@@ -1,0 +1,55 @@
+# Demo Environment Configuration
+# 데모 환경 - 시연 및 교육용 환경
+
+# 프로파일 메타데이터
+profile:
+  name: "데모 환경"
+  description: "시연 및 교육용 안전한 환경"
+  profile_type: "built-in"
+  tags: ["demo", "education", "showcase"]
+  created_at: "2025-08-11"
+  created_from: ""
+
+# 로깅 설정 (시연에 적합) 
+logging:
+  level: "INFO"                         # 정보성 로그 (깔끔한 출력)
+  context: "demo"                       # 데모 컨텍스트
+  scope: "normal"                       # 일반 스코프
+  console_enabled: true                 # 콘솔 출력 활성화
+  component_focus: "TradingEngine"      # 트레이딩 엔진 중심 로그
+  llm_briefing_enabled: true            # LLM 브리핑 활성화 (시연효과)
+  feature_development: "demo"           # 데모 전용 기능
+  performance_monitoring: false         # 성능 모니터링 비활성화
+  briefing_update_interval: 30          # 브리핑 간격 30초
+
+# 데이터베이스 설정 (데모용)
+database:
+  backup_enabled: false                 # 백업 비활성화 (임시 데이터)
+  connection_timeout: 10                # 10초 연결 타임아웃
+  max_connections: 10                   # 10개 연결
+  in_memory_cache: true                 # 인메모리 캐시 활성화
+
+# 트레이딩 설정 (데모 최적화)
+trading:
+  paper_trading: true                   # 가상 거래만 허용
+  max_position_size_krw: 1000000        # 최대 포지션 100만원 (시연용)
+  max_orders_per_minute: 5              # 분당 최대 주문 5개
+  min_order_amount_krw: 10000           # 최소 주문 금액 1만원
+  demo_mode: true                       # 데모 모드 활성화
+  auto_trading_enabled: true            # 자동매매 활성화 (시연용)
+  display_virtual_profits: true         # 가상 수익 표시
+
+# Upbit API 설정 (데모용)
+upbit_api:
+  use_testnet: true                     # 테스트넷 사용
+  rate_limit_delay: 0.5                 # API 호출 간격 0.5초
+  max_retries: 3                        # 최대 재시도 3회
+  mock_responses: true                  # 모의 응답 사용 (인터넷 불필요)
+
+# 데모 전용 설정
+demo_settings:
+  auto_start_trading: true              # 시작 시 자동 거래 시작
+  show_welcome_tutorial: true           # 환영 튜토리얼 표시
+  highlight_features: true              # 주요 기능 강조 표시
+  simplified_ui: true                   # 단순화된 UI
+  demo_data_preload: true               # 데모 데이터 미리 로드

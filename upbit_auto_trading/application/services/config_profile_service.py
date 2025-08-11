@@ -184,6 +184,34 @@ class ProfileSwitcher:
             if old_value != value:
                 logger.debug(f"환경변수 변경: {key} = '{value}' (이전: '{old_value}')")
 
+    # ============================================================================
+    # Task 5.2 호환성 메서드들 - ProfileSwitcher에 추가
+    # ============================================================================
+
+    def get_current_environment(self) -> str:
+        """현재 활성 환경 조회
+
+        Returns:
+            str: 현재 환경명 또는 기본값
+        """
+        if self.current_profile:
+            return self.current_profile
+
+        # 환경변수에서 현재 환경 추론
+        log_context = os.getenv('UPBIT_LOG_CONTEXT', 'development')
+        return log_context
+
+    def switch_profile(self, profile_name: str) -> ProfileSwitchResult:
+        """프로파일 전환 (Task 5.2 호환성 alias)
+
+        Args:
+            profile_name: 전환할 프로파일명
+
+        Returns:
+            ProfileSwitchResult: 전환 결과
+        """
+        return self.switch_to_profile(profile_name)
+
     def get_current_ui_state(self) -> Dict[str, Any]:
         """현재 환경변수 기반 UI 상태 반환
 
@@ -462,3 +490,87 @@ class ConfigProfileService:
         except Exception as e:
             logger.error(f"프로파일 정보 조회 실패 ({profile_name}): {e}")
             return {'name': profile_name, 'description': '정보 조회 실패', 'type': 'unknown'}
+
+    # ============================================================================
+    # Task 5.2 호환성 메서드들 - 기존 시스템과의 완전한 호환을 위해 추가
+    # ============================================================================
+
+    def get_current_environment(self) -> str:
+        """현재 활성 환경 조회
+
+        Returns:
+            str: 현재 환경명 (development, production, testing)
+        """
+        try:
+            return self.profile_switcher.get_current_environment()
+        except Exception as e:
+            logger.error(f"현재 환경 조회 실패: {e}")
+            return "development"  # 기본값
+
+    def switch_environment(self, environment_name: str) -> bool:
+        """환경 전환 (Task 5.2 호환성)
+
+        Args:
+            environment_name: 전환할 환경명
+
+        Returns:
+            bool: 전환 성공 여부
+        """
+        try:
+            result = self.profile_switcher.switch_profile(environment_name)
+            return result.success
+        except Exception as e:
+            logger.error(f"환경 전환 실패 ({environment_name}): {e}")
+            return False
+
+    def get_available_environments(self) -> List[str]:
+        """사용 가능한 환경 목록 조회
+
+        Returns:
+            List[str]: 환경명 리스트
+        """
+        try:
+            # 기본 환경들
+            basic_environments = ['development', 'production', 'testing']
+
+            # 커스텀 프로파일들 추가
+            custom_environments = []
+            if self.custom_profiles_dir.exists():
+                for yaml_file in self.custom_profiles_dir.glob("*.yaml"):
+                    custom_name = f"custom_{yaml_file.stem}"
+                    custom_environments.append(custom_name)
+
+            all_environments = basic_environments + custom_environments
+            logger.debug(f"사용 가능한 환경: {all_environments}")
+            return all_environments
+
+        except Exception as e:
+            logger.error(f"환경 목록 조회 실패: {e}")
+            return ['development', 'production', 'testing']  # 기본값
+
+    def load_environment_config(self, environment_name: str) -> Dict[str, Any]:
+        """환경 설정 로드 (Task 5.2 호환성)
+
+        Args:
+            environment_name: 환경명
+
+        Returns:
+            Dict[str, Any]: 환경 설정 데이터
+        """
+        try:
+            if environment_name.startswith("custom_"):
+                actual_name = environment_name.replace("custom_", "")
+                custom_path = self.custom_profiles_dir / f"{actual_name}.yaml"
+
+                if custom_path.exists():
+                    with open(custom_path, 'r', encoding='utf-8') as f:
+                        return yaml.safe_load(f)
+                else:
+                    logger.warning(f"커스텀 환경 파일 없음: {custom_path}")
+                    return {}
+            else:
+                return self.profile_switcher.config_loader.load_profile(environment_name)
+
+        except Exception as e:
+            logger.error(f"환경 설정 로드 실패 ({environment_name}): {e}")
+            return {}

@@ -204,17 +204,21 @@ class QuickEnvironmentButtons(QWidget):
         return color  # 처리 실패 시 원본 반환
 
     def _on_environment_selected(self, env_key: str) -> None:
-        """환경 선택 이벤트 처리"""
-        if env_key == self._current_environment:
-            # 이미 선택된 환경이면 무시
-            return
+        """환경 선택 이벤트 처리 - 일시적 액션으로 변경"""
+        logger.info(f"🔘 퀵 환경 액션 실행: {env_key}")
 
-        logger.info(f"환경 선택됨: {env_key}")
+        # 🔥 UX 개선: 버튼 일시적 강조 효과
+        button = self._environment_buttons.get(env_key)
+        if button:
+            env_config = self._environment_config[env_key]
+            # 잠시 활성화 스타일 적용
+            self._apply_button_style(button, env_config, is_active=True)
 
-        # 활성 환경 변경
-        self._update_active_environment(env_key)
+            # QTimer를 사용하여 짧은 시간 후 원래 상태로 복원
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(200, lambda: self._apply_button_style(button, env_config, is_active=False))
 
-        # 시그널 발송
+        # 시그널 발송 (상위 컴포넌트에서 콤보박스 업데이트 처리)
         self.environment_selected.emit(env_key)
 
     def _update_active_environment(self, env_key: str) -> None:

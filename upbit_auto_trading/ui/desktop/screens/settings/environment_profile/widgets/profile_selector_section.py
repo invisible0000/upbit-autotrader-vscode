@@ -163,8 +163,10 @@ class ProfileSelectorSection(QWidget):
         group_layout.addWidget(self.profile_description_label)
         group_layout.addWidget(self.profile_tags_label)
         group_layout.addWidget(self.profile_info_label)
-        group_layout.addWidget(QLabel("YAML 미리보기:"))
-        group_layout.addWidget(self.yaml_preview)
+
+        # YAML 미리보기 섹션 숨김 (편집기에서 전체 내용 확인 가능)
+        # group_layout.addWidget(QLabel("YAML 미리보기:"))
+        # group_layout.addWidget(self.yaml_preview)
 
         parent_layout.addWidget(group_box)
 
@@ -227,35 +229,54 @@ class ProfileSelectorSection(QWidget):
         self.refresh_button.clicked.connect(self._on_refresh_button_clicked)
 
     def _on_environment_selected(self, env_key: str) -> None:
-        """퀵 환경 버튼 선택 이벤트 처리"""
-        logger.info(f"퀵 환경 선택됨: {env_key}")
+        """퀵 환경 버튼 선택 이벤트 처리 - 일시적 액션으로 변경"""
+        logger.info(f"🔘 퀵 환경 액션: {env_key}")
 
-        self._current_environment = env_key
+        # 🔥 UX 개선: 퀵 환경 버튼은 "편의 기능"으로 위치 변경
+        # 사용자 요청: "빠른 환경 전환의 버튼은 클릭을 떼면 그냥 원래 색으로 돌아가는게 좋고"
+        # "프로파일 선택 콤보 박스에 선택한 기본 리스트가 되는 로직이면 좋을거 같습니다"
 
-        # 환경에 해당하는 기본 프로파일 자동 선택
+        # 해당 환경의 기본 프로파일 찾기
         default_profile = self._get_default_profile_for_environment(env_key)
         if default_profile:
+            logger.info(f"🎯 퀵 환경 '{env_key}' → 기본 프로파일 '{default_profile}' 선택")
+
+            # 콤보박스에서 해당 프로파일 선택 (이것이 주요 UI 상태가 됨)
             self._select_profile_in_combo(default_profile)
 
-        # 시그널 발송
+            # 콤보박스 선택 변경으로 자동 처리되지만, 확실히 하기 위해 강제 트리거
+            self.profile_selected.emit(default_profile)
+        else:
+            logger.warning(f"⚠️ 환경 '{env_key}'에 대응하는 기본 프로파일이 없습니다")
+
+        # 🔥 중요: 환경 전환 시그널은 참고용으로만 발송 (상태를 고정하지 않음)
         self.environment_quick_switch.emit(env_key)
 
     def _on_profile_combo_changed(self, profile_display_name: str) -> None:
-        """프로파일 콤보박스 변경 이벤트 처리"""
+        """프로파일 콤보박스 변경 이벤트 처리 - 핵심 로직 강화"""
         if not profile_display_name:
+            logger.debug("콤보박스 선택값이 비어있음 - 처리 스킵")
             return
 
         # 표시명에서 실제 프로파일명 추출
         profile_name = self._extract_profile_name_from_display(profile_display_name)
 
-        if profile_name != self._current_profile:
-            logger.info(f"프로파일 선택됨: {profile_name}")
+        logger.info(f"🔄 콤보박스 프로파일 변경: '{profile_display_name}' → '{profile_name}'")
 
-            self._current_profile = profile_name
-            self._update_profile_preview(profile_name)
+        # 🔥 수정: 동일 프로파일이라도 강제 로드 처리 (UI 동기화 보장)
+        logger.info(f"💫 프로파일 선택 강제 처리: {profile_name}")
 
-            # 시그널 발송
-            self.profile_selected.emit(profile_name)
+        # 🔥 1단계: 상태 업데이트
+        self._current_profile = profile_name
+
+        # 🔥 2단계: 프로파일 미리보기 즉시 업데이트
+        self._update_profile_preview(profile_name)
+
+        # 🔥 3단계: 실제 YAML 내용 로드를 위한 시그널 발송 (항상 발송)
+        logger.info(f"🚀 profile_selected 시그널 발송: {profile_name}")
+        self.profile_selected.emit(profile_name)
+
+        logger.info(f"✅ 프로파일 선택 처리 완료: {profile_name}")
 
     def _on_apply_button_clicked(self) -> None:
         """프로파일 적용 버튼 클릭 이벤트"""
@@ -360,39 +381,78 @@ class ProfileSelectorSection(QWidget):
 
     def _update_profile_preview(self, profile_name: str) -> None:
         """프로파일 미리보기 정보 업데이트"""
+        logger.info(f"🎯 프로파일 미리보기 업데이트 시작: {profile_name}")
+
         if profile_name not in self._profiles_data:
+            logger.warning(f"❌ 프로파일 '{profile_name}' 데이터가 없음. 사용 가능한 프로파일: {list(self._profiles_data.keys())}")
             self._clear_profile_preview()
             return
 
         profile_data = self._profiles_data[profile_name]
         metadata = profile_data.get('metadata', {})
 
+        logger.debug(f"📊 프로파일 데이터: {profile_data}")
+        logger.debug(f"📋 메타데이터: {metadata}")
+
         # 프로파일 이름 표시
-        display_name = metadata.get('name', profile_name)
+        if hasattr(metadata, 'name'):
+            display_name = getattr(metadata, 'name', profile_name)
+        else:
+            display_name = metadata.get('name', profile_name)
         self.profile_name_label.setText(f"📄 {display_name}")
+        logger.debug(f"✅ 프로파일명 설정: {display_name}")
 
         # 설명 표시
-        description = metadata.get('description', '설명이 없습니다.')
+        if hasattr(metadata, 'description'):
+            description = getattr(metadata, 'description', '설명이 없습니다.')
+        else:
+            description = metadata.get('description', '설명이 없습니다.')
         self.profile_description_label.setText(description)
+        logger.debug(f"✅ 설명 설정: {description}")
 
         # 태그 표시
-        tags = metadata.get('tags', [])
+        if hasattr(metadata, 'tags'):
+            tags = getattr(metadata, 'tags', [])
+        else:
+            tags = metadata.get('tags', [])
         if tags:
             tags_text = ', '.join([f"#{tag}" for tag in tags])
             self.profile_tags_label.setText(f"태그: {tags_text}")
+            logger.debug(f"✅ 태그 설정: {tags_text}")
         else:
             self.profile_tags_label.setText("태그: 없음")
+            logger.debug("✅ 태그 없음으로 설정")
 
         # 생성 정보 표시
-        created_at = metadata.get('created_at', '')
-        created_from = metadata.get('created_from', '')
+        if hasattr(metadata, 'created_at'):
+            created_at = getattr(metadata, 'created_at', '')
+        else:
+            created_at = metadata.get('created_at', '')
+
+        if hasattr(metadata, 'created_from'):
+            created_from = getattr(metadata, 'created_from', '')
+        else:
+            created_from = metadata.get('created_from', '')
+
+        # created_at이 datetime 객체인 경우 문자열로 변환
+        from datetime import datetime
+        if isinstance(created_at, datetime):
+            created_at = created_at.strftime('%Y-%m-%d')
+        elif not isinstance(created_at, str):
+            created_at = str(created_at) if created_at else ''
+
         if created_at and created_from:
             self.profile_info_label.setText(f"생성: {created_at} (기반: {created_from})")
+            logger.debug(f"✅ 생성정보 설정: {created_at} (기반: {created_from})")
+        elif created_at:
+            self.profile_info_label.setText(f"생성: {created_at}")
+            logger.debug(f"✅ 생성일자만 설정: {created_at}")
         else:
             self.profile_info_label.setText("생성 정보: 없음")
-
-        # YAML 미리보기
+            logger.debug("✅ 생성정보 없음으로 설정")        # YAML 미리보기
         yaml_content = profile_data.get('content', '')
+
+        logger.info(f"🎯 프로파일 미리보기 업데이트 완료: {profile_name}")
         if yaml_content:
             # 처음 5줄만 표시
             preview_lines = yaml_content.split('\n')[:5]

@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QSplitter, QFrame, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from pathlib import Path
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .widgets.profile_selector_section import ProfileSelectorSection
@@ -51,6 +52,9 @@ class EnvironmentProfileView(QWidget):
 
         # MVP Presenter 초기화
         self.presenter = None
+
+        # 🔥 상태 추가: 현재 선택된 프로파일 추적
+        self._current_profile = ""
 
         # UI 초기화
         self._setup_ui()
@@ -185,6 +189,11 @@ class EnvironmentProfileView(QWidget):
                     self.profile_selector.profile_selected.connect(self._on_profile_changed)
                 if hasattr(self.profile_selector, 'profile_apply_requested'):
                     self.profile_selector.profile_apply_requested.connect(self._on_profile_changed)
+
+                # 🔥 핵심 누락 수정: 퀵 환경 전환 시그널 연결
+                if hasattr(self.profile_selector, 'environment_quick_switch'):
+                    self.profile_selector.environment_quick_switch.connect(self._on_environment_quick_switch)
+
                 logger.debug("✅ 프로파일 선택기 시그널 연결 완료")
 
             # YAML 편집기 시그널 연결
@@ -193,6 +202,11 @@ class EnvironmentProfileView(QWidget):
                     self.yaml_editor.save_requested.connect(self._on_save_requested)
                 if hasattr(self.yaml_editor, 'content_changed'):
                     self.yaml_editor.content_changed.connect(self._on_content_changed)
+                # 이슈 2 해결: 편집 모드 요청 시그널 연결 추가
+                if hasattr(self.yaml_editor, 'edit_mode_requested'):
+                    self.yaml_editor.edit_mode_requested.connect(self._on_edit_mode_requested)
+                if hasattr(self.yaml_editor, 'cancel_requested'):
+                    self.yaml_editor.cancel_requested.connect(self._on_cancel_requested)
                 logger.debug("✅ YAML 편집기 시그널 연결 완료")
 
             logger.debug("✅ 모든 시그널 연결 완료")
@@ -202,21 +216,30 @@ class EnvironmentProfileView(QWidget):
 
     # === 시그널 핸들러 ===
 
-    def _on_profile_changed(self, profile_path: str):
-        """프로파일 변경 시 처리"""
-        logger.info(f"📂 프로파일 변경: {profile_path}")
+    def _on_profile_changed(self, profile_name: str):
+        """프로파일 변경 시 처리 - 콤보박스 선택 또는 퀵 버튼 클릭"""
+        logger.info(f"📂 프로파일 변경 요청: {profile_name}")
 
         try:
-            # YAML 편집기에 새 프로파일 로드
-            if self.yaml_editor and profile_path:
-                if hasattr(self.yaml_editor, 'load_file'):
-                    self.yaml_editor.load_file(profile_path)
-                elif hasattr(self.yaml_editor, 'load_profile'):
-                    self.yaml_editor.load_profile(profile_path)
-                logger.debug("✅ YAML 편집기에 프로파일 로드 완료")
+            # 🔥 중요: 상태 먼저 업데이트
+            self._current_profile = profile_name
+
+            # 🔥 핵심 수정: Presenter를 통해 프로파일 로드 처리
+            if self.presenter and profile_name:
+                logger.info(f"🎭 Presenter를 통한 프로파일 로드 시작: {profile_name}")
+                success = self.presenter.load_profile(profile_name)
+                if success:
+                    logger.info(f"✅ Presenter를 통한 프로파일 로드 성공: {profile_name}")
+                else:
+                    logger.warning(f"⚠️ Presenter를 통한 프로파일 로드 실패: {profile_name}")
+            else:
+                logger.warning(f"⚠️ Presenter 없음 또는 프로파일명 없음: presenter={self.presenter}, profile={profile_name}")
+
+            # 🔥 추가: 프로파일 정보 업데이트 (ProfileSelectorSection 미리보기)
+            self._update_profile_info(profile_name, f"config.{profile_name}.yaml")
 
             # 외부에 변경 알림
-            self.profile_changed.emit(profile_path)
+            self.profile_changed.emit(f"config.{profile_name}.yaml")
 
         except Exception as e:
             logger.error(f"❌ 프로파일 변경 처리 실패: {e}")
@@ -227,6 +250,20 @@ class EnvironmentProfileView(QWidget):
         logger.info(f"💾 저장 요청: {filename}")
 
         try:
+            # 실제 파일 저장
+            config_path = f"config/{filename}"
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            logger.info(f"📁 파일 저장 완료: {config_path}")
+
+            # YAML 편집기를 읽기 전용 모드로 전환
+            if self.yaml_editor and hasattr(self.yaml_editor, 'set_edit_mode'):
+                self.yaml_editor.set_edit_mode(False)
+                logger.info("✏️ 편집 모드 종료")
+
+            # 프로파일 선택기와 빠른 환경 버튼 다시 활성화
+            self._set_editing_state(False)
+
             # 프로파일 선택기에 저장 완료 알림
             if self.profile_selector and hasattr(self.profile_selector, 'refresh_profiles'):
                 self.profile_selector.refresh_profiles()
@@ -235,16 +272,126 @@ class EnvironmentProfileView(QWidget):
             # 외부에 저장 완료 알림
             self.content_saved.emit(content, filename)
 
-            logger.info(f"✅ 파일 저장 완료: {filename}")
+            logger.info(f"✅ 파일 저장 및 편집 모드 종료 완료: {filename}")
 
         except Exception as e:
             logger.error(f"❌ 저장 처리 실패: {e}")
             self._on_error_occurred(f"저장 실패: {e}")
 
+    def _set_editing_state(self, editing: bool):
+        """편집 상태에 따른 UI 제어"""
+        try:
+            # 프로파일 선택기 비활성화/활성화
+            if self.profile_selector:
+                if hasattr(self.profile_selector, 'setEnabled'):
+                    self.profile_selector.setEnabled(not editing)
+                    logger.debug(f"🔒 프로파일 선택기 {'비활성화' if editing else '활성화'}")
+
+            # 빠른 환경 버튼 비활성화/활성화
+            if self.profile_selector and hasattr(self.profile_selector, 'quick_env_buttons'):
+                if hasattr(self.profile_selector.quick_env_buttons, 'setEnabled'):
+                    self.profile_selector.quick_env_buttons.setEnabled(not editing)
+                    logger.debug(f"🔒 빠른 환경 버튼 {'비활성화' if editing else '활성화'}")
+
+        except Exception as e:
+            logger.warning(f"UI 상태 변경 중 오류: {e}")
+
+    def _on_edit_mode_requested(self):
+        """편집 모드 요청 처리"""
+        try:
+            # YAML 편집기를 편집 모드로 전환
+            if self.yaml_editor and hasattr(self.yaml_editor, 'set_edit_mode'):
+                self.yaml_editor.set_edit_mode(True)
+                logger.info("✏️ 편집 모드 활성화")
+
+            # 다른 UI 요소들 비활성화
+            self._set_editing_state(True)
+
+        except Exception as e:
+            logger.error(f"❌ 편집 모드 전환 실패: {e}")
+
+    def _on_cancel_requested(self):
+        """편집 취소 요청 처리"""
+        try:
+            # YAML 편집기를 읽기 전용 모드로 전환
+            if self.yaml_editor and hasattr(self.yaml_editor, 'set_edit_mode'):
+                self.yaml_editor.set_edit_mode(False)
+                logger.info("❌ 편집 취소")
+
+            # 다른 UI 요소들 다시 활성화
+            self._set_editing_state(False)
+
+        except Exception as e:
+            logger.error(f"❌ 편집 취소 실패: {e}")
+
     def _on_content_changed(self, content: str):
-        """내용 변경 시 처리 (필요시 확장)"""
-        logger.debug(f"📝 내용 변경됨 ({len(content)} 문자)")
-        # 현재는 로깅만, 필요시 추가 로직 구현
+        """내용 변경 시 처리 (로깅 최적화)"""
+        # 🔥 로깅 최적화: 과도한 디버그 메시지 제거
+        # 사용자 요청: "어마어마한 디버그 메세지를 내보내는데 프로파일 편집중 일부 텍스트 커서의 움직임만 있어도 반응하는 기능이 많은거 같습니다"
+
+        # 내용 변경 시마다 로그를 출력하지 않고, 필요한 경우에만 기록
+        # logger.debug(f"📝 내용 변경됨 ({len(content)} 문자)")  # 제거
+
+        # 현재는 별도 처리 없음, 필요시 확장
+        pass
+
+    def _on_environment_quick_switch(self, environment_name: str):
+        """🔥 퀵 환경 버튼 클릭 시 처리 (핵심 누락 메서드)"""
+        logger.info(f"🔘 퀵 환경 전환 요청: {environment_name}")
+
+        try:
+            # 환경 프로파일 파일 경로 생성
+            config_file = f"config.{environment_name}.yaml"
+            config_path = Path("config") / config_file
+
+            logger.debug(f"📁 설정 파일 경로: {config_path}")
+
+            # 설정 파일 존재 확인
+            if config_path.exists():
+                # 파일 내용 읽기
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                # YAML 편집기에 내용 로드 (실제 메서드명 사용)
+                if self.yaml_editor:
+                    self.yaml_editor.load_file_content(config_file, content)
+                    # 🔥 중요: 기본 프로파일 편집 보호를 위해 프로파일 이름 설정
+                    if hasattr(self.yaml_editor, 'set_current_profile'):
+                        self.yaml_editor.set_current_profile(environment_name)
+                    logger.info(f"✅ {environment_name} 환경 파일 로드 완료")
+
+                # 프로파일 선택기에 활성 환경 설정
+                if self.profile_selector:
+                    self.profile_selector.set_active_environment(environment_name)
+                    logger.debug(f"✅ 활성 환경 설정: {environment_name}")
+
+                # 외부에 환경 변경 알림
+                self.profile_changed.emit(str(config_path))
+
+                logger.info(f"🎯 퀵 환경 전환 완료: {environment_name}")
+
+            else:
+                error_msg = f"설정 파일을 찾을 수 없습니다: {config_file}"
+                logger.error(f"❌ {error_msg}")
+                self._on_error_occurred(error_msg)
+
+        except Exception as e:
+            error_msg = f"환경 전환 실패 ({environment_name}): {e}"
+            logger.error(f"❌ {error_msg}")
+            self._on_error_occurred(error_msg)
+
+    def _update_profile_info(self, profile_name: str, file_path: str):
+        """프로파일 정보 표시 업데이트"""
+        logger.debug(f"📋 프로파일 정보 업데이트: {profile_name}")
+
+        try:
+            # 프로파일 선택기에 현재 선택 상태 반영 (실제 메서드명 사용)
+            if self.profile_selector:
+                self.profile_selector.set_active_profile(profile_name)
+                logger.debug("✅ 프로파일 정보 업데이트 완료")
+
+        except Exception as e:
+            logger.error(f"❌ 프로파일 정보 업데이트 실패: {e}")
 
     def _on_error_occurred(self, error_message: str):
         """에러 발생 시 처리"""
@@ -267,13 +414,15 @@ class EnvironmentProfileView(QWidget):
         logger.info("🔄 데이터 새로고침 시작")
 
         try:
+            # 프로파일 선택기 새로고침 (실제 메서드 사용)
             if self.profile_selector and hasattr(self.profile_selector, 'refresh_profiles'):
                 self.profile_selector.refresh_profiles()
                 logger.debug("✅ 프로파일 목록 새로고침 완료")
 
-            if self.yaml_editor and hasattr(self.yaml_editor, 'refresh_content'):
-                self.yaml_editor.refresh_content()
-                logger.debug("✅ YAML 편집기 새로고침 완료")
+            # Presenter를 통한 새로고침
+            if self.presenter and hasattr(self.presenter, 'refresh_profile_list'):
+                self.presenter.refresh_profile_list()
+                logger.debug("✅ Presenter 새로고침 완료")
 
             logger.info("✅ 데이터 새로고침 완료")
 
@@ -282,16 +431,27 @@ class EnvironmentProfileView(QWidget):
 
     def get_current_profile_path(self) -> str:
         """현재 선택된 프로파일 경로 반환"""
-        if self.profile_selector and hasattr(self.profile_selector, 'get_selected_profile'):
-            return self.profile_selector.get_selected_profile()
-        return ""
+        # ProfileSelectorSection의 실제 메서드 사용
+        if self.profile_selector and hasattr(self.profile_selector, 'get_current_selection'):
+            selection = self.profile_selector.get_current_selection()
+            return selection.get('profile', '')
+        return self._current_profile
 
     def set_current_profile(self, profile_path: str):
         """프로파일 설정"""
         logger.info(f"🎯 프로파일 설정: {profile_path}")
 
-        if self.profile_selector and hasattr(self.profile_selector, 'set_profile'):
-            self.profile_selector.set_profile(profile_path)
+        # 내부 상태 업데이트
+        if '.' in profile_path:  # config.development.yaml 형태
+            profile_name = profile_path.split('.')[1]  # development 추출
+        else:
+            profile_name = profile_path
+
+        self._current_profile = profile_name
+
+        # ProfileSelectorSection의 실제 메서드 사용
+        if self.profile_selector and hasattr(self.profile_selector, 'set_active_profile'):
+            self.profile_selector.set_active_profile(profile_name)
 
     # === MVP Presenter 관련 메서드 ===
 
@@ -322,11 +482,18 @@ class EnvironmentProfileView(QWidget):
             # Presenter → View 시그널 연결
             self.presenter.profile_data_loaded.connect(self._on_presenter_profile_loaded)
             self.presenter.yaml_content_loaded.connect(self._on_presenter_yaml_loaded)
+            self.presenter.profile_list_updated.connect(self._on_presenter_profile_list_updated)  # 🔥 핵심 추가!
             self.presenter.validation_result.connect(self._on_presenter_validation)
             self.presenter.save_completed.connect(self._on_presenter_save_completed)
             self.presenter.error_occurred.connect(self._on_presenter_error)
 
             logger.debug("✅ Presenter 시그널 연결 완료")
+
+            # 🔥 시그널 연결 완료 후 프로파일 목록 수동 요청 (초기화 시점 문제 해결)
+            logger.info("🔄 시그널 연결 완료 후 프로파일 목록 수동 새로고침 요청")
+            if hasattr(self.presenter, 'refresh_profile_list'):
+                self.presenter.refresh_profile_list()
+                logger.debug("✅ 수동 프로파일 목록 새로고침 요청 완료")
 
         except Exception as e:
             logger.error(f"❌ Presenter 시그널 연결 실패: {e}")
@@ -337,17 +504,49 @@ class EnvironmentProfileView(QWidget):
         """Presenter에서 프로파일 데이터 로드 완료"""
         logger.debug(f"📂 Presenter 프로파일 로드: {profile_data.get('name', 'Unknown')}")
 
-        # 프로파일 선택기에 데이터 업데이트
-        if self.profile_selector and hasattr(self.profile_selector, 'update_profile_data'):
-            self.profile_selector.update_profile_data(profile_data)
+        # 🔥 수정: 내부 상태 업데이트만 수행 (ProfileSelectorSection은 자체 로직으로 처리)
+        profile_name = profile_data.get('name', '')
+        if profile_name:
+            self._current_profile = profile_name
+            logger.debug(f"✅ 내부 프로파일 상태 업데이트: {profile_name}")
 
     def _on_presenter_yaml_loaded(self, yaml_content: str):
         """Presenter에서 YAML 내용 로드 완료"""
-        logger.debug(f"📄 Presenter YAML 로드: {len(yaml_content)} 문자")
+        logger.info(f"📄 Presenter YAML 로드 완료: {len(yaml_content)} 문자")
 
         # YAML 편집기에 내용 로드
-        if self.yaml_editor and hasattr(self.yaml_editor, 'set_content'):
-            self.yaml_editor.set_content(yaml_content)
+        if self.yaml_editor and hasattr(self.yaml_editor, 'load_file_content'):
+            if self._current_profile:
+                config_file = f"config.{self._current_profile}.yaml"
+                logger.info(f"🔧 YAML 편집기에 파일 로드: {config_file}")
+                self.yaml_editor.load_file_content(config_file, yaml_content)
+
+                # 🔥 추가: 편집기에 현재 프로파일 설정 (기본 프로파일 보호)
+                if hasattr(self.yaml_editor, 'set_current_profile'):
+                    self.yaml_editor.set_current_profile(self._current_profile)
+                    logger.debug(f"📋 편집기에 현재 프로파일 설정: {self._current_profile}")
+
+                logger.info(f"✅ YAML 편집기에 내용 로드 완료: {config_file}")
+            else:
+                logger.warning("⚠️ 현재 프로파일이 설정되지 않아 YAML 로드 스킵")
+        else:
+            logger.error("❌ YAML 편집기가 없거나 load_file_content 메서드가 없음")
+
+    def _on_presenter_profile_list_updated(self, profiles_data: dict):
+        """Presenter에서 프로파일 목록 업데이트 수신 🔥 핵심 기능!"""
+        logger.info(f"🚀 _on_presenter_profile_list_updated 핸들러 호출됨! {len(profiles_data)}개")
+
+        # 프로파일 선택기의 콤보박스 업데이트
+        if self.profile_selector and hasattr(self.profile_selector, 'load_profiles'):
+            logger.debug("✅ ProfileSelectorSection과 load_profiles 메서드 존재 확인됨")
+
+            # Presenter에서 이미 올바른 딕셔너리 형태로 준비된 데이터를 직접 사용
+            logger.info(f"🚀 load_profiles 호출하기 전: {list(profiles_data.keys())}")
+            self.profile_selector.load_profiles(profiles_data)
+            logger.info(f"✅ 콤보박스 프로파일 목록 업데이트 완료: {len(profiles_data)}개")
+        else:
+            has_method = hasattr(self.profile_selector, 'load_profiles') if self.profile_selector else 'N/A'
+            logger.warning(f"⚠️ 문제 발생: profile_selector={self.profile_selector}, has_load_profiles={has_method}")
 
     def _on_presenter_validation(self, is_valid: bool, message: str):
         """Presenter에서 검증 결과 수신"""
@@ -368,6 +567,3 @@ class EnvironmentProfileView(QWidget):
     def _on_presenter_error(self, error_message: str):
         """Presenter에서 에러 발생"""
         logger.error(f"❌ Presenter 에러: {error_message}")
-
-        # View 레벨에서 에러 처리
-        self._on_error_occurred(error_message)

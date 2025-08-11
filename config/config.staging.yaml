@@ -1,0 +1,44 @@
+# Staging Environment Configuration
+# 스테이징 환경 - 실운영 직전 테스트 환경
+
+# 프로파일 메타데이터
+profile:
+  name: "스테이징 환경"
+  description: "프로덕션 배포 전 최종 검증 환경"
+  profile_type: "built-in"
+  tags: ["staging", "pre-production", "verification"]
+  created_at: "2025-08-11"
+  created_from: ""
+
+# 로깅 설정 (운영 환경과 유사하게 설정)
+logging:
+  level: "INFO"                         # 정보성 로그까지만
+  context: "staging"                    # 스테이징 컨텍스트
+  scope: "normal"                       # 일반 스코프
+  console_enabled: true                 # 콘솔 출력 활성화
+  component_focus: ""                   # 모든 컴포넌트 로그
+  llm_briefing_enabled: false           # LLM 브리핑 비활성화
+  feature_development: ""               # 개발 기능 없음
+  performance_monitoring: true          # 성능 모니터링 활성화
+  briefing_update_interval: 60          # 브리핑 간격 60초
+
+# 데이터베이스 설정 (실운영과 동일하지만 별도 DB)
+database:
+  backup_enabled: true                  # 백업 활성화
+  backup_interval_hours: 12             # 12시간마다 백업
+  connection_timeout: 15                # 15초 연결 타임아웃
+  max_connections: 15                   # 최대 연결 수 제한
+  query_timeout: 10                     # 쿼리 타임아웃 10초
+
+# 트레이딩 설정 (안전한 스테이징 설정)
+trading:
+  paper_trading: true                   # 가상 거래 활성화
+  max_position_size_krw: 500000         # 최대 포지션 50만원
+  max_orders_per_minute: 3              # 분당 최대 주문 3개
+  min_order_amount_krw: 5000            # 최소 주문 금액 5천원
+
+# Upbit API 설정 (스테이징 전용)
+upbit_api:
+  use_testnet: true                     # 테스트넷 사용
+  rate_limit_delay: 0.2                 # API 호출 간격 0.2초
+  max_retries: 2                        # 최대 재시도 2회

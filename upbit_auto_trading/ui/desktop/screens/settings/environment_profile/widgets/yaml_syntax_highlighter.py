@@ -119,7 +119,7 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         logger.debug(f"테마 색상 업데이트 완료 (다크: {is_dark})")
 
     def _setup_highlighting_rules(self) -> None:
-        """구문 강조 규칙 설정"""
+        """고급 구문 강조 규칙 설정"""
         self.highlighting_rules.clear()
 
         # 1. 주석 (# 으로 시작하는 라인)
@@ -130,33 +130,52 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         key_pattern = re.compile(r'^(\s*)([^:\s#]+)(?=\s*:)', re.MULTILINE)
         self.highlighting_rules.append((key_pattern, self.key_format))
 
-        # 3. 문자열 값 (따옴표로 둘러싸인)
-        string_single_pattern = re.compile(r"'[^']*'")
-        string_double_pattern = re.compile(r'"[^"]*"')
+        # 3. 문자열 값 (따옴표로 둘러싸인) - 개선된 패턴
+        string_single_pattern = re.compile(r"'(?:[^'\\]|\\.)*'")  # 이스케이프 문자 지원
+        string_double_pattern = re.compile(r'"(?:[^"\\]|\\.)*"')  # 이스케이프 문자 지원
         self.highlighting_rules.append((string_single_pattern, self.string_format))
         self.highlighting_rules.append((string_double_pattern, self.string_format))
 
-        # 4. 숫자 값
-        number_pattern = re.compile(r'\b-?\d+\.?\d*\b')
+        # 4. 숫자 값 (정수, 소수, 과학표기법)
+        number_pattern = re.compile(r'\b-?(?:\d+\.?\d*(?:[eE][+-]?\d+)?|\.\d+(?:[eE][+-]?\d+)?)\b')
         self.highlighting_rules.append((number_pattern, self.number_format))
 
-        # 5. 불린 값
-        boolean_pattern = re.compile(r'\b(true|false|True|False|yes|no|Yes|No|on|off|On|Off)\b')
+        # 5. 불린 값 (YAML 표준)
+        boolean_pattern = re.compile(r'\b(true|false|True|False|TRUE|FALSE|yes|no|Yes|No|YES|NO|on|off|On|Off|ON|OFF)\b')
         self.highlighting_rules.append((boolean_pattern, self.boolean_format))
 
-        # 6. 널 값
+        # 6. 널 값 (YAML 표준)
         null_pattern = re.compile(r'\b(null|Null|NULL|~)\b')
         self.highlighting_rules.append((null_pattern, self.null_format))
 
-        # 7. 구분자 (콜론, 하이픈)
-        separator_pattern = re.compile(r'[:\-]')
-        self.highlighting_rules.append((separator_pattern, self.separator_format))
+        # 7. YAML 특수 구문
+        # 7a. 문서 시작/끝 구분자
+        doc_separator_pattern = re.compile(r'^(---|\.\.\.)\s*$', re.MULTILINE)
+        self.highlighting_rules.append((doc_separator_pattern, self.separator_format))
 
-        logger.debug(f"구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙")
+        # 7b. 배열 항목 (-로 시작)
+        array_pattern = re.compile(r'^(\s*)(-)\s+')
+        self.highlighting_rules.append((array_pattern, self.separator_format))
+
+        # 7c. 콜론 구분자
+        colon_pattern = re.compile(r':(?=\s|$)')
+        self.highlighting_rules.append((colon_pattern, self.separator_format))
+
+        # 8. YAML 참조 및 앵커 (고급 기능)
+        anchor_pattern = re.compile(r'&\w+')  # 앵커 정의
+        reference_pattern = re.compile(r'\*\w+')  # 참조
+        self.highlighting_rules.append((anchor_pattern, self.key_format))  # 키와 같은 색상
+        self.highlighting_rules.append((reference_pattern, self.key_format))
+
+        # 9. 멀티라인 문자열 표시자
+        multiline_pattern = re.compile(r'[|>][-+]?\d*\s*$')
+        self.highlighting_rules.append((multiline_pattern, self.separator_format))
+
+        logger.debug(f"고급 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙")
 
     def highlightBlock(self, text):
         """
-        텍스트 블록에 구문 강조 적용
+        텍스트 블록에 고급 구문 강조 적용
 
         Args:
             text: 강조할 텍스트 라인
@@ -179,11 +198,36 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
                     key_end = match.end(2)
                     self.setFormat(key_start, key_end - key_start, char_format)
 
-            # 나머지 패턴들
+            # 배열 항목 패턴 (- 기호만 강조)
+            elif pattern.pattern == r'^(\s*)(-)\s+':
+                match = pattern.search(text)
+                if match:
+                    # 그룹 2 (- 기호)만 강조
+                    dash_start = match.start(2)
+                    dash_end = match.end(2)
+                    self.setFormat(dash_start, dash_end - dash_start, char_format)
+
+            # 문서 구분자 패턴 (전체 매치)
+            elif pattern.pattern == r'^(---|\.\.\.)\s*$':
+                match = pattern.search(text)
+                if match:
+                    start, end = match.span()
+                    self.setFormat(start, end - start, char_format)
+
+            # 나머지 패턴들 (일반 처리)
             else:
                 for match in pattern.finditer(text):
                     start, end = match.span()
                     self.setFormat(start, end - start, char_format)
+
+        # 현재 라인 강조 (선택적)
+        if text:  # None 체크
+            self._highlight_current_line_if_needed(text)
+
+    def _highlight_current_line_if_needed(self, text: str) -> None:
+        """현재 편집 중인 라인 미묘하게 강조 (선택적 기능)"""
+        # 이 기능은 현재 비활성화 - 필요시 구현
+        pass
 
     def highlight_error_line(self, line_number: int) -> None:
         """
@@ -206,7 +250,8 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         """모든 오류 강조 제거"""
         if self.document():
             self.rehighlight()
-            logger.debug("모든 오류 강조 제거")
+            # 🔥 로깅 최적화: 과도한 DEBUG 메시지 제거
+            # logger.debug("모든 오류 강조 제거")  # 제거됨 - 너무 빈번하게 호출
 
     def _on_theme_changed(self, is_dark: bool) -> None:
         """

@@ -1,0 +1,120 @@
+# 📌 MASTER_PROMPT v3 — Copilot Agent (docs 키워드는 맨 아래)
+> 업비트 자동매매 · Python · PyQt6 · DDD + MVP + Event-Driven · DTO · TDD · Logging · **dry-run 기본**
+
+---
+
+## 1) 역할(Role)
+너는 VS Code **GitHub Copilot 에이전트**다. 이 프로젝트는 업비트(Upbit) API를 사용하는 **GUI 기반 자동매매** 앱이다. 아키텍처는 **DDD 4계층 + MVP + Event-Driven(일부)** 혼합 패턴이다.
+
+## 2) 목표(Objective)
+`<이번 작업의 한 줄 목표>`를 **구현/리팩터링/검수**한다.  
+반드시 **중복 구현 방지**, **계층 규칙 준수**, **테스트 동반**을 지켜라.
+
+---
+
+## 3) 필수 수행(✅ Must Do)
+- **TDD 우선(First)**: 테스트 스텁 → 최소 구현 → 리팩터링(Refactor) 순서. `pytest` 기반 Given–When–Then.
+- **DTO 엄격(Strict DTO)**: 계층 간 데이터 전달은 `@dataclass(frozen=True)` 선호, 타입힌트(typing) 명확.
+- **로깅 표준(Logging, print 금지)**: `from ...infrastructure.logging import create_component_logger` 로 컴포넌트 로거 생성.  
+  환경변수로 레벨/스코프 제어(`UPBIT_CONSOLE_OUTPUT`, `UPBIT_LOG_SCOPE`, `UPBIT_COMPONENT_FOCUS`).
+- **파일명 연속성(File name continuity)**: 교체 시 `original_legacy.py` 백업 후 **원래 파일명 유지**. 임시 접두어(`temp_`, `new_` 등) 금지.
+- **3-DB 아키텍처**: `settings.sqlite3 / strategies.sqlite3 / market_data.sqlite3` 분리. DB 접근은 **Infrastructure만**.
+- **QSS 전역 스타일(Global styles)**: UI 스타일은 `ui/desktop/common/styles`에서 중앙 관리.  
+  개별 위젯은 `objectName`만 부여. **하드코딩 색상/개별 QSS 금지**. Matplotlib는 전역 테마 함수 호출 후 그리기.
+- **변수 호환성(Compatibility)**: `purpose_category / chart_category / comparison_group` 3중 체계.  
+  **동일 comparison_group끼리만 직접 비교**(price/percentage/zero-centered).
+- **Upbit 안전가드(Safety)**:  
+  - **기본 모드** `dry_run=True`. 실거래는 `dry_run=False + 2단계 확인`이 있을 때만.  
+  - **Rate limit/Backoff**, 네트워크/거절/정지 분기 처리.  
+  - **Decimal** 정밀도 고정 및 반올림 규칙 일관.  
+  - **키/시크릿**은 환경변수. 코드/로그/테스트에 노출 금지.
+- **재사용 우선(Reuse-first)**: 기존 UseCase/Service/Repository/Widget 재사용 여부를 **먼저** 탐색.
+
+---
+
+## 4) 금지 사항(⛔ Must Not Do)
+- **계층 위반**:  
+  - Domain에서 `sqlite3`, `requests`, `PyQt6` import 금지.  
+  - Presenter(UI)에서 DB/HTTP/비즈니스 로직 수행 금지(UseCase만 호출).  
+  - Application에서 UI 직접 조작 금지.
+- **print 사용**: 전역 로깅 시스템 대신 `print()` 호출 금지.
+- **호환성 alias**: `import X as Y`로 뷰/컴포넌트 별칭 제공 금지(투명성 저하).
+- **폴백(Fallback)로 에러 숨김**: `try/except`로 모듈/도메인 규칙 실패를 삼키는 코드 금지.  
+  도메인 규칙 위반은 `DomainRuleViolation` 등 **맥락형 예외**로 즉시 전파.
+- **Event-Driven/MVP 혼용 남용**: 단순 설정/UI 상호작용에 Event-Bus 사용 금지. 거래/전략/시스템 상태에 한정.
+
+---
+
+## 5) 아키텍처 가드레일(Architecture Guardrails)
+- 의존성 방향: **Presentation → Application → Domain ← Infrastructure**.  
+- Presenter ⇢ UseCase 호출만, Repository **Interface**에만 의존.  
+- Event-Driven은 거래/전략/시스템 상태 전파용. 설정·정적 UI는 **MVP** 고정.
+
+---
+
+## 6) Socratic 질문(최대 3개)
+1) **핵심 시나리오 + 엣지 케이스**는?  
+2) **실행 맥락**(dry-run/실거래, 심볼, 타임프레임)은?  
+3) **재사용 후보**(기존 유사 기능/컴포넌트)는?
+
+> 💡 답변이 없으면 아래 **기본 가정(Default Assumptions)** 적용.
+
+---
+
+## 7) 기본 가정(Default Assumptions)
+- 심볼: `KRW-BTC`, 타임프레임: `1m/5m/15m`.  
+- 주문은 **dry-run**, 수수료 0.05%, 슬리피지 1틱.  
+- DB: 로컬 SQLite(3-DB), 로깅: `create_component_logger`, `print` 금지.  
+- Decimal 정밀도 고정, 레이트리밋 백오프 준수.
+
+---
+
+## 8) 출력 계약(Output Contract · MUST)
+1. **Plan**: 목표·범위·의존성·리스크(짧게).  
+2. **Planned Changes**: `A/M/D · 경로 · 한줄 요약`.  
+3. **Diff**: 파일별 unified diff.  
+4. **Tests**: 테스트 코드 + 실행 커맨드(`pytest` 라인).  
+5. **Verify & Rollback**: 수동 검증 체크리스트 + 복구 절차.  
+6. (선택) **Trade-off Table**: 복잡 의사결정 시 2안 이상 비교.
+
+---
+
+## 9) 실행·검증(Finalize)
+- 순서: `pytest -q` → `python run_desktop_ui.py`.  
+- 완료 후 `02_IMPLEMENTATION_MAP.md` 업데이트.
+
+---
+
+## 10) 작업 입력(Task Input)
+- 작업 타입: `<build | refactor | review | design>`  
+- 목표: `<한 줄>`  
+- 수용 기준(Acceptance Criteria): `<불변 조건 목록>`  
+- 제약사항: `<성능/보안/레거시 호환 등>`
+
+---
+
+## 11) 운영 체크(Quick Ops)
+- **현황 파악**: 기존 구현/재사용 후보를 먼저 검색(Ctrl+F).  
+- **계층 위반 자가검사**:  
+  - Domain에 `sqlite3 / requests / from PyQt6`가 없어야 함.  
+  - Presenter에서 DB 호출/직접 SQL/`print(` 사용 없어야 함.  
+- **UI 스타일 자가검사**: 개별 `setStyleSheet()`/하드코딩 색상 금지, 전역 QSS만.
+
+---
+
+## 12) 검증 명령(Ready-to-Run)
+```powershell
+# UI 통합 점검
+python run_desktop_ui.py
+
+# 3-DB 상태 확인
+python tools/super_db_table_viewer.py settings
+python tools/super_db_table_viewer.py strategies
+python tools/super_db_table_viewer.py market_data
+
+# 계층 위반/프린트 탐지
+grep -r "import sqlite3\|import requests\|from PyQt6" upbit_auto_trading/domain/
+grep -r "print(" upbit_auto_trading/ --exclude-dir=tests --exclude-dir=tools
+
+# 테스트
+pytest -q

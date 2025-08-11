@@ -1,6 +1,15 @@
 # Development Environment Overrides
 # 개발 환경 전용 설정 - 디버깅 친화적 설정
 
+# 프로파일 메타데이터
+profile:
+  name: "개발 환경"
+  description: "개발 및 디버깅용 환경 설정"
+  profile_type: "built-in"
+  tags: ["development", "debug", "testing"]
+  created_at: "2025-08-11"
+  created_from: ""
+
 # 데이터베이스 설정 오버라이드
 database:
   backup_enabled: false           # 개발환경에서는 백업 비활성화

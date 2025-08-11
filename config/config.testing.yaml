@@ -1,6 +1,15 @@
 # Testing Environment Overrides
 # 테스트 환경 전용 설정 - 격리된 테스트 환경
 
+# 프로파일 메타데이터
+profile:
+  name: "테스트 환경"
+  description: "자동화된 테스트 및 검증용 환경"
+  profile_type: "built-in"
+  tags: ["testing", "automation", "validation"]
+  created_at: "2025-08-11"
+  created_from: ""
+
 # 데이터베이스 설정 오버라이드 (인메모리)
 database:
   settings_db_path: ":memory:"      # 인메모리 설정 DB

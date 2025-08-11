@@ -1,0 +1,55 @@
+# Debug Environment Configuration
+# 디버그 환경 - 상세한 디버깅을 위한 환경
+
+# 프로파일 메타데이터
+profile:
+  name: "디버그 환경"
+  description: "상세한 로깅과 디버깅을 위한 환경"
+  profile_type: "built-in"
+  tags: ["debug", "verbose", "troubleshooting"]
+  created_at: "2025-08-11"
+  created_from: ""
+
+# 로깅 설정 (디버깅에 최적화)
+logging:
+  level: "DEBUG"                        # 모든 디버그 로그 출력
+  context: "debug"                      # 디버그 컨텍스트
+  scope: "verbose"                      # 상세 스코프
+  console_enabled: true                 # 콘솔 출력 필수
+  component_focus: ""                   # 모든 컴포넌트 상세 로그
+  llm_briefing_enabled: true            # LLM 브리핑 활성화
+  feature_development: "experimental"   # 실험적 기능 활성화
+  performance_monitoring: true          # 성능 프로파일링 활성화
+  briefing_update_interval: 10          # 브리핑 간격 10초 (빠른 업데이트)
+
+# 데이터베이스 설정 (디버깅 최적화)
+database:
+  backup_enabled: false                 # 백업 비활성화 (빠른 테스트)
+  connection_timeout: 30                # 긴 타임아웃 (디버깅용)
+  max_connections: 5                    # 적은 연결 수 (리소스 절약)
+  query_logging: true                   # 쿼리 로깅 활성화
+  slow_query_threshold: 1.0             # 1초 이상 쿼리 로깅
+
+# 트레이딩 설정 (안전한 디버그 설정)
+trading:
+  paper_trading: true                   # 반드시 가상 거래
+  max_position_size_krw: 100000         # 최대 포지션 10만원
+  max_orders_per_minute: 1              # 분당 최대 주문 1개 (안전)
+  min_order_amount_krw: 1000            # 최소 주문 금액 1천원
+  debug_mode: true                      # 트레이딩 디버그 모드
+  simulation_delay: 2.0                 # 시뮬레이션 딜레이 2초
+
+# Upbit API 설정 (디버깅 전용)
+upbit_api:
+  use_testnet: true                     # 테스트넷 필수
+  rate_limit_delay: 1.0                 # API 호출 간격 1초 (여유롭게)
+  max_retries: 5                        # 최대 재시도 5회 (디버깅용)
+  debug_requests: true                  # API 요청 디버깅
+  log_responses: true                   # API 응답 로깅
+
+# 개발자 도구 설정
+developer_tools:
+  enable_profiler: true                 # 성능 프로파일러 활성화
+  memory_monitoring: true               # 메모리 모니터링
+  execution_time_logging: true          # 실행 시간 로깅
+  step_by_step_debugging: true          # 단계별 디버깅

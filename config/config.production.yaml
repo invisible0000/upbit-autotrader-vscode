@@ -1,6 +1,15 @@
 # Production Environment Overrides
 # 프로덕션 환경 전용 설정 - 실운영 최적화 설정
 
+# 프로파일 메타데이터
+profile:
+  name: "프로덕션 환경"
+  description: "실운영 거래를 위한 안정화된 환경"
+  profile_type: "built-in"
+  tags: ["production", "live-trading", "stable"]
+  created_at: "2025-08-11"
+  created_from: ""
+
 # 데이터베이스 설정 오버라이드 (안정성 중심)
 database:
   backup_enabled: true              # 프로덕션 백업 필수

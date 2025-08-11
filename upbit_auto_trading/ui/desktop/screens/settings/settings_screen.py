@@ -8,7 +8,7 @@ Infrastructure Layer Enhanced Logging v4.0 시스템과 완전히 통합되었�
 Phase 2 마이그레이션 적용:
 - API 설정: api_settings/ 폴더 구조 (DDD + MVP 패턴)
 - Database 설정: database_settings/ 폴더 구조 (Phase 1 완료)
-- Environment 로깅: environment_logging/ 폴더 구조 (기존 완료)
+- Environment 프로파일: environment_profile/ 폴더 구조 (TASK 4.3 완료)
 """
 
 import time
@@ -183,23 +183,16 @@ class SettingsScreen(QWidget):
             self.database_settings = DatabaseSettingsView(self)
             self.logger.debug("💾 데이터베이스 설정 생성 완료 (DatabaseSettingsView - MVP 적용)")
 
-            # 환경&로깅 통합 위젯 추가 (TASK-20250809-01 최우선 탭)
-            from upbit_auto_trading.ui.desktop.screens.settings.environment_logging.widgets.environment_logging_widget import (
-                EnvironmentLoggingWidget
-            )
-            from upbit_auto_trading.ui.desktop.screens.settings.environment_logging.presenters import (
-                EnvironmentLoggingPresenter
-            )
-            self.environment_logging = EnvironmentLoggingWidget(self)
-            self.environment_logging_presenter = EnvironmentLoggingPresenter(self.environment_logging)
-            self.logger.debug("🌍 환경&로깅 통합 위젯 + Presenter 생성 완료 (TASK-20250809-01 최우선)")
-
-            # Environment Profile 위젯 추가 (Task 3.1-3.2 완료)
+            # Environment Profile 위젯 추가 (Task 4.3 완료 - 레거시 교체)
             from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.environment_profile_view import (
                 EnvironmentProfileView
             )
+            from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.presenters import (
+                EnvironmentProfilePresenter
+            )
             self.environment_profile = EnvironmentProfileView(self)
-            self.logger.debug("⚙️ Environment Profile 위젯 생성 완료 (MVP 패턴 내장, Task 3.1-3.2)")
+            self.environment_profile_presenter = EnvironmentProfilePresenter(self.environment_profile)
+            self.logger.debug("⚙️ Environment Profile 위젯 + Presenter 생성 완료 (Task 4.3 - DDD+MVP 패턴)")
 
             self.notification_settings = NotificationSettingsView(self)
             self.logger.debug("🔔 알림 설정 생성 완료")
@@ -219,18 +212,14 @@ class SettingsScreen(QWidget):
             self.logger.error(f"❌ 설정 위젯 생성 실패: {e}")
             self.logger.warning("⚠️ 더미 위젯으로 폴백")
 
-            # 환경&로깅 통합 위젯 추가 (TASK-20250809-01 최우선 탭) - 폴백 처리
-            self.environment_logging = QWidget()
-
-            # Environment Profile 위젯 추가 - 폴백 처리
+            # Environment Profile 위젯 추가 (Task 4.3 완료 - 레거시 대체) - 폴백 처리
             self.environment_profile = QWidget()
 
             # 각 위젯에 임시 레이블 추가
             widgets_info = [
                 (self.api_key_manager, "API 키 관리"),
                 (self.database_settings, "데이터베이스 설정"),
-                (self.environment_logging, "환경&로깅 통합 (TASK-20250809-01)"),
-                (self.environment_profile, "Environment Profile (Task 3.1-3.2)"),
+                (self.environment_profile, "Environment Profile (Task 4.3 - 레거시 대체)"),
                 (self.notification_settings, "알림 설정"),
                 (self.ui_settings, "UI 설정")
             ]
@@ -296,11 +285,7 @@ class SettingsScreen(QWidget):
         self.tab_widget.addTab(self.database_settings, "데이터베이스")
         self.logger.debug("💾 데이터베이스 탭 추가 완료")
 
-        # 환경&로깅 통합 탭 (TASK-20250809-01 최우선 1순위)
-        self.tab_widget.addTab(self.environment_logging, "환경&로깅")
-        self.logger.debug("🌍 환경&로깅 통합 탭 추가 완료 (TASK-20250809-01 최우선)")
-
-        # Environment Profile 탭 (Task 3.1-3.2 완료)
+        # Environment Profile 탭 (Task 3.1-3.2 완료) - 유일한 프로파일 탭
         self.tab_widget.addTab(self.environment_profile, "프로파일")
         self.logger.debug("⚙️ Environment Profile 탭 추가 완료 (Task 3.1-3.2)")
 
@@ -453,22 +438,22 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
 
-            elif index == 3:  # 환경&로깅 탭 (TASK-20250809-01 최우선 + 성능 최적화)
-                self.logger.debug("🌍 환경&로깅 탭 선택 - 로그 뷰어 활성화 시작")
-                environment_logging = getattr(self, 'environment_logging', None)
-                if environment_logging:
+            elif index == 3:  # 프로파일 탭 (Task 4.3 완료)
+                self.logger.debug("⚙️ 프로파일 탭 선택 - 프로파일 데이터 로드 시작")
+                environment_profile = getattr(self, 'environment_profile', None)
+                if environment_profile:
                     try:
-                        # 성능 최적화: 로그 뷰어 활성화
-                        if hasattr(environment_logging, 'activate_log_viewer'):
-                            environment_logging.activate_log_viewer()
-                            self.logger.debug("✅ 로그 뷰어 활성화 완료")
+                        # 프로파일 목록 새로고침
+                        if hasattr(environment_profile, 'refresh_profiles'):
+                            environment_profile.refresh_profiles()
+                            self.logger.debug("✅ 프로파일 목록 새로고침 완료")
 
-                        # 기존 새로고침 기능도 유지
-                        if hasattr(environment_logging, 'refresh_display'):
-                            environment_logging.refresh_display()
-                            self.logger.debug("✅ 환경&로깅 상태 자동 새로고침 완료")
+                        # 위젯 상태 업데이트
+                        if hasattr(environment_profile, 'refresh_display'):
+                            environment_profile.refresh_display()
+                            self.logger.debug("✅ 프로파일 상태 자동 새로고침 완료")
                     except Exception as e:
-                        self.logger.warning(f"⚠️ 환경&로깅 탭 활성화 실패: {e}")
+                        self.logger.warning(f"⚠️ 프로파일 탭 활성화 실패: {e}")
 
             elif index == 4:  # 알림 탭
                 self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
@@ -480,15 +465,15 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
 
-            # 환경&로깅 탭이 아닌 경우 로그 뷰어 비활성화 (리소스 절약)
-            if index != 3:
-                environment_logging = getattr(self, 'environment_logging', None)
-                if environment_logging and hasattr(environment_logging, 'deactivate_log_viewer'):
+            # 환경 프로파일 탭이 아닌 경우 리소스 절약을 위한 정리 (옵션)
+            if index != 2:
+                environment_profile = getattr(self, 'environment_profile', None)
+                if environment_profile and hasattr(environment_profile, 'cleanup_resources'):
                     try:
-                        environment_logging.deactivate_log_viewer()
-                        self.logger.debug("🛑 로그 뷰어 비활성화 (리소스 절약)")
+                        environment_profile.cleanup_resources()
+                        self.logger.debug("🛑 환경 프로파일 리소스 정리 (절약)")
                     except Exception as e:
-                        self.logger.debug(f"⚠️ 로그 뷰어 비활성화 실패 (무시): {e}")
+                        self.logger.debug(f"⚠️ 환경 프로파일 리소스 정리 실패 (무시): {e}")
 
             self.logger.info(f"✅ {tab_name} 탭 자동 새로고침 처리 완료")
 
