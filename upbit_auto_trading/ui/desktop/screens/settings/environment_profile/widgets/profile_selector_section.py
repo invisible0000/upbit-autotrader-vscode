@@ -82,10 +82,14 @@ class ProfileSelectorSection(QWidget):
         layout.addStretch()
 
     def _create_quick_environment_section(self, parent_layout: QVBoxLayout) -> None:
-        """퀵 환경 버튼 섹션 생성"""
+        """퀵 환경 전환 섹션 생성"""
         # 그룹박스로 감싸기
         group_box = QGroupBox("빠른 환경 전환")
         group_box.setObjectName("quick_env_group")
+
+        # 그룹박스도 Expanding 정책 설정하여 자식 확장 허용
+        from PyQt6.QtWidgets import QSizePolicy
+        group_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         group_layout = QVBoxLayout(group_box)
         group_layout.setContentsMargins(10, 10, 10, 10)
@@ -101,6 +105,10 @@ class ProfileSelectorSection(QWidget):
         # 그룹박스로 감싸기
         group_box = QGroupBox("프로파일 선택")
         group_box.setObjectName("profile_selection_group")
+
+        # 형제 위젯들과 동일한 Expanding 정책 설정
+        from PyQt6.QtWidgets import QSizePolicy
+        group_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         group_layout = QVBoxLayout(group_box)
         group_layout.setContentsMargins(10, 10, 10, 10)
@@ -124,6 +132,10 @@ class ProfileSelectorSection(QWidget):
         # 그룹박스로 감싸기
         group_box = QGroupBox("프로파일 정보")
         group_box.setObjectName("profile_preview_group")
+
+        # 형제 위젯들과 동일한 Expanding 정책 설정
+        from PyQt6.QtWidgets import QSizePolicy
+        group_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         group_layout = QVBoxLayout(group_box)
         group_layout.setContentsMargins(10, 10, 10, 10)
@@ -175,6 +187,10 @@ class ProfileSelectorSection(QWidget):
         # 그룹박스로 감싸기
         group_box = QGroupBox("프로파일 관리")
         group_box.setObjectName("profile_actions_group")
+
+        # 형제 위젯들과 동일한 Expanding 정책 설정
+        from PyQt6.QtWidgets import QSizePolicy
+        group_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
         group_layout = QVBoxLayout(group_box)
         group_layout.setContentsMargins(10, 10, 10, 10)

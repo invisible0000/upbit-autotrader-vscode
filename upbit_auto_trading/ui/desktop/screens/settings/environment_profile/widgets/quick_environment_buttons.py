@@ -15,10 +15,9 @@ Features:
 
 from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QPushButton, QLabel
+    QWidget, QHBoxLayout, QPushButton
 )
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -79,39 +78,34 @@ class QuickEnvironmentButtons(QWidget):
         """UI 기본 구조 설정"""
         self._main_layout = QHBoxLayout(self)
         self._main_layout.setContentsMargins(5, 5, 5, 5)
-        self._main_layout.setSpacing(10)
-
-        # 제목 레이블
-        title_label = QLabel("빠른 환경 전환")
-        title_label.setObjectName("quick_env_title")
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(10)
-        title_label.setFont(font)
-
-        self._main_layout.addWidget(title_label)
-        self._main_layout.addStretch()  # 버튼들을 오른쪽으로 밀기
+        self._main_layout.setSpacing(8)
 
     def _create_environment_buttons(self) -> None:
-        """환경 버튼들 생성"""
+        """환경 버튼들 생성 - 테스트에서 성공한 방법 적용"""
         for env_key, env_config in self._environment_config.items():
             button = self._create_environment_button(env_key, env_config)
             self._environment_buttons[env_key] = button
-            self._main_layout.addWidget(button)
+            # 테스트에서 성공한 방법: stretch 파라미터 사용
+            self._main_layout.addWidget(button, 1)
 
     def _create_environment_button(self, env_key: str, env_config: Dict[str, Any]) -> QPushButton:
-        """개별 환경 버튼 생성"""
+        """개별 환경 버튼 생성 - 명시적 폭 설정으로 늘어남 강제"""
         button = QPushButton()
         button.setObjectName(f"quick_env_button_{env_key}")
+
+        # 테스트에서 효과적이었던 설정들 적용
+        button.setAutoDefault(False)  # autoDefault 해제
+        from PyQt6.QtWidgets import QSizePolicy
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        # 명시적 폭 설정 - 🔥 디버깅 결과: setMaximumWidth() 제거!
+        button.setMinimumWidth(120)   # 최소 폭 설정
+        # button.setMaximumWidth(600) 주석처리 - 이것이 stretch를 방해하는 주범!
 
         # 버튼 텍스트 설정
         icon = env_config["icon"]
         display_name = env_config["display_name"]
         button.setText(f"{icon} {display_name}")
-
-        # 기본 스타일 설정
-        button.setMinimumSize(80, 35)
-        button.setMaximumSize(100, 35)
 
         # 툴팁 설정
         button.setToolTip(f"{env_config['description']} 환경으로 전환")
@@ -125,11 +119,11 @@ class QuickEnvironmentButtons(QWidget):
         return button
 
     def _apply_button_style(self, button: QPushButton, env_config: Dict[str, Any], is_active: bool) -> None:
-        """버튼 스타일 적용"""
+        """버튼 스타일 적용 - 완전 기본 상태 (크기 설정 없음)"""
         base_color = env_config["color"]
 
         if is_active:
-            # 활성 상태 스타일
+            # 활성 상태 스타일 - 🧪 실험2: 전역 CSS max-width 명시적 오버라이드
             button.setStyleSheet(f"""
                 QPushButton#{button.objectName()} {{
                     background-color: {base_color};
@@ -137,7 +131,9 @@ class QuickEnvironmentButtons(QWidget):
                     border: 2px solid {self._darken_color(base_color, 0.3)};
                     border-radius: 4px;
                     font-weight: bold;
-                    padding: 2px 8px;
+                    padding: 6px 12px;
+                    max-width: none;
+                    min-width: 120px;
                 }}
                 QPushButton#{button.objectName()}:hover {{
                     background-color: {self._darken_color(base_color, 0.1)};
@@ -147,7 +143,7 @@ class QuickEnvironmentButtons(QWidget):
                 }}
             """)
         else:
-            # 비활성 상태 스타일
+            # 비활성 상태 스타일 - 🧪 실험2: 전역 CSS max-width 명시적 오버라이드
             light_color = self._lighten_color(base_color, 0.8)
             button.setStyleSheet(f"""
                 QPushButton#{button.objectName()} {{
@@ -156,7 +152,9 @@ class QuickEnvironmentButtons(QWidget):
                     border: 1px solid {base_color};
                     border-radius: 4px;
                     font-weight: normal;
-                    padding: 2px 8px;
+                    padding: 6px 12px;
+                    max-width: none;
+                    min-width: 120px;
                 }}
                 QPushButton#{button.objectName()}:hover {{
                     background-color: {self._lighten_color(base_color, 0.7)};

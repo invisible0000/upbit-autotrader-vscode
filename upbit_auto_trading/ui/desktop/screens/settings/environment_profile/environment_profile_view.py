@@ -12,6 +12,7 @@ Author: AI Assistant
 Created: 2025-08-11
 Refactored: 2025-08-11 (폴더 구조 리팩토링)
 """
+from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QHBoxLayout, QSplitter, QFrame, QMessageBox
 )
@@ -45,13 +46,13 @@ class EnvironmentProfileView(QWidget):
         super().__init__(parent)
         logger.info("🎯 EnvironmentProfileView 초기화 시작")
 
-        # 내부 위젯들
-        self.profile_selector = None
-        self.yaml_editor = None
-        self.main_splitter = None
+        # 내부 위젯들 (타입 힌팅 명시)
+        self.profile_selector: Optional[ProfileSelectorSection] = None
+        self.yaml_editor: Optional[YamlEditorSection] = None
+        self.main_splitter: Optional[QSplitter] = None
 
         # MVP Presenter 초기화
-        self.presenter = None
+        self.presenter: Optional[EnvironmentProfilePresenter] = None
 
         # 🔥 상태 추가: 현재 선택된 프로파일 추적
         self._current_profile = ""
@@ -123,7 +124,8 @@ class EnvironmentProfileView(QWidget):
             profile_layout.addWidget(self.profile_selector)
 
             # 스플리터에 추가
-            self.main_splitter.addWidget(profile_frame)
+            if self.main_splitter is not None:
+                self.main_splitter.addWidget(profile_frame)
 
             logger.debug("✅ 프로파일 선택기 설정 완료")
 
@@ -132,7 +134,8 @@ class EnvironmentProfileView(QWidget):
             # 에러 시 빈 위젯으로 대체
             error_widget = QWidget()
             error_widget.setObjectName("profile_selector_error")
-            self.main_splitter.addWidget(error_widget)
+            if self.main_splitter is not None:
+                self.main_splitter.addWidget(error_widget)
 
     def _setup_yaml_editor(self):
         """우측 YAML 편집기 설정"""
@@ -153,7 +156,8 @@ class EnvironmentProfileView(QWidget):
             editor_layout.addWidget(self.yaml_editor)
 
             # 스플리터에 추가
-            self.main_splitter.addWidget(editor_frame)
+            if self.main_splitter is not None:
+                self.main_splitter.addWidget(editor_frame)
 
             logger.debug("✅ YAML 편집기 설정 완료")
 
@@ -162,7 +166,8 @@ class EnvironmentProfileView(QWidget):
             # 에러 시 빈 위젯으로 대체
             error_widget = QWidget()
             error_widget.setObjectName("yaml_editor_error")
-            self.main_splitter.addWidget(error_widget)
+            if self.main_splitter is not None:
+                self.main_splitter.addWidget(error_widget)
 
     def _setup_splitter_ratios(self):
         """스플리터 비율 1:2로 설정"""
@@ -173,9 +178,11 @@ class EnvironmentProfileView(QWidget):
         left_width = total_width // 3  # 1/3
         right_width = total_width * 2 // 3  # 2/3
 
-        self.main_splitter.setSizes([left_width, right_width])
+        # 🔥 테스트: QSplitter 강제 크기 할당 주석 처리 (자연스러운 확장 테스트)
+        # if self.main_splitter is not None:
+        #     self.main_splitter.setSizes([left_width, right_width])
 
-        logger.debug(f"✅ 스플리터 비율 설정 완료: {left_width}:{right_width}")
+        logger.debug(f"✅ 스플리터 비율 설정 완료 (자연 확장 모드): {left_width}:{right_width}")
 
     def _connect_signals(self):
         """시그널 연결"""

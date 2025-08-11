@@ -16,12 +16,111 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
     QPushButton, QLabel, QFrame, QMessageBox
 )
-from PyQt6.QtCore import pyqtSignal, QTimer, QObject, Qt
-from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QTextDocument
+from PyQt6.QtCore import pyqtSignal, QTimer, QObject, Qt, QRect
+from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QTextDocument, QPainter, QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("YamlEditorSection")
+
+
+class LineNumberArea(QWidget):
+    """라인 넘버 표시 위젯"""
+
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.code_editor = editor
+
+    def sizeHint(self):
+        return Qt.QSize(self.code_editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event):
+        self.code_editor.line_number_area_paint_event(event)
+
+
+class CodeEditorWithLineNumbers(QPlainTextEdit):
+    """라인 넘버가 있는 코드 편집기"""
+
+    def __init__(self):
+        super().__init__()
+
+        self.line_number_area = LineNumberArea(self)
+
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.cursorPositionChanged.connect(self.highlight_current_line)
+
+        self.update_line_number_area_width(0)
+
+    def line_number_area_width(self):
+        """라인 넘버 영역 너비 계산"""
+        digits = 1
+        max_val = max(1, self.blockCount())
+        while max_val >= 10:
+            max_val //= 10
+            digits += 1
+
+        space = 3 + self.fontMetrics().horizontalAdvance('9') * digits
+        return space
+
+    def update_line_number_area_width(self, _):
+        """라인 넘버 영역 너비 업데이트"""
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+
+    def update_line_number_area(self, rect, dy):
+        """라인 넘버 영역 업데이트"""
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+
+    def resizeEvent(self, event):
+        """리사이즈 이벤트 처리"""
+        super().resizeEvent(event)
+
+        cr = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
+
+    def highlight_current_line(self):
+        """현재 라인 강조"""
+        extra_selections = []
+
+        if not self.isReadOnly():
+            selection = QPlainTextEdit.ExtraSelection()
+
+            line_color = QColor(Qt.GlobalColor.yellow).lighter(160)
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextCharFormat.Property.FullWidthSelection, True)
+            selection.cursor = self.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+
+        self.setExtraSelections(extra_selections)
+
+    def line_number_area_paint_event(self, event):
+        """라인 넘버 영역 페인트 이벤트"""
+        painter = QPainter(self.line_number_area)
+        painter.fillRect(event.rect(), QColor(240, 240, 240))
+
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+        bottom = top + self.blockBoundingRect(block).height()
+
+        height = self.fontMetrics().height()
+        while block.isValid() and (top <= event.rect().bottom()):
+            if block.isVisible() and (bottom >= event.rect().top()):
+                number = str(block_number + 1)
+                painter.setPen(QColor(120, 120, 120))
+                painter.drawText(0, int(top), self.line_number_area.width() - 3, height, Qt.AlignmentFlag.AlignRight, number)
+
+            block = block.next()
+            top = bottom
+            bottom = top + self.blockBoundingRect(block).height()
+            block_number += 1
 
 
 class OptimizedYamlSyntaxHighlighter(QSyntaxHighlighter):
@@ -278,8 +377,8 @@ class YamlEditorSection(QWidget):
 
     def _setup_editor(self, parent_layout):
         """편집기 영역 설정"""
-        # 텍스트 편집기
-        self.text_editor = QPlainTextEdit()
+        # 라인 넘버가 있는 텍스트 편집기
+        self.text_editor = CodeEditorWithLineNumbers()
         self.text_editor.setObjectName("yaml_text_editor")
 
         # 최적화된 신택스 하이라이터 적용
@@ -483,6 +582,14 @@ class YamlEditorSection(QWidget):
                 }
             """
             self.text_editor.setStyleSheet(edit_style)
+
+            # 라인 넘버 영역 스타일 (어두운 테마)
+            if hasattr(self.text_editor, 'line_number_area'):
+                self.text_editor.line_number_area.setStyleSheet("""
+                    background-color: #3c3c3c;
+                    color: #888888;
+                    border-right: 1px solid #555555;
+                """)
         else:
             # 읽기 모드: 밝은 배경 + 회색 테두리 (구문 강조 유지)
             read_style = base_style + """
@@ -496,6 +603,14 @@ class YamlEditorSection(QWidget):
                 }
             """
             self.text_editor.setStyleSheet(read_style)
+
+            # 라인 넘버 영역 스타일 (밝은 테마)
+            if hasattr(self.text_editor, 'line_number_area'):
+                self.text_editor.line_number_area.setStyleSheet("""
+                    background-color: #f0f0f0;
+                    color: #666666;
+                    border-right: 1px solid #cccccc;
+                """)
 
     def set_built_in_profile(self, is_built_in: bool):
         """빌트인 프로파일 여부 설정"""
