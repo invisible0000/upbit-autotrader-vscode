@@ -199,6 +199,8 @@
   },
   "active": "f240a362df9e0cab",
   "lastOpenFiles": [
+    "docs/ENVIRONMENT_PROFILE_INTEGRATION_MISSION.md",
+    "docs/ENVIRONMENT_PROFILE_MANAGEMENT_GUIDE.md",
     "upbit_auto_trading/ui/desktop/screens/settings/environment_profile/widgets/yaml_editor_section_backup2.py",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
@@ -209,7 +211,6 @@
     "logs/session_20250811_230750_PID76128.log",
     "test_minimal_button_stretch.py",
     "logs/session_20250811_230235_PID95624.log",
-    "logs/session_20250811_225344_PID94596.log",
     "docs/DDD_DATABASE_INTEGRATION_METHODOLOGY_GUIDE.md",
     "docs/DDD_DATABASE_ARCHITECTURE_COMPREHENSIVE_REPORT.md",
     "docs/DDD_CLASS_DESIGN_PRINCIPLES.md",
