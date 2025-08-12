@@ -22,7 +22,6 @@ from upbit_auto_trading.infrastructure.events.event_system_initializer import Ev
 from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import IEventBus
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class EventDrivenLoggingConfigurationSection(QWidget):
     """Event-Driven Architecture 기반 로깅 구성 섹션"""
 

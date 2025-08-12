@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
 
-
 class MarketOverviewWidget(QWidget):
     """
     시장 개요 위젯

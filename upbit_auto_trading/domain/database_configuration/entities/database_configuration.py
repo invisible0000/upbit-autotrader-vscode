@@ -11,7 +11,6 @@ from typing import Optional
 
 from upbit_auto_trading.domain.database_configuration.value_objects.database_path import DatabasePath
 
-
 @dataclass
 class DatabaseConfiguration:
     """

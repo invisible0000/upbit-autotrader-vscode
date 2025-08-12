@@ -15,7 +15,6 @@ from upbit_auto_trading.application.notifications.notification_service import No
 from upbit_auto_trading.application.caching.cache_invalidation_service import CacheInvalidationService
 from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_event_publisher
 
-
 class ApplicationServiceContainer:
     """Application Service들의 의존성 주입 컨테이너
 
@@ -131,10 +130,8 @@ class ApplicationServiceContainer:
         """
         self._services.clear()
 
-
 # 전역 컨테이너 인스턴스 (필요 시 사용)
 _global_container: Optional[ApplicationServiceContainer] = None
-
 
 def get_application_container() -> Optional[ApplicationServiceContainer]:
     """전역 Application Service Container 조회
@@ -143,7 +140,6 @@ def get_application_container() -> Optional[ApplicationServiceContainer]:
         ApplicationServiceContainer: 전역 컨테이너 (없으면 None)
     """
     return _global_container
-
 
 def set_application_container(container: ApplicationServiceContainer) -> None:
     """전역 Application Service Container 설정

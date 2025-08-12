@@ -6,7 +6,6 @@ from typing import Protocol, runtime_checkable
 
 from PyQt6.QtCore import pyqtSignal
 
-
 @runtime_checkable
 class ISettingsView(Protocol):
     """Settings View Interface for MVP Pattern
@@ -61,7 +60,6 @@ class ISettingsView(Protocol):
     def set_current_tab_index(self, index: int) -> None:
         """특정 탭으로 이동"""
         pass
-
 
 class ISettingsSubView(Protocol):
     """설정 하위 탭 View Interface"""

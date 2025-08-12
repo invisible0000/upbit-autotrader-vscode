@@ -20,7 +20,6 @@ from upbit_auto_trading.domain.value_objects.strategy_id import StrategyId
 from upbit_auto_trading.domain.repositories.strategy_repository import StrategyRepository
 from upbit_auto_trading.domain.services.strategy_compatibility_service import StrategyCompatibilityService
 
-
 class StrategyApplicationService(BaseApplicationService[Strategy]):
     """전략 관리 Application Service
 

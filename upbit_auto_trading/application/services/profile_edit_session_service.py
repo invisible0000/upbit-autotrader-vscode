@@ -25,9 +25,7 @@ import json
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("ProfileEditSessionService")
-
 
 # === ProfileEditorSession 데이터 클래스 ===
 class ProfileEditorSession:
@@ -78,7 +76,6 @@ class ProfileEditorSession:
         session.created_at = data.get('created_at', session.created_at)
         session.last_modified = data.get('last_modified', session.last_modified)
         return session
-
 
 class ProfileEditSessionService:
     """

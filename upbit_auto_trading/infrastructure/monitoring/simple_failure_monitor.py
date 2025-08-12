@@ -8,7 +8,6 @@ import threading
 from typing import Optional, Callable
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class SimpleFailureMonitor:
     """
     간단한 실패 모니터링 클래스
@@ -157,7 +156,6 @@ class SimpleFailureMonitor:
             f"healthy={self.is_healthy()})"
         )
 
-
 class GlobalAPIMonitor:
     """
     전역 API 모니터링 싱글톤 클래스
@@ -197,22 +195,18 @@ class GlobalAPIMonitor:
         with cls._lock:
             cls._instance = None
 
-
 # 편의 함수들
 def mark_api_success() -> None:
     """API 성공을 전역 모니터에 기록"""
     GlobalAPIMonitor.get_instance().mark_api_result(True)
 
-
 def mark_api_failure() -> None:
     """API 실패를 전역 모니터에 기록"""
     GlobalAPIMonitor.get_instance().mark_api_result(False)
 
-
 def get_api_statistics() -> dict:
     """전역 API 통계를 반환"""
     return GlobalAPIMonitor.get_instance().get_statistics()
-
 
 def is_api_healthy() -> bool:
     """전역 API 상태가 건강한지 확인"""

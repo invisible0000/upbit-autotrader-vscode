@@ -17,7 +17,6 @@ from upbit_auto_trading.domain.repositories.strategy_repository import StrategyR
 from upbit_auto_trading.domain.repositories.backtest_repository import BacktestRepository
 from upbit_auto_trading.domain.repositories.market_data_repository import MarketDataRepository
 
-
 class BacktestApplicationService(BaseApplicationService):
     """백테스팅 Application Service
 

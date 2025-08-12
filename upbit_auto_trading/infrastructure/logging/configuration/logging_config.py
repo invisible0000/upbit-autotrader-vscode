@@ -14,7 +14,6 @@ import logging
 
 from ..interfaces.logging_interface import LogContext, LogScope
 
-
 @dataclass
 class LoggingConfig:
     """

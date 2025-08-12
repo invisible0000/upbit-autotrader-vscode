@@ -11,7 +11,6 @@ from typing import Any, Optional, ContextManager
 import logging
 from enum import Enum
 
-
 class LogContext(Enum):
     """로그 컨텍스트 - 사용 상황별 분류"""
     DEVELOPMENT = "development"    # 개발 중
@@ -21,7 +20,6 @@ class LogContext(Enum):
     PERFORMANCE = "performance"   # 성능 측정
     EMERGENCY = "emergency"       # 응급 상황
 
-
 class LogScope(Enum):
     """로그 스코프 - 출력 범위 제어"""
     SILENT = "silent"         # 오류만
@@ -29,7 +27,6 @@ class LogScope(Enum):
     NORMAL = "normal"         # 정보 이상
     VERBOSE = "verbose"       # 디버그 포함
     DEBUG_ALL = "debug_all"   # 모든 로그
-
 
 class ILoggingService(ABC):
     """
@@ -148,7 +145,6 @@ class ILoggingService(ABC):
             dict: 로그 레벨별 통계, 파일 크기 등
         """
         pass
-
 
 class IContextManager(ABC):
     """기능별 개발 모드 컨텍스트 매니저 인터페이스"""

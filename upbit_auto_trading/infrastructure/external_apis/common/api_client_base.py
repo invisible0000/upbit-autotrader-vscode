@@ -7,14 +7,12 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
-
 @dataclass
 class RateLimitConfig:
     """API 호출 제한 설정"""
     requests_per_second: int = 10
     requests_per_minute: int = 600
     burst_limit: int = 100
-
 
 @dataclass
 class ApiResponse:
@@ -26,7 +24,6 @@ class ApiResponse:
     response_time_ms: float
     success: bool
     error_message: Optional[str] = None
-
 
 class RateLimiter:
     """API 호출 제한 관리 - 기존 UpbitAPI 로직 기반"""
@@ -64,7 +61,6 @@ class RateLimiter:
 
             # 현재 요청 타임스탬프 추가 (기존 로직 보존)
             self._minute_requests.append(time.time())
-
 
 class BaseApiClient(ABC):
     """API 클라이언트 기본 클래스"""
@@ -239,7 +235,6 @@ class BaseApiClient(ABC):
             # rate limiter에 정리할 리소스가 있다면 정리
             pass
 
-
 class ApiClientError(Exception):
     """API 클라이언트 예외"""
     def __init__(self, message: str, status_code: Optional[int] = None,
@@ -248,16 +243,13 @@ class ApiClientError(Exception):
         self.status_code = status_code
         self.response_data = response_data
 
-
 class AuthenticationError(ApiClientError):
     """인증 오류"""
     pass
 
-
 class RateLimitError(ApiClientError):
     """API 호출 제한 오류"""
     pass
-
 
 class NetworkError(ApiClientError):
     """네트워크 오류"""

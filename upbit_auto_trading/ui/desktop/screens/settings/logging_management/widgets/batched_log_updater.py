@@ -17,7 +17,6 @@ from typing import List, Callable, Optional
 from datetime import datetime
 import threading
 
-
 class BatchedLogUpdater(QObject):
     """성능 최적화를 위한 배치 로그 업데이트
 
@@ -44,12 +43,12 @@ class BatchedLogUpdater(QObject):
         if update_callback:
             self.logs_ready.connect(lambda logs: update_callback(logs))
 
-        # 배치 설정 (적응형)
+        # 배치 설정 (최적화됨)
         self._log_buffer: List[str] = []
-        self._max_buffer_size = 25      # 시작 크기 (작게)
-        self._min_buffer_size = 10      # 최소 크기
-        self._max_buffer_limit = 100    # 최대 크기
-        self._update_interval_ms = 150  # 업데이트 간격 (150ms)
+        self._max_buffer_size = 100     # 더 큰 버퍼 (100개)
+        self._min_buffer_size = 20      # 최소 크기 증가
+        self._max_buffer_limit = 500    # 최대 크기 대폭 증가
+        self._update_interval_ms = 100  # 업데이트 간격 단축 (100ms)
 
         # 성능 모니터링
         self._total_logs_processed = 0

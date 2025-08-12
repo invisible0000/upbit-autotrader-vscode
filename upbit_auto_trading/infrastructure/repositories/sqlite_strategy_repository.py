@@ -22,7 +22,6 @@ from upbit_auto_trading.infrastructure.mappers.strategy_mapper import (
     StrategyMapper, MockStrategy
 )
 
-
 class SqliteStrategyRepository(StrategyRepository):
     """
     SQLite 기반 Strategy Repository 완전 구현

@@ -17,9 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("YamlContent")
-
 
 @dataclass(frozen=True)
 class YamlContent:

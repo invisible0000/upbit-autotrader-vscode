@@ -13,7 +13,6 @@ from upbit_auto_trading.domain.repositories.settings_repository import SettingsR
 from upbit_auto_trading.domain.repositories.market_data_repository import MarketDataRepository
 from upbit_auto_trading.domain.repositories.backtest_repository import BacktestRepository
 
-
 class RepositoryFactory(ABC):
     """
     Repository 생성을 위한 추상 팩토리 인터페이스

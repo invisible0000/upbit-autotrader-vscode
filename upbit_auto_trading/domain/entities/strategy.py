@@ -31,16 +31,13 @@ from ..events.strategy_events import (
 )
 from ..events.base_domain_event import DomainEvent
 
-
 class InvalidStrategyConfigurationError(DomainException):
     """잘못된 전략 설정 예외"""
     pass
 
-
 class IncompatibleStrategyError(DomainException):
     """호환되지 않는 전략 예외"""
     pass
-
 
 @dataclass
 class Strategy:

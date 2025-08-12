@@ -60,7 +60,6 @@ if TYPE_CHECKING:
         IDatabaseTabView
     )
 
-
 class DatabaseSettingsPresenter:
     """데이터베이스 설정 통합 프레젠터
 

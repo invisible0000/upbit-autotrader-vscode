@@ -101,7 +101,6 @@ class BaseSimulationEngine:
         
         return self.calculate_technical_indicators(base_data)
 
-
 class EmbeddedSimulationEngine(BaseSimulationEngine):
     """내장 데이터 시뮬레이션 엔진"""
     
@@ -138,7 +137,6 @@ class EmbeddedSimulationEngine(BaseSimulationEngine):
         except Exception as e:
             logger.error(f"❌ 내장 데이터 로드 실패: {e}")
             return self.generate_sample_scenarios(pd.DataFrame(), "횡보")
-
 
 class RealDataSimulationEngine(BaseSimulationEngine):
     """실제 DB 데이터 시뮬레이션 엔진"""
@@ -197,7 +195,6 @@ class RealDataSimulationEngine(BaseSimulationEngine):
             logger.error(f"❌ 실제 DB 데이터 로드 실패: {e}")
             return EmbeddedSimulationEngine().load_market_data(limit)
 
-
 class RobustSimulationEngine(BaseSimulationEngine):
     """견고한 시뮬레이션 엔진 (다중 소스 지원)"""
     
@@ -223,7 +220,6 @@ class RobustSimulationEngine(BaseSimulationEngine):
         except Exception as e:
             logger.error(f"❌ 견고한 엔진 데이터 로드 실패: {e}")
             return self.embedded_engine.load_market_data(limit)
-
 
 # 엔진 팩토리 함수들
 def get_embedded_engine() -> EmbeddedSimulationEngine:
@@ -251,7 +247,6 @@ def get_simulation_engine(engine_type: str = "robust") -> BaseSimulationEngine:
     else:
         logger.warning(f"⚠️ 알 수 없는 엔진 타입: {engine_type}, robust 엔진 사용")
         return get_robust_engine()
-
 
 # 하위 호환성을 위한 클래스 별칭
 RealDataSimulation = RealDataSimulationEngine

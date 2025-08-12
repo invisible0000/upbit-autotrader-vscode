@@ -20,7 +20,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 # TODO: LiveTradingPresenter 구현 후 추가
 
-
 class MVPContainer:
     """MVP 패턴 구성 요소들의 의존성 주입 컨테이너
 
@@ -217,10 +216,8 @@ class MVPContainer:
         self._presenters.clear()
         self._views.clear()
 
-
 # 전역 MVP 컨테이너 인스턴스 (필요 시 사용)
 _global_mvp_container: Optional[MVPContainer] = None
-
 
 def get_mvp_container() -> Optional[MVPContainer]:
     """전역 MVP Container 조회
@@ -230,7 +227,6 @@ def get_mvp_container() -> Optional[MVPContainer]:
     """
     return _global_mvp_container
 
-
 def set_mvp_container(container: MVPContainer) -> None:
     """전역 MVP Container 설정
 
@@ -239,7 +235,6 @@ def set_mvp_container(container: MVPContainer) -> None:
     """
     global _global_mvp_container
     _global_mvp_container = container
-
 
 def initialize_mvp_system(application_container: ApplicationServiceContainer) -> MVPContainer:
     """MVP 시스템 초기화

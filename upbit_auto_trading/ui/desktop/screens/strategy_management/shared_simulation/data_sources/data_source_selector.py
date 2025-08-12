@@ -8,7 +8,6 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import pyqtSignal
 import logging
 
-
 class DataSourceSelectorWidget(QWidget):
     """데이터 소스 선택 위젯"""
     

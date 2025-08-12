@@ -25,7 +25,6 @@ from upbit_auto_trading.data_layer.strategy_models import (
     OptimizationJob, OptimizationResult, LiveTradingSession, LiveTrade
 )
 
-
 class DatabaseManager:
     """데이터베이스 관리 클래스"""
     
@@ -441,7 +440,6 @@ class DatabaseManager:
         finally:
             session.close()
 
-
 def main():
     """메인 실행 함수"""
     print("🚀 전략 트레이딩 데이터베이스 초기화")
@@ -471,7 +469,6 @@ def main():
         return 1
     
     return 0
-
 
 if __name__ == "__main__":
     exit(main())

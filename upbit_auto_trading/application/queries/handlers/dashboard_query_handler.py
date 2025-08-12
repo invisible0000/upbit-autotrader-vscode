@@ -12,7 +12,6 @@ from upbit_auto_trading.application.queries.dto.dashboard_query_dto import (
     DashboardQuery, DashboardResponse, PerformanceMetric, TriggerStatistic
 )
 
-
 class DashboardQueryHandler(BaseQueryHandler[DashboardQuery, DashboardResponse]):
     """대시보드 조회 Query Handler"""
 

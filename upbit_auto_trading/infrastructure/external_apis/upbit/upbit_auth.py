@@ -10,7 +10,6 @@ from upbit_auto_trading.infrastructure.external_apis.common.api_client_base impo
     AuthenticationError
 )
 
-
 class UpbitAuthenticator:
     """Upbit API 인증 처리 - ApiKeyService 연동"""
 

@@ -26,6 +26,8 @@ from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface impo
     ILoggingService, LogContext, LogScope
 )
 
+# 새로운 설정 파일 관리자
+from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
 
 class LoggingService(ILoggingService):
     """
@@ -47,39 +49,106 @@ class LoggingService(ILoggingService):
         self.main_log_name = "application.log"
         self.session_log_prefix = "session"
 
-        # 현재 컨텍스트 및 스코프 (환경변수에서 읽기)
-        self._current_context = self._get_context_from_env()
-        self._current_scope = self._get_scope_from_env()
-        self._component_focus = os.getenv('UPBIT_COMPONENT_FOCUS')
+        # 🆕 설정 파일 관리자 초기화
+        self._config_manager = LoggingConfigManager()
+        self._config_manager.add_change_handler(self._on_config_changed)
+
+        # 🆕 설정 파일에서 컨텍스트 및 스코프 읽기 (환경변수 대신)
+        logging_config = self._config_manager.get_logging_config()
+        self._current_context = self._get_context_from_config(logging_config)
+        self._current_scope = self._get_scope_from_config(logging_config)
+        self._component_focus = logging_config.get('component_focus', '')
 
         # Feature Development 컨텍스트
         self._feature_context_stack = []
 
-        # 환경변수 모니터링
-        self._env_monitor_timer = None
-        self._last_env_state = {}
+        # 🆕 환경변수 모니터링 제거 (더 이상 필요 없음)
+        # 대신 설정 파일 변경 모니터링 사용
 
         # 핵심 서비스 초기화
         self._initialize_core_service()
 
-        # 환경변수 모니터링 시작
-        self._start_env_monitoring()
+        print("🔧 Infrastructure 로깅 시스템 - 설정 파일 기반으로 초기화 완료!")
+        self._print_current_config()
 
-    def _get_context_from_env(self) -> LogContext:
-        """환경변수에서 로그 컨텍스트 읽기"""
-        env_context = os.getenv('UPBIT_LOG_CONTEXT', 'development').lower()
+    def _get_context_from_config(self, config: Dict[str, Any]) -> LogContext:
+        """설정 파일에서 로그 컨텍스트 읽기"""
+        context_str = config.get('context', 'development').lower()
         try:
-            return LogContext(env_context)
+            return LogContext(context_str)
         except ValueError:
             return LogContext.DEVELOPMENT
 
-    def _get_scope_from_env(self) -> LogScope:
-        """환경변수에서 로그 스코프 읽기"""
-        env_scope = os.getenv('UPBIT_LOG_SCOPE', 'normal').lower()
+    def _get_scope_from_config(self, config: Dict[str, Any]) -> LogScope:
+        """설정 파일에서 로그 스코프 읽기"""
+        scope_str = config.get('scope', 'normal').lower()
         try:
-            return LogScope(env_scope)
+            return LogScope(scope_str)
         except ValueError:
             return LogScope.NORMAL
+
+    def _on_config_changed(self, new_config: Dict[str, Any]) -> None:
+        """설정 파일 변경 시 콜백"""
+        try:
+            logging_config = new_config.get('logging', {})
+
+            # 컨텍스트 및 스코프 업데이트
+            old_context = self._current_context
+            old_scope = self._current_scope
+            old_focus = self._component_focus
+
+            self._current_context = self._get_context_from_config(logging_config)
+            self._current_scope = self._get_scope_from_config(logging_config)
+            self._component_focus = logging_config.get('component_focus', '')
+
+            # 변경 사항 출력
+            changes = []
+            if old_context != self._current_context:
+                changes.append(f"CONTEXT: '{old_context.value}' → '{self._current_context.value}'")
+            if old_scope != self._current_scope:
+                changes.append(f"SCOPE: '{old_scope.value}' → '{self._current_scope.value}'")
+            if old_focus != self._component_focus:
+                changes.append(f"FOCUS: '{old_focus}' → '{self._component_focus}'")
+
+            if changes:
+                print("🔧 Infrastructure 로깅 설정 실시간 적용:")
+                for change in changes:
+                    print(f"  {change}")
+                print(f"✅ 로깅 설정 변경 적용 완료: {len(changes)}개 변경사항")
+
+        except Exception as e:
+            print(f"❌ 설정 변경 적용 실패: {e}")
+
+    def _print_current_config(self) -> None:
+        """현재 설정 상태 출력"""
+        try:
+            config = self._config_manager.get_all_config()
+            logging_config = config.get('logging', {})
+
+            print("============================================================")
+            print("🔧 Infrastructure 로깅 시스템 - 현재 설정 파일 상태")
+            print("============================================================")
+
+            level = logging_config.get('level', 'INFO')
+            console = logging_config.get('console_output', False)
+            scope = logging_config.get('scope', 'normal')
+            context = logging_config.get('context', 'development')
+            focus = logging_config.get('component_focus', '')
+
+            print(f"🔹 LOG_LEVEL: {level}")
+            print(f"🔹 CONSOLE_OUTPUT: {console}")
+            print(f"🔹 LOG_SCOPE: {scope}")
+            print(f"🔹 LOG_CONTEXT: {context}")
+            print(f"🔹 COMPONENT_FOCUS: {focus or '(전체)'}")
+
+            # 프로파일 정보
+            profile = self._config_manager.get_current_profile()
+            print(f"🔹 CURRENT_PROFILE: {profile}")
+
+            print("============================================================")
+
+        except Exception as e:
+            print(f"❌ 설정 상태 출력 실패: {e}")
 
     def _initialize_core_service(self) -> None:
         """핵심 로깅 서비스 초기화"""
@@ -198,35 +267,51 @@ class LoggingService(ILoggingService):
         )
 
     def _initialize_handlers(self) -> None:
-        """로그 핸들러 초기화"""
+        """로그 핸들러 초기화 (설정 파일 기반)"""
         try:
-            # 메인 로그 파일 핸들러
-            main_log_path = Path("logs") / self.main_log_name
-            main_handler = logging.FileHandler(main_log_path, mode='a', encoding='utf-8')
-            main_handler.setFormatter(self._formatters['default'])
-            main_handler.setLevel(logging.DEBUG)
-            self._handlers['main'] = main_handler
+            # 🆕 설정 파일에서 로깅 설정 읽기
+            logging_config = self._config_manager.get_logging_config()
+            file_config = self._config_manager.get_file_logging_config()
 
-            # 세션 로그 파일 핸들러
-            session_filename = self._generate_session_filename()
-            session_log_path = Path("logs") / session_filename
-            session_handler = logging.FileHandler(session_log_path, mode='a', encoding='utf-8')
-            session_handler.setFormatter(self._formatters['default'])
-            session_handler.setLevel(logging.DEBUG)
-            self._handlers['session'] = session_handler
+            # 파일 로깅이 활성화된 경우에만 파일 핸들러 생성
+            if file_config.get('enabled', True):
+                # 🆕 설정 파일에서 경로 읽기
+                log_path = file_config.get('path', 'logs/upbit_auto_trading.log')
+                main_log_path = Path(log_path)
 
-            # 콘솔 핸들러 (강제 활성화)
-            console_output_enabled = os.getenv('UPBIT_CONSOLE_OUTPUT', 'false').lower() == 'true'
+                # 디렉토리 생성
+                main_log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # 디버깅을 위해 강제 활성화
-            if console_output_enabled or True:  # 임시로 항상 활성화
+                # 메인 로그 파일 핸들러
+                main_handler = logging.FileHandler(main_log_path, mode='a', encoding='utf-8')
+                main_handler.setFormatter(self._formatters['default'])
+
+                # 🆕 설정 파일에서 파일 로그 레벨 읽기
+                file_level_str = file_config.get('level', 'DEBUG')
+                file_level = getattr(logging, file_level_str.upper(), logging.DEBUG)
+                main_handler.setLevel(file_level)
+                self._handlers['main'] = main_handler
+
+                # 세션 로그 파일 핸들러 (설정된 경로 기준)
+                session_filename = self._generate_session_filename()
+                session_log_path = main_log_path.parent / session_filename
+                session_handler = logging.FileHandler(session_log_path, mode='a', encoding='utf-8')
+                session_handler.setFormatter(self._formatters['default'])
+                session_handler.setLevel(file_level)
+                self._handlers['session'] = session_handler
+
+            # 🆕 설정 파일에서 콘솔 출력 설정 읽기
+            console_output_enabled = logging_config.get('console_output', False)
+
+            if console_output_enabled:
                 console_handler = logging.StreamHandler(sys.stdout)
                 console_handler.setFormatter(self._formatters['console'])
                 console_handler.setLevel(self._get_console_log_level())
                 self._handlers['console'] = console_handler
 
-                # 디버깅 출력
                 print(f"✅ 콘솔 핸들러 활성화 - 레벨: {console_handler.level}")
+            else:
+                print("ℹ️ 콘솔 출력 비활성화 (설정 파일 기준)")
 
         except Exception as e:
             print(f"❌ 핸들러 초기화 실패: {e}")
@@ -483,13 +568,18 @@ class LoggingService(ILoggingService):
         print("🔧 Infrastructure 로깅 시스템 - 현재 환경변수 상태")
         print("=" * 60)
 
-        for var_name, value in self._last_env_state.items():
+        for var_name, current_value in self._last_env_state.items():
             default_value = defaults.get(var_name, '(정의되지 않음)')
 
-            if value:
-                display_value = f"{value} ✓ 설정됨"
-                logger.info(f"🔹 {var_name}: {value} (사용자 설정)")
+            # 실제 환경 변수에서 다시 확인
+            actual_env_value = os.getenv(var_name)
+
+            if actual_env_value is not None and actual_env_value != default_value:
+                # 사용자가 설정한 값
+                display_value = f"{actual_env_value} ✓ 설정됨"
+                logger.info(f"🔹 {var_name}: {actual_env_value} (사용자 설정)")
             else:
+                # 기본값 사용
                 display_value = f"{default_value} (기본값)"
                 logger.info(f"🔹 {var_name}: {default_value} (기본값)")
 
@@ -502,14 +592,18 @@ class LoggingService(ILoggingService):
         self._log_env_state_to_logs()
 
     def _get_relevant_env_vars(self) -> dict:
-        """로깅 관련 환경변수 수집"""
-        relevant_vars = {
-            'UPBIT_CONSOLE_OUTPUT': os.getenv('UPBIT_CONSOLE_OUTPUT', ''),
-            'UPBIT_LOG_SCOPE': os.getenv('UPBIT_LOG_SCOPE', ''),
-            'UPBIT_COMPONENT_FOCUS': os.getenv('UPBIT_COMPONENT_FOCUS', ''),
-            'UPBIT_LOG_LEVEL': os.getenv('UPBIT_LOG_LEVEL', ''),
-            'UPBIT_LOG_CONTEXT': os.getenv('UPBIT_LOG_CONTEXT', ''),
-        }
+        """로깅 관련 환경변수 수집 - 실제 값 우선, 없으면 기본값"""
+        defaults = self._get_env_defaults()
+
+        relevant_vars = {}
+        for var_name, default_value in defaults.items():
+            # 실제 환경 변수 값을 우선적으로 읽기
+            actual_value = os.getenv(var_name)
+            if actual_value is not None:
+                relevant_vars[var_name] = actual_value
+            else:
+                relevant_vars[var_name] = default_value
+
         return relevant_vars
 
     def _check_env_changes(self) -> None:
@@ -648,6 +742,39 @@ class LoggingService(ILoggingService):
             display_value = current_value if current_value else f"{default_value} (기본값)"
             logger.info(f"  🔹 {var_name}: {display_value}")
 
+    def get_current_session_file_path(self) -> Optional[Path]:
+        """현재 세션 로그 파일 경로 반환
+
+        Returns:
+            Optional[Path]: 현재 세션 로그 파일 경로, 없으면 None
+        """
+        try:
+            # 현재 세션 파일명 생성
+            session_filename = self._generate_session_filename()
+            session_path = Path("logs") / session_filename
+
+            # 파일이 실제로 존재하는지 확인
+            if session_path.exists():
+                return session_path
+
+            # 파일이 없으면 logs 디렉토리에서 최신 세션 파일 찾기
+            log_dir = Path("logs")
+            if not log_dir.exists():
+                return None
+
+            session_pattern = f"{self.session_log_prefix}_*.log"
+            session_files = list(log_dir.glob(session_pattern))
+
+            if session_files:
+                # 최신 파일 반환 (수정 시간 기준)
+                session_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                return session_files[0]
+
+            return None
+
+        except Exception:
+            return None
+
     def shutdown(self) -> None:
         """서비스 종료 및 정리"""
         try:
@@ -661,12 +788,10 @@ class LoggingService(ILoggingService):
         except Exception as e:
             print(f"❌ 서비스 종료 중 오류: {e}")
 
-
 # ==================== 전역 인스턴스 관리 ====================
 
 _global_logging_service: Optional[LoggingService] = None
 _service_lock = threading.Lock()
-
 
 def get_logging_service(config: Optional[Dict[str, Any]] = None) -> LoggingService:
     """전역 로깅 서비스 인스턴스 반환"""
@@ -677,11 +802,9 @@ def get_logging_service(config: Optional[Dict[str, Any]] = None) -> LoggingServi
             _global_logging_service = LoggingService(config)
         return _global_logging_service
 
-
 def create_logging_service(config: Optional[Dict[str, Any]] = None) -> LoggingService:
     """새로운 로깅 서비스 인스턴스 생성"""
     return LoggingService(config)
-
 
 def reset_logging_service() -> None:
     """전역 로깅 서비스 리셋 (테스트용)"""
@@ -691,7 +814,6 @@ def reset_logging_service() -> None:
             _global_logging_service.shutdown()
         _global_logging_service = None
 
-
 # ==================== 편의 함수 ====================
 
 def create_component_logger(component_name: str) -> logging.Logger:
@@ -699,18 +821,15 @@ def create_component_logger(component_name: str) -> logging.Logger:
     service = get_logging_service()
     return service.get_logger(component_name)
 
-
 def set_logging_context(context: LogContext) -> None:
     """로깅 컨텍스트 설정 (편의 함수)"""
     service = get_logging_service()
     service.set_context(context)
 
-
 def set_logging_scope(scope: LogScope) -> None:
     """로깅 스코프 설정 (편의 함수)"""
     service = get_logging_service()
     service.set_scope(scope)
-
 
 # ==================== 내보내기 ====================
 

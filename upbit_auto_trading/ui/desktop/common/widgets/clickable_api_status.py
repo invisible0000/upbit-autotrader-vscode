@@ -9,7 +9,6 @@ from PyQt6.QtCore import QTimer, pyqtSignal, Qt
 from PyQt6.QtGui import QMouseEvent, QCursor
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class ClickableApiStatus(QLabel):
     """
     클릭 가능한 API 상태 레이블

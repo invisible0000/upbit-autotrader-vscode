@@ -13,19 +13,16 @@ from pathlib import Path
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabaseReplacementSourceType(Enum):
     """DB 교체 소스 타입"""
     BACKUP_FILE = "backup_file"      # 백업 파일에서 복원
     EXTERNAL_FILE = "external_file"  # 외부 DB 파일로 교체
-
 
 class DatabaseReplacementMode(Enum):
     """DB 교체 모드"""
     SAFE_MODE = "safe_mode"          # 안전성 우선 (권장)
     FORCE_MODE = "force_mode"        # 강제 교체 (위험)
     VALIDATION_ONLY = "validation_only"  # 검증만 수행
-
 
 @dataclass(frozen=True)
 class DatabaseReplacementRequestDto:
@@ -39,7 +36,6 @@ class DatabaseReplacementRequestDto:
     validate_schema_compatibility: bool = True     # 스키마 호환성 검증
     force_system_pause: bool = False              # 강제 시스템 일시 정지
     rollback_on_failure: bool = True              # 실패 시 자동 롤백
-
 
 @dataclass(frozen=True)
 class DatabaseReplacementResultDto:
@@ -61,7 +57,6 @@ class DatabaseReplacementResultDto:
             return f"✅ {self.database_type} DB 교체 성공: {Path(self.source_path).name}"
         else:
             return f"❌ {self.database_type} DB 교체 실패: {self.error_message}"
-
 
 class DatabaseReplacementUseCase:
     """통합 데이터베이스 교체 Use Case"""
@@ -347,14 +342,12 @@ class DatabaseReplacementUseCase:
         pattern = r'^(settings|strategies|market_data)_backup_\d{8}_\d{6}\.sqlite3$'
         return bool(re.match(pattern, filename))
 
-
 @dataclass(frozen=True)
 class SourceValidationResult:
     """소스 검증 결과"""
     is_valid: bool
     error_message: Optional[str]
     warnings: List[str]
-
 
 @dataclass(frozen=True)
 class SystemSafetyResult:

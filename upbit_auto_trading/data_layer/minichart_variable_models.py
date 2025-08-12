@@ -19,7 +19,6 @@ from enum import Enum
 
 Base = declarative_base()
 
-
 class MiniChartCategory(Enum):
     """미니차트 변수 카테고리 정의 - 4요소 단순화"""
     # 기본 요소들
@@ -27,7 +26,6 @@ class MiniChartCategory(Enum):
     INDICATOR = "indicator"          # 지표값 iVal (녹색 라인) - SMA, EMA, RSI 등
     COMPARISON = "comparison"        # 비교값 fVal/eVal (주황색) - 고정값 또는 외부변수
     TRIGGER = "trigger"              # 트리거 마커 Trg (빨간 삼각형)
-
 
 class MiniChartScaleType(Enum):
     """미니차트 스케일 타입 정의"""
@@ -39,14 +37,12 @@ class MiniChartScaleType(Enum):
     NORMALIZED = "normalized"        # 정규화 스케일 (-1 ~ +1, -100 ~ +100 등)
     UNBOUNDED = "unbounded"          # 무제한 스케일 (MACD, ROC 등)
 
-
 class MiniChartDisplayMode(Enum):
     """미니차트 표시 모드"""
     OVERLAY = "overlay"              # 메인 차트에 오버레이 (이동평균 등)
     SUBPLOT = "subplot"              # 별도 서브플롯 (RSI, MACD 등)
     VOLUME_BAR = "volume_bar"        # 거래량 바 차트
     MARKER_ONLY = "marker_only"      # 마커만 표시 (트리거 포인트)
-
 
 class MiniChartVariable(Base):
     """미니차트 변수 정의 테이블"""
@@ -102,7 +98,6 @@ class MiniChartVariable(Base):
                 f"name='{self.variable_name}', category='{self.category.value}', "
                 f"scale_type='{self.scale_type.value}')>")
 
-
 class MiniChartScaleGroup(Base):
     """미니차트 스케일 그룹 관리 테이블"""
     __tablename__ = 'minichart_scale_groups'
@@ -128,7 +123,6 @@ class MiniChartScaleGroup(Base):
     
     def __repr__(self):
         return f"<MiniChartScaleGroup(name='{self.group_name}', range={self.min_value}-{self.max_value})>"
-
 
 class MiniChartCompatibilityRule(Base):
     """미니차트 변수 호환성 규칙 테이블"""
@@ -157,7 +151,6 @@ class MiniChartCompatibilityRule(Base):
         return (f"<MiniChartCompatibilityRule(base='{self.base_variable_id}', "
                 f"compatible='{self.compatible_variable_id}', type='{self.compatibility_type}')>")
 
-
 class MiniChartPreset(Base):
     """미니차트 프리셋 테이블"""
     __tablename__ = 'minichart_presets'
@@ -180,7 +173,6 @@ class MiniChartPreset(Base):
     
     def __repr__(self):
         return f"<MiniChartPreset(name='{self.preset_name}', context='{self.usage_context}')>"
-
 
 # 미니차트 변수 초기 데이터 정의
 MINICHART_INITIAL_VARIABLES = [

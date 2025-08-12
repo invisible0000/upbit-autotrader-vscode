@@ -11,7 +11,6 @@ from typing import ClassVar
 
 from ..exceptions.domain_exceptions import InvalidTriggerIdError
 
-
 @dataclass(frozen=True)
 class TriggerId:
     """

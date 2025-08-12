@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QGroup
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class NotificationMethodsWidget(QWidget):
     """알림 방법 설정 위젯"""
 

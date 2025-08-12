@@ -18,17 +18,14 @@ from datetime import datetime
 import json
 import logging
 
-
 # Mock 클래스들 - Domain Layer 구현 완료 후 실제 클래스로 교체
 class MockStrategyId:
     def __init__(self, value: Union[str, int]):
         self.value = str(value)
 
-
 class MockTriggerId:
     def __init__(self, value: Union[str, int]):
         self.value = str(value)
-
 
 class MockStrategy:
     """Mock Strategy Entity - Domain Layer 완성 후 실제 Strategy로 교체"""
@@ -55,7 +52,6 @@ class MockStrategy:
         return (self.entry_triggers + self.exit_triggers +
                 self.management_triggers)
 
-
 class MockTrigger:
     """Mock Trigger Entity - Domain Layer 완성 후 실제 Trigger로 교체"""
 
@@ -75,14 +71,12 @@ class MockTrigger:
         self.description = description
         self.created_at = created_at or datetime.now()
 
-
 class MockTradingVariable:
     """Mock TradingVariable Value Object"""
 
     def __init__(self, variable_id: str, parameters: Optional[Dict] = None):
         self.variable_id = variable_id
         self.parameters = parameters or {}
-
 
 class StrategyMapper:
     """Strategy 엔티티와 데이터베이스 레코드 간 매핑"""
@@ -170,7 +164,6 @@ class StrategyMapper:
             record['version'],
             record['id']  # WHERE 조건용
         )
-
 
 class TriggerMapper:
     """Trigger 엔티티와 데이터베이스 레코드 간 매핑"""
@@ -263,7 +256,6 @@ class TriggerMapper:
             record['id']  # WHERE 조건용
         )
 
-
 class TradingVariableMapper:
     """TradingVariable Value Object 매핑 (Settings DB용)"""
 
@@ -313,7 +305,6 @@ class TradingVariableMapper:
             parameters[param_name] = param_value
 
         return parameters
-
 
 # 로깅 설정
 logger = logging.getLogger(__name__)

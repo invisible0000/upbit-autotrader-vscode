@@ -18,7 +18,6 @@ from upbit_auto_trading.infrastructure.configuration import paths
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import mark_api_success, mark_api_failure
 
-
 class IApiKeyService(ABC):
     """API 키 서비스 인터페이스"""
 
@@ -51,7 +50,6 @@ class IApiKeyService(ABC):
     def get_secret_key_mask_length(self) -> int:
         """저장된 Secret Key의 마스킹 길이 반환"""
         pass
-
 
 class ApiKeyService(IApiKeyService):
     """API 키 서비스 구현체 - Infrastructure Layer"""

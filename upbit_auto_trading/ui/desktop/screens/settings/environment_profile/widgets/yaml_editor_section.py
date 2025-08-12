@@ -23,7 +23,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("YamlEditorSection")
 
-
 class LineNumberArea(QWidget):
     """라인 넘버 표시 위젯"""
 
@@ -36,7 +35,6 @@ class LineNumberArea(QWidget):
 
     def paintEvent(self, event):
         self.code_editor.line_number_area_paint_event(event)
-
 
 class CodeEditorWithLineNumbers(QPlainTextEdit):
     """라인 넘버가 있는 코드 편집기"""
@@ -121,7 +119,6 @@ class CodeEditorWithLineNumbers(QPlainTextEdit):
             top = bottom
             bottom = top + self.blockBoundingRect(block).height()
             block_number += 1
-
 
 class OptimizedYamlSyntaxHighlighter(QSyntaxHighlighter):
     """
@@ -227,7 +224,6 @@ class OptimizedYamlSyntaxHighlighter(QSyntaxHighlighter):
                 start, end = match.span()
                 self.setFormat(offset + start, end - start, format_obj)
 
-
 class DebouncedTextProcessor(QObject):
     """
     디바운싱을 적용한 텍스트 처리기
@@ -274,7 +270,6 @@ class DebouncedTextProcessor(QObject):
             self.validation_completed.emit(False, error_msg, line_number)
         except Exception as e:
             self.validation_completed.emit(False, f"검증 오류: {str(e)}", 0)
-
 
 class YamlEditorSection(QWidget):
     """

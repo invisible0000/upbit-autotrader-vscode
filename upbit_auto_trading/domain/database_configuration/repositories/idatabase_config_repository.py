@@ -12,7 +12,6 @@ from ..entities.database_profile import DatabaseProfile
 from ..entities.backup_record import BackupRecord
 from ..aggregates.database_configuration import DatabaseConfiguration
 
-
 class IDatabaseConfigRepository(ABC):
     """
     데이터베이스 설정 저장소 인터페이스
@@ -206,7 +205,6 @@ class IDatabaseConfigRepository(ABC):
             무결성 검증 결과
         """
         pass
-
 
 class IDatabaseValidationRepository(ABC):
     """

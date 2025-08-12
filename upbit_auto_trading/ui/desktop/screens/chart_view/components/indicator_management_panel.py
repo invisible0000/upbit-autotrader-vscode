@@ -293,7 +293,6 @@ class IndicatorConfigDialog(QDialog):
         self.stoch_d.setValue(3)
         layout.addRow("%D 기간:", self.stoch_d)
 
-
 class IndicatorItem(QWidget):
     """개별 지표 항목"""
     
@@ -388,7 +387,6 @@ class IndicatorItem(QWidget):
         elif self.params["type"] == "Stochastic":
             return f"K: {self.params['k']}, D: {self.params['d']}"
         return ""
-
 
 class IndicatorManagementPanel(QWidget):
     """지표 관리 패널"""

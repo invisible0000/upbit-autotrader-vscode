@@ -14,7 +14,6 @@ from upbit_auto_trading.domain.services.trigger_evaluation_service import (
 )
 from upbit_auto_trading.domain.entities.trigger import Trigger
 
-
 class BusinessLogicAdapter:
     """
     기존 business_logic과 Domain Service 간 어댑터
@@ -208,7 +207,6 @@ class BusinessLogicAdapter:
         
         return indicators
 
-
 class LegacyStrategyBridge:
     """
     기존 전략 클래스와 새로운 Domain Service 간 브릿지
@@ -251,7 +249,6 @@ class LegacyStrategyBridge:
         
         return self.adapter.convert_results_to_legacy_format(results)
 
-
 # 기존 코드와의 호환성을 위한 팩토리 함수
 def create_legacy_strategy_from_triggers(triggers: List[Trigger]) -> LegacyStrategyBridge:
     """
@@ -264,7 +261,6 @@ def create_legacy_strategy_from_triggers(triggers: List[Trigger]) -> LegacyStrat
     ```
     """
     return LegacyStrategyBridge(triggers)
-
 
 def migrate_dataframe_strategy_to_domain(df_strategy_func: Callable,
                                         triggers: List[Trigger]) -> Callable:

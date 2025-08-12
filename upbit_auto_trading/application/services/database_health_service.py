@@ -12,7 +12,6 @@ from typing import Dict, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabaseHealthService:
     """
     데이터베이스 건강 상태 서비스

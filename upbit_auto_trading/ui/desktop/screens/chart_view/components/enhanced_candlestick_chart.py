@@ -13,7 +13,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-
 class CandlestickItem(pg.GraphicsObject):
     """캔들스틱 아이템 클래스"""
     
@@ -113,7 +112,6 @@ class CandlestickItem(pg.GraphicsObject):
         
         # 경계 상자 반환
         return QRectF(min_x - 1, min_y - margin, max_x + 1, (max_y - min_y) + 2 * margin)
-
 
 class CandlestickChart(pg.PlotWidget):
     """캔들스틱 차트 클래스"""

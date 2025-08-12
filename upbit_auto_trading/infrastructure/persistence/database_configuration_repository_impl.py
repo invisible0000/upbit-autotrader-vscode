@@ -16,7 +16,6 @@ from upbit_auto_trading.domain.database_configuration.entities.database_configur
 from upbit_auto_trading.domain.database_configuration.value_objects.database_path import DatabasePath
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class FileSystemDatabaseConfigurationRepository(IDatabaseConfigurationRepository):
     """파일 시스템 기반 데이터베이스 구성 Repository"""
 

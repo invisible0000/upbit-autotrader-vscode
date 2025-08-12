@@ -20,7 +20,6 @@ from ..widgets.database_backup_widget import DatabaseBackupWidget
 from ..widgets.database_path_selector import DatabasePathSelector
 from ..widgets.database_task_progress_widget import DatabaseTaskProgressWidget
 
-
 class DatabaseSettingsView(QWidget):
     """
     데이터베이스 설정 화면 - MVP 패턴 적용

@@ -17,7 +17,6 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-
 class DataCollectionThread(QThread):
     """차트 데이터 수집 스레드"""
     
@@ -81,7 +80,6 @@ class DataCollectionThread(QThread):
         except Exception as e:
             logger.error(f"데이터 수집 중 오류: {e}")
             self.data_collected.emit(False, f"오류 발생: {str(e)}")
-
 
 class BacktestSetupWidget(QWidget):
     # 백테스트 시작 시그널 (설정 정보를 딕셔너리로 전달)

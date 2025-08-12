@@ -30,7 +30,6 @@ except ImportError as e:
     MINICHART_SERVICE_AVAILABLE = False
     print(f"⚠️ 미니차트 변수 서비스 로드 실패: {e}")
 
-
 class SimulationResultWidget(QWidget):
     """테스트 결과 차트 & 기록 위젯 - 원본 완전 복제"""
 
@@ -958,7 +957,6 @@ class SimulationResultWidget(QWidget):
     def get_history_count(self) -> int:
         """기록 개수 반환"""
         return self.test_history_list.count()
-
 
 if __name__ == "__main__":
     # 테스트용 코드

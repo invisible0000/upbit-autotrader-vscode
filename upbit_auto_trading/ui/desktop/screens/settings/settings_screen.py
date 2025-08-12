@@ -22,7 +22,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class SettingsScreen(QWidget):
     """Settings Screen - MVP 패턴 View 구현
 
@@ -117,8 +116,10 @@ class SettingsScreen(QWidget):
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
             from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management import (
-                LoggingManagementView, LoggingManagementPresenter
+            from upbit_auto_trading.ui.desktop.screens.settings.logging_management import LoggingManagementView
+            # 🆕 새로운 설정 파일 기반 Presenter 사용
+            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters.logging_management_presenter import (
+                LoggingManagementPresenter
             )
 
             self.logger.info("📦 설정 위젯 모듈들 import 성공 (직접 경로, alias 제거, 로깅 관리 탭 추가)")
@@ -209,10 +210,10 @@ class SettingsScreen(QWidget):
             self.ui_settings = UISettingsView(self)
             self.logger.debug("🎨 UI 설정 생성 완료 (DDD+MVP 구조)")
 
-            # 로깅 관리 View + Presenter 생성 (Phase 1 MVP)
+            # 🆕 로깅 설정 파일 관리 View + Presenter 생성 (환경변수 방식 대체)
             self.logging_management = LoggingManagementView()
             self.logging_management_presenter = LoggingManagementPresenter(self.logging_management)
-            self.logger.debug("📝 로깅 관리 View + Presenter 생성 완료 (Phase 1 MVP 패턴)")
+            self.logger.debug("📝 로깅 설정 파일 관리 View + Presenter 생성 완료 (안전한 설정 파일 기반)")
 
             self.logger.info("✅ 모든 실제 설정 위젯들 생성 완료 (Infrastructure Layer 연동)")
 
@@ -458,38 +459,51 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
 
-            elif index == 3:  # 프로파일 탭 (Task 4.3 완료)
+            elif index == 3:  # 프로파일 탭 (Task 4.3 완료) - 캐싱 최적화
                 self.logger.debug("⚙️ 프로파일 탭 선택 - 프로파일 데이터 로드 시작")
                 environment_profile = getattr(self, 'environment_profile', None)
                 if environment_profile:
                     try:
-                        # 프로파일 목록 새로고침
-                        if hasattr(environment_profile, 'refresh_profiles'):
-                            environment_profile.refresh_profiles()
-                            self.logger.debug("✅ 프로파일 목록 새로고침 완료")
+                        # 캐싱 로직: 프로파일 탭은 1분마다만 자동 새로고침
+                        current_time = time.time()
+                        last_refresh = getattr(self, '_profile_last_refresh_time', 0)
 
-                        # 위젯 상태 업데이트
-                        if hasattr(environment_profile, 'refresh_display'):
-                            environment_profile.refresh_display()
-                            self.logger.debug("✅ 프로파일 상태 자동 새로고침 완료")
+                        if current_time - last_refresh > 60:  # 1분 이후에만 자동 새로고침
+                            # 프로파일 목록 새로고침
+                            if hasattr(environment_profile, 'refresh_profiles'):
+                                environment_profile.refresh_profiles()
+                                self.logger.debug("✅ 프로파일 목록 새로고침 완료")
+
+                            # 위젯 상태 업데이트
+                            if hasattr(environment_profile, 'refresh_display'):
+                                environment_profile.refresh_display()
+                                self.logger.debug("✅ 프로파일 상태 자동 새로고침 완료")
+
+                            self._profile_last_refresh_time = current_time
+                        else:
+                            self.logger.debug("⏭️ 프로파일 탭 캐시 사용 (1분 이내 - 성능 최적화)")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 프로파일 탭 활성화 실패: {e}")
 
-            elif index == 4:  # 로깅 관리 탭 (Phase 1 MVP)
+            elif index == 4:  # 로깅 관리 탭 (Phase 2 Infrastructure Integration) - 캐싱 최적화
                 self.logger.debug("📝 로깅 관리 탭 선택 - 자동 새로고침 시작")
                 logging_management = getattr(self, 'logging_management', None)
                 if logging_management:
                     try:
-                        # Presenter를 통한 새로고침 (MVP 패턴)
-                        presenter = getattr(self, 'logging_management_presenter', None)
-                        if presenter and hasattr(presenter, 'refresh_logs'):
-                            presenter.refresh_logs()
-                            self.logger.debug("✅ 로깅 관리 상태 자동 새로고침 완료 (Presenter)")
+                        # 캐싱 로직: 로깅 관리 탭은 10초마다만 새로고침
+                        current_time = time.time()
+                        last_refresh = getattr(self, '_logging_last_refresh_time', 0)
 
-                        # 환경 변수 상태 새로고침
-                        if presenter and hasattr(presenter, 'refresh_environment_variables'):
-                            presenter.refresh_environment_variables()
-                            self.logger.debug("✅ 환경 변수 상태 새로고침 완료")
+                        if current_time - last_refresh > 10:  # 10초 이후에만 자동 새로고침
+                            # Presenter를 통한 새로고침 (MVP 패턴)
+                            presenter = getattr(self, 'logging_management_presenter', None)
+                            if presenter and hasattr(presenter, 'refresh'):
+                                presenter.refresh()
+                                self.logger.debug("✅ 로깅 관리 탭 새로고침 완료 (refresh 메서드)")
+
+                            self._logging_last_refresh_time = current_time
+                        else:
+                            self.logger.debug("⏭️ 로깅 관리 탭 캐시 사용 (10초 이내 - 성능 최적화)")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 로깅 관리 새로고침 실패: {e}")
 

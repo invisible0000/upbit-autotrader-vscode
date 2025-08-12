@@ -12,7 +12,6 @@ from ..briefing.status_tracker import SystemStatusTracker
 from .issue_detector import IssueDetector
 from .realtime_dashboard import RealtimeDashboard, DashboardData
 
-
 class DashboardService:
     """대시보드 서비스 - 실시간 JSON 대시보드 파일 관리"""
 

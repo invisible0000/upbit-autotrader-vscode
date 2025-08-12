@@ -19,19 +19,16 @@ from enum import Enum
 
 Base = declarative_base()
 
-
 class ConflictResolutionTypeEnum(str, Enum):
     """충돌 해결 방식"""
     CONSERVATIVE = "conservative"
     PRIORITY = "priority"
     MERGE = "merge"
 
-
 class StrategyTypeEnum(str, Enum):
     """전략 타입"""
     ENTRY = "entry"
     MANAGEMENT = "management"
-
 
 class BacktestStatusEnum(str, Enum):
     """백테스트 상태"""
@@ -40,7 +37,6 @@ class BacktestStatusEnum(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-
 
 # ===== 전략 조합 관련 테이블 =====
 
@@ -72,7 +68,6 @@ class StrategyDefinition(Base):
     
     def __repr__(self):
         return f"<StrategyDefinition(id='{self.id}', name='{self.name}', type='{self.strategy_type}')>"
-
 
 class StrategyCombination(Base):
     """전략 조합 테이블"""
@@ -110,7 +105,6 @@ class StrategyCombination(Base):
     def __repr__(self):
         return f"<StrategyCombination(id='{self.combination_id}', name='{self.name}')>"
 
-
 class StrategyConfig(Base):
     """전략 설정 테이블 (매개변수와 함께)"""
     __tablename__ = 'strategy_configs'
@@ -135,7 +129,6 @@ class StrategyConfig(Base):
     def __repr__(self):
         return f"<StrategyConfig(id='{self.config_id}', name='{self.strategy_name}')>"
 
-
 class CombinationManagementStrategy(Base):
     """조합의 관리 전략들 (Many-to-Many 관계)"""
     __tablename__ = 'combination_management_strategies'
@@ -156,7 +149,6 @@ class CombinationManagementStrategy(Base):
     
     def __repr__(self):
         return f"<CombinationManagementStrategy(combination='{self.combination_id}', priority={self.priority})>"
-
 
 # ===== 백테스트 관련 테이블 =====
 
@@ -221,7 +213,6 @@ class BacktestResult(Base):
     def __repr__(self):
         return f"<BacktestResult(id='{self.result_id}', combination='{self.combination_id}', symbol='{self.symbol}')>"
 
-
 class TradeLog(Base):
     """거래 로그 테이블"""
     __tablename__ = 'trade_logs'
@@ -267,7 +258,6 @@ class TradeLog(Base):
     def __repr__(self):
         return f"<TradeLog(backtest='{self.backtest_result_id}', action='{self.action}', timestamp='{self.timestamp}')>"
 
-
 class PositionLog(Base):
     """포지션 로그 테이블"""
     __tablename__ = 'position_logs'
@@ -302,7 +292,6 @@ class PositionLog(Base):
     
     def __repr__(self):
         return f"<PositionLog(backtest='{self.backtest_result_id}', timestamp='{self.timestamp}')>"
-
 
 # ===== 매개변수 최적화 관련 테이블 =====
 
@@ -360,7 +349,6 @@ class OptimizationJob(Base):
     def __repr__(self):
         return f"<OptimizationJob(id='{self.job_id}', algorithm='{self.algorithm}', status='{self.status}')>"
 
-
 class OptimizationResult(Base):
     """최적화 결과 테이블 (각 세대/반복의 결과)"""
     __tablename__ = 'optimization_results'
@@ -392,7 +380,6 @@ class OptimizationResult(Base):
     
     def __repr__(self):
         return f"<OptimizationResult(job='{self.job_id}', gen={self.generation}, fitness={self.fitness_score:.2f})>"
-
 
 # ===== 실시간 거래 관련 테이블 =====
 
@@ -433,7 +420,6 @@ class LiveTradingSession(Base):
     
     def __repr__(self):
         return f"<LiveTradingSession(id='{self.session_id}', symbol='{self.symbol}', status='{self.status}')>"
-
 
 class LiveTrade(Base):
     """실시간 거래 기록 테이블"""

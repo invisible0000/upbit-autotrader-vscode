@@ -19,7 +19,6 @@ from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_e
 T = TypeVar('T')  # Entity 타입
 ID = TypeVar('ID')  # ID 타입 (str, int, UUID 등)
 
-
 class BaseRepository(ABC, Generic[T, ID]):
     """
     모든 Repository의 기본 인터페이스

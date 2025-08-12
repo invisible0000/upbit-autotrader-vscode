@@ -473,7 +473,6 @@ class RealTimeMonitorWidget(QWidget):
         # 콤보박스 선택 변경시 자동으로 호출되지 않도록 방지
         pass
 
-
 class MiniChartWidget(QWidget):
     """미니 차트 위젯"""
     

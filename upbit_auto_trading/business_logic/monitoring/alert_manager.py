@@ -14,7 +14,6 @@ from datetime import datetime
 
 from upbit_auto_trading.domain.models.notification import Notification, NotificationType
 
-
 class AlertManager:
     """알림 관리자 클래스"""
 

@@ -31,7 +31,6 @@ from upbit_auto_trading.domain.events.strategy_events import (
     StrategyValidationCompleted, StrategyActivated, StrategyDeactivated
 )
 
-
 class StrategyManager:
     """
     전략 관리자 클래스
@@ -455,7 +454,6 @@ class StrategyManager:
 
         # 마지막 수단으로 기본 타입 반환
         return "moving_average_cross"  # 기본 전략 타입
-
 
 # 싱글톤 인스턴스
 _instance = None

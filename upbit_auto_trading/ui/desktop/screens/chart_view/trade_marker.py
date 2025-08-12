@@ -8,7 +8,6 @@ import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
 
-
 class TradeMarker(pg.GraphicsObject):
     """거래 마커 클래스"""
     

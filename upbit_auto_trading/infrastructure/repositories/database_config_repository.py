@@ -18,7 +18,6 @@ from upbit_auto_trading.domain.database_configuration.aggregates.database_config
 
 logger = create_component_logger("DatabaseConfigRepository")
 
-
 class DatabaseConfigRepository(IDatabaseConfigRepository):
     """
     YAML 기반 데이터베이스 설정 리포지토리

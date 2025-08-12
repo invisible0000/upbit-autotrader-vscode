@@ -26,7 +26,6 @@ from .management_rule import (
 from ..value_objects.strategy_id import StrategyId
 from ..value_objects.strategy_config import StrategyConfig
 
-
 class StrategyFactory:
     """
     전략 생성을 위한 팩토리 클래스
@@ -283,22 +282,18 @@ class StrategyFactory:
             }
         ]
 
-
 # 팩토리 함수들 (편의 함수)
 def create_basic_7_rule_strategy() -> Strategy:
     """기본 7규칙 전략 생성 (편의 함수)"""
     return StrategyFactory.create_basic_7_rule_strategy()
 
-
 def create_conservative_strategy() -> Strategy:
     """보수적 전략 생성 (편의 함수)"""
     return StrategyFactory.create_conservative_strategy()
 
-
 def create_aggressive_strategy() -> Strategy:
     """공격적 전략 생성 (편의 함수)"""
     return StrategyFactory.create_aggressive_strategy()
-
 
 def create_scalping_strategy() -> Strategy:
     """스캘핑 전략 생성 (편의 함수)"""

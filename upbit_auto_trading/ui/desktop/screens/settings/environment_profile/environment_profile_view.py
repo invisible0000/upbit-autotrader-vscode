@@ -26,7 +26,6 @@ from .presenters.environment_profile_presenter import EnvironmentProfilePresente
 
 logger = create_component_logger("EnvironmentProfileView")
 
-
 class EnvironmentProfileView(QWidget):
     """
     환경 프로파일 설정 메인 뷰

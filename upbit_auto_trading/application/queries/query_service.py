@@ -15,7 +15,6 @@ from upbit_auto_trading.application.queries.dto.dashboard_query_dto import (
     DashboardQuery, DashboardResponse
 )
 
-
 class QueryService:
     """Query 실행을 위한 Facade 클래스"""
 

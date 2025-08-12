@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from .terminal_capturer import TerminalCapturer, get_terminal_capturer
 from .output_parser import TerminalOutputParser, ParsedOutput, OutputType, create_terminal_output_parser
 
-
 @dataclass
 class SyncState:
     """동기화 상태 정보"""
@@ -27,7 +26,6 @@ class SyncState:
     sync_errors: int = 0
     is_running: bool = False
     last_error: Optional[str] = None
-
 
 @dataclass
 class SyncConfig:
@@ -39,7 +37,6 @@ class SyncConfig:
     llm_log_file: Optional[str] = None  # LLM 로그 파일 경로
     auto_cleanup: bool = True  # 자동 정리 활성화
     cleanup_interval_hours: int = 24  # 정리 간격 (시간)
-
 
 class LogSynchronizer:
     """
@@ -318,11 +315,9 @@ class LogSynchronizer:
             self.state.sync_errors += 1
             return False
 
-
 # 전역 인스턴스 관리
 _global_synchronizer: Optional[LogSynchronizer] = None
 _sync_lock = threading.Lock()
-
 
 def get_log_synchronizer(config: Optional[SyncConfig] = None) -> LogSynchronizer:
     """전역 로그 동기화 인스턴스 반환"""
@@ -332,7 +327,6 @@ def get_log_synchronizer(config: Optional[SyncConfig] = None) -> LogSynchronizer
         if _global_synchronizer is None:
             _global_synchronizer = LogSynchronizer(config)
         return _global_synchronizer
-
 
 def create_log_synchronizer(config: Optional[SyncConfig] = None) -> LogSynchronizer:
     """새로운 로그 동기화 인스턴스 생성"""

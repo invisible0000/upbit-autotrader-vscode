@@ -9,7 +9,6 @@ from enum import Enum
 
 from upbit_auto_trading.domain.events.base_domain_event import DomainEvent
 
-
 class LogLevel(Enum):
     """로그 레벨 열거형"""
     DEBUG = "DEBUG"
@@ -17,7 +16,6 @@ class LogLevel(Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
-
 
 @dataclass
 class LogMessageEvent(DomainEvent):
@@ -76,7 +74,6 @@ class LogMessageEvent(DomainEvent):
             "extra_data": self.extra_data
         }
 
-
 @dataclass
 class LogConfigurationChangedEvent(DomainEvent):
     """로깅 구성 변경 이벤트"""
@@ -106,7 +103,6 @@ class LogConfigurationChangedEvent(DomainEvent):
             "new_value": self.new_value,
             "config_path": self.config_path
         }
-
 
 @dataclass
 class EnvironmentVariableChangedEvent(DomainEvent):
@@ -146,7 +142,6 @@ class EnvironmentVariableChangedEvent(DomainEvent):
             "change_type": self._get_change_type()
         }
 
-
 @dataclass
 class LogViewerStateChangedEvent(DomainEvent):
     """로그 뷰어 상태 변경 이벤트"""
@@ -176,7 +171,6 @@ class LogViewerStateChangedEvent(DomainEvent):
             "previous_state": self.previous_state,
             "new_state": self.new_state
         }
-
 
 @dataclass
 class LogFilterChangedEvent(DomainEvent):

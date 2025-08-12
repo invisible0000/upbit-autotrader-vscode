@@ -13,7 +13,6 @@ from enum import Enum
 
 from upbit_auto_trading.domain.value_objects.strategy_id import StrategyId
 
-
 class BacktestStatus(Enum):
     """백테스팅 상태"""
     PENDING = "pending"
@@ -21,7 +20,6 @@ class BacktestStatus(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     STOPPED = "stopped"
-
 
 class BacktestMetric(Enum):
     """백테스팅 성능 지표"""
@@ -32,7 +30,6 @@ class BacktestMetric(Enum):
     WIN_RATE = "win_rate"
     PROFIT_FACTOR = "profit_factor"
     TOTAL_TRADES = "total_trades"
-
 
 @dataclass
 class BacktestResult:
@@ -67,7 +64,6 @@ class BacktestResult:
     error_message: Optional[str] = None
     notes: Optional[str] = None
 
-
 @dataclass
 class BacktestTrade:
     """백테스팅 개별 거래 기록"""
@@ -84,7 +80,6 @@ class BacktestTrade:
     portfolio_value: Optional[float]
     notes: Optional[str] = None
 
-
 @dataclass
 class BacktestStatistics:
     """백테스팅 통계 정보"""
@@ -98,7 +93,6 @@ class BacktestStatistics:
     avg_sharpe_ratio: float
     avg_win_rate: float
     last_backtest_date: Optional[datetime]
-
 
 class BacktestRepository(ABC):
     """

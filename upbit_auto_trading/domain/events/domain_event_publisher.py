@@ -21,7 +21,6 @@ else:
 EventHandler = Callable[['DomainEvent'], None]
 AsyncEventHandler = Callable[['DomainEvent'], Any]  # Awaitable 반환
 
-
 class DomainEventPublisher:
     """도메인 이벤트 발행을 담당하는 게시자"""
 
@@ -219,10 +218,8 @@ class DomainEventPublisher:
             "total_handlers": total_sync + total_async
         }
 
-
 # 전역 이벤트 게시자 인스턴스
 _domain_event_publisher: Optional[DomainEventPublisher] = None
-
 
 def get_domain_event_publisher() -> DomainEventPublisher:
     """전역 도메인 이벤트 게시자 반환"""
@@ -232,7 +229,6 @@ def get_domain_event_publisher() -> DomainEventPublisher:
         logger = create_component_logger("DomainEventPublisher")
         logger.info("전역 도메인 이벤트 게시자 초기화 완료")
     return _domain_event_publisher
-
 
 def reset_domain_event_publisher() -> None:
     """전역 도메인 이벤트 게시자 재설정 (테스트용)"""

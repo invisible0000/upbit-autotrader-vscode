@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from . import DomainEvent
 
-
 @dataclass(frozen=True)
 class TriggerCreated(DomainEvent):
     """트리거 생성 이벤트"""
@@ -37,7 +36,6 @@ class TriggerCreated(DomainEvent):
     def aggregate_id(self) -> str:
         return self.trigger_id
 
-
 @dataclass(frozen=True)
 class TriggerUpdated(DomainEvent):
     """트리거 수정 이벤트"""
@@ -55,7 +53,6 @@ class TriggerUpdated(DomainEvent):
     def aggregate_id(self) -> str:
         return self.trigger_id
 
-
 @dataclass(frozen=True)
 class TriggerDeleted(DomainEvent):
     """트리거 삭제 이벤트"""
@@ -71,7 +68,6 @@ class TriggerDeleted(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.trigger_id
-
 
 @dataclass(frozen=True)
 class TriggerEvaluationStarted(DomainEvent):
@@ -89,7 +85,6 @@ class TriggerEvaluationStarted(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.trigger_id
-
 
 @dataclass(frozen=True)
 class TriggerEvaluationCompleted(DomainEvent):
@@ -111,7 +106,6 @@ class TriggerEvaluationCompleted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.trigger_id
 
-
 @dataclass(frozen=True)
 class TriggerConditionMet(DomainEvent):
     """트리거 조건 만족 이벤트"""
@@ -130,7 +124,6 @@ class TriggerConditionMet(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.trigger_id
-
 
 @dataclass(frozen=True)
 class TradingSignalGenerated(DomainEvent):
@@ -155,7 +148,6 @@ class TradingSignalGenerated(DomainEvent):
     def aggregate_id(self) -> str:
         return self.signal_id
 
-
 @dataclass(frozen=True)
 class TradingSignalExecuted(DomainEvent):
     """매매 신호 실행 이벤트"""
@@ -177,7 +169,6 @@ class TradingSignalExecuted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.signal_id
 
-
 @dataclass(frozen=True)
 class TradingSignalRejected(DomainEvent):
     """매매 신호 거부 이벤트"""
@@ -196,7 +187,6 @@ class TradingSignalRejected(DomainEvent):
     def aggregate_id(self) -> str:
         return self.signal_id
 
-
 @dataclass(frozen=True)
 class ConditionValidationCompleted(DomainEvent):
     """조건 검증 완료 이벤트"""
@@ -213,7 +203,6 @@ class ConditionValidationCompleted(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.condition_id
-
 
 class TriggerEvaluatedEvent(DomainEvent):
     """트리거 평가 완료 이벤트"""
@@ -237,7 +226,6 @@ class TriggerEvaluatedEvent(DomainEvent):
     def aggregate_id(self) -> str:
         return self.trigger_id
 
-
 class TriggerActivatedEvent(DomainEvent):
     """트리거 활성화 이벤트"""
 
@@ -258,7 +246,6 @@ class TriggerActivatedEvent(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.trigger_id
-
 
 class TriggerEvaluationFailedEvent(DomainEvent):
     """트리거 평가 실패 이벤트"""

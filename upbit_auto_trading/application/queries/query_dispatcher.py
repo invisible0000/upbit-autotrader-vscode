@@ -8,7 +8,6 @@ import logging
 
 from upbit_auto_trading.application.queries.handlers.base_query_handler import BaseQueryHandler
 
-
 class QueryDispatcher:
     """Query와 Handler를 매핑하여 실행하는 디스패처"""
 

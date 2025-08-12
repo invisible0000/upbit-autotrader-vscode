@@ -19,7 +19,6 @@ from ..widgets import (
     AnimationSettingsWidget, ChartSettingsWidget
 )
 
-
 class UISettingsView(QWidget):
     """UI 설정 View - MVP 패턴"""
 

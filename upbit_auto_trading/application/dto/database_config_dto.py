@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
-
 class DatabaseStatusEnum(Enum):
     """데이터베이스 상태 열거형"""
     ACTIVE = "active"
@@ -20,13 +19,11 @@ class DatabaseStatusEnum(Enum):
     MIGRATING = "migrating"
     BACKUP_IN_PROGRESS = "backup_in_progress"
 
-
 class DatabaseTypeEnum(Enum):
     """데이터베이스 타입 열거형"""
     SETTINGS = "settings"
     STRATEGIES = "strategies"
     MARKET_DATA = "market_data"
-
 
 @dataclass(frozen=True)
 class DatabaseProfileDto:
@@ -63,7 +60,6 @@ class DatabaseProfileDto:
             description=domain_profile.metadata.get('description') if domain_profile.metadata else None
         )
 
-
 @dataclass(frozen=True)
 class BackupRecordDto:
     """백업 기록 정보 전송 객체"""
@@ -91,7 +87,6 @@ class BackupRecordDto:
             description=domain_backup.description
         )
 
-
 @dataclass(frozen=True)
 class DatabaseConfigDto:
     """데이터베이스 설정 정보 전송 객체 (간소화 버전)"""
@@ -112,7 +107,6 @@ class DatabaseConfigDto:
             is_valid=config_dto.is_valid,
             validation_errors=config_dto.validation_errors
         )
-
 
 @dataclass(frozen=True)
 class DatabaseConfigurationDto:
@@ -162,7 +156,6 @@ class DatabaseConfigurationDto:
         }
         return mapping[dto_type]
 
-
 @dataclass(frozen=True)
 class DatabaseStatusDto:
     """데이터베이스 상태 정보 DTO"""
@@ -178,7 +171,6 @@ class DatabaseStatusDto:
     connection_count: int = 0
     last_activity: Optional[datetime] = None
 
-
 @dataclass(frozen=True)
 class CreateProfileRequestDto:
     """프로필 생성 요청 DTO"""
@@ -189,7 +181,6 @@ class CreateProfileRequestDto:
     description: Optional[str] = None
     should_activate: bool = False
 
-
 @dataclass(frozen=True)
 class UpdateProfileRequestDto:
     """프로필 업데이트 요청 DTO"""
@@ -198,7 +189,6 @@ class UpdateProfileRequestDto:
     profile_name: Optional[str] = None
     file_path: Optional[str] = None
     description: Optional[str] = None
-
 
 @dataclass(frozen=True)
 class CreateBackupRequestDto:
@@ -209,7 +199,6 @@ class CreateBackupRequestDto:
     description: Optional[str] = None
     compression_enabled: bool = True
 
-
 @dataclass(frozen=True)
 class RestoreBackupRequestDto:
     """백업 복원 요청 DTO"""
@@ -218,7 +207,6 @@ class RestoreBackupRequestDto:
     target_profile_id: Optional[str] = None  # None이면 원본 프로필로 복원
     create_backup_before_restore: bool = True
 
-
 @dataclass(frozen=True)
 class SwitchProfileRequestDto:
     """프로필 전환 요청 DTO"""
@@ -226,7 +214,6 @@ class SwitchProfileRequestDto:
     database_type: DatabaseTypeEnum
     target_profile_id: str
     force_switch: bool = False  # 거래 중에도 강제 전환할지 여부
-
 
 @dataclass(frozen=True)
 class DatabaseValidationResultDto:
@@ -242,7 +229,6 @@ class DatabaseValidationResultDto:
     performance_issues: Optional[List[str]] = None
     file_size_bytes: Optional[int] = None
 
-
 @dataclass(frozen=True)
 class ValidationRequestDto:
     """데이터베이스 검증 요청 DTO"""
@@ -251,7 +237,6 @@ class ValidationRequestDto:
     validate_schema: bool = True
     check_performance: bool = False
     check_integrity: bool = True
-
 
 @dataclass(frozen=True)
 class DatabaseStatsDto:
@@ -266,7 +251,6 @@ class DatabaseStatsDto:
     calculated_at: datetime
     error: Optional[str] = None
 
-
 @dataclass(frozen=True)
 class DatabaseHealthCheckDto:
     """데이터베이스 건강 상태 확인 DTO"""
@@ -279,7 +263,6 @@ class DatabaseHealthCheckDto:
     file_size_bytes: Optional[int] = None
     connection_test_passed: bool = True
 
-
 @dataclass(frozen=True)
 class TradingStateDto:
     """거래 상태 정보 DTO"""
@@ -290,7 +273,6 @@ class TradingStateDto:
     active_backtests: List[str]
     can_switch_database: bool
     blocking_operations: Optional[List[str]] = None  # 전환을 막는 작업들
-
 
 # 호환성을 위한 별칭
 BackupRequestDto = CreateBackupRequestDto

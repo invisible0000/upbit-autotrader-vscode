@@ -12,7 +12,6 @@ from upbit_auto_trading.application.queries.dto.strategy_query_dto import (
     StrategyDetailQuery, StrategyDetailResponse
 )
 
-
 class StrategyListQueryHandler(BaseQueryHandler[StrategyListQuery, StrategyListResponse]):
     """전략 목록 조회 Query Handler"""
 
@@ -86,7 +85,6 @@ class StrategyListQueryHandler(BaseQueryHandler[StrategyListQuery, StrategyListR
             raise ValueError("페이지 번호는 1 이상이어야 합니다")
         if query.page_size < 1 or query.page_size > 100:
             raise ValueError("페이지 크기는 1-100 사이여야 합니다")
-
 
 class StrategyDetailQueryHandler(BaseQueryHandler[StrategyDetailQuery, StrategyDetailResponse]):
     """전략 상세 조회 Query Handler"""

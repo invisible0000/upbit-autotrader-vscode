@@ -6,7 +6,6 @@
 from typing import Dict, Any, List, Union, Optional, Type
 import json
 
-
 class ParameterDefinition:
     """
     전략 매개변수 정의 클래스
@@ -118,7 +117,6 @@ class ParameterDefinition:
             max_value=data.get("max_value"),
             choices=data.get("choices")
         )
-
 
 class StrategyParameterManager:
     """

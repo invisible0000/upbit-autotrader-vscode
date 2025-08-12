@@ -15,7 +15,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from .base_domain_event import DomainEvent
 
-
 @dataclass(frozen=True)
 class StrategyCreated(DomainEvent):
     """전략 생성 이벤트"""
@@ -47,7 +46,6 @@ class StrategyCreated(DomainEvent):
             raise ValueError("strategy_id는 필수 필드입니다 (현재 임시 None 기본값)")
         if not self.strategy_name:
             raise ValueError("strategy_name은 필수 필드입니다 (현재 임시 None 기본값)")
-
 
 @dataclass(frozen=True)
 class StrategyUpdated(DomainEvent):
@@ -81,7 +79,6 @@ class StrategyUpdated(DomainEvent):
         if not self.strategy_name:
             raise ValueError("strategy_name은 필수 필드입니다 (현재 임시 None 기본값)")
 
-
 @dataclass(frozen=True)
 class StrategyDeleted(DomainEvent):
     """전략 삭제 이벤트"""
@@ -110,7 +107,6 @@ class StrategyDeleted(DomainEvent):
             raise ValueError("strategy_id는 필수 필드입니다 (현재 임시 None 기본값)")
         if not self.strategy_name:
             raise ValueError("strategy_name은 필수 필드입니다 (현재 임시 None 기본값)")
-
 
 @dataclass(frozen=True)
 class StrategyActivated(DomainEvent):
@@ -141,7 +137,6 @@ class StrategyActivated(DomainEvent):
         if not self.strategy_name:
             raise ValueError("strategy_name은 필수 필드입니다 (현재 임시 None 기본값)")
 
-
 @dataclass(frozen=True)
 class StrategyDeactivated(DomainEvent):
     """전략 비활성화 이벤트"""
@@ -170,7 +165,6 @@ class StrategyDeactivated(DomainEvent):
             raise ValueError("strategy_id는 필수 필드입니다 (현재 임시 None 기본값)")
         if not self.strategy_name:
             raise ValueError("strategy_name은 필수 필드입니다 (현재 임시 None 기본값)")
-
 
 @dataclass(frozen=True)
 class StrategyBacktestCompleted(DomainEvent):

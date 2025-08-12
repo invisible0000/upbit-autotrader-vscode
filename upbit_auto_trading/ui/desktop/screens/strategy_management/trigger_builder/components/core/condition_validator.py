@@ -20,7 +20,6 @@
 from typing import Dict, Any, Tuple, Optional
 import re
 
-
 class ConditionValidator:
     """조건 생성 시 유효성 검사를 담당하는 클래스"""
     

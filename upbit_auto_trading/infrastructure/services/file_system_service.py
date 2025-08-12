@@ -29,7 +29,6 @@ from upbit_auto_trading.infrastructure.configuration.paths import infrastructure
 
 logger = create_component_logger("FileSystemService")
 
-
 class FileSystemService:
     """파일 시스템 작업을 위한 Infrastructure Service"""
 
@@ -369,7 +368,6 @@ class FileSystemService:
 
         except Exception:
             return False
-
 
 # 전역 인스턴스 (Singleton 패턴)
 file_system_service = FileSystemService()

@@ -11,7 +11,6 @@ from typing import List, Optional, TextIO
 from datetime import datetime
 import threading
 
-
 class TeeOutput:
     """
     출력을 두 곳으로 분기하는 클래스
@@ -44,7 +43,6 @@ class TeeOutput:
     def __getattr__(self, name):
         """나머지 속성들은 원본 스트림으로 위임"""
         return getattr(self.original_stream, name)
-
 
 class TerminalCapturer:
     """
@@ -179,10 +177,8 @@ class TerminalCapturer:
         if hasattr(self, 'is_capturing') and self.is_capturing:
             self.stop_capture()
 
-
 # 전역 캡처 인스턴스 (싱글톤 패턴)
 _global_capturer: Optional[TerminalCapturer] = None
-
 
 def get_global_terminal_capturer() -> TerminalCapturer:
     """전역 터미널 캡처 인스턴스 반환"""
@@ -191,24 +187,20 @@ def get_global_terminal_capturer() -> TerminalCapturer:
         _global_capturer = TerminalCapturer()
     return _global_capturer
 
-
 def start_global_terminal_capture() -> None:
     """전역 터미널 캡처 시작"""
     capturer = get_global_terminal_capturer()
     capturer.start_capture()
-
 
 def stop_global_terminal_capture() -> None:
     """전역 터미널 캡처 중지"""
     capturer = get_global_terminal_capturer()
     capturer.stop_capture()
 
-
 def get_recent_terminal_output(lines: int = 50) -> List[str]:
     """최근 터미널 출력 반환"""
     capturer = get_global_terminal_capturer()
     return capturer.get_recent_output(lines)
-
 
 # Alias for compatibility
 get_terminal_capturer = get_global_terminal_capturer

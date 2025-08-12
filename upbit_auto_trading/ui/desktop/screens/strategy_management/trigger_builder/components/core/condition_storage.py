@@ -25,7 +25,6 @@ except ImportError:
 # 전역 DB 매니저 비활성화 (DDD Infrastructure Layer로 전환)
 USE_GLOBAL_MANAGER = False
 
-
 class ConditionStorage:
     """조건을 데이터베이스에 저장/관리하는 클래스"""
 

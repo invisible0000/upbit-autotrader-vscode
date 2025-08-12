@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class WindowSettingsWidget(QWidget):
     """창 설정 위젯"""
 

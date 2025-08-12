@@ -11,7 +11,6 @@ from datetime import datetime
 
 from upbit_auto_trading.business_logic.strategy.strategy_interface import StrategyInterface
 
-
 class BaseStrategy(StrategyInterface):
     """
     기본 전략 추상 클래스

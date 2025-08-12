@@ -19,13 +19,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-
 class NotificationType(Enum):
     """알림 유형 열거형 (Value Object)"""
     PRICE_ALERT = auto()  # 가격 알림
     TRADE_ALERT = auto()  # 거래 알림
     SYSTEM_ALERT = auto()  # 시스템 알림
-
 
 @dataclass
 class Notification:
@@ -82,7 +80,6 @@ class Notification:
             return f"{delta.seconds // 60}분 전"
         else:
             return "방금 전"
-
 
 class NotificationManager:
     """알림 도메인 서비스 (Domain Service)"""

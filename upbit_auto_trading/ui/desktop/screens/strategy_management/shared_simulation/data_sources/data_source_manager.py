@@ -15,14 +15,12 @@ except ImportError:
     # 폴백: 기본 logging 사용
     logger = logging.getLogger("DataSourceManager")
 
-
 class DataSourceType(Enum):
     """데이터 소스 타입 정의"""
     EMBEDDED = "embedded"           # 내장 최적화 데이터셋 (시나리오별)
     REAL_DB = "real_db"            # 실제 DB 데이터 (세그먼테이션)
     SYNTHETIC = "synthetic"         # 합성 현실적 데이터
     SIMPLE_FALLBACK = "fallback"   # 단순 폴백 데이터
-
 
 class SimulationDataSourceManager:
     """시뮬레이션 데이터 소스 관리자"""
@@ -256,7 +254,6 @@ class SimulationDataSourceManager:
             'base_value': base_value,
             'change_percent': (price_data[-1] / price_data[0] - 1) * 100
         }
-
 
 # 전역 인스턴스
 _data_source_manager = None

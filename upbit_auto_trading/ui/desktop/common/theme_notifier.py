@@ -6,7 +6,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 from typing import Optional
 
-
 class ThemeNotifier(QObject):
     """전역 테마 변경 알림을 담당하는 클래스"""
 
@@ -58,10 +57,8 @@ class ThemeNotifier(QObject):
             print(f"🎨 테마 전환 (백업): {'다크' if is_dark else '라이트'}")
             self.theme_changed.emit(is_dark)
 
-
 # 전역 인스턴스
 _theme_notifier = None
-
 
 def get_theme_notifier() -> ThemeNotifier:
     """전역 테마 알림 인스턴스 반환"""
@@ -69,7 +66,6 @@ def get_theme_notifier() -> ThemeNotifier:
     if _theme_notifier is None:
         _theme_notifier = ThemeNotifier()
     return _theme_notifier
-
 
 def apply_matplotlib_theme_simple():
     """matplotlib에 간단한 테마 적용"""

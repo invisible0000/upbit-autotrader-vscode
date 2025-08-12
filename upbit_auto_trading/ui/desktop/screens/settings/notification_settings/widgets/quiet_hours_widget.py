@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class QuietHoursWidget(QWidget):
     """방해 금지 시간 설정 위젯"""
 

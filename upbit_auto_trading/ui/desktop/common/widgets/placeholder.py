@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QPixmap
 
-
 def create_placeholder_screen(title: str = "개발 중", description: str = "이 화면은 현재 개발 중입니다."):
     """
     플레이스홀더 화면 생성
@@ -141,7 +140,6 @@ def create_placeholder_screen(title: str = "개발 중", description: str = "이
     """)
     
     return widget
-
 
 def create_error_screen(error_message: str = "오류가 발생했습니다.", details: str = ""):
     """

@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Dict, Any, List
 import json
 
-
 @dataclass
 class ComponentStatus:
     """개별 컴포넌트 상태 정보"""
@@ -34,7 +33,6 @@ class ComponentStatus:
     def needs_attention(self) -> bool:
         """주의가 필요한 상태인지 확인"""
         return self.status in ['WARNING', 'ERROR', 'LIMITED']
-
 
 class SystemStatusTracker:
     """시스템 전체 상태 추적 및 관리"""

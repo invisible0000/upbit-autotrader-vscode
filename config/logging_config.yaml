@@ -1,0 +1,21 @@
+logging:
+  level: INFO
+  console_output: false
+  scope: normal
+  component_focus: ''
+  context: development
+advanced:
+  llm_briefing_enabled: false
+  feature_development: ''
+  performance_monitoring: false
+  briefing_update_interval: 30
+file_logging:
+  enabled: true
+  path: logs/upbit_auto_trading.log
+  max_size_mb: 10
+  backup_count: 5
+  level: DEBUG
+runtime:
+  watch_config_file: true
+  notify_on_change: true
+  last_modified: '2025-08-12T13:58:30.743703'

@@ -8,7 +8,6 @@ from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_e
 
 T = TypeVar('T')
 
-
 class BaseApplicationService(ABC, Generic[T]):
     """모든 Application Service의 기본 클래스
 

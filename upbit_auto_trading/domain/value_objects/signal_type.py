@@ -7,7 +7,6 @@
 
 from enum import Enum
 
-
 class SignalType(Enum):
     """
     신호 타입 분류

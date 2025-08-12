@@ -11,7 +11,6 @@ import json
 from upbit_auto_trading.infrastructure.config.models.config_models import UIConfig, TradingConfig
 from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
 
-
 class ISettingsService(ABC):
     """설정 서비스 인터페이스"""
 
@@ -49,7 +48,6 @@ class ISettingsService(ABC):
     def reset_to_defaults(self, section: str = "all") -> bool:
         """기본값으로 리셋"""
         pass
-
 
 class SettingsService(ISettingsService):
     """설정 서비스 구현체 (Configuration Management 기반)"""
@@ -180,7 +178,6 @@ class SettingsService(ISettingsService):
         except Exception as e:
             print(f"❌ 설정 리셋 실패 ({section}): {e}")
             return False
-
 
 class MockSettingsService(ISettingsService):
     """Mock 설정 서비스 (테스트용)"""

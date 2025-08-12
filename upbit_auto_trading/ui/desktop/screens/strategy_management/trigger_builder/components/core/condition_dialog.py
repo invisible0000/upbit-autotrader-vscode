@@ -59,7 +59,6 @@ except ImportError:
         """폴백 함수: 상태 코드 기반 기본 호환성 검증"""
         return 1, "기본 호환성 검증 사용 (모든 변수 호환)", "✅"
 
-
 class ConditionDialog(QWidget):
     """리팩토링된 조건 생성 위젯 (다이얼로그에서 위젯으로 변경)"""
     
@@ -1764,7 +1763,6 @@ class ConditionDialog(QWidget):
     def get_condition_data(self):
         """생성된 조건 데이터 반환"""
         return self.current_condition
-
 
 # 실행 코드
 if __name__ == "__main__":

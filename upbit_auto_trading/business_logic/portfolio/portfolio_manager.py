@@ -16,7 +16,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from upbit_auto_trading.data_layer.models import Portfolio, PortfolioCoin, Strategy
 
-
 class PortfolioManager:
     """포트폴리오 관리자 클래스"""
 

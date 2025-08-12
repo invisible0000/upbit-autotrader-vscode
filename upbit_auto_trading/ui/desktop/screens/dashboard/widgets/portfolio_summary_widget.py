@@ -14,7 +14,6 @@ from PyQt6.QtGui import QColor, QBrush
 import pyqtgraph as pg
 import numpy as np
 
-
 class PortfolioSummaryWidget(QWidget):
     """
     포트폴리오 요약 위젯

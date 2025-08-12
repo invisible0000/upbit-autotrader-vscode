@@ -7,7 +7,6 @@ DDD Application Service와 연동하여 비즈니스 로직을 처리합니다.
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class SettingsPresenter:
     """Settings Presenter - MVP Pattern 구현
 

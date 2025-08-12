@@ -18,7 +18,6 @@ from upbit_auto_trading.domain.models.notification import NotificationType
 from .alert_condition import AlertCondition, PriceAlertCondition, IndicatorAlertCondition, PatternAlertCondition
 from .alert_manager import AlertManager
 
-
 class MarketMonitor:
     """시장 모니터링 클래스"""
 

@@ -17,7 +17,6 @@ from upbit_auto_trading.business_logic.strategy.strategy_interface import Strate
 
 logger = logging.getLogger(__name__)
 
-
 @dataclass
 class TradeSignal:
     """매매 신호 데이터 클래스"""
@@ -27,7 +26,6 @@ class TradeSignal:
     quantity: float = 0.0
     confidence: float = 0.0
     reason: str = ""
-
 
 @dataclass
 class StrategyConfig:
@@ -54,7 +52,6 @@ class StrategyConfig:
             return BuyAndHoldStrategy(self)
         else:
             raise ValueError(f"지원하지 않는 전략 타입: {self.strategy_type}")
-
 
 class TradingStrategy(StrategyInterface):
     """매매전략 기본 클래스"""
@@ -130,7 +127,6 @@ class TradingStrategy(StrategyInterface):
         required_columns = ['open', 'high', 'low', 'close', 'volume']
         return all(col in data.columns for col in required_columns)
 
-
 class MovingAverageCrossStrategy(TradingStrategy):
     """이동평균선 교차 전략"""
     
@@ -200,7 +196,6 @@ class MovingAverageCrossStrategy(TradingStrategy):
         
         return signals
 
-
 class RSIStrategy(TradingStrategy):
     """RSI 과매수/과매도 전략"""
     
@@ -269,7 +264,6 @@ class RSIStrategy(TradingStrategy):
                 ))
         
         return signals
-
 
 class BollingerBandStrategy(TradingStrategy):
     """볼린저 밴드 평균회귀 전략"""
@@ -343,7 +337,6 @@ class BollingerBandStrategy(TradingStrategy):
         
         return signals
 
-
 class FixedStopLossStrategy(TradingStrategy):
     """고정 손절 전략"""
     
@@ -362,7 +355,6 @@ class FixedStopLossStrategy(TradingStrategy):
     def generate_signals(self, data: pd.DataFrame) -> List[TradeSignal]:
         """손절 신호 생성 (실제로는 포지션 관리에서 처리)"""
         return []  # 손절은 포지션 관리에서 처리
-
 
 class TrailingStopStrategy(TradingStrategy):
     """트레일링 스톱 전략"""
@@ -383,7 +375,6 @@ class TrailingStopStrategy(TradingStrategy):
         """트레일링 스톱 신호 생성"""
         return []  # 포지션 관리에서 처리
 
-
 class TakeProfitStrategy(TradingStrategy):
     """이익 실현 전략"""
     
@@ -403,17 +394,14 @@ class TakeProfitStrategy(TradingStrategy):
         """익절 신호 생성"""
         return []  # 포지션 관리에서 처리
 
-
 # UI에서 사용하는 전략 클래스들에 대한 별칭 추가
 class RSIReversalStrategy(RSIStrategy):
     """RSI 반전 전략 (RSIStrategy의 별칭)"""
     pass
 
-
 class BollingerBandMeanReversionStrategy(BollingerBandStrategy):
     """볼린저 밴드 평균회귀 전략 (BollingerBandStrategy의 별칭)"""
     pass
-
 
 class VolatilityBreakoutStrategy(TradingStrategy):
     """변동성 돌파 전략"""
@@ -481,7 +469,6 @@ class VolatilityBreakoutStrategy(TradingStrategy):
                 ))
         
         return signals
-
 
 class StrategyManager:
     """전략 관리자 클래스"""
@@ -650,7 +637,6 @@ class StrategyManager:
             logger.error(f"전략 생성 실패: {e}")
             return None
 
-
 # 기본 전략 설정 템플릿
 DEFAULT_STRATEGIES = [
     {
@@ -675,7 +661,6 @@ DEFAULT_STRATEGIES = [
         'description': '볼린저밴드 하단 접촉시 매수, 상단 접촉시 매도'
     }
 ]
-
 
 class BuyAndHoldStrategy(TradingStrategy):
     """단순 매수 보유 전략"""
@@ -707,7 +692,6 @@ class BuyAndHoldStrategy(TradingStrategy):
         )]
         
         return signals
-
 
 class VolatilityBreakoutStrategy(TradingStrategy):
     """변동성 돌파 전략"""
@@ -782,7 +766,6 @@ class VolatilityBreakoutStrategy(TradingStrategy):
         
         return signals
 
-
 def initialize_default_strategies():
     """기본 전략들을 DB에 초기화"""
     manager = StrategyManager()
@@ -802,7 +785,6 @@ def initialize_default_strategies():
             print(f"✅ 기본 전략 초기화: {config.name}")
         else:
             print(f"❌ 기본 전략 초기화 실패: {config.name}")
-
 
 if __name__ == "__main__":
     # 기본 전략 초기화 테스트

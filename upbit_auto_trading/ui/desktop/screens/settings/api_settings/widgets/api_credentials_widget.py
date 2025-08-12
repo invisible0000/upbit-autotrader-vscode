@@ -15,7 +15,6 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class ApiCredentialsWidget(QWidget):
     """
     API 자격증명 입력 위젯

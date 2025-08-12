@@ -11,7 +11,6 @@ from typing import ClassVar
 
 from ..exceptions.domain_exceptions import InvalidStrategyIdError
 
-
 @dataclass(frozen=True)
 class StrategyId:
     """

@@ -29,7 +29,6 @@ import logging
 import sqlite3
 import os
 
-
 class VariableType(Enum):
     """변수 타입 분류 (레거시 호환용)"""
     PRICE = "price"
@@ -41,7 +40,6 @@ class VariableType(Enum):
     FINANCIAL = "financial"
     CUSTOM = "custom"
 
-
 class ScaleType(Enum):
     """척도 타입 분류 (레거시 호환용)"""
     PRICE_SCALE = "price_scale"
@@ -49,7 +47,6 @@ class ScaleType(Enum):
     VOLUME_SCALE = "volume_scale"
     RATIO_SCALE = "ratio_scale"
     NORMALIZED = "normalized"
-
 
 class CompatibilityValidator:
     """DB 기반 통합 호환성 검증기 - 모든 정보를 DB에서 실시간 로드"""
@@ -574,10 +571,8 @@ class CompatibilityValidator:
                 }]
             }
 
-
 # 편의성을 위한 모듈 레벨 함수들
 _validator_instance = None
-
 
 def get_compatibility_validator() -> CompatibilityValidator:
     """싱글톤 호환성 검증기 인스턴스 반환"""
@@ -586,13 +581,11 @@ def get_compatibility_validator() -> CompatibilityValidator:
         _validator_instance = CompatibilityValidator()
     return _validator_instance
 
-
 def check_compatibility(var1_id: str, var2_id: str) -> Tuple[bool, str]:
     """간단한 호환성 검사 (기존 API와 호환)"""
     validator = get_compatibility_validator()
     is_compatible, reason, _ = validator.validate_compatibility(var1_id, var2_id)
     return is_compatible, reason
-
 
 def check_compatibility_with_status(var1_id: str, var2_id: str) -> Tuple[int, str, str]:
     """상태 코드 기반 호환성 검사
@@ -630,13 +623,11 @@ def check_compatibility_with_status(var1_id: str, var2_id: str) -> Tuple[int, st
         # 검증 중 오류 발생 시 DB 문제로 처리
         return 2, f"호환성 검증 중 오류가 발생했습니다: {str(e)}", "⚠️"
 
-
 def validate_condition_variables(variable_ids: List[str]) -> bool:
     """조건에 사용된 변수들의 호환성 검증"""
     validator = get_compatibility_validator()
     is_compatible, _ = validator.validate_multiple_compatibility(variable_ids)
     return is_compatible
-
 
 if __name__ == "__main__":
     # 테스트 코드

@@ -20,7 +20,6 @@ Security:
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 
-
 class SecureKeysRepository(ABC):
     """
     보안 키 관리를 위한 Repository 인터페이스

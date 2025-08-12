@@ -10,7 +10,6 @@ from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import (
     IEventBus, EventSubscription, EventProcessingResult, IEventStorage
 )
 
-
 class InMemoryEventBus(IEventBus):
     """메모리 기반 이벤트 버스 구현"""
 

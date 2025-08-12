@@ -14,7 +14,6 @@ from upbit_auto_trading.application.services.strategy_application_service import
 from upbit_auto_trading.application.commands.strategy_commands import CreateStrategyCommand, UpdateStrategyCommand
 from upbit_auto_trading.application.dto.strategy_dto import StrategyDto
 
-
 class StrategyMakerPresenter:
     """전략 메이커 Presenter
 

@@ -30,7 +30,6 @@ from upbit_auto_trading.infrastructure.configuration.paths import infrastructure
 
 logger = create_component_logger("DatabaseConnectionService")
 
-
 class DatabaseHealthStatus:
     """데이터베이스 연결 상태 정보"""
 
@@ -51,7 +50,6 @@ class DatabaseHealthStatus:
             'error_message': self.error_message,
             'checked_at': self.checked_at.isoformat()
         }
-
 
 class DatabaseConnectionService:
     """데이터베이스 연결 관리 서비스"""
@@ -331,7 +329,6 @@ class DatabaseConnectionService:
 
         finally:
             conn.close()
-
 
 # 전역 인스턴스 (Singleton 패턴)
 database_connection_service = DatabaseConnectionService()

@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-
 @dataclass(frozen=True)
 class StrategyConfig:
     """

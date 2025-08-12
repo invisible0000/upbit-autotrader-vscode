@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
 
-
 class DomainEvent(ABC):
     """
     모든 도메인 이벤트의 기본 클래스

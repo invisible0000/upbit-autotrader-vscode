@@ -19,7 +19,6 @@ from ..widgets.api_credentials_widget import ApiCredentialsWidget
 from ..widgets.api_connection_widget import ApiConnectionWidget
 from ..widgets.api_permissions_widget import ApiPermissionsWidget
 
-
 class ApiSettingsView(QWidget):
     """
     API 설정 뷰 - MVP 패턴의 View 역할

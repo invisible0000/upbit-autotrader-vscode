@@ -20,7 +20,6 @@ from upbit_auto_trading.domain.database_configuration.repositories.idatabase_con
 )
 from upbit_auto_trading.domain.exceptions.domain_exceptions import DomainException
 
-
 class DatabaseValidationUseCase:
     """데이터베이스 검증 Use Case"""
 

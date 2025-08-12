@@ -19,7 +19,6 @@ from upbit_auto_trading.domain.database_configuration.value_objects.database_hea
     DatabaseHealthReport, SystemDatabaseHealth, DatabaseHealthLevel
 )
 
-
 class DatabaseHealthMonitoringService:
     """
     데이터베이스 건강 모니터링 서비스

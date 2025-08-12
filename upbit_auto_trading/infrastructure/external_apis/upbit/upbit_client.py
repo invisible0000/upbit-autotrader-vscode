@@ -8,7 +8,6 @@ from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_private_client 
 from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import ApiClientError
 from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import mark_api_success, mark_api_failure
 
-
 class UpbitClient:
     """Upbit API 통합 클라이언트 - 퍼블릭과 프라이빗 API를 모두 제공"""
 

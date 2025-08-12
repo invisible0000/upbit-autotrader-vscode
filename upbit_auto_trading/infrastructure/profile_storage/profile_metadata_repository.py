@@ -20,9 +20,7 @@ from typing import Dict, List, Optional
 from upbit_auto_trading.domain.profile_management.entities.profile_metadata import ProfileMetadata
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("ProfileMetadataRepository")
-
 
 class ProfileMetadataRepository:
     """

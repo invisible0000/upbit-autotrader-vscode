@@ -8,7 +8,6 @@ MVP 패턴의 View 인터페이스입니다.
 from typing import Protocol, Dict
 from PyQt6.QtCore import pyqtSignal
 
-
 class IDatabaseTabView(Protocol):
     """데이터베이스 탭 View 인터페이스"""
 

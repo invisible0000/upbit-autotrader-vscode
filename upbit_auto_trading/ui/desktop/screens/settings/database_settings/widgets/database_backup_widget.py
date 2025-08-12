@@ -23,7 +23,6 @@ from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabaseBackupWidget(QWidget):
     """
     데이터베이스 백업 관리 위젯

@@ -12,7 +12,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class UISettingsPresenter(QObject):
     """UI 설정 Presenter - MVP 패턴"""
 

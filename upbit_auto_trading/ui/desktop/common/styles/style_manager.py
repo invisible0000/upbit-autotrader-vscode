@@ -5,12 +5,10 @@ import os
 from enum import Enum
 from PyQt6.QtWidgets import QApplication
 
-
 class Theme(Enum):
     """테마 열거형"""
     LIGHT = "light"
     DARK = "dark"
-
 
 class StyleManager:
     """

@@ -13,7 +13,6 @@ from pathlib import Path
 
 from .logging_config import LoggingConfig
 
-
 @dataclass
 class EnhancedLoggingConfig(LoggingConfig):
     """
@@ -195,7 +194,6 @@ class EnhancedLoggingConfig(LoggingConfig):
         ]
         return "\n".join(env_vars)
 
-
 def validate_enhanced_config(config: EnhancedLoggingConfig) -> List[str]:
     """
     강화된 로깅 설정 검증 및 경고 메시지 반환
@@ -207,7 +205,6 @@ def validate_enhanced_config(config: EnhancedLoggingConfig) -> List[str]:
         List[str]: 검증 경고 메시지 목록
     """
     return config.validate_config()
-
 
 def create_enhanced_logging_config() -> EnhancedLoggingConfig:
     """
@@ -229,22 +226,18 @@ def create_enhanced_logging_config() -> EnhancedLoggingConfig:
 
     return config
 
-
 # 편의 함수들
 def get_enhanced_logging_config() -> EnhancedLoggingConfig:
     """강화된 로깅 설정 인스턴스 반환"""
     return create_enhanced_logging_config()
 
-
 def is_llm_briefing_enabled() -> bool:
     """LLM 브리핑 시스템 활성화 여부 확인"""
     return os.getenv('UPBIT_LLM_BRIEFING_ENABLED', 'true').lower() == 'true'
 
-
 def is_terminal_capture_enabled() -> bool:
     """터미널 캡처 시스템 활성화 여부 확인"""
     return os.getenv('UPBIT_TERMINAL_CAPTURE', 'true').lower() == 'true'
-
 
 def is_auto_diagnosis_enabled() -> bool:
     """자동 진단 시스템 활성화 여부 확인"""

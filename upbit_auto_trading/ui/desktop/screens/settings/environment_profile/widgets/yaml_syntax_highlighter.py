@@ -25,7 +25,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.ui.desktop.common.theme_notifier import ThemeNotifier
 logger = create_component_logger("YamlSyntaxHighlighter")
 
-
 class YamlSyntaxHighlighter(QSyntaxHighlighter):
     """
     YAML 구문 강조 클래스

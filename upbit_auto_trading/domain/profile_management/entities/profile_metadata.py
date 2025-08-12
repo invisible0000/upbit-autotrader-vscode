@@ -18,9 +18,7 @@ from typing import List
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("ProfileMetadata")
-
 
 @dataclass
 class ProfileMetadata:

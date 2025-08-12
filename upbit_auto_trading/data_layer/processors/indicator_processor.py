@@ -8,7 +8,6 @@ import numpy as np
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 
-
 class IndicatorProcessor:
     """
     지표 처리기 클래스

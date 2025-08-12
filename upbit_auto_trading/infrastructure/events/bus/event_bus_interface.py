@@ -4,7 +4,6 @@ from datetime import datetime
 
 from upbit_auto_trading.domain.events.base_domain_event import DomainEvent
 
-
 class EventSubscription:
     """이벤트 구독 정보"""
 
@@ -17,7 +16,6 @@ class EventSubscription:
         self.retry_count = retry_count
         self.subscription_id = f"{event_type.__name__}_{id(handler)}"
         self.created_at = datetime.now()
-
 
 class EventProcessingResult:
     """이벤트 처리 결과"""
@@ -32,7 +30,6 @@ class EventProcessingResult:
         self.processing_time_ms = processing_time_ms
         self.retry_attempt = retry_attempt
         self.processed_at = datetime.now()
-
 
 class IEventBus(ABC):
     """이벤트 버스 인터페이스"""
@@ -73,7 +70,6 @@ class IEventBus(ABC):
     def get_statistics(self) -> Dict[str, Any]:
         """처리 통계 조회"""
         pass
-
 
 class IEventStorage(ABC):
     """이벤트 저장소 인터페이스"""

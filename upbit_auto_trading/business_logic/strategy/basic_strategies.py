@@ -13,7 +13,6 @@ import logging
 
 from upbit_auto_trading.business_logic.strategy.base_strategy import BaseStrategy
 
-
 class MovingAverageCrossStrategy(BaseStrategy):
     """
     이동 평균 교차 전략
@@ -134,7 +133,6 @@ class MovingAverageCrossStrategy(BaseStrategy):
         
         return result
 
-
 class BollingerBandsStrategy(BaseStrategy):
     """
     볼린저 밴드 전략
@@ -245,7 +243,6 @@ class BollingerBandsStrategy(BaseStrategy):
         result["signal"] = result["signal"].fillna(0)
         
         return result
-
 
 class RSIStrategy(BaseStrategy):
     """

@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 import pandas as pd
 
-
 class StrategyInterface(ABC):
     """
     거래 전략 인터페이스

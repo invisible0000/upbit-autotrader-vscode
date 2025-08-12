@@ -24,7 +24,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-
 class UpbitWebSocket:
     """업비트 웹소켓 클라이언트"""
     
@@ -323,7 +322,6 @@ class UpbitWebSocket:
             "subscriptions_count": len(self.subscriptions),
             "callbacks_count": len(self.callbacks)
         }
-
 
 class RealtimeChartUpdater:
     """실시간 차트 업데이터

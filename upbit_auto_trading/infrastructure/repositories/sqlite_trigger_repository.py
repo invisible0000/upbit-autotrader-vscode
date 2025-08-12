@@ -21,7 +21,6 @@ import logging
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 from upbit_auto_trading.infrastructure.mappers.strategy_mapper import TriggerMapper
 
-
 class SqliteTriggerRepository:
     """SQLite 기반 Trigger Repository 구현
 

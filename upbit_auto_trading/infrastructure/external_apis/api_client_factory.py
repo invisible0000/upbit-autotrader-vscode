@@ -3,7 +3,6 @@ import os
 
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
 
-
 class ApiClientFactory:
     """API 클라이언트 팩토리"""
 

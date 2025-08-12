@@ -14,7 +14,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("BackupRecord")
 
-
 class BackupStatus(Enum):
     """백업 상태 열거형"""
     PENDING = "pending"      # 대기 중
@@ -23,13 +22,11 @@ class BackupStatus(Enum):
     FAILED = "failed"        # 실패
     CORRUPTED = "corrupted"  # 손상됨
 
-
 class BackupType(Enum):
     """백업 타입 열거형"""
     MANUAL = "manual"        # 수동 백업
     AUTOMATIC = "automatic"  # 자동 백업
     SCHEDULED = "scheduled"  # 예약 백업
-
 
 @dataclass(frozen=True)
 class BackupRecord:

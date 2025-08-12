@@ -10,7 +10,6 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
-
 class IndicatorOverlay:
     """지표 오버레이 클래스"""
     

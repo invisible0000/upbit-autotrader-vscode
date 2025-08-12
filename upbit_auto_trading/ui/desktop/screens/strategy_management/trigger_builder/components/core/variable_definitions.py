@@ -18,7 +18,6 @@ except ImportError as e:
     print(f"⚠️ 통합 호환성 검증기 로드 실패: {e}")
     COMPATIBILITY_VALIDATOR_AVAILABLE = False
 
-
 class VariableDefinitions:
     """DB 기반 트레이딩 변수 정의 관리 클래스 - # O(1) 캐시 기반 접근"""
     
@@ -504,7 +503,6 @@ class VariableDefinitions:
                 "error": str(e),
                 "fallback_active": True
             }
-
 
 # 모듈 로드 시 DB 상태 확인
 if __name__ == "__main__":

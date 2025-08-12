@@ -13,11 +13,9 @@ from upbit_auto_trading.infrastructure.config.models.config_models import Applic
 from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
 from upbit_auto_trading.infrastructure.dependency_injection.container import DIContainer
 
-
 class ApplicationContextError(Exception):
     """애플리케이션 컨텍스트 관련 오류"""
     pass
-
 
 class ApplicationContext:
     """
@@ -599,10 +597,8 @@ class ApplicationContext:
         else:
             return f"ApplicationContext(environment={self._environment}, initialized=False)"
 
-
 # 애플리케이션 전역 컨텍스트 (선택적 사용)
 _app_context: Optional[ApplicationContext] = None
-
 
 def get_application_context() -> ApplicationContext:
     """
@@ -623,7 +619,6 @@ def get_application_context() -> ApplicationContext:
         _app_context.initialize()
     return _app_context
 
-
 def set_application_context(context: ApplicationContext) -> None:
     """
     전역 애플리케이션 컨텍스트 설정
@@ -638,7 +633,6 @@ def set_application_context(context: ApplicationContext) -> None:
         _app_context.dispose()
     _app_context = context
 
-
 def reset_application_context() -> None:
     """
     전역 애플리케이션 컨텍스트 재설정
@@ -649,7 +643,6 @@ def reset_application_context() -> None:
     if _app_context and _app_context.is_initialized:
         _app_context.dispose()
     _app_context = None
-
 
 def is_application_context_initialized() -> bool:
     """

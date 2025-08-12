@@ -8,7 +8,6 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 from datetime import datetime
 
-
 @dataclass
 class SystemIssue:
     """시스템 문제 정의"""
@@ -21,7 +20,6 @@ class SystemIssue:
     suggested_actions: List[str]
     estimated_fix_time: int
     log_excerpt: str
-
 
 class IssueDetector:
     """자동 문제 감지 시스템"""

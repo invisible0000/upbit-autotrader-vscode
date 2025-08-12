@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 from typing import Optional, List
 from upbit_auto_trading.domain.database_configuration.entities.database_configuration import DatabaseConfiguration
 
-
 class IDatabaseConfigurationRepository(ABC):
     """데이터베이스 구성 Repository 인터페이스"""
 

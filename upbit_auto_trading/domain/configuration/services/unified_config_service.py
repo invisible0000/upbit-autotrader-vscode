@@ -13,7 +13,6 @@ from datetime import datetime
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
 
-
 class UnifiedConfigService:
     """통합 설정 관리 도메인 서비스"""
 

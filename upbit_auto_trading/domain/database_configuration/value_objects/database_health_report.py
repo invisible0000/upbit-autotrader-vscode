@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-
 class DatabaseHealthLevel(Enum):
     """데이터베이스 건강 상태 레벨"""
     HEALTHY = "healthy"           # 정상
@@ -18,7 +17,6 @@ class DatabaseHealthLevel(Enum):
     ERROR = "error"               # 오류 (연결 불가)
     CRITICAL = "critical"         # 치명적 (파일 손상)
     MISSING = "missing"           # 파일 없음
-
 
 @dataclass
 class DatabaseHealthReport:
@@ -43,7 +41,6 @@ class DatabaseHealthReport:
     def needs_immediate_attention(self) -> bool:
         """즉시 사용자 개입이 필요한지 확인"""
         return self.health_level in [DatabaseHealthLevel.ERROR, DatabaseHealthLevel.CRITICAL, DatabaseHealthLevel.MISSING]
-
 
 @dataclass
 class SystemDatabaseHealth:

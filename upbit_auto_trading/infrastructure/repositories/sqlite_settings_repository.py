@@ -28,7 +28,6 @@ from upbit_auto_trading.domain.entities.trigger import TradingVariable
 from upbit_auto_trading.domain.value_objects.compatibility_rules import ComparisonGroupRules
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class SqliteSettingsRepository(SettingsRepository):
     """SQLite 기반 Settings Repository 구현 (읽기 전용)"""
 

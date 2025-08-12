@@ -344,7 +344,6 @@ class PortfolioCompositionPanel(QWidget):
             "asset_count": len(self.assets)
         }
 
-
 class AssetAllocationChart(QWidget):
     """자산 배분 도넛 차트"""
     
@@ -433,7 +432,6 @@ class AssetAllocationChart(QWidget):
         inner_rect = rect.adjusted(radius - inner_radius, radius - inner_radius,
                                   -(radius - inner_radius), -(radius - inner_radius))
         painter.drawEllipse(inner_rect)
-
 
 class AddAssetDialog(QDialog):
     """자산 추가 대화상자"""

@@ -13,7 +13,6 @@ Task: 4.2.1
 from typing import Optional
 import yaml
 
-
 class ProfileMetadata:
     """프로파일 메타데이터를 관리하는 데이터 클래스"""
     def __init__(self, name: str = "", description: str = "",

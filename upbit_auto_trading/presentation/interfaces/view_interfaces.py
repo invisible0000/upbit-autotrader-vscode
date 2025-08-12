@@ -10,7 +10,6 @@ Note: Protocol을 사용하여 PyQt6와의 메타클래스 충돌을 방지합�
 
 from typing import List, Dict, Any, Protocol
 
-
 class IStrategyMakerView(Protocol):
     """전략 메이커 View 인터페이스
 
@@ -54,7 +53,6 @@ class IStrategyMakerView(Protocol):
         """로딩 상태 숨김"""
         ...
 
-
 class ITriggerBuilderView(Protocol):
     """트리거 빌더 View 인터페이스"""
 
@@ -78,7 +76,6 @@ class ITriggerBuilderView(Protocol):
         """트리거 폼 초기화"""
         ...
 
-
 class IBacktestView(Protocol):
     """백테스팅 View 인터페이스"""
 
@@ -98,7 +95,6 @@ class IBacktestView(Protocol):
         """거래 이력 표시"""
         ...
 
-
 class ISettingsView(Protocol):
     """설정 View 인터페이스"""
 
@@ -117,7 +113,6 @@ class ISettingsView(Protocol):
     def display_settings_error(self, error: str) -> None:
         """설정 오류 메시지 표시"""
         ...
-
 
 class ILiveTradingView(Protocol):
     """실시간 거래 View 인터페이스"""

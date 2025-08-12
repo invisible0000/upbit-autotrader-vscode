@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set
 from enum import Enum
 
-
 class CompatibilityLevel(Enum):
     """
     변수 간 호환성 수준
@@ -54,7 +53,6 @@ class CompatibilityLevel(Enum):
             self.INCOMPATIBLE: "#F44336"   # 빨간색
         }
         return color_codes[self]
-
 
 @dataclass(frozen=True)
 class CompatibilityResult:
@@ -130,7 +128,6 @@ class CompatibilityResult:
             [],
             suggestions or []
         )
-
 
 @dataclass
 class ComparisonGroupRules:

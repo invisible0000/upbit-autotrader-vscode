@@ -12,9 +12,7 @@ from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("ConfigProfileService")
-
 
 @dataclass
 class ProfileSwitchResult:
@@ -23,7 +21,6 @@ class ProfileSwitchResult:
     profile_name: str
     env_vars_applied: Dict[str, str]
     errors: List[str]
-
 
 class ConfigProfileLoader:
     """YAML 설정 파일 로더"""
@@ -83,7 +80,6 @@ class ConfigProfileLoader:
 
         logger.debug(f"발견된 프로파일: {profiles}")
         return sorted(profiles)
-
 
 class ProfileSwitcher:
     """프로파일 기반 환경 설정 스위처"""
@@ -226,7 +222,6 @@ class ProfileSwitcher:
             'component_focus': os.getenv('UPBIT_COMPONENT_FOCUS', ''),
             'current_profile': self.current_profile or 'none'
         }
-
 
 class ConfigProfileService:
     """Configuration Profile Management Service

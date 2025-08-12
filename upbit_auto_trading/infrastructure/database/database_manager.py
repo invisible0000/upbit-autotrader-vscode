@@ -18,7 +18,6 @@ import logging
 from pathlib import Path
 import threading
 
-
 class DatabaseManager:
     """SQLite 데이터베이스 연결 관리"""
 
@@ -119,7 +118,6 @@ class DatabaseManager:
                 self._logger.error(f"데이터베이스 연결 종료 실패 {db_name}: {e}")
 
         self._connections.clear()
-
 
 class DatabaseConnectionProvider:
     """데이터베이스 연결 제공자 (Singleton)"""

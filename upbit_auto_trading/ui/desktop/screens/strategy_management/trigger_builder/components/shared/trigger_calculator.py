@@ -3,7 +3,6 @@ Trigger Calculator Component
 트리거 계산 로직을 담당하는 컴포넌트
 """
 
-
 class TriggerCalculator:
     """트리거 계산 로직을 담당하는 컴포넌트"""
     

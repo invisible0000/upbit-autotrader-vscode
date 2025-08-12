@@ -22,7 +22,6 @@ from upbit_auto_trading.infrastructure.events.event_system_initializer import Ev
 from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import IEventBus
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class EventDrivenLogViewerWidget(QWidget):
     """Event-Driven Architecture 기반 로그 뷰어 위젯"""
 
@@ -490,7 +489,6 @@ class EventDrivenLogViewerWidget(QWidget):
             self.logger.error(f"위젯 정리 실패: {e}")
 
         super().closeEvent(event)
-
 
 # Event Handler 함수들 (독립적으로 사용 가능)
 def create_log_message_event_from_log_record(record) -> LogMessageEvent:

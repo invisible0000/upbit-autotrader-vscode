@@ -4,13 +4,11 @@ from pathlib import Path
 import os
 from enum import Enum
 
-
 class Environment(Enum):
     """실행 환경"""
     DEVELOPMENT = "development"
     TESTING = "testing"
     PRODUCTION = "production"
-
 
 @dataclass
 class DatabaseConfig:
@@ -39,7 +37,6 @@ class DatabaseConfig:
         if self.market_data_db_path != ':memory:':
             self.market_data_db_path = str(Path(self.market_data_db_path).resolve())
 
-
 @dataclass
 class UpbitApiConfig:
     """Upbit API 설정"""
@@ -58,7 +55,6 @@ class UpbitApiConfig:
             self.access_key = os.getenv('UPBIT_ACCESS_KEY')
         if not self.secret_key:
             self.secret_key = os.getenv('UPBIT_SECRET_KEY')
-
 
 @dataclass
 @dataclass
@@ -101,7 +97,6 @@ class LoggingConfig:
                 pass
         self.feature_development = os.getenv('UPBIT_FEATURE_DEVELOPMENT', self.feature_development)
 
-
 @dataclass
 class EventBusConfig:
     """Event Bus 설정"""
@@ -115,7 +110,6 @@ class EventBusConfig:
     retry_exponential_base: float = 2.0
     storage_enabled: bool = True
     storage_cleanup_days: int = 7
-
 
 @dataclass
 class TradingConfig:
@@ -152,7 +146,6 @@ class TradingConfig:
     order_retry_count: int = 3            # 주문 재시도 횟수
     order_timeout_seconds: int = 30       # 주문 타임아웃
 
-
 @dataclass
 class UIConfig:
     """UI 설정"""
@@ -188,7 +181,6 @@ class UIConfig:
     # 성능 설정
     animation_enabled: bool = True        # UI 애니메이션
     smooth_scrolling: bool = True         # 부드러운 스크롤링
-
 
 @dataclass
 class ApplicationConfig:
@@ -251,7 +243,6 @@ class ApplicationConfig:
             errors.append("최대 포지션 크기가 최소 주문 금액보다 작습니다")
 
         return errors
-
 
 # 환경별 기본 설정
 DEFAULT_CONFIGS = {

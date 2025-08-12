@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from collections import deque
 import statistics
 
-
 @dataclass
 class PerformanceMetric:
     """성능 메트릭 정의"""
@@ -22,7 +21,6 @@ class PerformanceMetric:
     category: str
     threshold: Optional[float] = None
     status: str = "OK"  # OK, WARNING, CRITICAL
-
 
 @dataclass
 class SystemMetrics:
@@ -38,7 +36,6 @@ class SystemMetrics:
     thread_count: int
     file_descriptor_count: int
 
-
 @dataclass
 class PerformanceReport:
     """성능 리포트"""
@@ -48,7 +45,6 @@ class PerformanceReport:
     logging_performance: Dict[str, Any]
     bottleneck_analysis: List[str]
     recommendations: List[str]
-
 
 class PerformanceMonitor:
     """성능 모니터링 시스템"""

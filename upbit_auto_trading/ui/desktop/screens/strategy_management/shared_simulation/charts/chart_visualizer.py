@@ -59,7 +59,6 @@ except ImportError as e:
     print(f"⚠️ Matplotlib 라이브러리를 불러올 수 없습니다: {e}")
     CHART_AVAILABLE = False
 
-
 class ChartVisualizer:
     """차트 시각화를 담당하는 컴포넌트"""
 

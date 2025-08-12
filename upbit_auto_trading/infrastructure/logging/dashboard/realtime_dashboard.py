@@ -12,7 +12,6 @@ from pathlib import Path
 from ..briefing.status_tracker import SystemStatusTracker, ComponentStatus
 from .issue_detector import IssueDetector, SystemIssue
 
-
 @dataclass
 class DashboardData:
     """대시보드 데이터 구조"""
@@ -23,7 +22,6 @@ class DashboardData:
     performance_metrics: Dict[str, Any]
     recommendations: List[str]
     quick_actions: List[Dict[str, str]]
-
 
 class RealtimeDashboard:
     """실시간 대시보드 데이터 생성기"""

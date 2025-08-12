@@ -7,7 +7,6 @@ from upbit_auto_trading.infrastructure.external_apis.common.api_client_base impo
 )
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
 
-
 class UpbitPublicClient(BaseApiClient):
     """Upbit 공개 API 클라이언트 - 기존 UpbitAPI 메서드들 기반"""
 

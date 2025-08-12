@@ -416,7 +416,6 @@ def get_simulation_engine():
                     logging.warning("Using basic simulation engine (final fallback)")
     return _simulation_engine
 
-
 def get_simulation_engine_with_source(source_type: str):
     """특정 데이터 소스로 시뮬레이션 엔진 생성"""
     try:
@@ -425,7 +424,6 @@ def get_simulation_engine_with_source(source_type: str):
     except ImportError:
         logging.warning("Data source manager not available, using default engine")
         return get_simulation_engine()
-
 
 def reset_simulation_engine():
     """시뮬레이션 엔진 리셋 (데이터 소스 변경시 사용)"""

@@ -23,7 +23,6 @@ from upbit_auto_trading.domain.models.notification import NotificationType
 from .notification_list import NotificationList
 from .notification_filter import NotificationFilter
 
-
 class NotificationCenter(QMainWindow):
     """알림 센터 메인 윈도우"""
 

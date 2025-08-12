@@ -13,7 +13,6 @@ import asyncio
 import uuid
 import logging
 
-
 class NotificationType(Enum):
     """알림 타입 분류"""
     SUCCESS = "success"    # 성공적 완료 (전략 생성, 백테스팅 성공 등)
@@ -21,14 +20,12 @@ class NotificationType(Enum):
     ERROR = "error"        # 오류 발생 (백테스팅 실패, 시스템 오류 등)
     INFO = "info"          # 일반 정보 (진행 상황, 상태 변경 등)
 
-
 class NotificationChannel(Enum):
     """알림 전송 채널"""
     UI_TOAST = "ui_toast"                    # UI 토스트 메시지
     UI_STATUS_BAR = "ui_status_bar"          # UI 상태 표시줄
     LOG_FILE = "log_file"                    # 로그 파일 기록
     SYSTEM_NOTIFICATION = "system_notification"  # OS 시스템 알림
-
 
 @dataclass
 class Notification:
@@ -52,7 +49,6 @@ class Notification:
     timestamp: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
     auto_dismiss_seconds: Optional[int] = None
-
 
 class NotificationService:
     """알림 관리 서비스

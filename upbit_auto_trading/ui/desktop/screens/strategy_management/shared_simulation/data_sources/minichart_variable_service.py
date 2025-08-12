@@ -21,7 +21,6 @@ except ImportError:
     MINICHART_MODELS_AVAILABLE = False
     logging.warning("미니차트 모델을 가져올 수 없습니다. 폴백 모드로 동작합니다.")
 
-
 @dataclass
 class MiniChartVariableConfig:
     """미니차트 변수 설정"""
@@ -68,7 +67,6 @@ class MiniChartVariableConfig:
         if self.compatible_scale_types is None:
             self.compatible_scale_types = []
 
-
 @dataclass
 class MiniChartLayoutInfo:
     """미니차트 레이아웃 정보"""
@@ -77,7 +75,6 @@ class MiniChartLayoutInfo:
     trigger_markers: List[Dict[str, Any]]  # Trg
     color_scheme: Dict[str, str]
     scale_groups: Dict[str, Dict[str, Any]]
-
 
 class MiniChartVariableService:
     """미니차트 변수 서비스 - 4요소 단순화 시스템"""
@@ -384,7 +381,6 @@ class MiniChartVariableService:
                 'main_height_ratio': 0.4,
                 'subplot_ratios': normalized_ratios
             }
-
 
 # 전역 서비스 인스턴스
 _minichart_variable_service = None

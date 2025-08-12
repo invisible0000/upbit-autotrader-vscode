@@ -21,9 +21,7 @@ from PyQt6.QtCore import pyqtSignal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("QuickEnvironmentButtons")
-
 
 class QuickEnvironmentButtons(QWidget):
     """

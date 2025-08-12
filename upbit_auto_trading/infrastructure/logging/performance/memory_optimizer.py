@@ -11,7 +11,6 @@ from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-
 @dataclass
 class MemorySnapshot:
     """메모리 스냅샷"""
@@ -21,7 +20,6 @@ class MemorySnapshot:
     gc_counts: Dict[int, int]
     object_counts: Dict[str, int]
     active_references: int
-
 
 @dataclass
 class MemoryAlert:
@@ -33,7 +31,6 @@ class MemoryAlert:
     threshold_mb: float
     timestamp: datetime
     suggestions: List[str]
-
 
 class MemoryOptimizer:
     """메모리 최적화 관리자"""

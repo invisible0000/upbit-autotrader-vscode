@@ -15,7 +15,6 @@ except ImportError as e:
     print(f"⚠️ 통합 호환성 검증기 로드 실패: {e}")
     COMPATIBILITY_VALIDATOR_AVAILABLE = False
 
-
 class VariableDefinitions:
     """트레이딩 변수들의 파라미터 정의를 관리하는 클래스"""
     

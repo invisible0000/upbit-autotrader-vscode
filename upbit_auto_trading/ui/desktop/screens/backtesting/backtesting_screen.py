@@ -14,7 +14,6 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-
 class SimpleStrategyAdapter:
     """백테스트용 전략 어댑터 - StrategyInterface 요구사항 최소화"""
     
@@ -88,7 +87,6 @@ class SimpleStrategyAdapter:
         if self.strategy_type == 'moving_average_cross':
             return {'short_period': 5, 'long_period': 20}
         return {}
-
 
 class BacktestThread(QThread):
     """백테스트 실행 스레드"""

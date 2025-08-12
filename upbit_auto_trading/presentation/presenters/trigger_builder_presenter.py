@@ -11,7 +11,6 @@ import logging
 from upbit_auto_trading.presentation.interfaces.view_interfaces import ITriggerBuilderView
 from upbit_auto_trading.application.services.trigger_application_service import TriggerApplicationService
 
-
 class TriggerBuilderPresenter:
     """트리거 빌더 Presenter
 
@@ -85,7 +84,6 @@ class TriggerBuilderPresenter:
         except Exception as e:
             self._view.display_compatibility_warning(f"트리거 저장 실패: {str(e)}")
             self._logger.error(f"트리거 저장 실패: {e}", exc_info=True)
-
 
 class BacktestPresenter:
     """백테스팅 Presenter

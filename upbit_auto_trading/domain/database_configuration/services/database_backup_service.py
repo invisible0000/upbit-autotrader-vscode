@@ -18,7 +18,6 @@ from ..value_objects.database_type import DatabaseType
 
 logger = create_component_logger("DatabaseBackupService")
 
-
 class DatabaseBackupService:
     """
     데이터베이스 백업 도메인 서비스

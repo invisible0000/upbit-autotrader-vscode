@@ -121,7 +121,6 @@ class TriggerBuilderScreen(QWidget):
         self.logger = create_component_logger("TriggerBuilder")
 
         # LLM_REPORT 초기화 보고
-        self._log_llm_report("TriggerBuilder_초기화", "시작", "컴포넌트 기반 트리거 빌더 생성")
 
         # 메인 윈도우에 맞춘 최소 크기 설정 (1280x720) - 반응형
         self.setMinimumSize(1280, 720)
@@ -136,13 +135,9 @@ class TriggerBuilderScreen(QWidget):
         self.chart_visualizer = ChartVisualizer()
         self.trigger_calculator = TriggerCalculator()
 
-        self._log_llm_report("TriggerBuilder_컴포넌트", "로드_완료", "Storage, Chart, Calculator 초기화 완료")
-
         # 시뮬레이션 엔진 초기화 (NEW shared_simulation)
         from ..shared_simulation.engines.simulation_engines import get_embedded_engine
         self.simulation_engine = get_embedded_engine()
-
-        self._log_llm_report("시뮬레이션_엔진", "초기화_완료", "embedded 엔진 로드 성공")
 
         # 차트 변수 카테고리 시스템 초기화
         if CHART_VARIABLE_SYSTEM_AVAILABLE:
@@ -152,10 +147,9 @@ class TriggerBuilderScreen(QWidget):
                 self.chart_variable_service = None  # Legacy service disabled
                 self.variable_registry = get_variable_registry()
                 self.logger.debug("차트 변수 시스템 로드 완료 (레거시 서비스 비활성화)")
-                self._log_llm_report("차트_변수_시스템", "로드_완료", "variable_registry 활성화")
+
             except Exception as e:
                 self.logger.warning(f"차트 변수 시스템 초기화 실패: {e}")
-                self._log_llm_report("차트_변수_시스템", "로드_실패", f"오류: {str(e)}")
                 self.chart_variable_service = None
                 self.variable_registry = None
         else:
@@ -170,9 +164,7 @@ class TriggerBuilderScreen(QWidget):
         self.logger.debug("트리거 빌더 초기화 완료")
 
         # LLM_REPORT 완료 보고
-        self._log_llm_report("TriggerBuilder_초기화", "완료", "UI 및 스타일 적용 완료")
 
-    def _log_llm_report(self, operation: str, status: str, details: str = "") -> None:
         """LLM 에이전트 구조화된 보고"""
         self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
 
@@ -375,19 +367,17 @@ class TriggerBuilderScreen(QWidget):
 
     def load_trigger_list(self):
         """트리거 목록 로드 - TriggerListWidget 완전 위임"""
-        self._log_llm_report("트리거_목록_로드", "시작", "저장된 트리거 조건들 불러오기")
 
         try:
             if hasattr(self, 'trigger_list_widget'):
                 self.trigger_list_widget.load_trigger_list()
                 self.logger.info("✅ TriggerListWidget을 통한 트리거 목록 로드 완료")
-                self._log_llm_report("트리거_목록_로드", "성공", "TriggerListWidget 위임 완료")
+
             else:
                 self.logger.warning("⚠️ TriggerListWidget을 찾을 수 없습니다")
-                self._log_llm_report("트리거_목록_로드", "실패", "TriggerListWidget 없음")
+
         except Exception as e:
             self.logger.error(f"❌ 트리거 목록 로드 실패: {e}")
-            self._log_llm_report("트리거_목록_로드", "오류", f"예외: {str(e)}")
 
     def on_trigger_selected(self, item, column):
         """트리거 선택 처리"""
@@ -558,17 +548,15 @@ class TriggerBuilderScreen(QWidget):
 
     def run_simulation(self, scenario):
         """시뮬레이션 실행 - 실제 트리거 계산 로직 사용 (NEW)"""
-        self._log_llm_report("시뮬레이션_실행", "시작", f"시나리오: {scenario}")
 
         if not self.selected_condition:
             self.simulation_status.setText("Status: 트리거를 선택해 주세요.")
             print("⚠️ 트리거를 선택하세요.")
-            self._log_llm_report("시뮬레이션_실행", "중단", "트리거 미선택")
+
             return
 
         try:
             print(f"🚀 실제 트리거 시뮬레이션 시작: {scenario}")
-            self._log_llm_report("시뮬레이션_계산", "진행중", "트리거 조건 검증 시작")
 
             # 실제 트리거 시뮬레이션 서비스 사용 (NEW)
             from .components.shared.trigger_simulation_service import (
@@ -729,7 +717,6 @@ class TriggerBuilderScreen(QWidget):
         self.condition_tested.emit(self.selected_condition, trigger_count > 0)
 
         print(f"✅ 시뮬레이션 완료: {result.result_text}")
-
 
     def _get_variable_chart_info(self, variable_name):
         """차트 변수 카테고리 시스템을 통한 변수 정보 가져오기 - 올바른 ID 매핑"""
@@ -1655,7 +1642,6 @@ class TriggerBuilderScreen(QWidget):
                 self.logger.error(error_msg)
             else:
                 print(f"❌ {error_msg}")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

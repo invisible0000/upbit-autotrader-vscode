@@ -14,7 +14,6 @@ import threading
 # 데이터 계층 모듈 임포트
 from upbit_auto_trading.data_layer.upbit_api import UpbitAPI
 
-
 class TradeDataProvider(ABC):
     """거래 데이터 제공자 인터페이스"""
     
@@ -44,7 +43,6 @@ class TradeDataProvider(ABC):
             List[Dict[str, Any]]: 체결 내역 목록
         """
         pass
-
 
 class UpbitTradeDataProvider(TradeDataProvider):
     """업비트 거래 데이터 제공자"""

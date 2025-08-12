@@ -14,7 +14,6 @@ from PyQt6.QtCore import pyqtSignal, Qt
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class ApiConnectionWidget(QWidget):
     """
     API 연결 테스트 위젯

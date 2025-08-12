@@ -27,9 +27,7 @@ from upbit_auto_trading.application.services.profile_edit_session_service import
 from upbit_auto_trading.application.services.profile_validation_service import ProfileValidationService
 from ..dialogs.profile_metadata import ProfileMetadata
 
-
 logger = create_component_logger("EnvironmentProfilePresenter")
-
 
 class EnvironmentProfilePresenter(QObject):
     """

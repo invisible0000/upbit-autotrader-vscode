@@ -61,7 +61,6 @@ def retry_on_exception(max_retries=3, retry_delay=1, backoff_factor=2, exception
     
     return decorator
 
-
 class UpbitAPI:
     """업비트 API 클라이언트 클래스"""
     

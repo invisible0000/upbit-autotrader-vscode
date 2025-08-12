@@ -1,0 +1,5 @@
+{
+  "UPBIT_LOG_LEVEL": "DEBUG",
+  "UPBIT_CONSOLE_OUTPUT": "true",
+  "UPBIT_LOG_SCOPE": "verbose"
+}

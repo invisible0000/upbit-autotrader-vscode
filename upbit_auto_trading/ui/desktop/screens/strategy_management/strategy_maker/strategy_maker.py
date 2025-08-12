@@ -34,7 +34,6 @@ except ImportError as e:
     print(f"⚠️ shared_simulation 시스템 import 실패: {e}")
     SHARED_SIMULATION_AVAILABLE = False
 
-
 class StrategyMaker(QWidget):
     """전략 메이커 - 트리거 조합으로 매매 전략 생성"""
     
@@ -1414,7 +1413,6 @@ class StrategyMaker(QWidget):
             
         except Exception as e:
             print(f"❌ 리스트 크기 조정 오류: {e}")
-
 
 if __name__ == "__main__":
     from PyQt6.QtWidgets import QApplication

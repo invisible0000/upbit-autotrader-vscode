@@ -10,7 +10,6 @@ from ..configuration.enhanced_config import EnhancedLoggingConfig
 from .status_tracker import SystemStatusTracker, ComponentStatus
 from .issue_analyzer import IssueAnalyzer, SystemIssue
 
-
 class LLMBriefingService:
     """LLM 에이전트를 위한 실시간 브리핑 서비스"""
 

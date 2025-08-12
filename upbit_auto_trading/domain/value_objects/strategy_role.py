@@ -7,7 +7,6 @@
 
 from enum import Enum
 
-
 class StrategyRole(Enum):
     """
     전략 역할 분류

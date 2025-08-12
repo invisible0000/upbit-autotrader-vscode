@@ -8,7 +8,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QIcon, QFont
 
-
 class NavigationButton(QPushButton):
     """
     네비게이션 버튼 클래스
@@ -37,7 +36,6 @@ class NavigationButton(QPushButton):
         self.setIconSize(QSize(24, 24))
         
         # 스타일은 QSS 파일에서 관리하므로 인라인 스타일 제거
-
 
 class NavigationBar(QWidget):
     """

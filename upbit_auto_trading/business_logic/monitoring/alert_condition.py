@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
-
 class AlertCondition(ABC):
     """알림 조건 기본 클래스"""
     
@@ -61,7 +60,6 @@ class AlertCondition(ABC):
     def update_last_triggered(self):
         """마지막 발생 시간 업데이트"""
         self.last_triggered_at = datetime.now()
-
 
 class PriceAlertCondition(AlertCondition):
     """가격 알림 조건 클래스"""
@@ -129,7 +127,6 @@ class PriceAlertCondition(AlertCondition):
             condition.last_triggered_at = datetime.fromisoformat(data["last_triggered_at"])
         condition.is_active = data["is_active"]
         return condition
-
 
 class IndicatorAlertCondition(AlertCondition):
     """기술적 지표 알림 조건 클래스"""
@@ -210,7 +207,6 @@ class IndicatorAlertCondition(AlertCondition):
             condition.last_triggered_at = datetime.fromisoformat(data["last_triggered_at"])
         condition.is_active = data["is_active"]
         return condition
-
 
 class PatternAlertCondition(AlertCondition):
     """패턴 인식 알림 조건 클래스"""

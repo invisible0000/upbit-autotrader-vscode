@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QGroupBox, QFormLay
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class NotificationFrequencyWidget(QWidget):
     """알림 빈도 설정 위젯"""
 

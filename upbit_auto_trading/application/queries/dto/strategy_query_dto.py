@@ -8,7 +8,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 
-
 class StrategySortField(Enum):
     """전략 정렬 필드"""
     NAME = "name"
@@ -17,12 +16,10 @@ class StrategySortField(Enum):
     STATUS = "status"
     PERFORMANCE = "performance"
 
-
 class SortDirection(Enum):
     """정렬 방향"""
     ASC = "asc"
     DESC = "desc"
-
 
 @dataclass
 class StrategyListQuery:
@@ -38,7 +35,6 @@ class StrategyListQuery:
     sort_direction: SortDirection = SortDirection.DESC
     include_deleted: bool = False
 
-
 @dataclass
 class StrategyListItem:
     """전략 목록 아이템 응답 DTO"""
@@ -53,7 +49,6 @@ class StrategyListItem:
     created_at: datetime
     updated_at: datetime
 
-
 @dataclass
 class StrategyListResponse:
     """전략 목록 응답 DTO"""
@@ -64,7 +59,6 @@ class StrategyListResponse:
     has_next: bool
     has_previous: bool
 
-
 @dataclass
 class StrategyDetailQuery:
     """전략 상세 조회 쿼리"""
@@ -72,7 +66,6 @@ class StrategyDetailQuery:
     include_triggers: bool = True
     include_backtest_history: bool = True
     include_performance_metrics: bool = True
-
 
 @dataclass
 class StrategyDetailResponse:

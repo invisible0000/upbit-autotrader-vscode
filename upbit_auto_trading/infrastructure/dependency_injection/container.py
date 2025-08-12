@@ -6,13 +6,11 @@ import logging
 
 T = TypeVar('T')
 
-
 class LifetimeScope(Enum):
     """객체 생명주기 범위"""
     TRANSIENT = "transient"    # 매번 새 인스턴스
     SINGLETON = "singleton"    # 앱 전체에서 하나
     SCOPED = "scoped"         # 스코프 내에서 하나
-
 
 class ServiceRegistration:
     """서비스 등록 정보"""
@@ -25,7 +23,6 @@ class ServiceRegistration:
         self.lifetime = lifetime
         self.factory = factory
         self.instance: Optional[Any] = None
-
 
 class DIContainer:
     """의존성 주입 컨테이너"""
@@ -259,20 +256,16 @@ class DIContainer:
         """컨텍스트 매니저 종료"""
         self.dispose()
 
-
 class ServiceNotRegisteredError(Exception):
     """서비스가 등록되지 않은 경우 발생하는 예외"""
     pass
-
 
 class DependencyResolutionError(Exception):
     """의존성 해결 실패 시 발생하는 예외"""
     pass
 
-
 # 전역 컨테이너 (선택적 사용)
 _global_container: Optional[DIContainer] = None
-
 
 def get_global_container() -> DIContainer:
     """전역 컨테이너 조회"""
@@ -281,12 +274,10 @@ def get_global_container() -> DIContainer:
         _global_container = DIContainer()
     return _global_container
 
-
 def set_global_container(container: DIContainer) -> None:
     """전역 컨테이너 설정"""
     global _global_container
     _global_container = container
-
 
 def reset_global_container() -> None:
     """전역 컨테이너 재설정"""

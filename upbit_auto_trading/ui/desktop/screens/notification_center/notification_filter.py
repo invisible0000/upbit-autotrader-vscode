@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
 
 from upbit_auto_trading.domain.models.notification import NotificationType
 
-
 class NotificationFilter(QWidget):
     """알림 필터 위젯"""
 

@@ -26,7 +26,6 @@ except ImportError:
 from upbit_auto_trading.domain.models.notification import NotificationType
 from .alert_manager import AlertManager
 
-
 class SystemMonitor:
     """시스템 모니터링 클래스"""
 

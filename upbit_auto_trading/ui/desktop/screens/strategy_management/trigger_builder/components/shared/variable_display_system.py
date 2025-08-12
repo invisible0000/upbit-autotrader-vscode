@@ -17,7 +17,6 @@ try:
 except ImportError:
     _service_available = False
 
-
 class VariableCategory(Enum):
     """변수 카테고리 정의"""
     # 시가 차트에 함께 표시되는 지표들
@@ -33,7 +32,6 @@ class VariableCategory(Enum):
     PERCENTAGE = "percentage"        # 퍼센트 단위 (0-100%)
     CUSTOM = "custom"                # 사용자 정의
 
-
 class ChartDisplayType(Enum):
     """차트 표시 방식"""
     MAIN_CHART_LINE = "main_line"           # 메인 차트에 선으로 표시
@@ -42,7 +40,6 @@ class ChartDisplayType(Enum):
     SUBPLOT_LINE = "subplot_line"           # 서브플롯에 선으로 표시
     SUBPLOT_HISTOGRAM = "subplot_histogram" # 서브플롯에 히스토그램으로 표시
     SUBPLOT_LEVEL = "subplot_level"         # 서브플롯에 수평선으로 표시
-
 
 @dataclass
 class VariableDisplayConfig:
@@ -59,7 +56,6 @@ class VariableDisplayConfig:
     def __post_init__(self):
         if self.allow_external_vars is None:
             self.allow_external_vars = []
-
 
 class VariableRegistry:
     """변수 등록 및 관리 시스템"""
@@ -226,7 +222,6 @@ class VariableRegistry:
             ratios.append(subplot_ratio)
         
         return ratios
-
 
 # 전역 변수 레지스트리
 _variable_registry = None

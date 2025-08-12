@@ -7,14 +7,12 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-
 @dataclass
 class DashboardQuery:
     """대시보드 조회 쿼리"""
     date_range_days: int = 30
     include_performance_charts: bool = True
     include_trigger_stats: bool = True
-
 
 @dataclass
 class PerformanceMetric:
@@ -25,7 +23,6 @@ class PerformanceMetric:
     change_percentage: Optional[float]
     trend: str  # UP, DOWN, STABLE
 
-
 @dataclass
 class TriggerStatistic:
     """트리거 통계"""
@@ -34,7 +31,6 @@ class TriggerStatistic:
     active_count: int
     success_rate: float
     avg_execution_time_ms: float
-
 
 @dataclass
 class DashboardResponse:

@@ -13,7 +13,6 @@ import pandas as pd
 # 폴백 제거 - 실제 TriggerCalculator가 없으면 에러 발생하도록
 from .trigger_calculator import TriggerCalculator
 
-
 @dataclass
 class TriggerSimulationRequest:
     """트리거 시뮬레이션 요청 데이터"""
@@ -21,7 +20,6 @@ class TriggerSimulationRequest:
     scenario: str
     data_source: str = "real_db"
     data_limit: int = 100
-
 
 @dataclass
 class TriggerSimulationResult:
@@ -40,7 +38,6 @@ class TriggerSimulationResult:
     result_text: str
     data_source: str
     error_message: Optional[str] = None
-
 
 class TriggerSimulationService:
     """통합 트리거 시뮬레이션 서비스"""
@@ -360,10 +357,8 @@ class TriggerSimulationService:
             error_message=error_message
         )
 
-
 # 전역 서비스 인스턴스
 _trigger_simulation_service = None
-
 
 def get_trigger_simulation_service() -> TriggerSimulationService:
     """트리거 시뮬레이션 서비스 싱글톤 반환"""

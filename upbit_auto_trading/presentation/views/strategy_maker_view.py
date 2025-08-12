@@ -19,7 +19,6 @@ from upbit_auto_trading.ui.desktop.common.components import (
     StyledLineEdit
 )
 
-
 # PyQt6와 Protocol 기반 인터페이스 사용 (메타클래스 충돌 방지)
 class StrategyMakerView(QWidget):
     """전략 메이커 Passive View

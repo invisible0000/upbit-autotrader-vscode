@@ -13,7 +13,6 @@ from PyQt6.QtCore import pyqtSignal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class ApiPermissionsWidget(QWidget):
     """
     API 권한 설정 위젯

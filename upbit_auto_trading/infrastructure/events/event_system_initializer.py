@@ -6,7 +6,6 @@ from upbit_auto_trading.infrastructure.events.event_bus_factory import EventBusF
 from upbit_auto_trading.infrastructure.events.domain_event_publisher_impl import InfrastructureDomainEventPublisher
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class EventSystemInitializer:
     """이벤트 시스템 초기화 관리"""
 

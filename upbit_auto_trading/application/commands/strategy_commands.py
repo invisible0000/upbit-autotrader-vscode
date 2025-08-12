@@ -7,7 +7,6 @@ Command 패턴을 구현하여 입력 데이터 검증과 비즈니스 규칙을
 from dataclasses import dataclass
 from typing import List, Optional
 
-
 @dataclass(frozen=True)
 class CreateStrategyCommand:
     """전략 생성 명령"""
@@ -28,7 +27,6 @@ class CreateStrategyCommand:
         if len(self.name) > 100:
             errors.append("전략 이름은 100자를 초과할 수 없습니다")
         return errors
-
 
 @dataclass(frozen=True)
 class UpdateStrategyCommand:
@@ -51,7 +49,6 @@ class UpdateStrategyCommand:
         if self.name is not None and len(self.name) > 100:
             errors.append("전략 이름은 100자를 초과할 수 없습니다")
         return errors
-
 
 @dataclass(frozen=True)
 class DeleteStrategyCommand:

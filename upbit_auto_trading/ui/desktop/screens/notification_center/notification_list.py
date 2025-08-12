@@ -21,7 +21,6 @@ from PyQt6.QtGui import QIcon, QAction, QColor, QPalette
 
 from upbit_auto_trading.domain.models.notification import Notification, NotificationType
 
-
 class NotificationItem(QFrame):
     """알림 항목 위젯"""
 
@@ -153,7 +152,6 @@ class NotificationItem(QFrame):
         # 실제 구현에서는 각 위젯의 내용만 업데이트하는 것이 효율적
         self.deleteLater()
         self.__init__(notification, self.parent())
-
 
 class NotificationList(QScrollArea):
     """알림 목록 위젯"""

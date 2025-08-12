@@ -21,7 +21,6 @@ from upbit_auto_trading.domain.database_configuration.repositories.idatabase_con
 from upbit_auto_trading.domain.database_configuration.entities.database_profile import DatabaseProfile
 from upbit_auto_trading.domain.exceptions.domain_exceptions import DomainException
 
-
 class DatabaseProfileManagementUseCase:
     """데이터베이스 프로필 관리 Use Case"""
 

@@ -29,13 +29,11 @@ except ImportError:
         def is_variable_compatible_with(self, variable_id1: str, variable_id2: str) -> bool:
             ...
 
-
 class ValidationStrategy(Enum):
     """호환성 검증 전략"""
     STRICT = "strict"           # 완전 호환만 허용
     PERMISSIVE = "permissive"   # 부분 호환도 허용
     CONTEXT_AWARE = "context_aware"  # 컨텍스트 기반 판단
-
 
 @dataclass
 class ValidationContext:
@@ -49,7 +47,6 @@ class ValidationContext:
         if self.user_preferences is None:
             self.user_preferences = {}
 
-
 class CompatibilityResult:
     """호환성 검증 결과"""
     def __init__(self, level: str, message: str, details: Optional[Dict] = None, confidence_score: float = 1.0):
@@ -57,7 +54,6 @@ class CompatibilityResult:
         self.message = message
         self.details = details or {}
         self.confidence_score = confidence_score
-
 
 class StrategyCompatibilityService:
     """

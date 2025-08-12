@@ -29,7 +29,6 @@ from upbit_auto_trading.application.use_cases.database_configuration.database_st
     DatabaseStatusQueryUseCase
 )
 
-
 class DatabaseConfigurationAppService:
     """데이터베이스 설정 애플리케이션 서비스"""
 

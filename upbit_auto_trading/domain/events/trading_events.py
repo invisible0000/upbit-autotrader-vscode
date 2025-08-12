@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from . import DomainEvent
 
-
 @dataclass(frozen=True)
 class OrderPlaced(DomainEvent):
     """주문 생성 이벤트"""
@@ -28,7 +27,6 @@ class OrderPlaced(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.order_id
-
 
 @dataclass(frozen=True)
 class OrderExecuted(DomainEvent):
@@ -52,7 +50,6 @@ class OrderExecuted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.order_id
 
-
 @dataclass(frozen=True)
 class OrderCancelled(DomainEvent):
     """주문 취소 이벤트"""
@@ -71,7 +68,6 @@ class OrderCancelled(DomainEvent):
     def aggregate_id(self) -> str:
         return self.order_id
 
-
 @dataclass(frozen=True)
 class OrderFailed(DomainEvent):
     """주문 실패 이벤트"""
@@ -89,7 +85,6 @@ class OrderFailed(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.order_id
-
 
 @dataclass(frozen=True)
 class PositionOpened(DomainEvent):
@@ -111,7 +106,6 @@ class PositionOpened(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.position_id
-
 
 @dataclass(frozen=True)
 class PositionClosed(DomainEvent):
@@ -135,7 +129,6 @@ class PositionClosed(DomainEvent):
     def aggregate_id(self) -> str:
         return self.position_id
 
-
 @dataclass(frozen=True)
 class PositionUpdated(DomainEvent):
     """포지션 업데이트 이벤트"""
@@ -156,7 +149,6 @@ class PositionUpdated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.position_id
-
 
 @dataclass(frozen=True)
 class TradeCompleted(DomainEvent):
@@ -183,7 +175,6 @@ class TradeCompleted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.trade_id
 
-
 @dataclass(frozen=True)
 class RiskLimitExceeded(DomainEvent):
     """리스크 한계 초과 이벤트"""
@@ -202,7 +193,6 @@ class RiskLimitExceeded(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.strategy_id
-
 
 @dataclass(frozen=True)
 class MarginCallTriggered(DomainEvent):

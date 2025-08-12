@@ -40,7 +40,6 @@ from upbit_auto_trading.infrastructure.database.database_manager import (
     DatabaseConnectionProvider
 )
 
-
 class RepositoryContainer:
     """
     Repository들의 의존성 주입 컨테이너

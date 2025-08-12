@@ -1,557 +1,360 @@
 """
 실시간 로깅 관리 탭 - MVP Presenter
-=========================================
-DDD Application Layer - Use Case 구현, Service 계층
-Infrastructure Layer와 Presentation Layer 연결
+===================================
 
-주요 책임:
-- MVP 패턴 Presenter (비즈니스 로직과 UI 연결)
-- Infrastructure 로깅 시스템과 통합 (Phase 2)
-- 환경변수 관리 및 동기화 (Phase 2)
-- 이벤트 처리 및 UI 상태 관리
+DDD Application Layer - Use Case 구현
+Config 파일 기반 로깅 설정 관리 및 실시간 적용
 
-Phase 1: 기본 MVP + 데모 로그 생성
-Phase 2: Infrastructure 통합 + 실시간 로깅
-Phase 3: 성능 최적화 + LLM 제거
+주요 특징:
+- MVP 패턴 Presenter (비즈니스 로직 담당)
+- Config 파일 기반 설정 시스템 (환경변수 완전 대체)
+- 실시간 설정 적용 및 UI 프리징 방지
+- Infrastructure Layer 로깅 시스템 통합
+- DDD Domain Layer 의존성 없음
 """
 
-from PyQt6.QtCore import QTimer
-from datetime import datetime
-from ..logging_management_view import LoggingManagementView
+import os
+from typing import Dict, Any, Optional
+from pathlib import Path
 
-# Phase 2: Infrastructure Integration
-from upbit_auto_trading.infrastructure.logging.integration.log_stream_capture import LogStreamCapture
-from upbit_auto_trading.infrastructure.logging.integration.environment_variable_manager import EnvironmentVariableManager
-from ..widgets.batched_log_updater import BatchedLogUpdater
+from PyQt6.QtCore import QObject, QTimer
+from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
 
 
-class LoggingManagementPresenter:
-    """실시간 로깅 관리 탭 - MVP Presenter
+class LoggingManagementPresenter(QObject):
+    """실시간 로깅 관리 MVP Presenter - Config 파일 기반"""
 
-    Phase 2: Infrastructure 통합 완료
-    - 실제 Infrastructure 로깅 시스템과 연동
-    - 실시간 로그 스트림 캡처 및 UI 표시
-    - 환경변수 실시간 관리
-    """
-
-    def __init__(self, view: LoggingManagementView):
+    def __init__(self, view=None):
+        super().__init__()
         self.view = view
-        self._demo_counter = 0
 
-        # Phase 2: Infrastructure 로깅 시스템과 통합
-        self._log_stream_capture = LogStreamCapture(max_buffer_size=1000)
-        self._environment_manager = EnvironmentVariableManager()
-        self._batch_updater = BatchedLogUpdater(self._batch_log_callback, parent=view)
-        self._is_real_logging_active = False
+        # Infrastructure 로깅
+        self.logger = create_component_logger("LoggingManagementPresenter")
+        self.logger.info("🎛️ 로깅 관리 프레젠터 초기화 시작")
 
-        self._setup_event_handlers()
-        self._setup_infrastructure_logging()  # Phase 2: 실제 로깅 시스템
+        # Config 관리자 초기화
+        self._config_manager = LoggingConfigManager()
 
-        # 시작 메시지
-        self.view.append_log("✅ MVP Presenter 초기화 완료 (Phase 2)")
-        self.view.append_log("🔄 Infrastructure 로깅 시스템 연동 준비")
+        # 실시간 업데이트 타이머 (UI 프리징 방지)
+        self._update_timer = QTimer()
+        self._update_timer.setSingleShot(True)
+        self._update_timer.timeout.connect(self._apply_delayed_settings)
 
-    def _setup_event_handlers(self):
-        """이벤트 핸들러 연결 - MVP 패턴"""
-        # 환경변수 제어 버튼
-        self.view.apply_btn.clicked.connect(self._on_apply_clicked)
-        self.view.reset_btn.clicked.connect(self._on_reset_clicked)
+        # 현재 설정 캐시
+        self._current_settings = {}
+        self._pending_settings = {}
 
-        # 로그 뷰어 제어 버튼
-        self.view.clear_btn.clicked.connect(self._on_clear_clicked)
-        self.view.save_btn.clicked.connect(self._on_save_clicked)
+        self._initialize()
 
-        # 자동 스크롤 토글
-        self.view.auto_scroll_checkbox.toggled.connect(self._on_auto_scroll_toggled)
+    def _initialize(self):
+        """초기화 및 View 연결"""
+        if self.view:
+            self._connect_view_signals()
+            self._load_initial_settings()
 
-        # 환경변수 변경 감지 (Phase 2에서 실제 연동)
-        self.view.log_level_combo.currentTextChanged.connect(self._on_log_level_changed)
-        self.view.console_output_checkbox.toggled.connect(self._on_console_output_changed)
-        self.view.log_scope_combo.currentTextChanged.connect(self._on_log_scope_changed)
-        self.view.component_focus_edit.textChanged.connect(self._on_component_focus_changed)
+        self.logger.info("✅ 로깅 관리 프레젠터 초기화 완료")
 
-    def _setup_demo_system(self):
-        """Phase 1용 데모 로그 생성 시스템"""
-        self.demo_timer = QTimer()
-        self.demo_timer.timeout.connect(self._add_demo_log)
-        self.demo_timer.start(3000)  # 3초마다 데모 로그 생성
+    def _connect_view_signals(self):
+        """View 시그널 연결 - MVP 패턴"""
+        self.view.settings_changed.connect(self._on_settings_changed)
+        self.view.apply_settings_requested.connect(self._on_apply_settings)
+        self.view.reset_settings_requested.connect(self._on_reset_settings)
 
-        self.view.append_log("🎯 데모 로그 시스템 활성화 (3초 간격)")
+        self.logger.debug("🔗 뷰 시그널 연결 완료")
 
-    def _add_demo_log(self):
-        """데모용 로그 추가"""
-        self._demo_counter += 1
-        timestamp = datetime.now().strftime("%H:%M:%S")
+    def _load_initial_settings(self):
+        """초기 설정 로드 및 View 업데이트"""
+        try:
+            settings = self._config_manager.get_current_config()
+            self._current_settings = settings.copy()
 
-        # 다양한 로그 레벨 시뮬레이션
-        log_levels = ["INFO", "DEBUG", "WARNING", "ERROR"]
-        level = log_levels[self._demo_counter % len(log_levels)]
+            # View에 설정 반영
+            self.view.update_settings_display(settings)
 
-        # 컴포넌트명 시뮬레이션
-        components = ["StrategyService", "UIManager", "DataProvider", "TradingEngine"]
-        component = components[self._demo_counter % len(components)]
+            self.logger.info("📄 초기 설정 로드 완료")
+            self.view.show_status_message("설정 파일에서 초기 설정을 로드했습니다", "info")
 
-        demo_log = f"[{timestamp}] [{level:>7}] {component}: Demo log entry #{self._demo_counter:03d}"
-        self.view.append_log(demo_log)
+        except Exception as e:
+            self.logger.error(f"❌ 초기 설정 로드 실패: {e}")
+            self.view.show_status_message(f"초기 설정 로드 실패: {e}", "error")
 
-        # 10개마다 특별 메시지
-        if self._demo_counter % 10 == 0:
-            self.view.append_log(f"📊 Demo milestone: {self._demo_counter} logs generated")
+            # 기본 설정으로 폴백
+            self._apply_default_settings()
 
-    # ===== 이벤트 핸들러 (MVP 패턴) =====
-
-    def _on_apply_clicked(self):
-        """설정 적용 버튼 클릭 - Phase 1 기본 처리"""
-        # 현재 UI 값들 수집
-        log_level = self.view.get_log_level()
-        console_enabled = self.view.get_console_output_enabled()
-        log_scope = self.view.get_log_scope()
-        component_focus = self.view.get_component_focus()
-
-        # Phase 1에서는 로그로만 표시
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] ⚙️ 설정 적용됨:")
-        self.view.append_log(f"  └─ UPBIT_LOG_LEVEL: {log_level}")
-        self.view.append_log(f"  └─ UPBIT_CONSOLE_OUTPUT: {'true' if console_enabled else 'false'}")
-        self.view.append_log(f"  └─ UPBIT_LOG_SCOPE: {log_scope}")
-        self.view.append_log(f"  └─ UPBIT_COMPONENT_FOCUS: '{component_focus}'")
-
-        # Phase 2: 실제 환경변수 설정 구현
-        self._apply_environment_variables(log_level, console_enabled, log_scope, component_focus)
-
-    def _on_reset_clicked(self):
-        """기본값 복원 버튼 클릭"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] 🔄 설정을 기본값으로 복원 중...")
-
-        # UI를 기본값으로 설정
-        self.view.set_log_level("INFO")
-        self.view.set_console_output_enabled(True)
-        self.view.set_log_scope("normal")
-        self.view.set_component_focus("")
-
-        # Phase 2: 실제 환경변수도 기본값으로 리셋
-        self._reset_environment_variables()
-
-        self.view.append_log("✅ 기본값 복원 완료")
-
-    def _on_clear_clicked(self):
-        """로그 지우기 버튼 클릭"""
-        self.view.clear_logs()
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] 🗑️ 로그가 지워졌습니다")
-        self.view.append_log("📋 새로운 로그 세션 시작")
-
-    def _on_save_clicked(self):
-        """로그 저장 버튼 클릭"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] 💾 로그 저장 기능")
-        self.view.append_log("📋 Phase 2에서 파일 저장 기능 구현 예정")
-
-        # Phase 2에서 QFileDialog를 사용한 파일 저장 구현
-
-    def _on_auto_scroll_toggled(self, enabled: bool):
-        """자동 스크롤 토글"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        status = "활성화" if enabled else "비활성화"
-        self.view.append_log(f"[{timestamp}] 📜 자동 스크롤 {status}")
-
-        # Phase 3에서 실제 자동 스크롤 로직 구현
-
-    # ===== 환경변수 변경 감지 =====
-
-    def _on_log_level_changed(self, new_level: str):
-        """로그 레벨 변경 감지"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] 🔧 로그 레벨 변경: {new_level}")
-
-        # Phase 2에서 실제 환경변수 동기화 구현
-
-    def _on_console_output_changed(self, enabled: bool):
-        """콘솔 출력 변경 감지"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        status = "활성화" if enabled else "비활성화"
-        self.view.append_log(f"[{timestamp}] 🖥️ 콘솔 출력 {status}")
-
-        # Phase 2에서 실제 환경변수 동기화 구현
-
-    def _on_log_scope_changed(self, new_scope: str):
-        """로그 스코프 변경 감지"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.view.append_log(f"[{timestamp}] 📊 로그 스코프 변경: {new_scope}")
-
-        # Phase 2에서 실제 환경변수 동기화 구현
-
-    def _on_component_focus_changed(self, component: str):
-        """컴포넌트 집중 변경 감지"""
-        if component.strip():
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            self.view.append_log(f"[{timestamp}] 🎯 컴포넌트 집중: '{component.strip()}'")
-
-        # Phase 2에서 실제 환경변수 동기화 구현
-
-    # ===== 생명주기 관리 =====
-
-    def shutdown(self):
-        """Presenter 종료 처리"""
-        if hasattr(self, 'demo_timer') and self.demo_timer:
-            self.demo_timer.stop()
-            self.view.append_log("🛑 데모 로그 시스템 종료")
-
-        # Phase 2에서 Infrastructure 연결 해제 구현
-
-    def get_current_settings(self) -> dict:
-        """현재 설정 상태 반환 (디버깅/테스트용)"""
-        return {
-            'log_level': self.view.get_log_level(),
-            'console_output': self.view.get_console_output_enabled(),
-            'log_scope': self.view.get_log_scope(),
-            'component_focus': self.view.get_component_focus(),
-            'demo_counter': self._demo_counter
+    def _apply_default_settings(self):
+        """기본 설정 적용 (폴백용)"""
+        default_settings = {
+            "log_level": "INFO",
+            "console_output": True,
+            "log_scope": "normal",
+            "component_focus": "",
+            "file_logging_enabled": True,
+            "file_path": "logs/upbit_auto_trading.log",
+            "file_level": "DEBUG"
         }
 
-    # ===== Phase 2: Infrastructure 로깅 통합 =====
+        self._current_settings = default_settings.copy()
+        self.view.update_settings_display(default_settings)
 
-    def _setup_infrastructure_logging(self) -> None:
-        """Infrastructure 로깅 시스템 설정 및 연동"""
-        try:
-            # LogStreamCapture 핸들러 등록
-            self._log_stream_capture.add_handler(self._on_real_log_received)
+        self.logger.warning("⚠️ 기본 설정으로 폴백")
+        self.view.show_status_message("기본 설정을 적용했습니다", "warning")
 
-            # 실시간 로그 캡처 시작
-            if self._log_stream_capture.start_capture():
-                self._is_real_logging_active = True
-                self.view.append_log("✅ Infrastructure 로깅 시스템 연동 성공")
-                self.view.append_log("📡 실시간 로그 스트림 캡처 활성화")
+    def _on_settings_changed(self, changed_setting: Dict[str, Any]):
+        """설정 변경 시 실시간 처리 (UI 프리징 방지)"""
+        self.logger.debug(f"🔄 설정 변경 감지: {changed_setting}")
 
-                # 환경변수 상태 동기화
-                self._sync_environment_variables()
-            else:
-                self.view.append_log("⚠️ Infrastructure 로깅 시스템 연동 실패 - 데모 모드 사용")
-                self._setup_demo_system()  # 폴백
+        # 변경 사항을 펜딩 큐에 누적
+        self._pending_settings.update(changed_setting)
 
-        except Exception as e:
-            self.view.append_log(f"❌ Infrastructure 로깅 연동 오류: {e}")
-            self.view.append_log("🔧 데모 모드로 폴백")
-            self._setup_demo_system()  # 폴백
+        # 지연 적용 타이머 재시작 (연속 변경 시 마지막만 적용)
+        self._update_timer.stop()
+        self._update_timer.start(500)  # 500ms 지연
 
-    def _on_real_log_received(self, log_messages: str) -> None:
-        """실제 Infrastructure 로그 수신 처리
+        # 즉시 UI 상태 메시지 업데이트
+        setting_name = list(changed_setting.keys())[0]
+        setting_value = list(changed_setting.values())[0]
+        self.view.show_status_message(f"{setting_name}: {setting_value} (적용 대기중...)", "info")
 
-        Args:
-            log_messages: 배치로 전달된 로그 메시지들
-        """
-        if not self._is_real_logging_active:
+    def _apply_delayed_settings(self):
+        """지연된 설정 일괄 적용 (성능 최적화)"""
+        if not self._pending_settings:
             return
 
         try:
-            # 여러 로그 메시지를 줄 단위로 분할하여 처리
-            log_lines = log_messages.strip().split('\n')
+            self.logger.info(f"⚡ 일괄 설정 적용: {self._pending_settings}")
 
-            if hasattr(self, '_batch_updater'):
-                # 배치 업데이터를 통해 처리 (성능 최적화)
-                self._batch_updater.add_multiple_log_entries(log_lines)
-            else:
-                # 배치 업데이터가 없는 경우 직접 처리
-                for log_line in log_lines:
-                    if log_line.strip():
-                        self.view.append_log(log_line.strip())
+            # 현재 설정에 변경사항 병합
+            self._current_settings.update(self._pending_settings)
 
-            # 로그 통계 업데이트 (50개마다)
-            stats = self._log_stream_capture.get_capture_stats()
-            if stats['total_logs'] % 50 == 0:
-                stats_message = f"📊 캡처 통계: {stats['total_logs']}개 로그, {stats['duration_seconds']:.1f}초"
-                if hasattr(self, '_batch_updater'):
-                    self._batch_updater.add_log_entry(stats_message)
-                else:
-                    self.view.append_log(stats_message)
+            # Config 파일에 저장
+            self._config_manager.update_config(self._current_settings)
 
-        except Exception as e:
-            print(f"⚠️ 실시간 로그 표시 오류: {e}")
-
-    def _sync_environment_variables(self) -> None:
-        """현재 환경변수 상태를 UI와 동기화"""
-        import os
-
-        try:
-            # 현재 환경변수 읽기
-            current_level = os.getenv('UPBIT_LOG_LEVEL', 'INFO')
-            current_console = os.getenv('UPBIT_CONSOLE_OUTPUT', 'false').lower() == 'true'
-            current_scope = os.getenv('UPBIT_LOG_SCOPE', 'normal')
-            current_component = os.getenv('UPBIT_COMPONENT_FOCUS', '')
+            # 로깅 시스템 즉시 적용
+            self._apply_to_logging_system(self._current_settings)
 
             # UI 상태 업데이트
-            # self.view.update_log_level_display(current_level)  # Phase 2에서 구현 예정
-            # self.view.set_console_output_enabled(current_console)  # Phase 2에서 구현 예정
-            # self.view.update_environment_variable('UPBIT_LOG_SCOPE', current_scope)  # Phase 2에서 구현 예정
-            # self.view.update_environment_variable('UPBIT_COMPONENT_FOCUS', current_component)  # Phase 2에서 구현 예정
+            change_count = len(self._pending_settings)
+            self.view.show_status_message(f"✅ {change_count}개 설정이 적용되었습니다", "info")
 
-            self.view.append_log(f"🔄 환경변수 상태: LEVEL={current_level}, CONSOLE={current_console}")
-            self.view.append_log(f"🔄 환경변수 상태: SCOPE={current_scope}, FOCUS={current_component}")
+            # 펜딩 큐 클리어
+            self._pending_settings.clear()
 
         except Exception as e:
-            self.view.append_log(f"⚠️ 환경변수 동기화 오류: {e}")
+            self.logger.error(f"❌ 설정 적용 실패: {e}")
+            self.view.show_status_message(f"설정 적용 실패: {e}", "error")
 
-    def start_real_logging(self) -> bool:
-        """실시간 로깅 시작
-
-        Returns:
-            bool: 시작 성공 여부
-        """
-        if self._is_real_logging_active:
-            return True
-
+    def _apply_to_logging_system(self, settings: Dict[str, Any]):
+        """Infrastructure Layer 로깅 시스템에 설정 적용"""
         try:
-            self._setup_infrastructure_logging()
-            return self._is_real_logging_active
+            # 로깅 레벨 적용
+            if "log_level" in settings:
+                self._config_manager.set_log_level(settings["log_level"])
+
+            # 콘솔 출력 설정
+            if "console_output" in settings:
+                self._config_manager.set_console_output(settings["console_output"])
+
+            # 파일 로깅 설정
+            if any(key in settings for key in ["file_logging_enabled", "file_path", "file_level"]):
+                self._config_manager.configure_file_logging(
+                    enabled=settings.get("file_logging_enabled", True),
+                    file_path=settings.get("file_path", "logs/upbit_auto_trading.log"),
+                    level=settings.get("file_level", "DEBUG")
+                )
+
+            # 고급 설정
+            if "log_scope" in settings:
+                self._config_manager.set_log_scope(settings["log_scope"])
+
+            if "component_focus" in settings:
+                self._config_manager.set_component_focus(settings["component_focus"])
+
+            self.logger.debug("🔧 로깅 시스템 설정 적용 완료")
+
         except Exception as e:
-            self.view.append_log(f"❌ 실시간 로깅 시작 실패: {e}")
-            return False
+            self.logger.error(f"❌ 로깅 시스템 적용 실패: {e}")
+            raise
 
-    def stop_real_logging(self) -> None:
-        """실시간 로깅 중단"""
-        if not self._is_real_logging_active:
-            return
-
+    def _on_apply_settings(self):
+        """설정 적용 버튼 클릭 시 처리"""
         try:
-            self._log_stream_capture.stop_capture()
-            self._is_real_logging_active = False
-            self.view.append_log("🛑 실시간 로깅 중단됨")
+            # 현재 View의 모든 설정 가져오기
+            current_view_settings = self.view.get_current_settings()
 
-            # 데모 시스템으로 전환
-            self._setup_demo_system()
+            # 변경사항 비교
+            changes = {}
+            for key, value in current_view_settings.items():
+                if key not in self._current_settings or self._current_settings[key] != value:
+                    changes[key] = value
+
+            if not changes:
+                self.view.show_status_message("변경된 설정이 없습니다", "info")
+                return
+
+            self.logger.info(f"🔄 수동 설정 적용 요청: {changes}")
+
+            # 즉시 적용
+            self._current_settings.update(changes)
+            self._config_manager.update_config(self._current_settings)
+            self._apply_to_logging_system(self._current_settings)
+
+            change_count = len(changes)
+            self.view.show_status_message(f"✅ {change_count}개 설정을 수동 적용했습니다", "info")
 
         except Exception as e:
-            self.view.append_log(f"⚠️ 실시간 로깅 중단 오류: {e}")
+            self.logger.error(f"❌ 수동 설정 적용 실패: {e}")
+            self.view.show_status_message(f"설정 적용 실패: {e}", "error")
 
-    def get_logging_stats(self) -> dict:
-        """로깅 시스템 통계 반환
-
-        Returns:
-            dict: 로깅 통계 정보
-        """
-        if self._is_real_logging_active:
-            return self._log_stream_capture.get_capture_stats()
-        else:
-            return {
-                'is_capturing': False,
-                'mode': 'demo',
-                'demo_counter': self._demo_counter
-            }
-
-    # ===== Phase 2: 실시간 환경변수 제어 =====
-
-    def _apply_environment_variables(
-        self, log_level: str, console_enabled: bool, log_scope: str, component_focus: str
-    ) -> None:
-        """UI 설정을 실제 환경변수에 적용
-
-        Args:
-            log_level: 로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            console_enabled: 콘솔 출력 활성화 여부
-            log_scope: 로그 스코프 (silent, minimal, normal, verbose, debug_all)
-            component_focus: 집중할 컴포넌트 이름
-        """
+    def _on_reset_settings(self):
+        """설정 리셋 요청 처리"""
         try:
-            # 환경변수 설정
-            variables_to_set = {
-                'UPBIT_LOG_LEVEL': log_level,
-                'UPBIT_CONSOLE_OUTPUT': 'true' if console_enabled else 'false',
-                'UPBIT_LOG_SCOPE': log_scope,
-                'UPBIT_COMPONENT_FOCUS': component_focus
-            }
+            # 사용자 확인
+            reply = QMessageBox.question(
+                self.view,
+                "설정 리셋 확인",
+                "모든 로깅 설정을 기본값으로 되돌리시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
 
-            # 일괄 적용
-            results = self._environment_manager.set_multiple_variables(variables_to_set)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.logger.info("🔄 설정 리셋 실행")
 
-            # 결과 확인 및 로깅
-            success_count = sum(1 for success in results.values() if success)
-            total_count = len(results)
+                # Config 파일 리셋
+                self._config_manager.reset_to_default()
 
-            if success_count == total_count:
-                self.view.append_log("✅ 모든 환경변수 적용 성공")
-                self.view.append_log("🔄 Infrastructure 로깅 시스템에 즉시 반영됨")
+                # 기본 설정 로드
+                default_settings = self._config_manager.get_current_config()
+                self._current_settings = default_settings.copy()
+
+                # View 업데이트
+                self.view.update_settings_display(default_settings)
+
+                # 로깅 시스템 적용
+                self._apply_to_logging_system(default_settings)
+
+                self.view.show_status_message("✅ 모든 설정이 기본값으로 리셋되었습니다", "info")
+
+        except Exception as e:
+            self.logger.error(f"❌ 설정 리셋 실패: {e}")
+            self.view.show_status_message(f"설정 리셋 실패: {e}", "error")
+
+    # ===== 로그/콘솔 관리 메서드 =====
+
+    def start_log_monitoring(self):
+        """로그 파일 모니터링 시작"""
+        try:
+            log_file_path = self._current_settings.get("file_path", "logs/upbit_auto_trading.log")
+
+            if os.path.exists(log_file_path):
+                # 기존 로그 내용 로드
+                with open(log_file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    if content.strip():
+                        self.view.append_log_message(content)
+
+                self.logger.info(f"📄 로그 파일 모니터링 시작: {log_file_path}")
             else:
-                failed_vars = [var for var, success in results.items() if not success]
-                self.view.append_log(f"⚠️ 일부 환경변수 적용 실패: {failed_vars}")
+                self.view.append_log_message("로그 파일이 아직 생성되지 않았습니다.")
 
         except Exception as e:
-            self.view.append_log(f"❌ 환경변수 적용 오류: {e}")
+            self.logger.error(f"❌ 로그 모니터링 시작 실패: {e}")
 
-    def _reset_environment_variables(self) -> None:
-        """환경변수를 기본값으로 리셋"""
+    def save_logs_to_file(self):
+        """로그를 파일로 저장"""
         try:
-            # 기본값으로 리셋
-            results = self._environment_manager.reset_all_variables()
+            file_path, _ = QFileDialog.getSaveFileName(
+                self.view,
+                "로그 파일 저장",
+                f"upbit_logs_{QTimer().currentDateTime().toString('yyyyMMdd_hhmmss')}.txt",
+                "Text Files (*.txt);;All Files (*)"
+            )
 
-            # 결과 확인
-            success_count = sum(1 for success in results.values() if success)
-            total_count = len(results)
+            if file_path:
+                # View에서 현재 로그 내용 가져오기 (이 메서드는 View에 추가 필요)
+                log_content = self.view.log_viewer_widget.get_all_content()
 
-            if success_count == total_count:
-                self.view.append_log("✅ 모든 환경변수가 기본값으로 리셋됨")
-            else:
-                failed_vars = [var for var, success in results.items() if not success]
-                self.view.append_log(f"⚠️ 일부 환경변수 리셋 실패: {failed_vars}")
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(log_content)
+
+                self.view.show_status_message(f"✅ 로그가 저장되었습니다: {file_path}", "info")
+                self.logger.info(f"💾 로그 파일 저장: {file_path}")
 
         except Exception as e:
-            self.view.append_log(f"❌ 환경변수 리셋 오류: {e}")
+            self.logger.error(f"❌ 로그 저장 실패: {e}")
+            self.view.show_status_message(f"로그 저장 실패: {e}", "error")
 
-    def get_current_environment_variables(self) -> dict:
-        """현재 환경변수 상태 조회
+    def clear_all_viewers(self):
+        """모든 뷰어 내용 지우기"""
+        self.view.clear_log_viewer()
+        self.view.clear_console_viewer()
+        self.view.show_status_message("✅ 모든 뷰어 내용이 지워졌습니다", "info")
+        self.logger.info("🧹 모든 뷰어 내용 지우기 완료")
 
-        Returns:
-            dict: 현재 환경변수 값들
-        """
+    # ===== 설정 관리 헬퍼 메서드 =====
+
+    def get_current_config_path(self) -> str:
+        """현재 사용 중인 설정 파일 경로 반환"""
+        return self._config_manager.get_config_file_path()
+
+    def export_settings(self):
+        """설정을 파일로 내보내기"""
         try:
-            return self._environment_manager.get_all_variables()
+            file_path, _ = QFileDialog.getSaveFileName(
+                self.view,
+                "로깅 설정 내보내기",
+                f"logging_settings_{QTimer().currentDateTime().toString('yyyyMMdd_hhmmss')}.yaml",
+                "YAML Files (*.yaml *.yml);;All Files (*)"
+            )
+
+            if file_path:
+                self._config_manager.export_config(file_path)
+                self.view.show_status_message(f"✅ 설정이 내보내졌습니다: {file_path}", "info")
+                self.logger.info(f"📤 설정 내보내기: {file_path}")
+
         except Exception as e:
-            self.view.append_log(f"❌ 환경변수 조회 오류: {e}")
-            return {}
+            self.logger.error(f"❌ 설정 내보내기 실패: {e}")
+            self.view.show_status_message(f"설정 내보내기 실패: {e}", "error")
 
-    def update_environment_variable(self, var_name: str, value: str) -> bool:
-        """개별 환경변수 업데이트
-
-        Args:
-            var_name: 환경변수 이름
-            value: 새 값
-
-        Returns:
-            bool: 설정 성공 여부
-        """
+    def import_settings(self):
+        """파일에서 설정 가져오기"""
         try:
-            success = self._environment_manager.set_variable(var_name, value)
-            if success:
-                self.view.append_log(f"✅ {var_name}={value} 설정 완료")
-            else:
-                self.view.append_log(f"❌ {var_name}={value} 설정 실패")
-            return success
-        except Exception as e:
-            self.view.append_log(f"❌ {var_name} 설정 오류: {e}")
-            return False
+            file_path, _ = QFileDialog.getOpenFileName(
+                self.view,
+                "로깅 설정 가져오기",
+                "",
+                "YAML Files (*.yaml *.yml);;All Files (*)"
+            )
 
-    def get_environment_variable_info(self, var_name: str) -> dict:
-        """환경변수 상세 정보 조회
+            if file_path:
+                imported_settings = self._config_manager.import_config(file_path)
 
-        Args:
-            var_name: 환경변수 이름
+                # View 업데이트
+                self.view.update_settings_display(imported_settings)
+                self._current_settings = imported_settings.copy()
 
-        Returns:
-            dict: 환경변수 정보 (타입, 가능한 값, 현재 값 등)
-        """
-        try:
-            return self._environment_manager.get_variable_info(var_name)
-        except Exception as e:
-            self.view.append_log(f"❌ {var_name} 정보 조회 오류: {e}")
-            return {}
+                # 로깅 시스템 적용
+                self._apply_to_logging_system(imported_settings)
 
-    def rollback_environment_variables(self) -> None:
-        """환경변수를 원래 상태로 롤백"""
-        try:
-            results = self._environment_manager.rollback_to_original()
-
-            success_count = sum(1 for success in results.values() if success)
-            total_count = len(results)
-
-            if success_count == total_count:
-                self.view.append_log("✅ 환경변수 원상복구 완료")
-            else:
-                failed_vars = [var for var, success in results.items() if not success]
-                self.view.append_log(f"⚠️ 일부 환경변수 롤백 실패: {failed_vars}")
+                self.view.show_status_message(f"✅ 설정을 가져왔습니다: {file_path}", "info")
+                self.logger.info(f"📥 설정 가져오기: {file_path}")
 
         except Exception as e:
-            self.view.append_log(f"❌ 환경변수 롤백 오류: {e}")
+            self.logger.error(f"❌ 설정 가져오기 실패: {e}")
+            self.view.show_status_message(f"설정 가져오기 실패: {e}", "error")
 
-    def get_environment_change_history(self, limit: int = 10) -> list:
-        """환경변수 변경 이력 조회
+    # ===== 라이프사이클 관리 =====
 
-        Args:
-            limit: 조회할 최대 이력 수
+    def cleanup(self):
+        """리소스 정리"""
+        if self._update_timer.isActive():
+            self._update_timer.stop()
 
-        Returns:
-            list: 변경 이력 리스트
-        """
-        try:
-            return self._environment_manager.get_change_history(limit)
-        except Exception as e:
-            self.view.append_log(f"❌ 변경 이력 조회 오류: {e}")
-            return []
-
-    # === 실시간 로그 콜백 메서드들 ===
-
-    def _on_log_received(self, log_record: dict) -> None:
-        """개별 로그 메시지 수신 콜백 (배치 처리를 위해 BatchedLogUpdater로 전달)
-
-        Args:
-            log_record: 로그 레코드 정보
-        """
-        try:
-            if hasattr(self, '_batch_updater'):
-                # 로그 레코드를 포맷팅한 후 배치 업데이터에 추가
-                formatted_log = self._format_log_record(log_record)
-                self._batch_updater.add_log_entry(formatted_log)
-            else:
-                # 배치 업데이터가 없는 경우 직접 처리
-                formatted_log = self._format_log_record(log_record)
-                self.view.append_log(formatted_log)
-        except Exception as e:
-            print(f"❌ 로그 수신 콜백 오류: {e}")
-
-    def _batch_log_callback(self, log_batch: list) -> None:
-        """배치 로그 처리 콜백 (BatchedLogUpdater에서 호출)
-
-        Args:
-            log_batch: 배치로 처리할 포맷팅된 로그 메시지 리스트
-        """
-        try:
-            # BatchedLogUpdater에서 이미 포맷팅된 문자열들이 전달됨
-            if log_batch:
-                self.view.append_log_batch(log_batch)
-
-        except Exception as e:
-            print(f"❌ 배치 로그 콜백 오류: {e}")
-
-    def _format_log_record(self, log_record: dict) -> str:
-        """로그 레코드를 UI 표시 형식으로 포맷팅
-
-        Args:
-            log_record: 로그 레코드 정보
-
-        Returns:
-            str: 포맷팅된 로그 메시지
-        """
-        try:
-            timestamp = log_record.get('timestamp', '')
-            level = log_record.get('level', 'INFO')
-            component = log_record.get('component', 'Unknown')
-            message = log_record.get('message', '')
-
-            # 레벨별 이모지 매핑
-            level_emoji = {
-                'DEBUG': '🔍',
-                'INFO': 'ℹ️',
-                'WARNING': '⚠️',
-                'ERROR': '❌',
-                'CRITICAL': '🚨'
-            }
-
-            emoji = level_emoji.get(level, 'ℹ️')
-
-            # 포맷팅
-            if timestamp:
-                formatted = f"{emoji} [{timestamp}] {level:<8} | {component:<15} | {message}"
-            else:
-                formatted = f"{emoji} {level:<8} | {component:<15} | {message}"
-
-            return formatted
-
-        except Exception as e:
-            return f"❌ 로그 포맷팅 오류: {e}"
+        self.logger.info("🧹 로깅 관리 프레젠터 정리 완료")
 
     def __del__(self):
-        """소멸자: 리소스 정리"""
-        try:
-            if hasattr(self, '_is_real_logging_active') and self._is_real_logging_active:
-                self.stop_real_logging()
-        except Exception:
-            pass
+        """소멸자"""
+        self.cleanup()

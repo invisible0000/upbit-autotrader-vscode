@@ -12,7 +12,6 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple, Any
 from enum import Enum
 
-
 class OutputType(Enum):
     """출력 타입 분류"""
     WARNING = "warning"
@@ -23,7 +22,6 @@ class OutputType(Enum):
     STATUS = "status"
     DEBUG = "debug"
     UNKNOWN = "unknown"
-
 
 @dataclass
 class ParsedOutput:
@@ -40,7 +38,6 @@ class ParsedOutput:
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
-
 
 class TerminalOutputParser:
     """
@@ -314,7 +311,6 @@ class TerminalOutputParser:
         """우선순위별 필터링"""
         return [output for output in parsed_outputs
                 if output.metadata and output.metadata.get('priority') == priority]
-
 
 def create_terminal_output_parser() -> TerminalOutputParser:
     """터미널 출력 파서 인스턴스 생성"""

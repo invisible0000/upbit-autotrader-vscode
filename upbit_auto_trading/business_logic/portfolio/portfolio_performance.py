@@ -18,7 +18,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from upbit_auto_trading.data_layer.models import Portfolio, PortfolioCoin, Strategy, Backtest, OHLCV
 
-
 class PortfolioPerformance:
     """포트폴리오 성과 계산 클래스"""
 

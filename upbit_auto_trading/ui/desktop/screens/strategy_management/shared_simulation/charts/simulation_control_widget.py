@@ -22,7 +22,6 @@ except ImportError as e:
     DATA_SOURCE_AVAILABLE = False
     logger.warning(f"DataSourceSelectorWidget를 찾을 수 없습니다: {e}")
 
-
 class SimulationControlWidget(QWidget):
     """케이스 시뮬레이션 제어 위젯 - 원본 완전 복제"""
 

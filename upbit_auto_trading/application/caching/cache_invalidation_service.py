@@ -7,7 +7,6 @@ from typing import Dict, List, Optional
 import asyncio
 from ...infrastructure.logging import create_component_logger
 
-
 class CacheKey:
     """캐시 키 관리 클래스"""
 
@@ -50,7 +49,6 @@ class CacheKey:
     def market_indicators(symbol: str) -> str:
         """시장 지표 데이터 캐시 키"""
         return f"market:indicators:{symbol}"
-
 
 class CacheInvalidationService:
     """캐시 무효화 관리 서비스"""

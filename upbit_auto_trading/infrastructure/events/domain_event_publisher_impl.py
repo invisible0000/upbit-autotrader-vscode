@@ -6,7 +6,6 @@ from upbit_auto_trading.domain.events.base_domain_event import DomainEvent
 from upbit_auto_trading.domain.events.domain_event_publisher import DomainEventPublisher
 from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import IEventBus
 
-
 class InfrastructureDomainEventPublisher(DomainEventPublisher):
     """Infrastructure 이벤트 버스를 사용하는 도메인 이벤트 Publisher"""
 

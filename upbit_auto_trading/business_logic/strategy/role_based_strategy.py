@@ -19,12 +19,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class StrategyRole(Enum):
     """전략 역할 분류"""
     ENTRY = "entry"         # 진입 전략
     MANAGEMENT = "management"  # 관리 전략
-
 
 class SignalType(Enum):
     """신호 타입 분류"""
@@ -38,7 +36,6 @@ class SignalType(Enum):
     ADD_SELL = "ADD_SELL"      # 부분 매도
     CLOSE_POSITION = "CLOSE_POSITION"  # 전체 청산
     UPDATE_STOP = "UPDATE_STOP"        # 스탑 가격 업데이트
-
 
 @dataclass
 class PositionInfo:
@@ -55,7 +52,6 @@ class PositionInfo:
         if self.management_history is None:
             self.management_history = []
 
-
 @dataclass
 class TradingSignal:
     """매매 신호 데이터"""
@@ -70,7 +66,6 @@ class TradingSignal:
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
-
 
 class BaseStrategy(ABC):
     """모든 전략의 기본 클래스"""
@@ -115,7 +110,6 @@ class BaseStrategy(ABC):
             "created_at": self.created_at
         }
 
-
 class EntryStrategy(BaseStrategy):
     """진입 전략 기본 클래스
     
@@ -144,7 +138,6 @@ class EntryStrategy(BaseStrategy):
     def can_activate(self, position_status: Optional[PositionInfo]) -> bool:
         """진입 전략 활성화 조건: 포지션이 없을 때만"""
         return position_status is None
-
 
 class ManagementStrategy(BaseStrategy):
     """관리 전략 기본 클래스
@@ -188,7 +181,6 @@ class ManagementStrategy(BaseStrategy):
             "unrealized_pnl_amount": unrealized_pnl_pct * position_info.quantity * position_info.entry_price / 100,
             "holding_time_hours": (datetime.now() - position_info.entry_time).total_seconds() / 3600
         }
-
 
 # ============================================================================
 # 진입 전략 구현체들 (6개)
@@ -279,7 +271,6 @@ class MovingAverageCrossEntry(EntryStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
 
-
 class RSIEntry(EntryStrategy):
     """RSI 과매수/과매도 진입 전략
     
@@ -353,7 +344,6 @@ class RSIEntry(EntryStrategy):
             )
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
-
 
 class BollingerBandsEntry(EntryStrategy):
     """볼린저 밴드 진입 전략
@@ -433,7 +423,6 @@ class BollingerBandsEntry(EntryStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
 
-
 class VolatilityBreakoutEntry(EntryStrategy):
     """변동성 돌파 진입 전략 (래리 윌리엄스)
     
@@ -508,7 +497,6 @@ class VolatilityBreakoutEntry(EntryStrategy):
             )
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
-
 
 class MACDEntry(EntryStrategy):
     """MACD 진입 전략
@@ -595,7 +583,6 @@ class MACDEntry(EntryStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
 
-
 class StochasticEntry(EntryStrategy):
     """스토캐스틱 진입 전략
     
@@ -680,7 +667,6 @@ class StochasticEntry(EntryStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current['close'])
 
-
 # ============================================================================
 # 관리 전략 구현체들 (6개)
 # ============================================================================
@@ -760,7 +746,6 @@ class AveragingDownManagement(ManagementStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current_price)
 
-
 class PyramidingManagement(ManagementStrategy):
     """불타기 관리 전략
     
@@ -835,7 +820,6 @@ class PyramidingManagement(ManagementStrategy):
             )
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current_price)
-
 
 class TrailingStopManagement(ManagementStrategy):
     """트레일링 스탑 관리 전략
@@ -923,7 +907,6 @@ class TrailingStopManagement(ManagementStrategy):
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current_price)
 
-
 class FixedTargetManagement(ManagementStrategy):
     """고정 익절/손절 관리 전략
     
@@ -983,7 +966,6 @@ class FixedTargetManagement(ManagementStrategy):
             )
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current_price)
-
 
 class PartialExitManagement(ManagementStrategy):
     """부분 청산 관리 전략
@@ -1055,7 +1037,6 @@ class PartialExitManagement(ManagementStrategy):
                 )
         
         return TradingSignal(SignalType.HOLD, datetime.now(), current_price)
-
 
 class TimeBasedExitManagement(ManagementStrategy):
     """시간 기반 청산 관리 전략
@@ -1148,7 +1129,6 @@ class StrategyCombination:
             return False  # 최대 5개 관리 전략
         
         return True
-
 
 # ============================================================================
 # 충돌 해결 시스템
@@ -1262,7 +1242,6 @@ class ConflictResolver:
         
         return signals[0]
 
-
 # ============================================================================
 # 상태 기반 백테스팅 엔진
 # ============================================================================
@@ -1272,7 +1251,6 @@ class PositionState(Enum):
     WAITING_ENTRY = "waiting_entry"        # 진입 대기
     POSITION_MANAGEMENT = "position_management"  # 포지션 관리
     POSITION_EXIT = "position_exit"        # 포지션 종료
-
 
 class RoleBasedBacktestEngine:
     """역할 기반 백테스팅 엔진
@@ -1572,7 +1550,6 @@ class StrategyCombination:
             return False  # 최대 5개 관리 전략
         
         return True
-
 
 if __name__ == "__main__":
     # ============================================================================

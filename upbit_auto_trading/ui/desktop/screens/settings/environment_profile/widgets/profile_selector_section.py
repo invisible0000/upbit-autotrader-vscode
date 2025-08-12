@@ -24,9 +24,7 @@ from PyQt6.QtGui import QFont
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .quick_environment_buttons import QuickEnvironmentButtons
 
-
 logger = create_component_logger("ProfileSelectorSection")
-
 
 class ProfileSelectorSection(QWidget):
     """

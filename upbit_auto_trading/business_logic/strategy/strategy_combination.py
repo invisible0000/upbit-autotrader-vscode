@@ -13,19 +13,16 @@ from enum import Enum
 import json
 import uuid
 
-
 class ConflictResolutionType(Enum):
     """충돌 해결 방식"""
     PRIORITY = "priority"        # 우선순위 기반
     CONSERVATIVE = "conservative"  # 보수적 접근 (청산 우선)
     MERGE = "merge"             # 신호 병합
 
-
 class ExecutionOrderType(Enum):
     """실행 순서"""
     PARALLEL = "parallel"       # 병렬 실행
     SEQUENTIAL = "sequential"   # 순차 실행
-
 
 @dataclass
 class StrategyConfig:
@@ -36,7 +33,6 @@ class StrategyConfig:
     priority: int = 1
     enabled: bool = True
 
-
 @dataclass
 class RiskLimit:
     """리스크 한계 설정"""
@@ -44,7 +40,6 @@ class RiskLimit:
     max_drawdown: float = 0.15          # 최대 드로우다운 (%)
     max_trades_per_day: int = 10        # 일일 최대 거래 수
     position_timeout_hours: int = 168   # 포지션 최대 보유 시간 (시간)
-
 
 @dataclass
 class StrategyCombination:
@@ -181,7 +176,6 @@ class StrategyCombination:
             updated_at=datetime.fromisoformat(data["updated_at"]),
             is_active=data.get("is_active", True)
         )
-
 
 class CombinationManager:
     """전략 조합 관리 클래스"""
@@ -321,7 +315,6 @@ class CombinationManager:
         ]
         
         return sample_combinations
-
 
 # 사용 예시 및 테스트
 if __name__ == "__main__":

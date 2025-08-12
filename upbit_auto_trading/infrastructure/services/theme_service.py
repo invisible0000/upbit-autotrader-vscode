@@ -11,7 +11,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService
 from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager, Theme
 
-
 class IThemeService(Protocol):
     """테마 서비스 인터페이스 (Protocol 사용으로 메타클래스 충돌 해결)"""
 
@@ -34,7 +33,6 @@ class IThemeService(Protocol):
     def connect_theme_changed(self, callback) -> bool:
         """테마 변경 시그널 연결"""
         ...
-
 
 class ThemeService(QObject):
     """테마 서비스 구현체 (Infrastructure Layer 기반)"""
@@ -137,7 +135,6 @@ class ThemeService(QObject):
             self.logger.info("✅ ThemeService: theme_notifier에 테마 변경 알림 완료")
         except Exception as e:
             self.logger.warning(f"⚠️ ThemeService: theme_notifier 알림 실패 - {e}")
-
 
 class MockThemeService:
     """Mock 테마 서비스 (테스트용) - 메타클래스 충돌 없음"""

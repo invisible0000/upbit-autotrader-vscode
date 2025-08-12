@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional
 from datetime import datetime
 from . import DomainEvent
 
-
 class StrategyCreated(DomainEvent):
     """전략 생성 이벤트"""
 
@@ -69,7 +68,6 @@ class StrategyCreated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self._strategy_id
-
 
 class StrategyUpdated(DomainEvent):
     """전략 수정 이벤트"""
@@ -130,7 +128,6 @@ class StrategyUpdated(DomainEvent):
     def aggregate_id(self) -> str:
         return self._strategy_id
 
-
 class StrategyDeleted(DomainEvent):
     """전략 삭제 이벤트"""
 
@@ -182,7 +179,6 @@ class StrategyDeleted(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self._strategy_id
-
 
 class StrategyActivated(DomainEvent):
     """전략 활성화 이벤트"""
@@ -236,7 +232,6 @@ class StrategyActivated(DomainEvent):
     def aggregate_id(self) -> str:
         return self._strategy_id
 
-
 class StrategyDeactivated(DomainEvent):
     """전략 비활성화 이벤트"""
 
@@ -288,7 +283,6 @@ class StrategyDeactivated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self._strategy_id
-
 
 class StrategyBacktestCompleted(DomainEvent):
     """전략 백테스트 완료 이벤트"""
@@ -391,7 +385,6 @@ class StrategyBacktestCompleted(DomainEvent):
     def aggregate_id(self) -> str:
         return self._strategy_id
 
-
 class StrategyValidated(DomainEvent):
     """전략 호환성 검증 성공 이벤트"""
 
@@ -449,7 +442,6 @@ class StrategyValidated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self._strategy_id
-
 
 class StrategyValidationFailed(DomainEvent):
     """전략 호환성 검증 실패 이벤트"""

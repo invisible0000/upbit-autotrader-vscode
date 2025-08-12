@@ -15,7 +15,6 @@ import threading
 from upbit_auto_trading.data_layer.upbit_api import UpbitAPI
 from upbit_auto_trading.data_layer.data_processor import DataProcessor
 
-
 class MarketDataProvider(ABC):
     """시장 데이터 제공자 인터페이스"""
     
@@ -60,7 +59,6 @@ class MarketDataProvider(ABC):
             bool: 성공 여부
         """
         pass
-
 
 class UpbitMarketDataProvider(MarketDataProvider):
     """업비트 시장 데이터 제공자"""

@@ -16,7 +16,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .presenters.api_settings_presenter import ApiSettingsPresenter
 from .views.api_settings_view import ApiSettingsView
 
-
 class ApiKeyManagerSecure(QWidget):
     """
     API 키 관리자 - DDD + MVP 패턴 (Phase 2 마이그레이션)

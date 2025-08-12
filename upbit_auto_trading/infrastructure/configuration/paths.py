@@ -34,7 +34,6 @@ warnings.warn(
     stacklevel=2
 )
 
-
 class PathsConfiguration:
     """DDD Infrastructure Layer용 경로 관리 클래스"""
 
@@ -153,7 +152,6 @@ class PathsConfiguration:
         self.SETTINGS_DB = self._default_settings_db
         self.STRATEGIES_DB = self._default_strategies_db
         self.MARKET_DATA_DB = self._default_market_data_db
-
 
 # Infrastructure Layer 전용 인스턴스
 infrastructure_paths = PathsConfiguration()

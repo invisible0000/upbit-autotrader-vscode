@@ -13,7 +13,6 @@ from upbit_auto_trading.domain.events.base_domain_event import DomainEvent
 
 T = TypeVar('T', bound=DomainEvent)
 
-
 class BaseEventHandler(ABC, Generic[T]):
     """모든 Event Handler의 기본 클래스
 

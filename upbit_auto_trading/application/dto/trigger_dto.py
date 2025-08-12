@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-
 @dataclass(frozen=True)
 class CreateTriggerDto:
     """트리거 생성 요청 DTO"""
@@ -17,7 +16,6 @@ class CreateTriggerDto:
     target_value: Any
     trigger_type: str  # ENTRY, EXIT
     trigger_name: Optional[str] = None
-
 
 @dataclass(frozen=True)
 class TriggerDto:

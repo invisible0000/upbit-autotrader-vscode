@@ -11,7 +11,6 @@ import logging
 import os
 import sqlite3
 
-
 class RobustSimulationEngine:
     """DB 없이도 작동하는 강화된 시뮬레이션 엔진"""
     
@@ -415,12 +414,10 @@ class RobustSimulationEngine:
             'change_percent': (price_data[-1] / price_data[0] - 1) * 100
         }
 
-
 # 기존 RealDataSimulationEngine을 강화된 버전으로 확장
 class EnhancedRealDataSimulationEngine(RobustSimulationEngine):
     """기존 기능과 호환되는 강화된 시뮬레이션 엔진"""
     pass
-
 
 # 전역 인스턴스 (UI에서 사용)
 _simulation_engine = None

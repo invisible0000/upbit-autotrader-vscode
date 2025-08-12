@@ -17,9 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("YamlParser")
-
 
 @dataclass
 class ValidationResult:
@@ -51,7 +49,6 @@ class ValidationResult:
                 return f"✅ 유효 (경고 {len(self.warnings)}개)"
             return "✅ 유효"
         return f"❌ 무효 (오류 {len(self.errors)}개)"
-
 
 class YamlParser:
     """

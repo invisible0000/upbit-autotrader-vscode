@@ -14,7 +14,6 @@ import weakref
 
 T = TypeVar('T')
 
-
 @dataclass
 class CacheEntry(Generic[T]):
     """캐시 엔트리"""
@@ -25,7 +24,6 @@ class CacheEntry(Generic[T]):
     ttl_seconds: Optional[int] = None
     size_bytes: int = 0
 
-
 @dataclass
 class CacheStats:
     """캐시 통계"""
@@ -35,7 +33,6 @@ class CacheStats:
     evictions: int = 0
     memory_usage_bytes: int = 0
     entry_count: int = 0
-
 
 class LRUCache(Generic[T]):
     """LRU (Least Recently Used) 캐시 구현"""
@@ -162,7 +159,6 @@ class LRUCache(Generic[T]):
 
             self.stats.entry_count = len(self._cache)
             return len(expired_keys)
-
 
 class CacheManager:
     """캐시 관리자 - 다중 캐시 통합 관리"""

@@ -23,7 +23,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 if TYPE_CHECKING:
     from upbit_auto_trading.ui.desktop.screens.settings.api_settings.views.api_settings_view import ApiSettingsView
 
-
 class ApiSettingsPresenter:
     """
     API 설정 프레젠터 - MVP 패턴의 Presenter 역할

@@ -21,13 +21,11 @@ from upbit_auto_trading.domain.database_configuration.services.database_path_ser
 )
 from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
 
-
 class DatabaseReplacementType(Enum):
     """데이터베이스 교체 유형"""
     BACKUP_RESTORE = "backup_restore"
     PATH_CHANGE = "path_change"
     FILE_IMPORT = "file_import"
-
 
 @dataclass
 class DatabaseReplacementRequestDto:
@@ -39,7 +37,6 @@ class DatabaseReplacementRequestDto:
     force_replacement: bool = False
     safety_backup_suffix: str = "safety_backup"
 
-
 @dataclass
 class DatabaseReplacementResultDto:
     """데이터베이스 교체 결과 DTO"""
@@ -50,7 +47,6 @@ class DatabaseReplacementResultDto:
     safety_backup_path: Optional[str] = None
     error_message: Optional[str] = None
     system_resumed: bool = False
-
 
 class DatabaseReplacementUseCase:
     """데이터베이스 교체 통합 Use Case

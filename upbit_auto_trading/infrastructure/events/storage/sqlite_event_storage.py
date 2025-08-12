@@ -9,7 +9,6 @@ from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import (
 )
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class SqliteEventStorage(IEventStorage):
     """SQLite 기반 이벤트 저장소"""
 

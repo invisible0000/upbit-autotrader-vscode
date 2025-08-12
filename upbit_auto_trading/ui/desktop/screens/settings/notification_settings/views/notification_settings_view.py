@@ -21,7 +21,6 @@ from ..widgets.quiet_hours_widget import QuietHoursWidget
 # Presenter
 from ..presenters.notification_settings_presenter import NotificationSettingsPresenter
 
-
 class NotificationSettingsView(QWidget):
     """알림 설정 View - MVP 패턴 Presentation Layer"""
 

@@ -11,7 +11,6 @@ from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 @dataclass(frozen=True)
 class SystemSafetyRequestDto:
     """시스템 안전성 확인 요청 DTO"""
@@ -20,7 +19,6 @@ class SystemSafetyRequestDto:
     safety_level: str = "NORMAL"  # NORMAL, HIGH, CRITICAL
     timeout_seconds: int = 30
     force_check: bool = False
-
 
 @dataclass(frozen=True)
 class SystemSafetyStatusDto:
@@ -41,7 +39,6 @@ class SystemSafetyStatusDto:
         else:
             blocking = ", ".join(self.blocking_operations)
             return f"⚠️ 백업 작업이 위험한 상태입니다: {blocking}"
-
 
 class SystemSafetyCheckUseCase:
     """시스템 안전성 확인 Use Case"""

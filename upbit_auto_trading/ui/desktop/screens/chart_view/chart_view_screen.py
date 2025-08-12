@@ -47,7 +47,6 @@ except ImportError:
     class TradeMarker:
         def __init__(self, *args, **kwargs): pass
 
-
 class ChartViewScreen(QWidget):
     """리팩토링된 차트 뷰 화면"""
     
@@ -2877,7 +2876,6 @@ class ChartViewScreen(QWidget):
     def is_update_allowed(self):
         """업데이트가 허용되는지 확인"""
         return self.is_screen_active and not self.update_paused
-
 
 # 직접 실행을 위한 메인 블록
 if __name__ == "__main__":

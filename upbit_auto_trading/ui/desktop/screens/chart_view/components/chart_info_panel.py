@@ -88,7 +88,6 @@ class PriceInfoWidget(QWidget):
         self.change_amount_label.setStyleSheet(f"color: {color};")
         self.change_percent_label.setStyleSheet(f"color: {color};")
 
-
 class MarketInfoWidget(QWidget):
     """시장 정보 위젯"""
     
@@ -166,7 +165,6 @@ class MarketInfoWidget(QWidget):
         if "opening_price" in market_data:
             self.open_price_label.setText(f"₩ {float(market_data['opening_price']):,.0f}")
 
-
 class ChartStatusWidget(QWidget):
     """차트 상태 위젯"""
     
@@ -223,7 +221,6 @@ class ChartStatusWidget(QWidget):
     def update_chart_info(self, symbol, timeframe, data_count=0):
         """차트 정보 업데이트"""
         self.chart_info_label.setText(f"{symbol} | {timeframe} | {data_count}개 봉")
-
 
 class ChartInfoPanel(QWidget):
     """차트 정보 패널"""

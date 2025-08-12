@@ -9,7 +9,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("ProfileMetadataUseCase")
 
-
 class ProfileMetadataUseCase:
     """프로파일 메타데이터 관리 Use Case"""
 

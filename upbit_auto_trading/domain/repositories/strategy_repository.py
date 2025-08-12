@@ -17,7 +17,6 @@ from upbit_auto_trading.domain.entities.strategy import Strategy
 from upbit_auto_trading.domain.value_objects.strategy_id import StrategyId
 from upbit_auto_trading.domain.repositories.base_repository import BaseRepository
 
-
 class StrategyRepository(BaseRepository[Strategy, StrategyId]):
     """
     전략 데이터 접근을 위한 Repository 인터페이스

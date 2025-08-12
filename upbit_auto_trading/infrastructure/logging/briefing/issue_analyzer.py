@@ -9,7 +9,6 @@ import re
 import time
 from .status_tracker import SystemStatusTracker, ComponentStatus
 
-
 @dataclass
 class SystemIssue:
     """시스템 이슈 정보"""
@@ -36,7 +35,6 @@ class SystemIssue:
             'estimated_time': self.estimated_time,
             'timestamp': self.timestamp.isoformat()
         }
-
 
 class IssueAnalyzer:
     """시스템 이슈 분석 및 진단 엔진"""

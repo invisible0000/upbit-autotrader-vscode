@@ -598,7 +598,6 @@ class AlertHistoryPanel(QWidget):
             self.update_table()
             self.update_stats()
 
-
 class AlertDetailDialog(QDialog):
     """알림 상세 정보 대화상자"""
     

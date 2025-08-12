@@ -28,9 +28,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .profile_metadata import ProfileMetadata
 
-
 logger = create_component_logger("ProfileMetadataDialog")
-
 
 class ProfileMetadataDialog(QDialog):
     """

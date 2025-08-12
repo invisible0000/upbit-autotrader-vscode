@@ -19,14 +19,12 @@ from upbit_auto_trading.domain.events.trigger_events import (
 )
 from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_event_publisher
 
-
 class NormalizationMethod(Enum):
     """정규화 방법"""
     MINMAX = "minmax"          # 최소-최대 정규화 (0-1 스케일)
     ZSCORE = "zscore"          # Z-스코어 정규화 (평균 0, 표준편차 1)
     PERCENTAGE = "percentage"   # 백분율 기반 정규화
     ROBUST = "robust"          # 로버스트 정규화 (중앙값, IQR 기반)
-
 
 @dataclass(frozen=True)
 class NormalizationParameters:
@@ -56,7 +54,6 @@ class NormalizationParameters:
     confidence_level: float = 0.95
     last_updated: Optional[str] = None
 
-
 @dataclass(frozen=True)
 class NormalizationResult:
     """
@@ -82,7 +79,6 @@ class NormalizationResult:
     normalization_params1: Optional[NormalizationParameters] = None
     normalization_params2: Optional[NormalizationParameters] = None
 
-
 class NormalizationStrategy(ABC):
     """정규화 전략 인터페이스"""
 
@@ -95,7 +91,6 @@ class NormalizationStrategy(ABC):
     def denormalize(self, normalized_value: float, params: NormalizationParameters) -> float:
         """정규화된 값을 원래 스케일로 복원"""
         pass
-
 
 class MinMaxNormalizationStrategy(NormalizationStrategy):
     """최소-최대 정규화 전략"""
@@ -116,7 +111,6 @@ class MinMaxNormalizationStrategy(NormalizationStrategy):
 
         return params.min_value + normalized_value * (params.max_value - params.min_value)
 
-
 class ZScoreNormalizationStrategy(NormalizationStrategy):
     """Z-스코어 정규화 전략"""
 
@@ -135,7 +129,6 @@ class ZScoreNormalizationStrategy(NormalizationStrategy):
 
         return normalized_value * params.std + params.mean
 
-
 class RobustNormalizationStrategy(NormalizationStrategy):
     """로버스트 정규화 전략"""
 
@@ -153,7 +146,6 @@ class RobustNormalizationStrategy(NormalizationStrategy):
             raise ValueError("Robust 역정규화에는 median, iqr이 필요합니다")
 
         return normalized_value * params.iqr + params.median
-
 
 class NormalizationService:
     """

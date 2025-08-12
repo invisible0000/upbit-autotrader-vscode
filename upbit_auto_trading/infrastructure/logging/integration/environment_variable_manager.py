@@ -14,6 +14,10 @@ Infrastructure 로깅 시스템의 환경변수를 실시간으로 관리하는 
 
 import os
 import threading
+import subprocess
+import platform
+import json
+from pathlib import Path
 from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime
 
@@ -27,7 +31,7 @@ class EnvironmentVariableManager:
     - 변경 이력 추적 및 롤백 지원
     """
 
-    # Infrastructure 로깅 시스템 환경변수 정의
+    # Infrastructure 로깅 시스템 환경변수 정의 (로깅 서비스와 동기화)
     SUPPORTED_VARIABLES = {
         'UPBIT_LOG_LEVEL': {
             'type': 'choice',
@@ -56,6 +60,26 @@ class EnvironmentVariableManager:
             'choices': ['development', 'testing', 'staging', 'production'],
             'default': 'development',
             'description': '로깅 컨텍스트'
+        },
+        'UPBIT_LLM_BRIEFING_ENABLED': {
+            'type': 'boolean',
+            'default': 'false',
+            'description': 'LLM 브리핑 활성화'
+        },
+        'UPBIT_FEATURE_DEVELOPMENT': {
+            'type': 'string',
+            'default': '',
+            'description': '기능 개발 컨텍스트'
+        },
+        'UPBIT_PERFORMANCE_MONITORING': {
+            'type': 'boolean',
+            'default': 'false',
+            'description': '성능 모니터링 활성화'
+        },
+        'UPBIT_BRIEFING_UPDATE_INTERVAL': {
+            'type': 'number',
+            'default': '30',
+            'description': '브리핑 업데이트 간격 (초)'
         }
     }
 
@@ -66,13 +90,132 @@ class EnvironmentVariableManager:
         self._change_history: List[Dict[str, Any]] = []
         self._original_values: Dict[str, str] = {}
 
-        # 초기 상태 저장
+        # 🆕 로컬 설정 파일 경로 (즉시 적용용)
+        self._local_config_path = Path("config/local_env_vars.json")
+        self._local_config_path.parent.mkdir(exist_ok=True)
+
+        # 초기 상태 저장 및 로컬 설정 로드
         self._save_original_state()
+        self._load_local_config()
 
     def _save_original_state(self) -> None:
         """초기 환경변수 상태 저장 (롤백용)"""
         for var_name in self.SUPPORTED_VARIABLES:
             self._original_values[var_name] = os.getenv(var_name, '')
+
+    def _load_local_config(self) -> None:
+        """로컬 설정 파일에서 환경변수 로드 및 적용"""
+        try:
+            if not self._local_config_path.exists():
+                return
+
+            with open(self._local_config_path, 'r', encoding='utf-8') as f:
+                local_config = json.load(f)
+
+            # 로컬 설정을 현재 환경변수에 적용
+            for var_name, value in local_config.items():
+                if var_name in self.SUPPORTED_VARIABLES:
+                    os.environ[var_name] = str(value)
+
+        except Exception as e:
+            print(f"⚠️ 로컬 환경변수 설정 로드 실패: {e}")
+
+    def _save_local_config(self, var_name: str, value: str) -> bool:
+        """로컬 설정 파일에 환경변수 저장 (즉시 적용용)"""
+        try:
+            # 기존 로컬 설정 읽기
+            local_config = {}
+            if self._local_config_path.exists():
+                with open(self._local_config_path, 'r', encoding='utf-8') as f:
+                    local_config = json.load(f)
+
+            # 새 값 설정
+            local_config[var_name] = value
+
+            # 파일에 저장
+            with open(self._local_config_path, 'w', encoding='utf-8') as f:
+                json.dump(local_config, f, indent=2, ensure_ascii=False)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 로컬 환경변수 설정 저장 실패 ({var_name}): {e}")
+            return False
+
+    def _save_to_powershell_profile(self, var_name: str, value: str) -> bool:
+        """PowerShell 프로파일에 환경변수 영구 저장 (비동기)
+
+        Args:
+            var_name: 환경변수 이름
+            value: 저장할 값
+
+        Returns:
+            bool: 저장 시도 여부 (실제 성공은 백그라운드에서 처리)
+        """
+        try:
+            if platform.system() != "Windows":
+                return False  # Windows에서만 지원
+
+            # 🔧 비동기 백그라운드 실행으로 UI 프리징 방지
+            def _async_save():
+                try:
+                    ps_command = f'[Environment]::SetEnvironmentVariable("{var_name}", "{value}", "User")'
+                    subprocess.run(
+                        ["powershell", "-Command", ps_command],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,  # 타임아웃 단축 (10초 → 5초)
+                        check=False  # 실패해도 예외 발생 안 함
+                    )
+                except Exception:
+                    pass  # 백그라운드에서 실패해도 UI에 영향 없음
+
+            # 백그라운드 스레드로 실행
+            thread = threading.Thread(target=_async_save, daemon=True)
+            thread.start()
+
+            return True  # 시도는 성공으로 간주
+
+        except Exception as e:
+            print(f"❌ PowerShell 환경변수 저장 시작 실패 ({var_name}): {e}")
+            return False
+
+    def _remove_from_powershell_profile(self, var_name: str) -> bool:
+        """PowerShell에서 환경변수 영구 제거 (비동기)
+
+        Args:
+            var_name: 제거할 환경변수 이름
+
+        Returns:
+            bool: 제거 시도 여부 (실제 성공은 백그라운드에서 처리)
+        """
+        try:
+            if platform.system() != "Windows":
+                return False
+
+            # 🔧 비동기 백그라운드 실행으로 UI 프리징 방지
+            def _async_remove():
+                try:
+                    ps_command = f'[Environment]::SetEnvironmentVariable("{var_name}", $null, "User")'
+                    subprocess.run(
+                        ["powershell", "-Command", ps_command],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,  # 타임아웃 단축
+                        check=False
+                    )
+                except Exception:
+                    pass  # 백그라운드에서 실패해도 UI에 영향 없음
+
+            # 백그라운드 스레드로 실행
+            thread = threading.Thread(target=_async_remove, daemon=True)
+            thread.start()
+
+            return True  # 시도는 성공으로 간주
+
+        except Exception as e:
+            print(f"❌ PowerShell 환경변수 제거 시작 실패 ({var_name}): {e}")
+            return False
 
     def get_variable(self, var_name: str) -> str:
         """환경변수 값 조회
@@ -89,12 +232,13 @@ class EnvironmentVariableManager:
         default_value = self.SUPPORTED_VARIABLES[var_name]['default']
         return os.getenv(var_name, default_value)
 
-    def set_variable(self, var_name: str, value: str) -> bool:
+    def set_variable(self, var_name: str, value: str, persistent: bool = True) -> bool:
         """환경변수 값 설정
 
         Args:
             var_name: 환경변수 이름
             value: 설정할 값
+            persistent: 영구 저장 여부 (기본값: True)
 
         Returns:
             bool: 설정 성공 여부
@@ -111,16 +255,32 @@ class EnvironmentVariableManager:
                 # 이전 값 저장
                 old_value = self.get_variable(var_name)
 
-                # 환경변수 설정
+                # 1. 현재 세션 환경변수 설정 (즉시 적용)
                 os.environ[var_name] = value
 
-                # 변경 이력 기록
-                self._record_change(var_name, old_value, value)
+                # 2. 로컬 설정 파일에 저장 (다음 실행시 적용)
+                local_success = self._save_local_config(var_name, value)
 
-                # 변경 알림
-                self._notify_change_handlers(var_name, old_value, value)
+                # 3. 영구 저장 (백그라운드, UI 프리징 방지)
+                persistent_success = True
+                if persistent:
+                    persistent_success = self._save_to_powershell_profile(var_name, value)
 
-                return True
+                # 현재 세션과 로컬 설정이 성공하면 OK
+                if local_success:
+                    # 변경 이력 기록
+                    self._record_change(var_name, old_value, value, persistent and persistent_success)
+
+                    # 변경 알림
+                    self._notify_change_handlers(var_name, old_value, value)
+
+                    if persistent and not persistent_success:
+                        print(f"⚠️ {var_name}이 즉시 적용되었지만 Windows 사용자 환경변수 저장은 백그라운드에서 처리 중입니다")
+
+                    return True
+                else:
+                    print(f"❌ {var_name} 로컬 설정 저장 실패")
+                    return False
 
             except Exception as e:
                 print(f"❌ 환경변수 설정 실패 ({var_name}={value}): {e}")
@@ -151,11 +311,12 @@ class EnvironmentVariableManager:
             results[var_name] = self.set_variable(var_name, value)
         return results
 
-    def reset_variable(self, var_name: str) -> bool:
+    def reset_variable(self, var_name: str, persistent: bool = True) -> bool:
         """환경변수를 기본값으로 리셋
 
         Args:
             var_name: 환경변수 이름
+            persistent: 영구 저장 여부 (기본값: True)
 
         Returns:
             bool: 리셋 성공 여부
@@ -164,17 +325,20 @@ class EnvironmentVariableManager:
             raise ValueError(f"지원하지 않는 환경변수: {var_name}")
 
         default_value = self.SUPPORTED_VARIABLES[var_name]['default']
-        return self.set_variable(var_name, default_value)
+        return self.set_variable(var_name, default_value, persistent)
 
-    def reset_all_variables(self) -> Dict[str, bool]:
+    def reset_all_variables(self, persistent: bool = True) -> Dict[str, bool]:
         """모든 환경변수를 기본값으로 리셋
+
+        Args:
+            persistent: 영구 저장 여부 (기본값: True)
 
         Returns:
             Dict[str, bool]: 각 변수별 리셋 결과
         """
         results = {}
         for var_name in self.SUPPORTED_VARIABLES:
-            results[var_name] = self.reset_variable(var_name)
+            results[var_name] = self.reset_variable(var_name, persistent)
         return results
 
     def rollback_to_original(self) -> Dict[str, bool]:
@@ -274,19 +438,21 @@ class EnvironmentVariableManager:
         # string 타입은 모든 값 허용
         return True
 
-    def _record_change(self, var_name: str, old_value: str, new_value: str) -> None:
+    def _record_change(self, var_name: str, old_value: str, new_value: str, persistent: bool = False) -> None:
         """환경변수 변경 이력 기록
 
         Args:
             var_name: 환경변수 이름
             old_value: 이전 값
             new_value: 새 값
+            persistent: 영구 저장 여부
         """
         change_record = {
             'timestamp': datetime.now().isoformat(),
             'variable': var_name,
             'old_value': old_value,
-            'new_value': new_value
+            'new_value': new_value,
+            'persistent': persistent
         }
 
         self._change_history.append(change_record)

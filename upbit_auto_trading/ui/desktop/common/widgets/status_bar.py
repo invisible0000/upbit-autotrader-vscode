@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import QStatusBar, QLabel, QHBoxLayout, QWidget
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal
 from upbit_auto_trading.ui.desktop.common.widgets.clickable_api_status import ClickableApiStatus
 
-
 class StatusBar(QStatusBar):
     """
     상태 바 위젯

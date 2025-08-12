@@ -28,7 +28,6 @@ from typing import List, Optional, Dict, Any
 from upbit_auto_trading.domain.entities.trigger import TradingVariable
 from upbit_auto_trading.domain.value_objects.compatibility_rules import ComparisonGroupRules
 
-
 class SettingsRepository(ABC):
     """
     설정 데이터 접근을 위한 Repository 인터페이스 (읽기 전용)

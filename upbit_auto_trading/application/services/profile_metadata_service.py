@@ -26,9 +26,7 @@ from upbit_auto_trading.infrastructure.profile_storage.profile_metadata_reposito
 from upbit_auto_trading.infrastructure.yaml_processing.yaml_parser import YamlParser
 from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.dialogs.profile_metadata import ProfileMetadata
 
-
 logger = create_component_logger("ProfileMetadataService")
-
 
 class ProfileMetadataService:
     """

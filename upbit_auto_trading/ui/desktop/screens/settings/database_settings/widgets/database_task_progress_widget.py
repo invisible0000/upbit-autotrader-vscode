@@ -14,7 +14,6 @@ from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabaseTaskProgressWidget(QWidget):
     """
     데이터베이스 작업 진행 상황 위젯

@@ -15,7 +15,6 @@ from PyQt6.QtWidgets import (
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class ThemeSelectorWidget(QWidget):
     """테마 선택 위젯"""
 

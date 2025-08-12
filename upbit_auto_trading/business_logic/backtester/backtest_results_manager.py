@@ -34,7 +34,6 @@ except ImportError:
 from sqlalchemy.orm import Session
 from upbit_auto_trading.data_layer.models import Backtest
 
-
 class BacktestResultsManager:
     """백테스트 결과 관리 클래스"""
 

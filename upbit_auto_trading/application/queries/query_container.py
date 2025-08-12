@@ -14,7 +14,6 @@ from upbit_auto_trading.application.queries.dto.strategy_query_dto import (
 )
 from upbit_auto_trading.application.queries.dto.dashboard_query_dto import DashboardQuery
 
-
 class QueryServiceContainer:
     """Query Service들의 의존성 주입 컨테이너"""
 

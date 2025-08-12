@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class AnimationSettingsWidget(QWidget):
     """애니메이션 설정 위젯"""
 

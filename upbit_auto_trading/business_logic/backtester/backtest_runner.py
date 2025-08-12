@@ -29,7 +29,6 @@ from upbit_auto_trading.domain.events.backtest_events import (
     BacktestDataLoaded, BacktestTradeExecuted, BacktestProgressUpdated
 )
 
-
 class BacktestRunner:
     """
     백테스트 실행기 클래스

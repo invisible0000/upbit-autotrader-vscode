@@ -36,7 +36,6 @@ from upbit_auto_trading.business_logic.portfolio.portfolio_manager import Portfo
 from upbit_auto_trading.business_logic.portfolio.portfolio_performance import PortfolioPerformance
 from upbit_auto_trading.business_logic.strategy.strategy_factory import StrategyFactory
 
-
 class PortfolioBacktest:
     """포트폴리오 백테스트 클래스"""
 

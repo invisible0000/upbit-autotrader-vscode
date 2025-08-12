@@ -28,7 +28,6 @@ from enum import Enum
 # Domain Value Object import
 from upbit_auto_trading.domain.services.trigger_evaluation_service import MarketData
 
-
 class Timeframe(Enum):
     """지원하는 시간프레임"""
     MINUTE_1 = "1m"
@@ -49,7 +48,6 @@ class Timeframe(Enum):
             self.DAY_1: "1일봉"
         }
         return display_names[self]
-
 
 class MarketDataRepository(ABC):
     """

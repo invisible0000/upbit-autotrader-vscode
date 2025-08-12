@@ -9,11 +9,9 @@ from upbit_auto_trading.infrastructure.config.models.config_models import (
     LoggingConfig, EventBusConfig, TradingConfig, UIConfig, DEFAULT_CONFIGS
 )
 
-
 class ConfigurationError(Exception):
     """설정 관련 오류"""
     pass
-
 
 class ConfigLoader:
     """설정 로더"""
@@ -185,7 +183,6 @@ class ConfigLoader:
                       allow_unicode=True, sort_keys=False)
 
         return output_path
-
 
 class EnvironmentConfigManager:
     """환경별 설정 관리자"""

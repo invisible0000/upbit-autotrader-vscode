@@ -23,7 +23,6 @@ from upbit_auto_trading.infrastructure.yaml_processing.yaml_parser import YamlPa
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 logger = create_component_logger("ProfileEditorUseCase")
 
-
 class ProfileEditorUseCase:
     """
     프로파일 편집 Use Case

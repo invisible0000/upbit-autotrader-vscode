@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush, QIcon
 
-
 class ActivePositionsWidget(QWidget):
     """
     활성 거래 목록 위젯

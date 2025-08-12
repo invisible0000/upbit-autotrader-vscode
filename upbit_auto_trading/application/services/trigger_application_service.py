@@ -20,7 +20,6 @@ from upbit_auto_trading.domain.repositories.trigger_repository import TriggerRep
 from upbit_auto_trading.domain.repositories.settings_repository import SettingsRepository
 from upbit_auto_trading.domain.services.strategy_compatibility_service import StrategyCompatibilityService
 
-
 class TriggerApplicationService(BaseApplicationService[Trigger]):
     """트리거 관리 Application Service
 

@@ -24,7 +24,6 @@ except ImportError:
         pass
     Figure = DummyFigure
 
-
 class BacktestAnalyzer:
     """
     백테스트 결과 분석기 클래스

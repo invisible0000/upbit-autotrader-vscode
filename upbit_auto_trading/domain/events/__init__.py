@@ -22,7 +22,6 @@ from .base_domain_event import DomainEvent
 
 logger = create_component_logger("DomainEvent")
 
-
 # 편의 함수들 (하위 호환성 유지)
 def publish_domain_event(event: DomainEvent) -> None:
     """
@@ -33,7 +32,6 @@ def publish_domain_event(event: DomainEvent) -> None:
     """
     publisher = get_domain_event_publisher()
     publisher.publish(event)
-
 
 def subscribe_to_domain_event(event_type: Type[DomainEvent], handler: Callable[[DomainEvent], None]) -> None:
     """

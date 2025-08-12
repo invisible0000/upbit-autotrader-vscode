@@ -12,7 +12,6 @@ import logging
 import os
 import sqlite3
 
-
 class EmbeddedSimulationDataEngine:
     """내장 시뮬레이션 데이터셋 엔진"""
     
@@ -385,7 +384,6 @@ class EmbeddedSimulationDataEngine:
                 'data_points': dataset['data_points']
             }
         return None
-
 
 # 전역 인스턴스
 _embedded_engine = None

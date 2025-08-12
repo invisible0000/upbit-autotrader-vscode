@@ -6,7 +6,6 @@ from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InM
 from upbit_auto_trading.infrastructure.events.storage.sqlite_event_storage import SqliteEventStorage
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
-
 class EventBusFactory:
     """이벤트 버스 팩토리"""
 

@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-
 @dataclass
 class LogEntry:
     """로그 엔트리 정의"""
@@ -22,7 +21,6 @@ class LogEntry:
     metadata: Dict[str, Any]
     priority: int = 1  # 1(낮음) ~ 5(긴급)
 
-
 @dataclass
 class ProcessingResult:
     """로그 처리 결과"""
@@ -31,7 +29,6 @@ class ProcessingResult:
     failed_count: int
     processing_time: float
     errors: List[str]
-
 
 class AsyncLogProcessor:
     """비동기 로그 처리기"""
@@ -256,10 +253,8 @@ class AsyncLogProcessor:
 
         return False
 
-
 # 글로벌 프로세서 인스턴스 관리
 _global_processor: Optional[AsyncLogProcessor] = None
-
 
 async def get_async_processor(queue_size: int = 10000,
                              worker_count: int = 3) -> AsyncLogProcessor:
@@ -271,7 +266,6 @@ async def get_async_processor(queue_size: int = 10000,
         await _global_processor.initialize()
 
     return _global_processor
-
 
 async def shutdown_global_processor():
     """글로벌 프로세서 종료"""

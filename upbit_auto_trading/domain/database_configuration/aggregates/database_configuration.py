@@ -16,7 +16,6 @@ from ..value_objects.database_path import DatabasePath
 
 logger = create_component_logger("DatabaseConfiguration")
 
-
 @dataclass
 class DatabaseConfiguration:
     """

@@ -17,7 +17,6 @@ from upbit_auto_trading.data_layer.storage.database_manager import DatabaseManag
 from upbit_auto_trading.data_layer.models import StrategyCombination, CombinationManagementStrategy, Strategy
 from .strategy_combination import StrategyCombination as StrategyCombinationData, StrategyConfig
 
-
 class DBCombinationManager:
     """DB 기반 전략 조합 관리자"""
     
@@ -381,7 +380,6 @@ class DBCombinationManager:
                 "updated_at": datetime.now()
             }
         ]
-
 
 def get_db_combination_manager(db_manager: DatabaseManager = None) -> DBCombinationManager:
     """DB 조합 매니저 팩토리 함수

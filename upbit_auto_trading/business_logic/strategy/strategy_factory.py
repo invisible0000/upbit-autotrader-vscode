@@ -11,7 +11,6 @@ import logging
 from upbit_auto_trading.business_logic.strategy.strategy_interface import StrategyInterface
 from upbit_auto_trading.business_logic.strategy.base_strategy import BaseStrategy
 
-
 class StrategyFactory:
     """
     전략 팩토리 클래스

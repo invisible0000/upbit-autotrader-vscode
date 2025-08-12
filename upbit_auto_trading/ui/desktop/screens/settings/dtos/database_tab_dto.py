@@ -7,14 +7,12 @@ MVP 패턴의 데이터 전송 객체입니다.
 from dataclasses import dataclass
 from typing import List
 
-
 @dataclass
 class DatabaseInfoDto:
     """데이터베이스 정보 DTO"""
     settings_db_path: str
     strategies_db_path: str
     market_data_db_path: str
-
 
 @dataclass
 class DatabaseStatusDto:
@@ -23,7 +21,6 @@ class DatabaseStatusDto:
     strategies_db_exists: bool
     market_data_db_exists: bool
     status_message: str
-
 
 @dataclass
 class ValidationResultDto:

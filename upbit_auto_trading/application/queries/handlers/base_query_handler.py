@@ -9,7 +9,6 @@ from typing import TypeVar, Generic
 Q = TypeVar('Q')  # Query type
 R = TypeVar('R')  # Response type
 
-
 class BaseQueryHandler(ABC, Generic[Q, R]):
     """모든 Query Handler의 기본 클래스"""
 

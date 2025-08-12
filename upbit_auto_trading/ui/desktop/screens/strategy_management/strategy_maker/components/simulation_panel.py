@@ -27,7 +27,6 @@ except ImportError as e:
     print(f"⚠️ 공통 시뮬레이션 시스템 import 실패: {e}")
     SHARED_SIMULATION_AVAILABLE = False
 
-
 class SimulationWorker(QThread):
     """시뮬레이션 작업 쓰레드"""
     
@@ -54,7 +53,6 @@ class SimulationWorker(QThread):
             self.simulation_completed.emit({
                 'error': f'시뮬레이션 실행 실패: {str(e)}'
             })
-
 
 class StrategySimulationPanel(QWidget):
     """전략 시뮬레이션 패널"""
@@ -254,7 +252,6 @@ class StrategySimulationPanel(QWidget):
             
         except Exception as e:
             print(f"❌ 차트 업데이트 실패: {e}")
-
 
 # 테스트용 메인 함수
 if __name__ == "__main__":

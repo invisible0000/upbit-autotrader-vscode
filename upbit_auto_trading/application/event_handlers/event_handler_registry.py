@@ -18,7 +18,6 @@ from ..caching.cache_invalidation_service import CacheInvalidationService
 from ...domain.events.base_domain_event import DomainEvent
 from ...infrastructure.logging import create_component_logger
 
-
 class CacheInvalidationHandler(BaseEventHandler):
     """캐시 무효화 전용 통합 핸들러"""
 
@@ -94,7 +93,6 @@ class CacheInvalidationHandler(BaseEventHandler):
             object 타입 (모든 이벤트 처리)
         """
         return object
-
 
 class EventHandlerRegistry:
     """Event Handler 등록 및 관리 레지스트리"""

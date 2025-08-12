@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-
 @dataclass(frozen=True)
 class CreateStrategyDto:
     """전략 생성 요청 DTO"""
@@ -16,7 +15,6 @@ class CreateStrategyDto:
     description: Optional[str] = None
     tags: Optional[List[str]] = None
     created_by: str = "system"
-
 
 @dataclass(frozen=True)
 class StrategyDto:
@@ -52,7 +50,6 @@ class StrategyDto:
             created_at=strategy.created_at,
             updated_at=strategy.updated_at
         )
-
 
 @dataclass(frozen=True)
 class UpdateStrategyDto:

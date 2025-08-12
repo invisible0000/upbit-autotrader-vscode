@@ -7,7 +7,6 @@
 
 from enum import Enum
 
-
 class ComparisonOperator(Enum):
     """
     비교 연산자 열거형

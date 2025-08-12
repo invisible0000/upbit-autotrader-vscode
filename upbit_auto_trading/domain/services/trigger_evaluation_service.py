@@ -29,13 +29,11 @@ except ImportError:
         def get_indicator_data(self, symbol: str, indicator_name: str, timeframe: str, count: int) -> List[float]:
             ...
 
-
 class EvaluationStatus(Enum):
     """평가 상태"""
     SUCCESS = "success"
     ERROR = "error"
     SKIPPED = "skipped"
-
 
 @dataclass(frozen=True)
 class MarketData:
@@ -86,7 +84,6 @@ class MarketData:
             "Volume": self.volume
         }
         return price_map.get(price_type, self.close_price)
-
 
 @dataclass(frozen=True)
 class EvaluationResult:
@@ -143,7 +140,6 @@ class EvaluationResult:
             error_details=error_message,
             **kwargs
         )
-
 
 class TriggerEvaluationService:
     """

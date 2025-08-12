@@ -32,7 +32,6 @@ from ..exceptions.domain_exceptions import IncompatibleTriggerError
 if TYPE_CHECKING:
     from typing import Any as MarketData  # 실제 구현에서는 MarketData 클래스로 교체
 
-
 class TriggerType(Enum):
     """트리거 유형 분류"""
     ENTRY = "entry"         # 진입 트리거 (포지션 없을 때 신호 생성)
@@ -51,7 +50,6 @@ class TriggerType(Enum):
     def requires_position(self) -> bool:
         """포지션이 필요한 트리거 타입인지 확인"""
         return self in [self.MANAGEMENT, self.EXIT]
-
 
 @dataclass(frozen=True)
 class TradingVariable:
@@ -107,7 +105,6 @@ class TradingVariable:
         
         return 0.0  # 완전 비호환
 
-
 @dataclass
 class TriggerEvaluationResult:
     """트리거 평가 결과"""
@@ -136,7 +133,6 @@ class TriggerEvaluationResult:
             evaluation_time=datetime.now(),
             evaluation_details=details
         )
-
 
 @dataclass
 class Trigger:
@@ -373,7 +369,6 @@ class Trigger:
                 f"variable={self.variable.variable_id}, operator={self.operator.value}, "
                 f"target={self.target_value}, active={self.is_active})")
 
-
 # 팩토리 함수들
 def create_rsi_entry_trigger() -> Trigger:
     """RSI 과매도 진입 트리거 생성 - 기본 7규칙 전략용"""
@@ -393,7 +388,6 @@ def create_rsi_entry_trigger() -> Trigger:
         target_value=30.0,
         parameters={"period": 14}
     )
-
 
 def create_sma_crossover_trigger() -> Trigger:
     """이동평균 교차 트리거 생성 예시"""

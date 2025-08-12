@@ -7,7 +7,6 @@
 
 from enum import Enum
 
-
 class ConflictResolution(Enum):
     """
     전략 충돌 해결 방식

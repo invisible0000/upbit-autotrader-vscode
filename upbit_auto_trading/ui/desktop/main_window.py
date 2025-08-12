@@ -85,7 +85,6 @@ try:
 except ImportError:
     MonitoringAlertsScreen = lambda: create_placeholder_screen("모니터링 & 알림")
 
-
 class MainWindow(QMainWindow):
     """
     메인 윈도우 클래스
@@ -172,10 +171,9 @@ class MainWindow(QMainWindow):
                 self._log_info("✅ ThemeService DI 주입 성공")
                 # 테마 변경 시그널 연결
                 self.theme_service.connect_theme_changed(self._on_theme_changed_from_service)
-                self._log_llm_report("IL", "ThemeService DI 주입 및 시그널 연결 완료")
+
             except Exception as e:
                 self._log_warning(f"⚠️ ThemeService DI 주입 실패, 기존 방식 사용: {e}")
-                self._log_llm_report("IL", f"ThemeService DI 실패: {type(e).__name__}")
 
         # DatabaseHealthService 초기화 (최소 구현)
         self.db_health_service = None
@@ -247,8 +245,6 @@ class MainWindow(QMainWindow):
         else:
             print(f"DEBUG: {message}")
 
-
-
     def _setup_ui(self):
         """UI 설정"""
         # 중앙 위젯 설정
@@ -265,10 +261,10 @@ class MainWindow(QMainWindow):
             try:
                 self.nav_bar = self.di_container.resolve(NavigationBar)
                 self._log_info("✅ NavigationBar DI 주입 성공")
-                self._log_llm_report("NavigationBar_DI", "SUCCESS", "DI Container 기반 주입 완료")
+
             except Exception as e:
                 self._log_warning(f"⚠️ NavigationBar DI 주입 실패, 기존 방식 사용: {e}")
-                self._log_llm_report("NavigationBar_DI", "FALLBACK", f"기존 방식 사용: {e}")
+
                 self.nav_bar = NavigationBar()
         else:
             self.nav_bar = NavigationBar()
@@ -298,10 +294,9 @@ class MainWindow(QMainWindow):
             try:
                 self.status_bar = self.di_container.resolve(StatusBar)
                 self._log_info("StatusBar DI 주입 성공")
-                self._log_llm_report("IL", "StatusBar DI 주입 성공")
+
             except Exception as e:
                 self._log_warning(f"StatusBar DI 주입 실패, 기존 방식 사용: {e}")
-                self._log_llm_report("IL", f"StatusBar DI fallback 실행: {type(e).__name__}")
                 self.status_bar = StatusBar()
         else:
             self.status_bar = StatusBar()
@@ -343,13 +338,11 @@ class MainWindow(QMainWindow):
                         self.showMaximized()
                         self._log_info("SettingsService에서 창 최대화 상태 로드")
 
-                    self._log_llm_report("IL", f"창 상태 로드 성공: {window_state}")
                     return
                 else:
                     self._log_info("SettingsService에 저장된 창 상태 없음, 기본값 사용")
             except Exception as e:
                 self._log_warning(f"SettingsService 창 상태 로드 실패, QSettings 사용: {e}")
-                self._log_llm_report("IL", f"SettingsService 창 상태 로드 실패: {type(e).__name__}")
 
         # 폴백: QSettings 사용
         try:
@@ -367,12 +360,10 @@ class MainWindow(QMainWindow):
                 self.move(position)
                 self._log_info(f"QSettings에서 창 위치 로드: ({position.x()}, {position.y()})")
 
-            self._log_llm_report("IL", "QSettings 창 상태 로드 완료")
         except Exception as e:
             self._log_warning(f"QSettings 창 상태 로드 실패, 기본값 사용: {e}")
             # 기본 창 크기/위치 설정
             self.resize(1600, 1000)
-            self._log_llm_report("IL", "기본 창 상태 사용")
 
     def _setup_menu_bar(self):
         """메뉴 바 설정"""
@@ -436,7 +427,6 @@ class MainWindow(QMainWindow):
         self._screen_widgets['설정'] = None
 
         self._log_info("대시보드 화면만 초기화 완료, 나머지는 지연 로딩됩니다")
-        self._log_llm_report("IL", "MainWindow 초기화 완료 - 지연 로딩 방식")
 
     def _add_placeholder_screens(self, screens):
         """임시 화면 추가"""
@@ -461,7 +451,6 @@ class MainWindow(QMainWindow):
             screen_name (str): 화면 이름
         """
         self._log_info(f"화면 전환 요청: {screen_name}")
-        self._log_llm_report("IL", f"화면 전환 요청: {screen_name}")
 
         # 현재 활성 화면에서 차트뷰인 경우 업데이트 일시정지
         current_widget = self.stack_widget.currentWidget()
@@ -472,7 +461,6 @@ class MainWindow(QMainWindow):
                     current_widget.pause_chart_updates()
             except Exception as e:
                 self._log_warning(f"이전 화면 일시정지 중 오류: {e}")
-                self._log_llm_report("IL", f"화면 일시정지 오류: {type(e).__name__}")
 
         # 화면 이름 매핑
         screen_mapping = {
@@ -492,7 +480,7 @@ class MainWindow(QMainWindow):
         # 해당 화면이 이미 로드되었는지 확인
         if self._screen_widgets.get(mapped_name) is None:
             self._log_info(f"{mapped_name} 화면 지연 로딩 중...")
-            self._log_llm_report("IL", f"화면 지연 로딩 시작: {mapped_name}")
+
             self._load_screen_lazy(mapped_name)
 
         # 화면 전환
@@ -502,7 +490,6 @@ class MainWindow(QMainWindow):
             if index >= 0:
                 self.stack_widget.setCurrentIndex(index)
                 self._log_info(f"{mapped_name} 화면으로 전환 완료")
-                self._log_llm_report("IL", f"화면 전환 성공: {mapped_name}")
 
                 # 차트뷰 화면으로 전환한 경우 업데이트 재개
                 try:
@@ -510,21 +497,19 @@ class MainWindow(QMainWindow):
                         widget.resume_chart_updates()
                 except Exception as e:
                     self._log_warning(f"차트뷰 업데이트 재개 중 오류: {e}")
-                    self._log_llm_report("IL", f"차트뷰 업데이트 재개 오류: {type(e).__name__}")
 
             else:
                 self._log_error(f"{mapped_name} 화면을 스택에서 찾을 수 없습니다")
-                self._log_llm_report("IL", f"화면 스택 오류: {mapped_name} 없음")
+
         else:
             self._log_error(f"{mapped_name} 화면 로딩 실패")
-            self._log_llm_report("IL", f"화면 로딩 실패: {mapped_name}")
 
     def _load_screen_lazy(self, screen_name):
         """지연 로딩으로 화면 생성"""
         try:
             if screen_name == "차트 뷰":
                 self._log_info("차트뷰 화면 로딩 중...")
-                self._log_llm_report("IL", "차트뷰 화면 로딩 시작")
+
                 from upbit_auto_trading.ui.desktop.screens.chart_view.chart_view_screen import ChartViewScreen
                 screen = ChartViewScreen()
 
@@ -541,17 +526,15 @@ class MainWindow(QMainWindow):
                 if self.mvp_container and hasattr(screen, 'set_mvp_container'):
                     screen.set_mvp_container(self.mvp_container)
                     self._log_info("✅ 기존 탭 구조 유지하며 MVP Container 주입 완료")
-                    self._log_llm_report("MVP", "전략관리 화면 탭 구조 유지 + MVP 패턴 적용")
+
                 else:
                     self._log_info("기존 전략 관리 화면 사용 (탭 구조 유지)")
-                    self._log_llm_report("MVP", "전략관리 화면 기존 방식 사용")
 
                 # 백테스팅 요청 시그널 연결 (시그널이 있는 경우)
                 if hasattr(screen, 'backtest_requested'):
                     screen.backtest_requested.connect(self._on_backtest_requested)
                 else:
                     self._log_warning("StrategyManagementScreen에 backtest_requested 시그널이 없습니다")
-                    self._log_llm_report("IL", "전략관리 화면 시그널 연결 실패: backtest_requested")
 
             elif screen_name == "백테스팅":
                 from upbit_auto_trading.ui.desktop.screens.backtesting.backtesting_screen import BacktestingScreen
@@ -588,10 +571,9 @@ class MainWindow(QMainWindow):
                         settings_presenter.load_initial_settings()
 
                         self._log_info("✅ Settings MVP 패턴 생성 완료")
-                        self._log_llm_report("IL", "Settings MVP 패턴 적용 성공")
+
                     except Exception as e:
                         self._log_error(f"❌ Settings MVP 생성 실패: {e}")
-                        self._log_llm_report("IL", f"Settings MVP 실패: {type(e).__name__}")
                         # 폴백: 기존 방식
                         from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
                         screen = SettingsScreen(settings_service=self.settings_service, parent=self)
@@ -601,7 +583,6 @@ class MainWindow(QMainWindow):
                     from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
                     screen = SettingsScreen(settings_service=self.settings_service, parent=self)
                     self._log_info("SettingsScreen에 SettingsService 주입 완료 (기존 방식)")
-                    self._log_llm_report("IL", "SettingsScreen 기존 방식 생성")
 
                 # 설정 변경 시그널 연결 (테마 변경 즉시 반영)
                 if hasattr(screen, 'settings_changed'):
@@ -622,29 +603,25 @@ class MainWindow(QMainWindow):
                     screen.api_status_changed.connect(self._on_api_status_changed)
                 else:
                     self._log_warning("SettingsScreen에 api_status_changed 시그널이 없습니다")
-                    self._log_llm_report("IL", "설정 화면 시그널 연결 실패: api_status_changed")
 
                 # DB 상태 변경 시그널 연결
                 if hasattr(screen, 'db_status_changed'):
                     screen.db_status_changed.connect(self._on_db_status_changed)
                 else:
                     self._log_warning("SettingsScreen에 db_status_changed 시그널이 없습니다")
-                    self._log_llm_report("IL", "설정 화면 시그널 연결 실패: db_status_changed")
 
             else:
                 self._log_error(f"알 수 없는 화면: {screen_name}")
-                self._log_llm_report("IL", f"알 수 없는 화면 요청: {screen_name}")
+
                 return
 
             # 스택에 추가하고 캐시에 저장
             self.stack_widget.addWidget(screen)
             self._screen_widgets[screen_name] = screen
             self._log_info(f"{screen_name} 화면 로딩 완료")
-            self._log_llm_report("IL", f"화면 로딩 성공: {screen_name}")
 
         except Exception as e:
             self._log_error(f"{screen_name} 화면 로딩 실패: {e}")
-            self._log_llm_report("IL", f"화면 로딩 실패: {screen_name}, 오류: {type(e).__name__}")
             import traceback
             traceback.print_exc()
 
@@ -661,7 +638,6 @@ class MainWindow(QMainWindow):
                 # ThemeService를 통한 테마 전환
                 new_theme = self.theme_service.toggle_theme()
                 self._log_info(f"ThemeService를 통한 테마 전환 완료: {new_theme}")
-                self._log_llm_report("IL", f"테마 전환 성공: {new_theme}")
 
                 # 네비게이션 바 스타일 강제 업데이트
                 self.nav_bar.update()
@@ -669,7 +645,6 @@ class MainWindow(QMainWindow):
                 return
             except Exception as e:
                 self._log_warning(f"ThemeService 테마 전환 실패, 기존 방식 사용: {e}")
-                self._log_llm_report("IL", f"ThemeService 테마 전환 실패: {type(e).__name__}")
 
         # 기존 방식 (폴백)
         self.style_manager.toggle_theme()
@@ -686,12 +661,10 @@ class MainWindow(QMainWindow):
             theme_notifier.notify_theme_changed()
         except Exception as e:
             self._log_warning(f"테마 변경 알림 실패: {e}")
-            self._log_llm_report("IL", f"테마 변경 알림 실패: {type(e).__name__}")
 
     def _on_theme_changed_from_service(self, theme_name: str):
         """ThemeService에서 테마 변경 시그널을 받았을 때 처리"""
         self._log_info(f"ThemeService에서 테마 변경 시그널 수신: {theme_name}")
-        self._log_llm_report("IL", f"테마 변경 시그널 수신: {theme_name}")
 
         # 네비게이션 바 스타일 강제 업데이트
         if hasattr(self, 'nav_bar') and self.nav_bar:
@@ -706,12 +679,10 @@ class MainWindow(QMainWindow):
             self._log_info("기존 theme_notifier를 통한 알림 발송 완료")
         except Exception as e:
             self._log_warning(f"기존 테마 변경 알림 실패: {e}")
-            self._log_llm_report("IL", f"기존 테마 변경 알림 실패: {type(e).__name__}")
 
     def _on_settings_changed_from_screen(self):
         """설정 화면에서 설정 변경 시그널을 받았을 때 처리 (테마 변경 등)"""
         self._log_info("설정 화면에서 설정 변경 시그널 수신")
-        self._log_llm_report("IL", "설정 변경 시그널 수신")
 
         # 테마가 변경되었을 수 있으므로 다시 로드
         self._load_theme()
@@ -729,12 +700,10 @@ class MainWindow(QMainWindow):
             self._log_info("설정 변경으로 인한 테마 알림 발송 완료")
         except Exception as e:
             self._log_warning(f"설정 변경 테마 알림 실패: {e}")
-            self._log_llm_report("IL", f"설정 변경 테마 알림 실패: {type(e).__name__}")
 
     def _on_theme_changed_from_ui_settings(self, theme_name: str):
         """UI 설정에서 테마 변경 시그널을 받았을 때 처리"""
         self._log_info(f"🎨 UI 설정에서 테마 변경 시그널 수신: {theme_name}")
-        self._log_llm_report("IL", f"UI 설정 테마 변경 수신: {theme_name}")
 
         # ThemeService 상태 확인
         if self.theme_service:
@@ -747,17 +716,16 @@ class MainWindow(QMainWindow):
                 if success:
                     new_theme = self.theme_service.get_current_theme()
                     self._log_info(f"✅ ThemeService를 통한 테마 적용 완료: {new_theme}")
-                    self._log_llm_report("IL", f"테마 적용 성공: {current_theme} → {new_theme}")
+
                 else:
                     self._log_warning(f"❌ ThemeService 테마 적용 실패: {theme_name}")
-                    self._log_llm_report("IL", f"테마 적용 실패: {theme_name}")
+
             except Exception as e:
                 self._log_warning(f"❌ ThemeService 테마 적용 중 오류: {e}")
-                self._log_llm_report("IL", f"테마 적용 오류: {type(e).__name__}")
         else:
             # ThemeService가 없으면 기존 방식으로 폴백
             self._log_warning("⚠️ ThemeService가 None - 기존 방식으로 테마 적용")
-            self._log_llm_report("IL", "ThemeService 없음, 기존 방식 폴백")
+
             self._load_theme()
 
         # 네비게이션 바 스타일 강제 업데이트
@@ -782,11 +750,10 @@ class MainWindow(QMainWindow):
                 self.theme_service.apply_current_theme()
                 current_theme = self.theme_service.get_current_theme()
                 self._log_info(f"ThemeService를 통한 테마 로드 완료: {current_theme}")
-                self._log_llm_report("IL", f"ThemeService 테마 로드 성공: {current_theme}")
+
                 return
             except Exception as e:
                 self._log_warning(f"ThemeService 테마 로드 실패, 기존 방식 사용: {e}")
-                self._log_llm_report("IL", f"ThemeService 테마 로드 실패: {type(e).__name__}")
 
         # 기존 방식 (폴백)
         theme_name = "light"  # 기본값
@@ -797,10 +764,9 @@ class MainWindow(QMainWindow):
                 ui_config = self.settings_service.get_ui_config()
                 theme_name = ui_config.theme
                 self._log_info(f"SettingsService에서 테마 로드: {theme_name}")
-                self._log_llm_report("IL", f"테마 로드 성공: {theme_name}")
+
             except Exception as e:
                 self._log_warning(f"SettingsService 테마 로드 실패, ConfigLoader 시도: {e}")
-                self._log_llm_report("IL", f"SettingsService 테마 로드 실패: {type(e).__name__}")
 
                 # ConfigLoader 폴백 시도
                 if self.di_container:
@@ -810,10 +776,9 @@ class MainWindow(QMainWindow):
                         config = config_loader.get_config()
                         theme_name = config.ui.theme
                         self._log_info(f"ConfigLoader에서 테마 로드: {theme_name}")
-                        self._log_llm_report("IL", f"ConfigLoader 테마 로드 성공: {theme_name}")
+
                     except Exception as e2:
                         self._log_warning(f"ConfigLoader 테마 로드 실패, QSettings 사용: {e2}")
-                        self._log_llm_report("IL", f"ConfigLoader 테마 로드 실패: {type(e2).__name__}")
                         settings = QSettings("UpbitAutoTrading", "MainWindow")
                         theme_name = settings.value("theme", "light")
                 else:
@@ -834,7 +799,6 @@ class MainWindow(QMainWindow):
                 self.style_manager.set_theme(Theme.LIGHT)
         except Exception as e:
             self._log_warning(f"테마 적용 실패: {e}")
-            self._log_llm_report("IL", f"테마 적용 실패: {type(e).__name__}")
 
     def _save_theme(self):
         """현재 테마 저장 (SettingsService 우선, 실패 시 QSettings 폴백)"""
@@ -843,11 +807,10 @@ class MainWindow(QMainWindow):
                 theme_name = self.style_manager.current_theme.value
                 self.settings_service.update_ui_setting("theme", theme_name)
                 self._log_info(f"SettingsService에 테마 저장: {theme_name}")
-                self._log_llm_report("IL", f"테마 저장 성공: {theme_name}")
+
                 return
             except Exception as e:
                 self._log_warning(f"SettingsService 테마 저장 실패, QSettings 사용: {e}")
-                self._log_llm_report("IL", f"SettingsService 테마 저장 실패: {type(e).__name__}")
 
         # 폴백: QSettings 사용
         settings = QSettings("UpbitAutoTrading", "MainWindow")
@@ -857,7 +820,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             # 오류 발생 시 기본값 저장
             self._log_warning(f"테마 저장 오류, 기본값 저장: {e}")
-            self._log_llm_report("IL", f"테마 저장 오류: {type(e).__name__}")
             settings.setValue("theme", "light")
 
     def _reset_window_size(self):
@@ -883,14 +845,13 @@ class MainWindow(QMainWindow):
         self._update_all_widgets()
 
         self._log_info("창 크기를 중간 크기(1600x1000)로 초기화했습니다")
-        self._log_llm_report("IL", "창 크기 초기화 완료: 1600x1000")
 
     def _update_all_widgets(self):
         """모든 위젯 업데이트 (IL 스마트 로깅 적용)"""
         # stack_widget이 초기화되지 않은 경우 안전하게 처리
         if not hasattr(self, 'stack_widget') or self.stack_widget is None:
             self._log_debug("stack_widget이 아직 초기화되지 않아 위젯 업데이트를 건너뜁니다")
-            self._log_llm_report("IL", "위젯 업데이트 건너뛰기: stack_widget 미초기화")
+
             return
 
         try:
@@ -920,14 +881,12 @@ class MainWindow(QMainWindow):
                     layout.activate()
 
                 self._log_debug("모든 위젯 업데이트 완료")
-                self._log_llm_report("IL", "위젯 업데이트 성공")
+
             else:
                 self._log_debug("현재 위젯이 없어 업데이트를 건너뜁니다")
-                self._log_llm_report("IL", "위젯 업데이트 건너뛰기: 현재 위젯 없음")
 
         except Exception as e:
             self._log_error(f"위젯 업데이트 중 오류 발생: {e}")
-            self._log_llm_report("IL", f"위젯 업데이트 오류: {type(e).__name__}")
             import traceback
             self._log_debug(f"위젯 업데이트 오류 상세: {traceback.format_exc()}")
 
@@ -983,14 +942,13 @@ class MainWindow(QMainWindow):
                     if window_state.get("maximized", False):
                         self.showMaximized()
                     self._log_info("SettingsService를 통한 창 상태 로드 완료")
-                    self._log_llm_report("IL", "창 상태 로드 성공: SettingsService")
+
                     return
                 else:
                     self._log_info("저장된 창 상태가 없어 기본값 사용")
-                    self._log_llm_report("IL", "창 상태 기본값 사용")
+
             except Exception as e:
                 self._log_warning(f"SettingsService 창 상태 로드 실패, QSettings 사용: {e}")
-                self._log_llm_report("IL", f"SettingsService 창 상태 로드 실패: {type(e).__name__}")
 
         # 폴백: QSettings 사용
         settings = QSettings("UpbitAutoTrading", "MainWindow")
@@ -1012,11 +970,10 @@ class MainWindow(QMainWindow):
                     maximized=self.isMaximized()
                 )
                 self._log_info("SettingsService를 통한 창 상태 저장 완료")
-                self._log_llm_report("IL", "창 상태 저장 성공: SettingsService")
+
                 return
             except Exception as e:
                 self._log_warning(f"SettingsService 창 상태 저장 실패, QSettings 사용: {e}")
-                self._log_llm_report("IL", f"SettingsService 창 상태 저장 실패: {type(e).__name__}")
 
         # 폴백: QSettings 사용
         settings = QSettings("UpbitAutoTrading", "MainWindow")
@@ -1041,7 +998,6 @@ class MainWindow(QMainWindow):
         """매매전략 관리에서 백테스팅 요청 시 처리"""
         try:
             self._log_info(f"백테스팅 요청 수신: 전략 ID = {strategy_id}")
-            self._log_llm_report("IL", f"백테스팅 요청 수신: {strategy_id}")
 
             # 백테스팅 화면으로 전환
             self._change_screen("backtest")
@@ -1065,14 +1021,12 @@ class MainWindow(QMainWindow):
                                 break
 
                 self._log_info(f"백테스팅 화면에 전략 ID 설정 완료: {strategy_id}")
-                self._log_llm_report("IL", f"백테스팅 화면 설정 완료: {strategy_id}")
+
             else:
                 self._log_error("백테스팅 화면을 찾을 수 없습니다")
-                self._log_llm_report("IL", "백테스팅 화면 없음")
 
         except Exception as e:
             self._log_error(f"백테스팅 요청 처리 실패: {e}")
-            self._log_llm_report("IL", f"백테스팅 요청 처리 실패: {type(e).__name__}")
             import traceback
             traceback.print_exc()
 
@@ -1083,19 +1037,17 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_api_status(connected)
                 self._log_info(f"API 연결 상태 업데이트: {'연결됨' if connected else '연결 끊김'}")
-                self._log_llm_report("IL", f"API 상태 업데이트: {connected}")
+
             else:
                 self._log_warning("상태바를 찾을 수 없습니다")
-                self._log_llm_report("IL", "API 상태 업데이트 시 상태바 없음")
+
         except Exception as e:
             self._log_error(f"API 상태 업데이트 실패: {e}")
-            self._log_llm_report("IL", f"API 상태 업데이트 실패: {type(e).__name__}")
 
     def _on_api_refresh_requested(self):
         """API 상태 새로고침 요청 처리"""
         try:
             self._log_info("사용자가 API 상태 새로고침을 요청했습니다")
-            self._log_llm_report("IL", "API 수동 새로고침 요청")
 
             # 상태바에 확인 중 표시
             if hasattr(self, 'status_bar'):
@@ -1106,7 +1058,6 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self._log_error(f"API 새로고침 요청 처리 실패: {e}")
-            self._log_llm_report("IL", f"API 새로고침 실패: {type(e).__name__}")
 
     def _perform_background_api_test(self):
         """백그라운드에서 API 연결 테스트 수행"""
@@ -1272,13 +1223,12 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_db_status(connected)
                 self._log_info(f"DB 연결 상태 업데이트: {'연결됨' if connected else '연결 끊김'}")
-                self._log_llm_report("IL", f"DB 상태 업데이트: {connected}")
+
             else:
                 self._log_warning("상태바를 찾을 수 없습니다")
-                self._log_llm_report("IL", "DB 상태 업데이트 시 상태바 없음")
+
         except Exception as e:
             self._log_error(f"DB 상태 업데이트 실패: {e}")
-            self._log_llm_report("IL", f"DB 상태 업데이트 실패: {type(e).__name__}")
 
     def _check_initial_db_status(self):
         """애플리케이션 시작 시 DB 연결 상태 확인 - DatabaseHealthService 활용"""
@@ -1328,7 +1278,7 @@ class MainWindow(QMainWindow):
                 self.status_bar.set_db_status(is_healthy)
                 status_text = "연결됨" if is_healthy else "고장남"
                 self._log_info(f"📊 DB 상태 업데이트: {status_text}")
-                self._log_llm_report("IL", f"DB 상태 확인 완료: {is_healthy}")
+
             else:
                 self._log_warning("⚠️ StatusBar 없음 - DB 상태 표시 불가")
         except Exception as e:
@@ -1359,7 +1309,7 @@ class MainWindow(QMainWindow):
                 warning_message = f"DB 파일이 존재하지 않습니다.\n경로: {db_path}\n\n새로 설치했거나 파일이 손상되었을 수 있습니다."
                 show_warning = True
                 self._log_error(f"DB 파일 없음: {db_path.name}")
-                self._log_llm_report("IL", f"DB 파일 없음: {db_path.name}")
+
             else:
                 try:
                     # 실제 DB 연결 테스트
@@ -1372,35 +1322,31 @@ class MainWindow(QMainWindow):
                         if result:
                             db_connected = True
                             self._log_info(f"DB 연결 성공: {db_path.name}")
-                            self._log_llm_report("IL", f"DB 연결 성공: {db_path.name}")
+
                         else:
                             warning_message = f"DB 파일이 비어있거나 손상되었습니다.\n경로: {db_path}\n\n데이터베이스를 다시 초기화해야 할 수 있습니다."
                             show_warning = True
                             self._log_warning(f"DB가 비어있음: {db_path.name}")
-                            self._log_llm_report("IL", f"DB 비어있음: {db_path.name}")
 
                 except Exception as e:
                     warning_message = f"DB 연결에 실패했습니다.\n경로: {db_path}\n오류: {str(e)}\n\n데이터베이스 파일이 손상되었을 수 있습니다."
                     show_warning = True
                     self._log_error(f"DB 연결 실패: {str(e)}")
-                    self._log_llm_report("IL", f"DB 연결 실패: {type(e).__name__}")
                     db_connected = False
 
             # 상태바 DB 상태 설정
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_db_status(db_connected)
                 self._log_info(f"초기 DB 상태: {'연결됨' if db_connected else '연결 끊김'}")
-                self._log_llm_report("IL", f"초기 DB 상태 확인 완료: {db_connected}")
 
             # DB 문제가 있는 경우 콘솔에만 로그 출력 (알림 비활성화)
             if show_warning:
                 self._log_warning(f"DB 상태 경고: {warning_message}")
-                self._log_llm_report("IL", f"DB 상태 경고: {warning_message}")
+
                 # 사용자 알림은 표시하지 않음 (조용한 체크)
 
         except Exception as e:
             self._log_error(f"초기 DB 상태 확인 실패: {e}")
-            self._log_llm_report("IL", f"초기 DB 상태 확인 실패: {type(e).__name__}")
             # 오류 발생 시 연결 끊김으로 설정
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_db_status(False)
@@ -1436,7 +1382,7 @@ class MainWindow(QMainWindow):
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(False)
                 self._log_warning("API 키 파일이 없습니다. 설정에서 API 키를 등록해주세요")
-                self._log_llm_report("IL", "API 키 파일 없음")
+
                 return
 
             # API 키가 있으면 실제 통신 테스트
@@ -1446,11 +1392,10 @@ class MainWindow(QMainWindow):
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(False)
                 self._log_warning("API 키 정보가 불완전합니다")
-                self._log_llm_report("IL", "API 키 정보 불완전")
+
                 return
 
             self._log_info("API 키 파일 발견 - 연결 테스트 중...")
-            self._log_llm_report("IL", "API 키 파일 발견, 연결 테스트 시작")
 
             # ApiKeyService를 통한 통합된 API 테스트
             success, message, account_info = api_key_service.test_api_connection(access_key, secret_key)
@@ -1460,23 +1405,20 @@ class MainWindow(QMainWindow):
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(True)
                 self._log_info("API 연결 테스트 성공 - 정상 연결됨")
-                self._log_llm_report("IL", "API 연결 테스트 성공")
+
             else:
                 # API 통신 실패
                 if hasattr(self, 'status_bar'):
                     self.status_bar.set_api_status(False)
                 self._log_error(f"API 연결 테스트 실패: {message}")
-                self._log_llm_report("IL", "API 연결 테스트 실패: InvalidToken")
 
         except Exception as e:
             # 전체적인 오류
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_api_status(False)
             self._log_error(f"API 상태 확인 중 오류: {str(e)}")
-            self._log_llm_report("IL", f"API 상태 확인 오류: {type(e).__name__}")
             # 조용한 테스트이므로 사용자에게 팝업은 표시하지 않음
             self._log_error(f"초기 API 상태 확인 실패: {e}")
-            self._log_llm_report("IL", f"초기 API 상태 확인 실패: {type(e).__name__}")
             # 오류 발생 시 연결 끊김으로 설정
             if hasattr(self, 'status_bar'):
                 self.status_bar.set_api_status(False)

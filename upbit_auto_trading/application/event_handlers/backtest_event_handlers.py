@@ -11,7 +11,6 @@ from ...domain.events.backtest_events import (
     BacktestStarted, BacktestCompleted, BacktestFailed, BacktestProgressUpdated
 )
 
-
 class BacktestStartedHandler(BaseEventHandler[BacktestStarted]):
     """백테스팅 시작 이벤트 핸들러"""
 
@@ -69,7 +68,6 @@ class BacktestStartedHandler(BaseEventHandler[BacktestStarted]):
             이벤트 타입 클래스
         """
         return BacktestStarted
-
 
 class BacktestCompletedHandler(BaseEventHandler[BacktestCompleted]):
     """백테스팅 완료 이벤트 핸들러"""
@@ -156,7 +154,6 @@ class BacktestCompletedHandler(BaseEventHandler[BacktestCompleted]):
         """
         return BacktestCompleted
 
-
 class BacktestFailedHandler(BaseEventHandler[BacktestFailed]):
     """백테스팅 실패 이벤트 핸들러"""
 
@@ -230,7 +227,6 @@ class BacktestFailedHandler(BaseEventHandler[BacktestFailed]):
             이벤트 타입 클래스
         """
         return BacktestFailed
-
 
 class BacktestProgressUpdatedHandler(BaseEventHandler[BacktestProgressUpdated]):
     """백테스팅 진행률 업데이트 이벤트 핸들러"""

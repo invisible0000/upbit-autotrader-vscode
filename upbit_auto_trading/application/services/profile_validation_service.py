@@ -24,9 +24,7 @@ from pathlib import Path
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 logger = create_component_logger("ProfileValidationService")
-
 
 class ValidationError(Exception):
     """프로파일 검증 에러"""
@@ -34,7 +32,6 @@ class ValidationError(Exception):
         super().__init__(message)
         self.field_name = field_name
         self.line_number = line_number
-
 
 class ValidationResult:
     """검증 결과를 담는 데이터 클래스"""
@@ -55,7 +52,6 @@ class ValidationResult:
     def has_issues(self) -> bool:
         """에러나 경고가 있는지 확인"""
         return len(self.errors) > 0 or len(self.warnings) > 0
-
 
 class ProfileValidationService:
     """

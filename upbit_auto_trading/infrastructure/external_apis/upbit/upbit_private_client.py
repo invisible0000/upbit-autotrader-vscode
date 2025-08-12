@@ -6,7 +6,6 @@ from upbit_auto_trading.infrastructure.external_apis.common.api_client_base impo
 )
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
 
-
 class UpbitPrivateClient(BaseApiClient):
     """Upbit 프라이빗 API 클라이언트 - 인증이 필요한 API 담당"""
 

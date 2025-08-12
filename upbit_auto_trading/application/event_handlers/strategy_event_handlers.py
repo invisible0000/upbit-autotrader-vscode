@@ -10,7 +10,6 @@ from .base_event_handler import BaseEventHandler
 from ...domain.events.strategy_events import StrategyCreated, StrategyUpdated
 from ...domain.events.trigger_events import TriggerCreated
 
-
 class StrategyCreatedHandler(BaseEventHandler[StrategyCreated]):
     """전략 생성 이벤트 핸들러"""
 
@@ -66,7 +65,6 @@ class StrategyCreatedHandler(BaseEventHandler[StrategyCreated]):
             이벤트 타입 클래스
         """
         return StrategyCreated
-
 
 class StrategyUpdatedHandler(BaseEventHandler[StrategyUpdated]):
     """전략 수정 이벤트 핸들러"""
@@ -124,7 +122,6 @@ class StrategyUpdatedHandler(BaseEventHandler[StrategyUpdated]):
             이벤트 타입 클래스
         """
         return StrategyUpdated
-
 
 class TriggerCreatedHandler(BaseEventHandler[TriggerCreated]):
     """트리거 생성 이벤트 핸들러"""

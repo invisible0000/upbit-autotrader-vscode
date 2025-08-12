@@ -31,16 +31,13 @@ from decimal import Decimal
 from ..value_objects.signal_type import SignalType
 from ..exceptions.domain_exceptions import DomainException
 
-
 class InvalidManagementRuleError(DomainException):
     """잘못된 관리 규칙 설정 예외"""
     pass
 
-
 class IncompatiblePositionStateError(DomainException):
     """호환되지 않는 포지션 상태 예외"""
     pass
-
 
 class ManagementType(Enum):
     """관리 전략 유형 분류"""
@@ -91,7 +88,6 @@ class ManagementType(Enum):
         }
         return signal_mapping[self]
 
-
 @dataclass(frozen=True)
 class PositionState:
     """포지션 상태 값 객체"""
@@ -136,7 +132,6 @@ class PositionState:
         """보유 시간 계산"""
         return datetime.now() - self.entry_time
 
-
 @dataclass(frozen=True)
 class ManagementExecutionResult:
     """관리 규칙 실행 결과"""
@@ -159,7 +154,6 @@ class ManagementExecutionResult:
     def failure(cls, reason: str) -> "ManagementExecutionResult":
         """실패 결과 생성"""
         return cls(signal=SignalType.HOLD, executed=False, reason=f"실행 실패: {reason}")
-
 
 @dataclass
 class ManagementRule:
@@ -494,7 +488,6 @@ class ManagementRule:
         """도메인 이벤트 초기화"""
         self._domain_events.clear()
 
-
 # 팩토리 함수들
 def create_pyramid_buying_rule(rule_id: str, trigger_drop_rate: float = 5.0, 
                              max_additions: int = 5, absolute_stop_loss: float = 15.0) -> ManagementRule:
@@ -511,7 +504,6 @@ def create_pyramid_buying_rule(rule_id: str, trigger_drop_rate: float = 5.0,
         parameters=parameters
     )
 
-
 def create_scale_in_buying_rule(rule_id: str, trigger_profit_rate: float = 3.0,
                                max_additions: int = 3, profit_target: float = 20.0) -> ManagementRule:
     """불타기 관리 규칙 생성"""
@@ -527,7 +519,6 @@ def create_scale_in_buying_rule(rule_id: str, trigger_profit_rate: float = 3.0,
         parameters=parameters
     )
 
-
 def create_trailing_stop_rule(rule_id: str, trail_distance: float = 5.0,
                              activation_profit: float = 2.0) -> ManagementRule:
     """트레일링 스탑 관리 규칙 생성"""
@@ -541,7 +532,6 @@ def create_trailing_stop_rule(rule_id: str, trail_distance: float = 5.0,
         management_type=ManagementType.TRAILING_STOP,
         parameters=parameters
     )
-
 
 def create_fixed_stop_take_rule(rule_id: str, stop_loss_rate: float = 5.0,
                                take_profit_rate: float = 10.0) -> ManagementRule:

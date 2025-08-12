@@ -10,7 +10,6 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Tuple
 
-
 class MarketDataStorage:
     """
     시장 데이터 저장소 클래스

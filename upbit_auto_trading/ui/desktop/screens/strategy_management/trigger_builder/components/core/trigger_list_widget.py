@@ -49,7 +49,6 @@ except ImportError as e:
             ConditionStorage = None
             STORAGE_AVAILABLE = False
 
-
 class TriggerListWidget(QWidget):
     """트리거 리스트 위젯 - 기존 기능 정확 복제"""
 
@@ -839,7 +838,6 @@ class TriggerListWidget(QWidget):
                 self.trigger_tree.setColumnWidth(0, name_width)
                 self.trigger_tree.setColumnWidth(1, variable_width)
                 self.trigger_tree.setColumnWidth(2, condition_width)
-
 
 if __name__ == "__main__":
     # 테스트용 코드

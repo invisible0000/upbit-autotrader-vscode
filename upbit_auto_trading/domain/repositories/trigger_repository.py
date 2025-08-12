@@ -18,7 +18,6 @@ from upbit_auto_trading.domain.value_objects.trigger_id import TriggerId
 from upbit_auto_trading.domain.value_objects.strategy_id import StrategyId
 from upbit_auto_trading.domain.repositories.base_repository import BaseRepository
 
-
 class TriggerRepository(BaseRepository[Trigger, TriggerId]):
     """
     트리거 데이터 접근을 위한 Repository 인터페이스

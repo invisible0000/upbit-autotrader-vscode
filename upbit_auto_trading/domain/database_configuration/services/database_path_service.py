@@ -21,7 +21,6 @@ from upbit_auto_trading.domain.database_configuration.value_objects.database_pat
 from upbit_auto_trading.domain.database_configuration.repositories.database_configuration_repository import IDatabaseConfigurationRepository
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabasePathService:
     """
     데이터베이스 경로 관리 도메인 서비스

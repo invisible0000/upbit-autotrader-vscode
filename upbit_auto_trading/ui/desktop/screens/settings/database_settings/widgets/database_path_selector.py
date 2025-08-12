@@ -21,7 +21,6 @@ from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabasePathSelector(QWidget):
     """
     데이터베이스 파일 경로 선택 위젯
@@ -200,7 +199,6 @@ class DatabasePathSelector(QWidget):
         """입력 내용 초기화"""
         self.path_edit.clear()
         self._clear_status()
-
 
 class DatabasePathSelectorGroup(QWidget):
     """

@@ -14,7 +14,6 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("TriggerDetail")
 
-
 class TriggerDetailWidget(QWidget):
     """트리거 상세정보 위젯 - 기존 기능 정확 복제"""
 
@@ -433,7 +432,6 @@ class TriggerDetailWidget(QWidget):
         except Exception as e:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "⚠️ 경고", f"클립보드 복사 실패: {e}")
-
 
 if __name__ == "__main__":
     # 테스트용 코드

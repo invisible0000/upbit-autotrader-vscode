@@ -12,13 +12,11 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 logger = create_component_logger("DatabaseType")
 
-
 class DatabaseCategory(Enum):
     """데이터베이스 카테고리"""
     CONFIGURATION = "configuration"  # 설정 데이터
     BUSINESS_DATA = "business_data"   # 비즈니스 데이터
     CACHE_DATA = "cache_data"         # 캐시 데이터
-
 
 @dataclass(frozen=True)
 class DatabaseType:
@@ -204,7 +202,6 @@ class DatabaseType:
     def __hash__(self) -> int:
         return hash(self.type_name)
 
-
 # 상수 정의
 DatabaseType.SETTINGS = DatabaseType(
     type_name="settings",
@@ -227,7 +224,6 @@ DatabaseType.MARKET_DATA = DatabaseType(
     default_filename="market_data.sqlite3"
 )
 
-
 def get_all_database_types() -> List[DatabaseType]:
     """모든 데이터베이스 타입 반환"""
     return [
@@ -235,7 +231,6 @@ def get_all_database_types() -> List[DatabaseType]:
         DatabaseType.STRATEGIES,
         DatabaseType.MARKET_DATA
     ]
-
 
 def get_database_type_by_name(type_name: str) -> DatabaseType:
     """이름으로 데이터베이스 타입 조회"""

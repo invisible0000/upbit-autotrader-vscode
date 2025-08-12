@@ -14,7 +14,6 @@ from upbit_auto_trading.ui.desktop.screens.dashboard.widgets.portfolio_summary_w
 from upbit_auto_trading.ui.desktop.screens.dashboard.widgets.active_positions_widget import ActivePositionsWidget
 from upbit_auto_trading.ui.desktop.screens.dashboard.widgets.market_overview_widget import MarketOverviewWidget
 
-
 class DashboardScreen(QWidget):
     """
     대시보드 화면 클래스

@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from . import DomainEvent
 
-
 @dataclass(frozen=True)
 class BacktestStarted(DomainEvent):
     """백테스트 시작 이벤트"""
@@ -30,7 +29,6 @@ class BacktestStarted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestDataLoaded(DomainEvent):
     """백테스트 데이터 로드 완료 이벤트"""
@@ -50,7 +48,6 @@ class BacktestDataLoaded(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.backtest_id
-
 
 @dataclass(frozen=True)
 class BacktestSignalGenerated(DomainEvent):
@@ -72,7 +69,6 @@ class BacktestSignalGenerated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.backtest_id
-
 
 @dataclass(frozen=True)
 class BacktestTradeExecuted(DomainEvent):
@@ -97,7 +93,6 @@ class BacktestTradeExecuted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestPositionOpened(DomainEvent):
     """백테스트 중 포지션 개설 이벤트"""
@@ -117,7 +112,6 @@ class BacktestPositionOpened(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.backtest_id
-
 
 @dataclass(frozen=True)
 class BacktestPositionClosed(DomainEvent):
@@ -141,7 +135,6 @@ class BacktestPositionClosed(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestProgressUpdated(DomainEvent):
     """백테스트 진행률 업데이트 이벤트"""
@@ -162,7 +155,6 @@ class BacktestProgressUpdated(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.backtest_id
-
 
 @dataclass(frozen=True)
 class BacktestCompleted(DomainEvent):
@@ -192,7 +184,6 @@ class BacktestCompleted(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestFailed(DomainEvent):
     """백테스트 실패 이벤트"""
@@ -213,7 +204,6 @@ class BacktestFailed(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestStopped(DomainEvent):
     """백테스트 중단 이벤트"""
@@ -233,7 +223,6 @@ class BacktestStopped(DomainEvent):
     def aggregate_id(self) -> str:
         return self.backtest_id
 
-
 @dataclass(frozen=True)
 class BacktestResultSaved(DomainEvent):
     """백테스트 결과 저장 이벤트"""
@@ -251,7 +240,6 @@ class BacktestResultSaved(DomainEvent):
     @property
     def aggregate_id(self) -> str:
         return self.backtest_id
-
 
 @dataclass(frozen=True)
 class BacktestComparisonCompleted(DomainEvent):

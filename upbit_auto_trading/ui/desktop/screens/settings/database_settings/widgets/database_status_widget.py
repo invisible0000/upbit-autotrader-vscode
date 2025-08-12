@@ -22,7 +22,6 @@ from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class DatabaseStatusWidget(QWidget):
     """
     데이터베이스 상태 표시 위젯
@@ -215,7 +214,6 @@ class DatabaseStatusWidget(QWidget):
             labels['frame'].setStyleSheet("")
 
         self._status_data.clear()
-
 
 class DatabaseProgressWidget(QWidget):
     """

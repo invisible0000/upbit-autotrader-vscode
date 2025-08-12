@@ -11,7 +11,6 @@ from PyQt6.QtCore import QObject, pyqtSignal
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-
 class NotificationSettingsPresenter(QObject):
     """알림 설정 Presenter - MVP 패턴 Application Layer"""
 

@@ -3,266 +3,170 @@
 ====================================
 
 DDD Presentation Layer - PyQt6 UI (표시만, Passive View)
-Infrastructure Layer 로깅 시스템과 통합된 실시간 로그 관리 UI
+3-위젯 아키텍처로 구성된 로깅 관리 인터페이스
 
 주요 특징:
 - MVP 패턴 Passive View (순수 UI 관심사만)
-- 좌우 1:2 분할 레이아웃 (환경변수 제어 | 로그 뷰어)
-- Infrastructure 로깅 시스템 환경변수 제어
+- 3-위젯 구조: 좌측 설정 | 우측 상단 로그뷰어 | 우측 하단 콘솔뷰어
+- Config 파일 기반 설정 시스템 (환경변수 시스템 완전 대체)
 - 전역 스타일 관리 시스템 준수
+- 실시간 설정 반영 및 UI 프리징 방지
 """
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QGroupBox, QComboBox, QCheckBox, QLineEdit,
-    QPushButton, QPlainTextEdit, QLabel
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSplitter
+from PyQt6.QtCore import Qt, pyqtSignal
+
+# 3개 위젯 컴포넌트 임포트
+from .widgets.logging_settings_widget import LoggingSettingsWidget
+from .widgets.log_viewer_widget import LogViewerWidget
+from .widgets.console_viewer_widget import ConsoleViewerWidget
+
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 
 class LoggingManagementView(QWidget):
-    """실시간 로깅 관리 탭 - MVP Passive View"""
+    """실시간 로깅 관리 탭 - MVP Passive View with 3-Widget Architecture"""
 
-    def __init__(self):
-        super().__init__()
+    # MVP 패턴: Presenter로 전달할 시그널들
+    settings_changed = pyqtSignal(dict)  # 설정 변경 시그널
+    apply_settings_requested = pyqtSignal()  # 설정 적용 요청
+    reset_settings_requested = pyqtSignal()  # 설정 리셋 요청
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("logging-management-view")
+
+        # Infrastructure 로깅
+        self.logger = create_component_logger("LoggingManagementView")
+        self.logger.info("🎛️ 로깅 관리 뷰 초기화 시작")
+
         self._setup_ui()
+        self._connect_signals()
+
+        self.logger.info("✅ 로깅 관리 뷰 초기화 완료 - 3-위젯 아키텍처")
 
     def _setup_ui(self):
-        """UI 레이아웃 구성 - DDD Presentation Layer 표준"""
+        """3-위젯 아키텍처 UI 레이아웃 구성"""
         layout = QVBoxLayout()
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
 
-        # 메인 스플리터 (좌우 1:2 비율)
+        # 메인 수평 스플리터 (좌측:우측 = 1:2)
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.main_splitter.setSizes([300, 600])  # 1:2 비율
+        self.main_splitter.setChildrenCollapsible(False)  # 위젯 완전 숨김 방지
 
-        # 좌측: 환경변수 제어 패널
-        self.control_panel = self._create_control_panel()
+        # 좌측: 로깅 설정 위젯
+        self.logging_settings_widget = LoggingSettingsWidget()
+        self.logging_settings_widget.setMinimumWidth(280)  # 최소 폭 보장
+        self.logging_settings_widget.setMaximumWidth(400)  # 최대 폭 제한
 
-        # 우측: 로그 뷰어 패널
-        self.log_viewer = self._create_log_viewer()
+        # 우측: 수직 스플리터 (상단:하단 = 2:1)
+        self.right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.right_splitter.setChildrenCollapsible(False)
 
-        self.main_splitter.addWidget(self.control_panel)
-        self.main_splitter.addWidget(self.log_viewer)
+        # 우측 상단: 로그 뷰어 위젯
+        self.log_viewer_widget = LogViewerWidget()
+        self.log_viewer_widget.setMinimumHeight(200)  # 최소 높이 보장
+
+        # 우측 하단: 콘솔 뷰어 위젯
+        self.console_viewer_widget = ConsoleViewerWidget()
+        self.console_viewer_widget.setMinimumHeight(150)  # 최소 높이 보장
+
+        # 우측 스플리터에 위젯 추가 (상단:하단 = 2:1)
+        self.right_splitter.addWidget(self.log_viewer_widget)
+        self.right_splitter.addWidget(self.console_viewer_widget)
+        self.right_splitter.setSizes([400, 200])  # 2:1 비율 (600 기준)
+        self.right_splitter.setStretchFactor(0, 2)  # 로그 뷰어가 더 많은 공간
+        self.right_splitter.setStretchFactor(1, 1)  # 콘솔 뷰어
+
+        # 메인 스플리터에 추가 (좌측:우측 = 1:2)
+        self.main_splitter.addWidget(self.logging_settings_widget)
+        self.main_splitter.addWidget(self.right_splitter)
+        self.main_splitter.setSizes([300, 600])  # 1:2 비율 (900 기준)
+        self.main_splitter.setStretchFactor(0, 1)  # 설정 위젯
+        self.main_splitter.setStretchFactor(1, 2)  # 뷰어 영역
 
         layout.addWidget(self.main_splitter)
         self.setLayout(layout)
 
-    def _create_control_panel(self) -> QWidget:
-        """환경변수 제어 패널 - Infrastructure 로깅 시스템 연동"""
-        panel = QWidget()
-        layout = QVBoxLayout()
+        self.logger.debug("🎛️ 3-위젯 레이아웃 구성 완료: 1:2(수평) × 2:1(수직)")
 
-        # 1. 로그 레벨 제어 그룹
-        log_level_group = QGroupBox("로그 레벨 제어")
-        log_level_layout = QVBoxLayout()
+    def _connect_signals(self):
+        """위젯 간 시그널 연결 - MVP 패턴 준수"""
 
-        self.log_level_combo = QComboBox()
-        self.log_level_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-        self.log_level_combo.setCurrentText("INFO")  # 기본값
+        # 로깅 설정 위젯 → 메인 뷰 (Presenter로 전달)
+        self.logging_settings_widget.apply_settings.connect(self.apply_settings_requested.emit)
+        self.logging_settings_widget.reset_settings.connect(self.reset_settings_requested.emit)
 
-        log_level_layout.addWidget(QLabel("UPBIT_LOG_LEVEL:"))
-        log_level_layout.addWidget(self.log_level_combo)
-        log_level_group.setLayout(log_level_layout)
-
-        # 2. 출력 제어 그룹
-        output_group = QGroupBox("출력 제어")
-        output_layout = QVBoxLayout()
-
-        self.console_output_checkbox = QCheckBox("콘솔 출력 활성화")
-        self.console_output_checkbox.setChecked(True)  # 기본값
-
-        output_layout.addWidget(self.console_output_checkbox)
-        output_group.setLayout(output_layout)
-
-        # 3. 로깅 스코프 그룹 (Infrastructure 로깅 시스템 v4.0)
-        scope_group = QGroupBox("로깅 스코프")
-        scope_layout = QVBoxLayout()
-
-        self.log_scope_combo = QComboBox()
-        self.log_scope_combo.addItems(["silent", "minimal", "normal", "verbose", "debug_all"])
-        self.log_scope_combo.setCurrentText("normal")  # 기본값
-
-        scope_layout.addWidget(QLabel("UPBIT_LOG_SCOPE:"))
-        scope_layout.addWidget(self.log_scope_combo)
-        scope_group.setLayout(scope_layout)
-
-        # 4. 컴포넌트 집중 모드
-        focus_group = QGroupBox("컴포넌트 집중")
-        focus_layout = QVBoxLayout()
-
-        self.component_focus_edit = QLineEdit()
-        self.component_focus_edit.setPlaceholderText("컴포넌트명 입력 (비어두면 모든 컴포넌트)")
-
-        focus_layout.addWidget(QLabel("UPBIT_COMPONENT_FOCUS:"))
-        focus_layout.addWidget(self.component_focus_edit)
-        focus_group.setLayout(focus_layout)
-
-        # 5. 제어 버튼
-        button_layout = QHBoxLayout()
-        self.apply_btn = QPushButton("설정 적용")
-        self.reset_btn = QPushButton("기본값 복원")
-
-        # 전역 스타일 적용을 위한 objectName 설정
-        self.apply_btn.setObjectName("primary_button")
-        self.reset_btn.setObjectName("secondary_button")
-
-        button_layout.addWidget(self.apply_btn)
-        button_layout.addWidget(self.reset_btn)
-
-        # 레이아웃 조립
-        layout.addWidget(log_level_group)
-        layout.addWidget(output_group)
-        layout.addWidget(scope_group)
-        layout.addWidget(focus_group)
-        layout.addLayout(button_layout)
-        layout.addStretch()  # 하단 여백
-
-        panel.setLayout(layout)
-        return panel
-
-    def _create_log_viewer(self) -> QWidget:
-        """로그 뷰어 패널 - 실시간 로그 표시"""
-        viewer_widget = QWidget()
-        layout = QVBoxLayout()
-
-        # 툴바
-        toolbar = QHBoxLayout()
-
-        # 자동 스크롤 토글
-        self.auto_scroll_checkbox = QCheckBox("자동 스크롤")
-        self.auto_scroll_checkbox.setChecked(True)
-
-        # 로그 필터 (Phase 2에서 구현)
-        self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("로그 필터링 (정규식 지원)")
-        self.filter_edit.setEnabled(False)  # Phase 1에서는 비활성화
-
-        # 제어 버튼
-        self.clear_btn = QPushButton("로그 지우기")
-        self.save_btn = QPushButton("로그 저장")
-
-        # 전역 스타일 적용
-        self.clear_btn.setObjectName("warning_button")
-        self.save_btn.setObjectName("secondary_button")
-
-        toolbar.addWidget(self.auto_scroll_checkbox)
-        toolbar.addWidget(QLabel("필터:"))
-        toolbar.addWidget(self.filter_edit)
-        toolbar.addWidget(self.clear_btn)
-        toolbar.addWidget(self.save_btn)
-        toolbar.addStretch()
-
-        # 로그 텍스트 뷰어
-        self.log_text_edit = QPlainTextEdit()
-        self.log_text_edit.setReadOnly(True)
-        self.log_text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-
-        # 모노스페이스 폰트 설정
-        font = QFont("Consolas", 9)
-        if not font.exactMatch():
-            font = QFont("Courier New", 9)  # 폴백 폰트
-        font.setFixedPitch(True)
-        self.log_text_edit.setFont(font)
-
-        # Phase 1 초기 메시지
-        self.log_text_edit.setPlainText(
-            "=== 실시간 로깅 관리 탭 ===\n"
-            "Infrastructure Layer 로깅 시스템 v4.0 연동\n"
-            "Phase 1: MVP 기본 구현 완료\n"
-            "\n"
-            "실시간 로그가 여기에 표시됩니다...\n"
+        # 개별 설정 변경 시그널들을 dict로 변환하여 전달
+        self.logging_settings_widget.log_level_changed.connect(
+            lambda value: self.settings_changed.emit({"log_level": value})
+        )
+        self.logging_settings_widget.console_output_changed.connect(
+            lambda value: self.settings_changed.emit({"console_output": value})
+        )
+        self.logging_settings_widget.log_scope_changed.connect(
+            lambda value: self.settings_changed.emit({"log_scope": value})
+        )
+        self.logging_settings_widget.component_focus_changed.connect(
+            lambda value: self.settings_changed.emit({"component_focus": value})
+        )
+        self.logging_settings_widget.file_logging_changed.connect(
+            lambda value: self.settings_changed.emit({"file_logging_enabled": value})
+        )
+        self.logging_settings_widget.file_path_changed.connect(
+            lambda value: self.settings_changed.emit({"file_path": value})
         )
 
-        # 상태바
-        status_layout = QHBoxLayout()
-        self.log_count_label = QLabel("로그 개수: 0")
-        self.filter_count_label = QLabel("필터링됨: 0")
-
-        status_layout.addWidget(self.log_count_label)
-        status_layout.addWidget(self.filter_count_label)
-        status_layout.addStretch()
-
-        # 레이아웃 조립
-        layout.addLayout(toolbar)
-        layout.addWidget(self.log_text_edit)
-        layout.addLayout(status_layout)
-
-        viewer_widget.setLayout(layout)
-        return viewer_widget
+        self.logger.debug("🔗 위젯 간 시그널 연결 완료 - MVP 패턴")
 
     # ===== MVP Passive View 인터페이스 =====
+    # Presenter에서 호출할 메서드들
 
-    def append_log(self, log_text: str):
-        """로그 추가 (Presenter에서 호출)"""
-        self.log_text_edit.appendPlainText(log_text)
-        self._update_status()
+    def update_settings_display(self, settings: dict):
+        """설정 값들을 UI에 반영 (Presenter → View)"""
+        self.logger.debug(f"🔄 설정 표시 업데이트: {settings}")
+        self.logging_settings_widget.update_from_settings(settings)
 
-    def append_log_batch(self, log_texts: list):
-        """배치 로그 추가 (성능 최적화용)
+    def get_current_settings(self) -> dict:
+        """현재 UI 설정 값들 반환 (View → Presenter)"""
+        return self.logging_settings_widget.get_current_settings()
 
-        Args:
-            log_texts: 추가할 로그 메시지 리스트
-        """
-        if not log_texts:
-            return
+    def append_log_message(self, message: str):
+        """로그 메시지 추가 (Presenter → View)"""
+        self.log_viewer_widget.append_log_message(message)
 
-        # 배치로 한번에 추가하여 UI 업데이트 최소화
-        combined_text = '\n'.join(log_texts)
-        self.log_text_edit.appendPlainText(combined_text)
-        self._update_status()
+    def append_console_output(self, output: str, is_error: bool = False):
+        """콘솔 출력 추가 (Presenter → View)"""
+        self.console_viewer_widget.append_console_output(output, is_error)
 
-    def clear_logs(self):
-        """로그 클리어 (Presenter에서 호출)"""
-        self.log_text_edit.clear()
-        self._update_status()
+    def clear_log_viewer(self):
+        """로그 뷰어 클리어 (Presenter → View)"""
+        self.log_viewer_widget.clear_logs()
 
-    def get_log_level(self) -> str:
-        """선택된 로그 레벨 반환"""
-        return self.log_level_combo.currentText()
+    def clear_console_viewer(self):
+        """콘솔 뷰어 클리어 (Presenter → View)"""
+        self.console_viewer_widget.clear_console()
 
-    def get_console_output_enabled(self) -> bool:
-        """콘솔 출력 활성화 여부"""
-        return self.console_output_checkbox.isChecked()
-
-    def get_log_scope(self) -> str:
-        """선택된 로그 스코프 반환"""
-        return self.log_scope_combo.currentText()
-
-    def get_component_focus(self) -> str:
-        """컴포넌트 집중 모드 값 반환"""
-        return self.component_focus_edit.text().strip()
-
-    def set_log_level(self, level: str):
-        """로그 레벨 설정 (환경변수 동기화용)"""
-        index = self.log_level_combo.findText(level)
-        if index >= 0:
-            self.log_level_combo.setCurrentIndex(index)
-
-    def set_console_output_enabled(self, enabled: bool):
-        """콘솔 출력 설정 (환경변수 동기화용)"""
-        self.console_output_checkbox.setChecked(enabled)
-
-    def set_log_scope(self, scope: str):
-        """로그 스코프 설정 (환경변수 동기화용)"""
-        index = self.log_scope_combo.findText(scope)
-        if index >= 0:
-            self.log_scope_combo.setCurrentIndex(index)
-
-    def set_component_focus(self, component: str):
-        """컴포넌트 집중 설정 (환경변수 동기화용)"""
-        self.component_focus_edit.setText(component)
-
-    def _update_status(self):
-        """상태바 업데이트"""
-        # 현재 로그 라인 수 계산
-        log_content = self.log_text_edit.toPlainText()
-        line_count = len(log_content.split('\n')) if log_content.strip() else 0
-        self.log_count_label.setText(f"로그 개수: {line_count}")
-
-        # 필터링은 Phase 2에서 구현
-        filter_text = self.filter_edit.text().strip()
-        if filter_text:
-            self.filter_count_label.setText(f"필터링됨: 활성")
+    def show_status_message(self, message: str, level: str = "info"):
+        """상태 메시지 표시 (Presenter → View)"""
+        # 상태바가 있다면 여기서 처리, 현재는 로그로 대체
+        if level == "error":
+            self.logger.error(f"❌ {message}")
+        elif level == "warning":
+            self.logger.warning(f"⚠️ {message}")
         else:
-            self.filter_count_label.setText("필터링됨: 비활성")
+            self.logger.info(f"ℹ️ {message}")
+
+    def get_splitter_sizes(self) -> tuple:
+        """스플리터 크기 반환 (상태 저장용)"""
+        main_sizes = self.main_splitter.sizes()
+        right_sizes = self.right_splitter.sizes()
+        return (main_sizes, right_sizes)
+
+    def set_splitter_sizes(self, main_sizes: list, right_sizes: list):
+        """스플리터 크기 설정 (상태 복원용)"""
+        if main_sizes:
+            self.main_splitter.setSizes(main_sizes)
+        if right_sizes:
+            self.right_splitter.setSizes(right_sizes)

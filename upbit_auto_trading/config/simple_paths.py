@@ -9,7 +9,6 @@
 from pathlib import Path
 import os
 
-
 class SimplePaths:
     """설치형 프로그램용 단순 경로 관리 클래스"""
     
@@ -78,7 +77,6 @@ class SimplePaths:
             'market_data_db': str(self.MARKET_DATA_DB),
         }
 
-
 # 전역 인스턴스 (싱글톤 패턴 대신 단순 전역 객체)
 paths = SimplePaths()
 
@@ -89,7 +87,6 @@ CONFIG_DIR = paths.CONFIG_DIR
 SETTINGS_DB = paths.SETTINGS_DB
 STRATEGIES_DB = paths.STRATEGIES_DB
 MARKET_DATA_DB = paths.MARKET_DATA_DB
-
 
 if __name__ == "__main__":
     # 테스트 및 정보 출력
