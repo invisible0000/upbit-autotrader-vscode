@@ -506,8 +506,11 @@ class EnvironmentProfilePresenter(QObject):
         logger.info("🧹 임시 파일 정리 시작")
 
         try:
-            self._edit_session_service.cleanup_abandoned_temp_files()
-            logger.info("✅ 임시 파일 정리 완료")
+            if self._edit_session_service and hasattr(self._edit_session_service, 'cleanup_abandoned_temp_files'):
+                self._edit_session_service.cleanup_abandoned_temp_files()
+                logger.info("✅ 임시 파일 정리 완료")
+            else:
+                logger.debug("📝 Edit Session Service가 초기화되지 않음 - 임시 파일 정리 건너뜀")
 
         except Exception as e:
             error_msg = f"임시 파일 정리 중 예외 발생: {str(e)}"

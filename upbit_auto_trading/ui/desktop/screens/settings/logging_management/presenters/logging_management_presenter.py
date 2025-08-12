@@ -70,11 +70,11 @@ class LoggingManagementPresenter(QObject):
             self.logger.error(f"❌ 로깅 설정 저장 실패: {e}")
 
     def reset_to_defaults(self) -> None:
-        """기본 설정으로 복원"""
+        """기본 설정으로 복원 (UI에서 확인 완료 후 호출됨)"""
         try:
             self.config_manager.reset_to_defaults(save_to_file=True)
             self.logger.info("✅ 기본 설정으로 복원 완료")
-            self.load_current_config()
+            self.load_current_config()  # UI에 새 설정 반영
         except Exception as e:
             self.logger.error(f"❌ 기본 설정 복원 실패: {e}")
 

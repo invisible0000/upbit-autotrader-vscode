@@ -9,7 +9,7 @@
 - 컴포넌트 집중 설정
 """
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QLineEdit, QGroupBox,
@@ -43,6 +43,10 @@ class LoggingSettingsWidget(QWidget):
     apply_settings = pyqtSignal()               # 설정 적용
     reset_settings = pyqtSignal()               # 설정 초기화
 
+    # UX 개선 시그널
+    settings_changed_signal = pyqtSignal(bool)  # 변경사항 있음/없음
+    reload_requested = pyqtSignal()             # 설정 새로고침 요청
+
     def __init__(self, parent=None):
         """초기화"""
         super().__init__(parent)
@@ -55,9 +59,17 @@ class LoggingSettingsWidget(QWidget):
         # 내부 상태
         self._is_loading = False
 
+        # UX 개선: 변경사항 추적
+        self._original_settings = {}  # YAML에서 로드된 원본 설정
+        self._has_unsaved_changes = False  # 저장되지 않은 변경사항 여부
+
         # UI 구성
         self._setup_ui()
         self._connect_signals()
+
+        # 크기 정책 설정 (유연한 확장)
+        from PyQt6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.logger.info("✅ 로깅 설정 위젯 초기화 완료")
 
@@ -319,21 +331,54 @@ class LoggingSettingsWidget(QWidget):
 
         return group
 
-    def _create_action_buttons(self) -> QHBoxLayout:
-        """액션 버튼 레이아웃 생성"""
-        layout = QHBoxLayout()
+    def _create_action_buttons(self) -> QVBoxLayout:
+        """액션 버튼 레이아웃 생성 - 수직 배치로 변경"""
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(8)
+
+        # 버튼들 수평 레이아웃
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)  # 버튼 간 고정 간격
+
+        # 새로고침 버튼 (YAML 파일에서 다시 로드)
+        self.reload_button = QPushButton("🔄 새로고침")
+        self.reload_button.setObjectName("button-neutral")
+        self.reload_button.setToolTip("YAML 파일에서 최신 설정을 다시 로드합니다")
+        self.reload_button.setMinimumWidth(100)  # 최소 폭 설정
+        self.reload_button.setMaximumWidth(120)  # 최대 폭 제한
 
         # 설정 적용 버튼
         self.apply_button = QPushButton("설정 적용")
         self.apply_button.setObjectName("button-primary")
-        layout.addWidget(self.apply_button)
+        self.apply_button.setEnabled(False)  # 초기에는 비활성화
+        self.apply_button.setMinimumWidth(100)  # 최소 폭 설정
+        self.apply_button.setMaximumWidth(120)  # 최대 폭 제한
 
-        # 기본값 복원 버튼
-        self.reset_button = QPushButton("기본값 복원")
-        self.reset_button.setObjectName("button-secondary")
-        layout.addWidget(self.reset_button)
+        # 기본값 복원 버튼 (더 안전한 스타일로)
+        self.reset_button = QPushButton("⚠️ 기본값 복원")
+        self.reset_button.setObjectName("button-warning")
+        self.reset_button.setToolTip("주의: 현재 설정이 모두 기본값으로 되돌아갑니다")
+        self.reset_button.setMinimumWidth(120)  # 텍스트가 길어서 더 큰 폭
+        self.reset_button.setMaximumWidth(140)  # 최대 폭 제한
 
-        return layout
+        # 버튼들을 수평 레이아웃에 추가
+        button_layout.addWidget(self.reload_button)
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.reset_button)
+        button_layout.addStretch()  # 남은 공간 차지
+
+        # 변경사항 표시 레이블 (버튼 아래)
+        self.changes_label = QLabel("")
+        self.changes_label.setObjectName("changes-indicator")
+        self.changes_label.setStyleSheet("color: orange; font-weight: bold; font-size: 11px; margin-top: 5px;")
+        self.changes_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.changes_label.hide()  # 초기에는 숨김
+
+        # 메인 레이아웃에 추가: 버튼들 → 변경사항 라벨
+        main_layout.addLayout(button_layout)
+        main_layout.addWidget(self.changes_label)
+
+        return main_layout
 
     def _connect_signals(self):
         """시그널 연결"""
@@ -351,6 +396,10 @@ class LoggingSettingsWidget(QWidget):
         # 액션 버튼
         self.apply_button.clicked.connect(self._on_apply_clicked)
         self.reset_button.clicked.connect(self._on_reset_clicked)
+        self.reload_button.clicked.connect(self._on_reload_clicked)
+
+        # 변경사항 추적을 위한 시그널 연결
+        self._connect_change_tracking()
 
         # 파일 로깅 토글에 따른 입력 필드 활성화/비활성화
         self.file_logging_checkbox.toggled.connect(self.file_path_edit.setEnabled)
@@ -423,10 +472,47 @@ class LoggingSettingsWidget(QWidget):
     def _on_apply_clicked(self):
         """설정 적용 버튼 클릭"""
         self.apply_settings.emit()
+        # 적용 후 변경사항 초기화
+        self._mark_as_saved()
 
     def _on_reset_clicked(self):
-        """기본값 복원 버튼 클릭"""
-        self.reset_settings.emit()
+        """기본값 복원 버튼 클릭 - 안전장치 추가"""
+        from PyQt6.QtWidgets import QMessageBox
+
+        # 확인 다이얼로그 표시
+        reply = QMessageBox.question(
+            self,
+            "기본값 복원 확인",
+            "정말로 모든 로깅 설정을 기본값으로 복원하시겠습니까?\n\n"
+            "⚠️ 주의: 현재 설정이 즉시 변경되며 되돌릴 수 없습니다.\n"
+            "현재 설정을 먼저 백업하는 것을 권장합니다.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self.reset_settings.emit()
+
+    def _on_reload_clicked(self):
+        """새로고침 버튼 클릭 - YAML 파일에서 다시 로드"""
+        if self._has_unsaved_changes:
+            from PyQt6.QtWidgets import QMessageBox
+
+            reply = QMessageBox.question(
+                self,
+                "새로고침 확인",
+                "저장되지 않은 변경사항이 있습니다.\n"
+                "새로고침하면 현재 변경사항이 손실됩니다.\n\n"
+                "계속하시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        self.reload_requested.emit()
+        self.logger.info("🔄 사용자 요청으로 설정 새로고침")
 
     # ===== 공개 인터페이스 =====
 
@@ -591,35 +677,43 @@ class LoggingSettingsWidget(QWidget):
         """설정 딕셔너리로부터 UI 업데이트 (Presenter에서 호출)
 
         Args:
-            settings: 로깅 설정 딕셔너리
+            settings: 로깅 설정 딕셔너리 (전체 구조 또는 logging 섹션)
         """
         self._is_loading = True
         try:
+            # logging 섹션이 있으면 그것을 사용, 없으면 전체를 logging 설정으로 간주
+            logging_settings = settings.get('logging', settings)
+
+            self.logger.debug(f"🔄 UI 설정 업데이트 시작: {list(logging_settings.keys())}")
+
             # 기본 로깅 설정
-            if 'context' in settings:
-                self.set_context(settings['context'])
-            if 'level' in settings:
-                self.set_log_level(settings['level'])
-            if 'console_output' in settings:
+            if 'context' in logging_settings:
+                self.set_context(logging_settings['context'])
+            if 'level' in logging_settings:
+                self.set_log_level(logging_settings['level'])
+            if 'console_output' in logging_settings:
                 # boolean 값도 호환성을 위해 지원
-                console_value = settings['console_output']
+                console_value = logging_settings['console_output']
                 if isinstance(console_value, bool):
                     console_value = "true" if console_value else "false"
                 self.set_console_output(str(console_value))
-            if 'scope' in settings:
-                self.set_log_scope(settings['scope'])
-            if 'component_focus' in settings:
-                self.set_component_focus(settings['component_focus'])
+            if 'scope' in logging_settings:
+                self.set_log_scope(logging_settings['scope'])
+            if 'component_focus' in logging_settings:
+                self.set_component_focus(logging_settings['component_focus'])
 
             # 파일 로깅 설정
-            if 'file_logging' in settings:
-                self.set_file_logging_settings(settings['file_logging'])
+            if 'file_logging' in logging_settings:
+                self.set_file_logging_settings(logging_settings['file_logging'])
 
             # 고급 설정 (advanced 섹션)
-            if 'advanced' in settings:
-                advanced = settings['advanced']
+            if 'advanced' in logging_settings:
+                advanced = logging_settings['advanced']
                 if 'performance_monitoring' in advanced:
                     self.set_performance_monitoring(advanced['performance_monitoring'])
+
+            # UX 개선: 원본 설정 저장 및 변경사항 초기화
+            self.update_original_settings(settings)
 
         finally:
             self._is_loading = False
@@ -729,3 +823,91 @@ class LoggingSettingsWidget(QWidget):
             "• 절대 경로도 지원됨\n"
             "• 존재하지 않는 폴더는 자동 생성"
         )
+
+    # ===== UX 개선: 변경사항 추적 시스템 =====
+
+    def _connect_change_tracking(self):
+        """변경사항 추적을 위한 시그널 연결"""
+        # 모든 변경 시그널을 추적
+        self.context_changed.connect(self._on_settings_changed)
+        self.log_level_changed.connect(self._on_settings_changed)
+        self.console_output_changed.connect(self._on_settings_changed)
+        self.log_scope_changed.connect(self._on_settings_changed)
+        self.component_focus_changed.connect(self._on_settings_changed)
+        self.file_logging_changed.connect(self._on_settings_changed)
+        self.file_log_level_changed.connect(self._on_settings_changed)
+        self.file_path_changed.connect(self._on_settings_changed)
+        self.performance_monitoring_changed.connect(self._on_settings_changed)
+
+    def _on_settings_changed(self):
+        """설정 변경 감지 시 호출"""
+        if self._is_loading:
+            return
+
+        # 현재 설정과 원본 설정 비교
+        current_settings = self.get_current_settings()
+        self._has_unsaved_changes = self._compare_settings(current_settings, self._original_settings)
+
+        # UI 업데이트
+        self._update_change_indicators()
+
+    def _compare_settings(self, current: dict, original: dict) -> bool:
+        """설정 비교하여 변경사항 있는지 확인"""
+        if not original:  # 원본 설정이 없으면 변경사항 없음으로 간주
+            return False
+
+        # logging 섹션 비교
+        current_logging = current.get('logging', {})
+        original_logging = original.get('logging', {})
+
+        # 주요 필드들 비교
+        fields_to_compare = [
+            'context', 'level', 'console_output', 'scope', 'component_focus'
+        ]
+
+        for field in fields_to_compare:
+            if str(current_logging.get(field, '')).strip() != str(original_logging.get(field, '')).strip():
+                return True
+
+        # file_logging 섹션 비교
+        current_file = current_logging.get('file_logging', {})
+        original_file = original_logging.get('file_logging', {})
+
+        file_fields = ['enabled', 'path', 'level', 'max_size_mb', 'backup_count']
+        for field in file_fields:
+            if str(current_file.get(field, '')).strip() != str(original_file.get(field, '')).strip():
+                return True
+
+        # advanced 섹션 비교
+        current_advanced = current_logging.get('advanced', {})
+        original_advanced = original_logging.get('advanced', {})
+
+        if current_advanced.get('performance_monitoring', False) != original_advanced.get('performance_monitoring', False):
+            return True
+
+        return False
+
+    def _update_change_indicators(self):
+        """변경사항 표시 업데이트"""
+        if self._has_unsaved_changes:
+            self.changes_label.setText("● 저장되지 않은 변경사항")
+            self.changes_label.show()
+            self.apply_button.setEnabled(True)
+            self.apply_button.setText("변경사항 적용")
+        else:
+            self.changes_label.hide()
+            self.apply_button.setEnabled(False)
+            self.apply_button.setText("설정 적용")
+
+    def _mark_as_saved(self):
+        """설정이 저장되었음을 표시"""
+        self._has_unsaved_changes = False
+        self._update_change_indicators()
+        self.logger.debug("✅ 변경사항이 저장되어 상태 초기화됨")
+
+    def update_original_settings(self, settings: dict):
+        """원본 설정 업데이트 (Presenter에서 호출)"""
+        self._original_settings = settings.copy()
+        self._has_unsaved_changes = False
+        self._update_change_indicators()
+        self.logger.debug(f"📥 원본 설정 업데이트됨: {list(settings.keys())}")

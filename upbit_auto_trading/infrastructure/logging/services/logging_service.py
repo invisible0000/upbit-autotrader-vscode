@@ -782,17 +782,13 @@ class LoggingService(ILoggingService):
             logger.info("📴 콘솔 출력 즉시 비활성화됨")
 
     def _get_env_defaults(self) -> dict:
-        """환경변수 기본값 정의"""
+        """환경변수 기본값 정의 (레거시 환경변수 제거됨)"""
         return {
             'UPBIT_LOG_LEVEL': 'INFO',
             'UPBIT_LOG_SCOPE': 'normal',
             'UPBIT_LOG_CONTEXT': 'development',
             'UPBIT_CONSOLE_OUTPUT': 'false',
-            'UPBIT_COMPONENT_FOCUS': '',
-            'UPBIT_LLM_BRIEFING_ENABLED': 'false',
-            'UPBIT_FEATURE_DEVELOPMENT': '',
-            'UPBIT_PERFORMANCE_MONITORING': 'false',
-            'UPBIT_BRIEFING_UPDATE_INTERVAL': '30'
+            'UPBIT_COMPONENT_FOCUS': ''
         }
 
     def _log_env_state_to_logs(self) -> None:

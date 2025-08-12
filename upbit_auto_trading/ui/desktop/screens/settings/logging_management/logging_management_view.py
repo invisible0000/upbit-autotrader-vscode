@@ -64,7 +64,7 @@ class LoggingManagementView(QWidget):
         # 좌측: 로깅 설정 위젯
         self.logging_settings_widget = LoggingSettingsWidget()
         self.logging_settings_widget.setMinimumWidth(280)  # 최소 폭 보장
-        self.logging_settings_widget.setMaximumWidth(400)  # 최대 폭 제한
+        # 최대 폭 제한 제거하여 윈도우 크기에 비례하도록 함
 
         # 우측: 수직 스플리터 (상단:하단 = 2:1)
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -85,17 +85,17 @@ class LoggingManagementView(QWidget):
         self.right_splitter.setStretchFactor(0, 2)  # 로그 뷰어가 더 많은 공간
         self.right_splitter.setStretchFactor(1, 1)  # 콘솔 뷰어
 
-        # 메인 스플리터에 추가 (좌측:우측 = 1:2)
+        # 메인 스플리터에 추가 (좌측:우측 = 1:2.5 → 더 유연한 비율)
         self.main_splitter.addWidget(self.logging_settings_widget)
         self.main_splitter.addWidget(self.right_splitter)
-        self.main_splitter.setSizes([300, 600])  # 1:2 비율 (900 기준)
-        self.main_splitter.setStretchFactor(0, 1)  # 설정 위젯
-        self.main_splitter.setStretchFactor(1, 2)  # 뷰어 영역
+        self.main_splitter.setSizes([280, 700])  # 기본 크기: 280px + 700px = 980px
+        self.main_splitter.setStretchFactor(0, 1)  # 설정 위젯: 비례 확장
+        self.main_splitter.setStretchFactor(1, 3)  # 뷰어 영역: 3배 더 확장
 
         layout.addWidget(self.main_splitter)
         self.setLayout(layout)
 
-        self.logger.debug("🎛️ 3-위젯 레이아웃 구성 완료: 1:2(수평) × 2:1(수직)")
+        self.logger.debug("🎛️ 3-위젯 레이아웃 구성 완료: 1:3(유연한 수평) × 2:1(수직)")
 
     def _connect_signals(self):
         """위젯 간 시그널 연결 - MVP 패턴 준수"""
@@ -131,6 +131,11 @@ class LoggingManagementView(QWidget):
         )
         self.logging_settings_widget.performance_monitoring_changed.connect(
             lambda value: self.settings_changed.emit({"performance_monitoring": value})
+        )
+
+        # UX 개선 시그널 연결
+        self.logging_settings_widget.reload_requested.connect(
+            lambda: self.presenter.load_current_config()
         )
 
         self.logger.debug("🔗 위젯 간 시그널 연결 완료 - MVP 패턴")

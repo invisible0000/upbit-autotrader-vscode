@@ -1,9 +1,9 @@
 logging:
-  level: DEBUG
-  console_output: 'true'
-  scope: debug_all
-  component_focus: SettingsScreen
-  context: debug
+  level: INFO
+  console_output: false
+  scope: normal
+  component_focus: ''
+  context: development
   file_logging:
     enabled: true
     path: logs
@@ -11,8 +11,8 @@ logging:
     max_size_mb: 10
     backup_count: 5
   advanced:
-    performance_monitoring: true
+    performance_monitoring: false
 runtime:
   watch_config_file: true
   notify_on_change: true
-  last_modified: '2025-08-12T21:16:41.270603'
+  last_modified: '2025-08-12T22:39:56.495392'

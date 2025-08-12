@@ -272,17 +272,6 @@ def run_application() -> int:
 
         logger.info("✅ 애플리케이션 시작됨 (Infrastructure Layer 기반)")
 
-        # Enhanced Logging v4.0 Dashboard 업데이트
-        try:
-            from upbit_auto_trading.infrastructure.logging.dashboard.dashboard_service import DashboardService
-            dashboard_service = DashboardService()
-            dashboard_data = dashboard_service.update_dashboard([
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - MainApp - INFO - 애플리케이션 시작됨 (Infrastructure Layer v4.0 기반)"
-            ])
-            logger.info("✅ Dashboard updated: logs/llm_agent_dashboard.json")
-        except Exception as dashboard_e:
-            logger.warning(f"⚠️ Dashboard 업데이트 실패: {dashboard_e}")
-
         # 애플리케이션 이벤트 루프 시작
         exit_code = app.exec()
 

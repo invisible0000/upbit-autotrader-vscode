@@ -189,30 +189,47 @@
   - [x] RotatingFileHandler 백업 시스템 구현
   - [x] upbit_auto_trading.log → logs 폴더 경로로 변경
   - [x] application.log 자동 백업 및 순환 삭제 로직 구현
+  - [x] YAML 중복 설정 문제 해결 (file_logging, advanced 중복 제거)
+  - [x] UI 설정 로딩 로직 수정 (logging 섹션 구조 대응)
+  - [x] 레거시 briefing/dashboard/configuration 폴더 제거
+  - [x] 환경변수 시스템 완전 제거 및 YAML 기반 통합
 
-### **Phase D: 레거시 기능 정리 (우선순위: 낮음)**
+### **Phase D: 레거시 완전 제거 + 단일 로깅 시스템 통합 (우선순위: 최고)** - **✅ 완료**
 
-- [ ] **D.1** LLM 브리핑 관련 코드 제거
-  - [ ] UI에서 LLM 브리핑 설정 완전 숨김
-  - [ ] `briefing_update_interval` 필드 UI에서 제거
-  - [ ] Infrastructure Layer의 LLM 관련 코드 비활성화
+- [x] **D.1** LLM 브리핑 관련 코드 제거 - **✅ 완료**
+  - [x] UI에서 LLM 브리핑 설정 완전 숨김
+  - [x] `briefing_update_interval` 필드 UI에서 제거
+  - [x] Infrastructure Layer의 LLM 관련 코드 비활성화
+  - [x] `briefing/` 폴더 전체 제거
+  - [x] `dashboard/` 폴더 제거 (LLM 시스템)
+  - [x] `integration/` 폴더 제거 (환경변수 시스템)
 
-- [ ] **D.2** 사용하지 않는 고급 설정 정리
-  - [ ] `feature_development` 미사용시 UI에서 숨김
-  - [ ] `performance_monitoring` 단순화 또는 제거
-  - [ ] 설정 파일에서 deprecated 필드 마킹
+- [x] **D.2** 사용하지 않는 고급 설정 정리 - **✅ 완료**
+  - [x] `configuration/logging_config.py` 레거시 파일 제거
+  - [x] `configuration/enhanced_config.py` LLM 전용 설정 제거
+  - [x] 설정 파일에서 deprecated 필드 마킹
+  - [x] 환경변수 기반 코드를 YAML 설정 파일 기반으로 완전 전환
+  - [x] `run_desktop_ui.py`에서 레거시 Dashboard import 제거
 
-### **Phase E: 사용성 개선 (우선순위: 낮음)**
+### **Phase E: UX/UI 완전 개선 (우선순위: 최고)** - **✅ 완료**
 
-- [ ] **E.1** 도움말 및 설명 추가
-  - [ ] 각 설정 항목에 툴팁 추가
-  - [ ] "기본값으로 복원" 버튼에 확인 다이얼로그
-  - [ ] 설정 변경시 즉시 적용 안내 메시지
+- [x] **E.1** 변경사항 추적 및 안전장치 - **✅ 완료**
+  - [x] 설정 변경사항 실시간 감지 및 표시
+  - [x] "설정 적용" 버튼 스마트 활성화/비활성화
+  - [x] 새로고침 시 변경사항 손실 경고
+  - [x] 기본값 복원 확인 다이얼로그 추가
 
-- [ ] **E.2** 폼 레이아웃 최적화
-  - [ ] 그룹박스 순서 조정 (기본 설정 → 파일 로깅 → 고급 설정)
-  - [ ] 라벨 텍스트 통일성 확보
-  - [ ] 위젯 크기 및 간격 조정
+- [x] **E.2** 버튼 레이아웃 및 크기 최적화 - **✅ 완료**
+  - [x] 균등한 버튼 크기 및 간격 설정
+  - [x] 변경사항 라벨을 버튼 아래로 배치
+  - [x] 윈도우 크기 변경에 반응하는 레이아웃
+  - [x] 로깅 설정 위젯 크기 제한 해제 (최대 400px → 비례 확장)
+
+- [x] **E.3** 로깅 시스템 백업 및 순환 삭제 - **✅ 완료**
+  - [x] RotatingFileHandler 구현으로 자동 백업
+  - [x] application.log.1, .2, .3, .4, .5 순환 관리
+  - [x] 설정된 백업 개수 (5개) 초과 시 자동 삭제
+  - [x] 최대 크기 (10MB) 도달 시 자동 로테이션
 
 #### ⚠️ **주의사항**
 - **복잡도 관리**: 각 Phase는 독립적으로 실행 가능하도록 설계
