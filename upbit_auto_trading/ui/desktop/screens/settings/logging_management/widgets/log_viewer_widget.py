@@ -4,19 +4,21 @@
 우측 상단에 위치하는 로그 메시지 표시 영역입니다.
 - 실시간 로그 메시지 표시
 - 자동 스크롤 기능
-- 로그 필터링
-- 로그 내용 저장
+- 로그 구문 강조 (하이라이트)
+- 폰트 크기 조절
+- 로그 내용 복사
 """
 
 from datetime import datetime
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QPushButton, QCheckBox, QLabel, QGroupBox
+    QPushButton, QCheckBox, QLabel, QSpinBox
 )
 from PyQt6.QtGui import QFont, QTextCursor
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from .log_syntax_highlighter import LogSyntaxHighlighter
 
 
 class LogViewerWidget(QWidget):
@@ -40,10 +42,14 @@ class LogViewerWidget(QWidget):
         self._auto_scroll = True
         self._max_lines = 1000  # 최대 로그 라인 수
         self._current_lines = 0
+        self._font_size = 12  # 기본 폰트 크기 (12px로 변경)
 
         # UI 구성
         self._setup_ui()
         self._connect_signals()
+
+        # 로그 구문 강조기 설정
+        self._setup_syntax_highlighter()
 
         self.logger.info("✅ 로그 뷰어 위젯 초기화 완료")
 
@@ -61,7 +67,7 @@ class LogViewerWidget(QWidget):
         self.log_text_edit = QTextEdit()
         self.log_text_edit.setObjectName("log-text-display")
         self.log_text_edit.setReadOnly(True)
-        self.log_text_edit.setFont(QFont("Consolas", 9))  # 고정폭 폰트
+        self.log_text_edit.setFont(QFont("Consolas", self._font_size))  # 고정폭 폰트
         self.log_text_edit.setPlaceholderText("로그 메시지가 여기에 표시됩니다...")
         layout.addWidget(self.log_text_edit)
 
@@ -81,6 +87,16 @@ class LogViewerWidget(QWidget):
 
         # 스페이서
         layout.addStretch()
+
+        # 폰트 크기 조절
+        font_label = QLabel("폰트:")
+        layout.addWidget(font_label)
+
+        self.font_size_spinbox = QSpinBox()
+        self.font_size_spinbox.setRange(6, 20)
+        self.font_size_spinbox.setValue(self._font_size)
+        self.font_size_spinbox.setToolTip("로그 텍스트 폰트 크기")
+        layout.addWidget(self.font_size_spinbox)
 
         # 자동 스크롤 체크박스
         self.auto_scroll_checkbox = QCheckBox("자동 스크롤")
@@ -105,6 +121,17 @@ class LogViewerWidget(QWidget):
         self.clear_button.clicked.connect(self._on_clear_clicked)
         self.save_button.clicked.connect(self._on_save_clicked)
 
+        # 폰트 크기 변경
+        self.font_size_spinbox.valueChanged.connect(self._on_font_size_changed)
+
+    def _setup_syntax_highlighter(self):
+        """로그 구문 강조기 설정"""
+        try:
+            self.syntax_highlighter = LogSyntaxHighlighter(self.log_text_edit.document())
+            self.logger.debug("✅ 로그 구문 강조기 설정 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 로그 구문 강조기 설정 실패: {e}")
+
     # ===== 이벤트 핸들러 =====
 
     def _on_auto_scroll_changed(self, checked: bool):
@@ -121,7 +148,24 @@ class LogViewerWidget(QWidget):
         """로그 저장 버튼 클릭"""
         self.save_logs.emit()
 
+    def _on_font_size_changed(self, size: int):
+        """폰트 크기 변경 핸들러"""
+        self._font_size = size
+        font = QFont("Consolas", size)
+        self.log_text_edit.setFont(font)
+        self.logger.debug(f"폰트 크기 변경: {size}px")
+
     # ===== 공개 인터페이스 =====
+
+    def append_log_message(self, log_message: str):
+        """로그 메시지 추가 (MVP Presenter 인터페이스)
+
+        Phase 5.1 실시간 로그 스트리밍을 위한 메서드
+
+        Args:
+            log_message: 추가할 로그 메시지
+        """
+        self.append_log(log_message)
 
     def append_log(self, log_message: str):
         """로그 메시지 추가
@@ -163,6 +207,13 @@ class LogViewerWidget(QWidget):
         """
         for message in log_messages:
             self.append_log(message)
+
+    def clear_log_viewer(self):
+        """로그 뷰어 클리어 (MVP Presenter 인터페이스)
+
+        Phase 5.1 MVP 패턴을 위한 메서드
+        """
+        self._clear_logs()
 
     def _clear_logs(self):
         """로그 내용 지우기"""

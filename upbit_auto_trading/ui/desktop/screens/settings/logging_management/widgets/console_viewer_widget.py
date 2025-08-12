@@ -124,6 +124,25 @@ class ConsoleViewerWidget(QWidget):
 
     # ===== 공개 인터페이스 =====
 
+    def append_console_output(self, output: str, is_error: bool = False):
+        """콘솔 출력 추가 (MVP Presenter 인터페이스)
+
+        Phase 5.1 MVP 패턴을 위한 메서드
+
+        Args:
+            output: 콘솔 출력 내용
+            is_error: 에러 메시지 여부
+        """
+        message_type = "stderr" if is_error else "stdout"
+        self.append_console(output, message_type)
+
+    def clear_console_viewer(self):
+        """콘솔 뷰어 클리어 (MVP Presenter 인터페이스)
+
+        Phase 5.1 MVP 패턴을 위한 메서드
+        """
+        self._clear_console()
+
     def append_console(self, message: str, message_type: str = "stdout"):
         """콘솔 메시지 추가
 

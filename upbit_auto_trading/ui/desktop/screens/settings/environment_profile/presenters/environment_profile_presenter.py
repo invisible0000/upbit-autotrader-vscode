@@ -72,22 +72,37 @@ class EnvironmentProfilePresenter(QObject):
         self._current_profile = ""
         self._edit_mode = False
         self._has_unsaved_changes = False
+        self._is_initialized = False  # 지연 로딩을 위한 플래그
 
-        # Application Services 초기화
-        self._metadata_service = ProfileMetadataService()
-        self._edit_session_service = ProfileEditSessionService()
-        self._validation_service = ProfileValidationService()
+        # Application Services (지연 초기화)
+        self._metadata_service = None
+        self._edit_session_service = None
+        self._validation_service = None
 
         logger.info("🎭 EnvironmentProfilePresenter 초기화 완료 (DDD 리팩토링 버전)")
+        logger.debug("🔄 지연 로딩 모드 - 실제 사용시 서비스 초기화")
 
-        # 초기 데이터 로드
-        self._initialize_data()
+    def _ensure_services_initialized(self):
+        """서비스가 초기화되지 않았다면 초기화 (지연 로딩)"""
+        if not self._is_initialized:
+            logger.info("🚀 환경 프로파일 서비스 지연 초기화 시작")
+
+            # Application Services 초기화
+            self._metadata_service = ProfileMetadataService()
+            self._edit_session_service = ProfileEditSessionService()
+            self._validation_service = ProfileValidationService()
+
+            self._is_initialized = True
+            logger.info("✅ 환경 프로파일 서비스 지연 초기화 완료")
 
     def _initialize_data(self):
         """초기 데이터 로드 및 UI 초기화"""
         logger.debug("🔧 초기 데이터 로드 시작")
 
         try:
+            # 서비스 초기화 보장
+            self._ensure_services_initialized()
+
             # 프로파일 목록 새로고침
             self.refresh_profile_list()
 
@@ -108,6 +123,9 @@ class EnvironmentProfilePresenter(QObject):
         logger.info(f"📂 프로파일 로드 요청: {profile_name}")
 
         try:
+            # 서비스 초기화 보장
+            self._ensure_services_initialized()
+
             # 0단계: 빈 값 검증
             if not profile_name or profile_name.strip() == "":
                 error_msg = "프로파일명이 비어있습니다"
@@ -218,56 +236,42 @@ class EnvironmentProfilePresenter(QObject):
             return f"# YAML 파일 로드 오류: {str(e)}"
 
     def refresh_profile_list(self):
-        """프로파일 목록 새로고침"""
+        """프로파일 목록 새로고침 (메타데이터는 지연 로딩)"""
         logger.debug("🔄 프로파일 목록 새로고침")
 
         try:
-            # 메타데이터 서비스로 프로파일 목록 조회
+            # 서비스 초기화 보장
+            self._ensure_services_initialized()
+
+            # 메타데이터 서비스로 프로파일 목록 조회 (이름만)
             profile_list = self._metadata_service.get_available_profiles()
 
-            # View에서 사용할 수 있는 완전한 프로파일 데이터 생성
+            # View에서 사용할 수 있는 경량 프로파일 데이터 생성 (메타데이터 지연 로딩)
             profiles_data = {}
             for profile_name in profile_list:
-                try:
-                    # 각 프로파일의 메타데이터 로드
-                    metadata = self._metadata_service.load_profile_metadata(profile_name)
+                # 메타데이터는 로드하지 않고 기본 정보만 설정
+                built_in_profiles = ['development', 'production', 'testing', 'staging', 'debug', 'demo']
+                profile_type = 'built-in' if profile_name in built_in_profiles else 'custom'
 
-                    # ProfileSelectorSection.load_profiles()가 요구하는 형태로 변환
-                    profiles_data[profile_name] = {
-                        'metadata': {
-                            'name': getattr(metadata, 'name', profile_name),
-                            'description': getattr(metadata, 'description', ''),
-                            'profile_type': getattr(metadata, 'profile_type', 'unknown'),
-                            'tags': getattr(metadata, 'tags', []),
-                            'created_at': getattr(metadata, 'created_at', ''),
-                            'created_from': getattr(metadata, 'created_from', '')
-                        },
-                        'content': ''  # YAML 내용은 필요시 로드
-                    }
-                except Exception as e:
-                    logger.warning(f"⚠️ {profile_name} 메타데이터 로드 실패: {e}")
-                    # 기본 데이터 구조 생성
-                    built_in_profiles = ['development', 'production', 'testing']
-                    profile_type = 'built-in' if profile_name in built_in_profiles else 'custom'
-
-                    profiles_data[profile_name] = {
-                        'metadata': {
-                            'name': profile_name,
-                            'description': f'{profile_name} 환경 설정',
-                            'profile_type': profile_type,
-                            'tags': [],
-                            'created_at': '',
-                            'created_from': ''
-                        },
-                        'content': ''
-                    }
+                profiles_data[profile_name] = {
+                    'metadata': {
+                        'name': profile_name,  # 실제 표시명은 선택시 로드
+                        'description': f'{profile_name} 환경 설정',  # 기본 설명
+                        'profile_type': profile_type,
+                        'tags': [],  # 실제 태그는 선택시 로드
+                        'created_at': '',
+                        'created_from': '',
+                        'loaded': False  # 메타데이터 로딩 여부 플래그
+                    },
+                    'content': ''  # YAML 내용도 선택시 로드
+                }
 
             # View 업데이트 시그널 발송 (딕셔너리 형태로 - ProfileSelectorSection.load_profiles() 호환)
-            logger.info(f"🚀 profile_list_updated 시그널 발송: {len(profiles_data)}개 프로파일")
-            logger.debug(f"📋 발송할 프로파일 데이터: {list(profiles_data.keys())}")
+            logger.info(f"🚀 profile_list_updated 시그널 발송: {len(profiles_data)}개 프로파일 (지연 로딩)")
+            logger.debug(f"📋 발송할 프로파일 목록: {list(profiles_data.keys())}")
             self.profile_list_updated.emit(profiles_data)  # 딕셔너리 전체 발송
 
-            logger.debug(f"✅ 프로파일 목록 새로고침 완료: {len(profile_list)}개")
+            logger.debug(f"✅ 프로파일 목록 새로고침 완료: {len(profile_list)}개 (메타데이터 지연 로딩)")
 
         except Exception as e:
             error_msg = f"프로파일 목록 새로고침 실패: {str(e)}"
@@ -284,6 +288,9 @@ class EnvironmentProfilePresenter(QObject):
         logger.info(f"✏️ 편집 모드 시작: {target_profile}")
 
         try:
+            # 서비스 초기화 보장
+            self._ensure_services_initialized()
+
             # 1단계: 기존 프로파일 편집 시작
             if target_profile and target_profile != "":
                 temp_file_path = self._edit_session_service.start_edit_existing_profile(target_profile)

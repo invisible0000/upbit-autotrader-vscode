@@ -14,7 +14,7 @@ Refactored: 2025-08-11 (폴더 구조 리팩토링)
 """
 from typing import Optional
 from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QSplitter, QFrame, QMessageBox
+    QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QFrame, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from pathlib import Path
@@ -51,43 +51,76 @@ class EnvironmentProfileView(QWidget):
         self.main_splitter: Optional[QSplitter] = None
 
         # MVP Presenter 초기화
-        self.presenter: Optional[EnvironmentProfilePresenter] = None
+        self._presenter: Optional[EnvironmentProfilePresenter] = None
 
-        # 🔥 상태 추가: 현재 선택된 프로파일 추적
-        self._current_profile = ""
-
-        # UI 초기화
+        # 🔥 지연 로딩 제거 - 직접 초기화
         self._setup_ui()
         self._connect_signals()
-
-        # Presenter 초기화 (View 준비 완료 후)
         self._setup_presenter()
 
-        logger.info("✅ EnvironmentProfileView 초기화 완료")
+        logger.info("✅ EnvironmentProfileView 초기화 완료 - 직접 초기화")
 
     def _setup_ui(self):
-        """UI 레이아웃 설정"""
-        logger.debug("🔧 UI 레이아웃 설정 시작")
+        """UI 레이아웃 설정 - QSplitter 기반 1:2 비율 강제"""
+        logger.debug("🔧 UI 레이아웃 설정 시작 - QSplitter 모드")
 
-        # 메인 레이아웃
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        # 메인 레이아웃 생성
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(0)
 
-        # 좌우 분할 스플리터 설정
-        self._setup_splitter_layout()
+        try:
+            # QSplitter로 1:2 비율 강제 적용
+            self.main_splitter = QSplitter(Qt.Orientation.Horizontal, self)
 
-        # 스플리터를 메인 레이아웃에 추가
-        main_layout.addWidget(self.main_splitter)
+            # 좌측: 프로파일 선택기 생성
+            logger.debug("🔧 ProfileSelectorSection 생성 중...")
+            self.profile_selector = ProfileSelectorSection(self)
+            left_frame = QFrame()
+            left_frame.setMinimumSize(300, 200)
+            left_layout = QVBoxLayout(left_frame)
+            left_layout.addWidget(self.profile_selector)
 
-        # 분할 위젯들 설정
-        self._setup_profile_selector()
-        self._setup_yaml_editor()
+            # 우측: YAML 편집기 생성
+            logger.debug("🔧 YamlEditorSection 생성 중...")
+            self.yaml_editor = YamlEditorSection(self)
+            right_frame = QFrame()
+            right_frame.setMinimumSize(600, 200)
+            right_layout = QVBoxLayout(right_frame)
+            right_layout.addWidget(self.yaml_editor)
 
-        # 스플리터 비율 설정 (1:2)
-        self._setup_splitter_ratios()
+            # 스플리터에 프레임 추가
+            self.main_splitter.addWidget(left_frame)
+            self.main_splitter.addWidget(right_frame)
 
-        logger.debug("✅ UI 레이아웃 설정 완료")
+            # 1:2 비율 강제 설정
+            self.main_splitter.setSizes([1, 2])  # 좌측:우측 = 1:2
+            self.main_splitter.setStretchFactor(0, 1)  # 좌측 stretch factor
+            self.main_splitter.setStretchFactor(1, 2)  # 우측 stretch factor
+
+            # 메인 레이아웃에 스플리터 추가
+            main_layout.addWidget(self.main_splitter)
+
+            logger.debug("✅ ProfileSelectorSection 생성 완료")
+            logger.debug("✅ YamlEditorSection 생성 완료")
+            logger.debug("✅ UI 레이아웃 설정 완료 - QSplitter 1:2 비율")
+
+        except Exception as e:
+            logger.error(f"❌ 실제 위젯 생성 실패: {e}")
+            logger.debug("⚠️ 폴백: 테스트 프레임으로 복구")
+
+            # 폴백: 테스트 프레임만 표시 (배경색 제거 - 전역 테마 적용)
+            test_frame1 = QFrame()
+            test_frame1.setObjectName("test_frame_left")
+            test_frame1.setMinimumSize(300, 200)
+            main_layout.addWidget(test_frame1)
+
+            test_frame2 = QFrame()
+            test_frame2.setObjectName("test_frame_right")
+            test_frame2.setMinimumSize(600, 200)
+            main_layout.addWidget(test_frame2)
+
+            logger.debug("✅ UI 레이아웃 설정 완료 - 폴백 테스트 버전")
 
     def _setup_splitter_layout(self):
         """QSplitter 기반 1:2 분할 레이아웃 설정"""
@@ -178,8 +211,8 @@ class EnvironmentProfileView(QWidget):
         right_width = total_width * 2 // 3  # 2/3
 
         # 🔥 테스트: QSplitter 강제 크기 할당 주석 처리 (자연스러운 확장 테스트)
-        # if self.main_splitter is not None:
-        #     self.main_splitter.setSizes([left_width, right_width])
+        if self.main_splitter is not None:
+            self.main_splitter.setSizes([left_width, right_width])
 
         logger.debug(f"✅ 스플리터 비율 설정 완료 (자연 확장 모드): {left_width}:{right_width}")
 
@@ -542,8 +575,13 @@ class EnvironmentProfileView(QWidget):
         """Presenter에서 프로파일 목록 업데이트 수신 🔥 핵심 기능!"""
         logger.info(f"🚀 _on_presenter_profile_list_updated 핸들러 호출됨! {len(profiles_data)}개")
 
+        # 테스트 버전에서는 실제 위젯이 없으므로 무시
+        if not self.profile_selector:
+            logger.info("📋 테스트 버전 - 프로파일 목록 수신했지만 실제 위젯이 없음 (정상)")
+            return
+
         # 프로파일 선택기의 콤보박스 업데이트
-        if self.profile_selector and hasattr(self.profile_selector, 'load_profiles'):
+        if hasattr(self.profile_selector, 'load_profiles'):
             logger.debug("✅ ProfileSelectorSection과 load_profiles 메서드 존재 확인됨")
 
             # Presenter에서 이미 올바른 딕셔너리 형태로 준비된 데이터를 직접 사용

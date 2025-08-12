@@ -366,3 +366,19 @@ class LoggingSettingsWidget(QWidget):
 
         finally:
             self._is_loading = False
+
+    def get_current_settings(self) -> dict:
+        """현재 설정값들을 딕셔너리로 반환 (MVP Presenter 인터페이스)
+
+        Phase 5.1 MVP 패턴을 위한 메서드
+
+        Returns:
+            dict: 현재 설정 딕셔너리
+        """
+        return {
+            'level': self.get_log_level(),
+            'console_output': self.get_console_output(),
+            'scope': self.get_log_scope(),
+            'component_focus': self.get_component_focus(),
+            'file_logging': self.get_file_logging_settings()
+        }

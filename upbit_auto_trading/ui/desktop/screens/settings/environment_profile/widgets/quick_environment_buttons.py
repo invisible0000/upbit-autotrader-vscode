@@ -97,7 +97,7 @@ class QuickEnvironmentButtons(QWidget):
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         # 명시적 폭 설정 - 🔥 디버깅 결과: setMaximumWidth() 제거!
-        button.setMinimumWidth(120)   # 최소 폭 설정
+        button.setMinimumWidth(60)   # 최소 폭 설정
         # button.setMaximumWidth(600) 주석처리 - 이것이 stretch를 방해하는 주범!
 
         # 버튼 텍스트 설정
@@ -130,8 +130,8 @@ class QuickEnvironmentButtons(QWidget):
                     border-radius: 4px;
                     font-weight: bold;
                     padding: 6px 12px;
-                    max-width: none;
-                    min-width: 120px;
+                    max-width: 300px;
+                    min-width: 60px;
                 }}
                 QPushButton#{button.objectName()}:hover {{
                     background-color: {self._darken_color(base_color, 0.1)};
@@ -151,8 +151,8 @@ class QuickEnvironmentButtons(QWidget):
                     border-radius: 4px;
                     font-weight: normal;
                     padding: 6px 12px;
-                    max-width: none;
-                    min-width: 120px;
+                    max-width: 300;
+                    min-width: 60px;
                 }}
                 QPushButton#{button.objectName()}:hover {{
                     background-color: {self._lighten_color(base_color, 0.7)};

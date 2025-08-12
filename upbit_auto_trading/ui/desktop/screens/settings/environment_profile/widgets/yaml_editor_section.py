@@ -328,7 +328,7 @@ class YamlEditorSection(QWidget):
         self._update_ui_state()
 
     def _setup_header(self, parent_layout):
-        """헤더 영역 설정 - 이슈 3 해결: 상태 레이블을 편집 버튼 왼쪽으로 이동"""
+        """헤더 영역 설정 - 간소화: 제목과 폰트 조절만"""
         header_frame = QFrame()
         header_frame.setObjectName("yaml_editor_header")
         header_layout = QHBoxLayout(header_frame)
@@ -339,34 +339,11 @@ class YamlEditorSection(QWidget):
         self.title_label.setObjectName("yaml_editor_title")
         header_layout.addWidget(self.title_label)
 
+        # 스페이서 - 제목과 폰트 조절 사이 공간
         header_layout.addStretch()
 
-        # 폰트 크기 조절 컨트롤
+        # 폰트 크기 조절 컨트롤 (우측 정렬)
         self._add_font_size_controls(header_layout)
-
-        header_layout.addStretch()
-
-        # 상태 레이블 (편집 버튼 왼쪽에 배치)
-        self.status_label = QLabel("읽기 전용 모드")
-        self.status_label.setObjectName("yaml_editor_status")
-        header_layout.addWidget(self.status_label)
-
-        # 편집 모드 버튼
-        self.edit_mode_button = QPushButton("편집 시작")
-        self.edit_mode_button.setObjectName("yaml_edit_mode_button")
-        header_layout.addWidget(self.edit_mode_button)
-
-        # 저장 버튼 (편집 시작 버튼 우측)
-        self.save_button = QPushButton("저장")
-        self.save_button.setObjectName("yaml_save_button")
-        self.save_button.setEnabled(False)  # 기본적으로 비활성화
-        header_layout.addWidget(self.save_button)
-
-        # 취소 버튼 (저장 버튼 우측)
-        self.cancel_button = QPushButton("취소")
-        self.cancel_button.setObjectName("yaml_cancel_button")
-        self.cancel_button.setEnabled(False)  # 기본적으로 비활성화
-        header_layout.addWidget(self.cancel_button)
 
         parent_layout.addWidget(header_frame)
 
@@ -394,9 +371,38 @@ class YamlEditorSection(QWidget):
         parent_layout.addWidget(self.text_editor)
 
     def _setup_footer(self, parent_layout):
-        """푸터 영역 설정 - 버튼들이 헤더로 이동하여 여기서는 최소한만 유지"""
-        # 푸터는 현재 불필요하므로 제거
-        pass
+        """푸터 영역 설정 - 상태 레이블과 편집 버튼들"""
+        footer_frame = QFrame()
+        footer_frame.setObjectName("yaml_editor_footer")
+        footer_layout = QHBoxLayout(footer_frame)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 상태 레이블 (좌측)
+        self.status_label = QLabel("읽기 전용 모드")
+        self.status_label.setObjectName("yaml_editor_status")
+        footer_layout.addWidget(self.status_label)
+
+        # 스페이서 - 상태와 버튼들 사이 공간
+        footer_layout.addStretch()
+
+        # 편집 모드 버튼
+        self.edit_mode_button = QPushButton("편집 시작")
+        self.edit_mode_button.setObjectName("yaml_edit_mode_button")
+        footer_layout.addWidget(self.edit_mode_button)
+
+        # 저장 버튼
+        self.save_button = QPushButton("저장")
+        self.save_button.setObjectName("yaml_save_button")
+        self.save_button.setEnabled(False)  # 기본적으로 비활성화
+        footer_layout.addWidget(self.save_button)
+
+        # 취소 버튼
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.setObjectName("yaml_cancel_button")
+        self.cancel_button.setEnabled(False)  # 기본적으로 비활성화
+        footer_layout.addWidget(self.cancel_button)
+
+        parent_layout.addWidget(footer_frame)
 
     def _add_font_size_controls(self, header_layout: QHBoxLayout) -> None:
         """폰트 크기 조절 컨트롤 추가"""
@@ -406,9 +412,21 @@ class YamlEditorSection(QWidget):
         header_layout.addWidget(font_label)
 
         # 폰트 크기 감소 버튼
-        self.font_decrease_btn = QPushButton("-")
+        self.font_decrease_btn = QPushButton("▼")
         self.font_decrease_btn.setObjectName("font_size_button")
         self.font_decrease_btn.setFixedSize(24, 24)
+        self.font_decrease_btn.setStyleSheet("""
+            QPushButton {
+                padding: 0px;
+                margin: 0px;
+                border: 1px solid #ccc;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+        """)
         self.font_decrease_btn.clicked.connect(self._decrease_font_size)
         header_layout.addWidget(self.font_decrease_btn)
 
@@ -420,9 +438,21 @@ class YamlEditorSection(QWidget):
         header_layout.addWidget(self.font_size_label)
 
         # 폰트 크기 증가 버튼
-        self.font_increase_btn = QPushButton("+")
+        self.font_increase_btn = QPushButton("▲")
         self.font_increase_btn.setObjectName("font_size_button")
         self.font_increase_btn.setFixedSize(24, 24)
+        self.font_increase_btn.setStyleSheet("""
+            QPushButton {
+                padding: 0px;
+                margin: 0px;
+                border: 1px solid #ccc;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+        """)
         self.font_increase_btn.clicked.connect(self._increase_font_size)
         header_layout.addWidget(self.font_increase_btn)
 
