@@ -4,7 +4,7 @@
 ---
 
 ## 🎯 역할 및 목표 (Role & Objective)
-VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 **구현/리팩터링/검수**를 담당한다.  
+VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 **구현/리팩터링/검수**를 담당한다.
 **7규칙 전략 완전 구현**, **중복 방지**, **계층 규칙 준수**, **테스트 동반**을 절대 원칙으로 한다.
 
 ---
@@ -23,7 +23,7 @@ VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 *
 - **3-DB 분리**: `settings.sqlite3` / `strategies.sqlite3` / `market_data.sqlite3`
 - **DTO 엄격**: `@dataclass(frozen=True)` + 타입힌트 명확
 
-### 🎨 UI 수행  
+### 🎨 UI 수행
 - **전역 QSS**: `ui/desktop/common/styles` 중앙 관리, 하드코딩 금지
 - **objectName**: 표준 네이밍으로 스타일 적용, `setStyleSheet()` 직접 사용 금지
 - **변수 호환성**: `comparison_group` 동일한 것끼리만 직접 비교
@@ -40,7 +40,7 @@ VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 *
 
 ### 🚫 계층 위반
 - Domain에 `sqlite3`, `requests`, `PyQt6` import 금지
-- Presenter에서 DB/HTTP/비즈니스 로직 수행 금지  
+- Presenter에서 DB/HTTP/비즈니스 로직 수행 금지
 - Application에서 UI 직접 조작 금지
 
 ### 🚫 에러 숨김
@@ -59,7 +59,7 @@ VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 *
 
 ### 1) Socratic 질문 (최대 3개)
 1. **핵심 시나리오 + 엣지 케이스**는?
-2. **실행 맥락**(dry-run/실거래, 심볼, 타임프레임)은?  
+2. **실행 맥락**(dry-run/실거래, 심볼, 타임프레임)은?
 3. **재사용 후보**(기존 유사 기능/컴포넌트)는?
 
 ### 2) 기본 가정 (답변 없을 시)
@@ -88,7 +88,7 @@ pytest -q
 
 # DB 상태 확인
 python tools/super_db_table_viewer.py settings
-python tools/super_db_table_viewer.py strategies  
+python tools/super_db_table_viewer.py strategies
 python tools/super_db_table_viewer.py market_data
 
 # 계층 위반 탐지
@@ -115,7 +115,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 logger = create_component_logger("TradingService")
 logger.info("거래 요청 시작")
 
-# ❌ 금지 패턴  
+# ❌ 금지 패턴
 print("거래 요청 시작")  # 로깅 시스템 무시
 ```
 
@@ -138,7 +138,7 @@ class SqliteTradingStrategyRepository:
 class TradingView(QWidget):
     def __init__(self):
         self.setObjectName("trading_main_view")  # QSS 적용
-        
+
 # ✅ Presenter (로직 담당)
 class TradingPresenter:
     def handle_buy_signal(self):
@@ -162,7 +162,7 @@ class TradingPresenter:
 
 ### 코드 품질
 - [ ] Domain에 외부 의존성(`sqlite3/requests/PyQt6`) 없음
-- [ ] Presenter에서 DB 직접 호출/`print()` 사용 없음  
+- [ ] Presenter에서 DB 직접 호출/`print()` 사용 없음
 - [ ] `setStyleSheet()` 대신 `objectName` 사용
 - [ ] Infrastructure 로깅으로 `print()` 대체
 
@@ -183,7 +183,7 @@ class TradingPresenter:
 
 ### 핵심 3문서
 - **시스템 아키텍처**: DDD 설계, 에러 처리, DB 스키마 관련
-- **UI 테마 시스템**: PyQt6 개발, QSS 테마, 호환성 시스템 관련  
+- **UI 테마 시스템**: PyQt6 개발, QSS 테마, 호환성 시스템 관련
 - **운영 시스템**: 전략 시스템, 로깅 v4.0, 7규칙 전략 관련
 
 ### 특화 영역
@@ -197,8 +197,8 @@ class TradingPresenter:
 
 ## 🎯 성공 기준
 
-**최종 목표**: 7규칙 전략이 완벽 동작하는 안전한 자동매매 시스템  
-**검증 방법**: `python run_desktop_ui.py` → 전략 관리 → 트리거 빌더에서 7규칙 구성 가능  
+**최종 목표**: 7규칙 전략이 완벽 동작하는 안전한 자동매매 시스템
+**검증 방법**: `python run_desktop_ui.py` → 전략 관리 → 트리거 빌더에서 7규칙 구성 가능
 **핵심 원칙**: DDD 준수 + 에러 투명성 + Dry-Run 우선 + Infrastructure 로깅
 
 ---
