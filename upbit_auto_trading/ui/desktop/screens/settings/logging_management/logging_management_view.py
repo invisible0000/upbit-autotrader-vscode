@@ -105,6 +105,9 @@ class LoggingManagementView(QWidget):
         self.logging_settings_widget.reset_settings.connect(self.reset_settings_requested.emit)
 
         # 개별 설정 변경 시그널들을 dict로 변환하여 전달
+        self.logging_settings_widget.context_changed.connect(
+            lambda value: self.settings_changed.emit({"context": value})
+        )
         self.logging_settings_widget.log_level_changed.connect(
             lambda value: self.settings_changed.emit({"log_level": value})
         )
@@ -122,6 +125,12 @@ class LoggingManagementView(QWidget):
         )
         self.logging_settings_widget.file_path_changed.connect(
             lambda value: self.settings_changed.emit({"file_path": value})
+        )
+        self.logging_settings_widget.file_log_level_changed.connect(
+            lambda value: self.settings_changed.emit({"file_log_level": value})
+        )
+        self.logging_settings_widget.performance_monitoring_changed.connect(
+            lambda value: self.settings_changed.emit({"performance_monitoring": value})
         )
 
         self.logger.debug("🔗 위젯 간 시그널 연결 완료 - MVP 패턴")

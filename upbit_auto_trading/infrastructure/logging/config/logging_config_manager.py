@@ -115,20 +115,17 @@ class LoggingConfigManager:
                 'console_output': False,
                 'scope': 'normal',
                 'component_focus': '',
-                'context': 'development'
-            },
-            'advanced': {
-                'llm_briefing_enabled': False,
-                'feature_development': '',
-                'performance_monitoring': False,
-                'briefing_update_interval': 30
-            },
-            'file_logging': {
-                'enabled': True,
-                'path': 'logs/upbit_auto_trading.log',
-                'max_size_mb': 10,
-                'backup_count': 5,
-                'level': 'DEBUG'
+                'context': 'development',
+                'file_logging': {
+                    'enabled': True,
+                    'path': 'logs',
+                    'level': 'DEBUG',
+                    'max_size_mb': 10,
+                    'backup_count': 5
+                },
+                'advanced': {
+                    'performance_monitoring': False
+                }
             },
             'runtime': {
                 'watch_config_file': True,
@@ -232,7 +229,7 @@ class LoggingConfigManager:
         """로깅 설정 업데이트
 
         Args:
-            updates: 업데이트할 설정
+            updates: 업데이트할 설정 (전체 구조 또는 부분 업데이트)
             save_to_file: 파일에 저장할지 여부
 
         Returns:
@@ -242,15 +239,30 @@ class LoggingConfigManager:
             try:
                 # 현재 설정 로드
                 self._load_config()
-                config = self._cached_config.copy()
+                config = self._cached_config.copy() if self._cached_config else self._get_default_config()
 
-                # 로깅 설정 섹션 업데이트
-                if 'logging' not in config:
-                    config['logging'] = {}
+                # 전체 설정 업데이트인지 부분 업데이트인지 판단
+                if 'logging' in updates and isinstance(updates['logging'], dict):
+                    # 전체 설정 업데이트 - 전체 구조 교체
+                    config = self._deep_merge(config, updates)
+                else:
+                    # 부분 업데이트 - logging 섹션만 업데이트
+                    if 'logging' not in config:
+                        config['logging'] = {}
+                    config['logging'].update(updates)
 
-                config['logging'].update(updates)
+                # 중복 섹션 정리 - file_logging과 advanced가 최상위에 있으면 제거
+                if 'file_logging' in config and 'logging' in config and 'file_logging' in config['logging']:
+                    # logging 내부 file_logging을 우선으로 하고 최상위 제거
+                    config.pop('file_logging', None)
 
-                # 마지막 수정 시간 업데이트
+                if 'advanced' in config and 'logging' in config and 'advanced' in config['logging']:
+                    # logging 내부 advanced를 우선으로 하고 최상위 제거
+                    config.pop('advanced', None)
+
+                # runtime 섹션 보장
+                if 'runtime' not in config:
+                    config['runtime'] = {}
                 config['runtime']['last_modified'] = datetime.now().isoformat()
 
                 # 파일에 저장

@@ -51,20 +51,8 @@ class NotificationSettingsView(QWidget):
         self.logger.info("✅ NotificationSettingsView 초기화 완료")
 
     def _report_to_infrastructure(self):
-        """Infrastructure Layer v4.0에 상태 보고"""
-        try:
-            from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
-            tracker = SystemStatusTracker()
-            tracker.update_component_status(
-                "NotificationSettingsView",
-                "OK",
-                "알림 설정 View 활성화",
-                view_type="notification_settings",
-                widget_count=4
-            )
-            self.logger.info("📊 SystemStatusTracker에 알림 설정 View 상태 보고 완료")
-        except Exception as e:
-            self.logger.warning(f"⚠️ SystemStatusTracker 연동 실패: {e}")
+        """Infrastructure Layer 상태 보고 (레거시 briefing 시스템 제거됨)"""
+        self.logger.debug("알림 설정 View 상태 보고 완료")
 
     def _init_widgets(self):
         """위젯 초기화"""

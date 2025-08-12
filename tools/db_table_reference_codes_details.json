@@ -1,29 +1,72 @@
 {
   "analysis_info": {
-    "total_tables": 21,
-    "analyzed_tables": 3,
-    "total_files": 252,
-    "suspect_tables": [
-      "tv_trading_variables",
-      "tv_variable_parameters",
-      "trading_conditions"
-    ],
+    "total_tables": 25,
+    "analyzed_tables": 25,
+    "total_files": 493,
+    "suspect_tables": [],
     "analyzer_version": "Super_v5.0_precise",
-    "total_references_found": 120
+    "total_references_found": 210
   },
   "table_references": {
-    "tv_trading_variables": {
-      "upbit_auto_trading\\config\\database_paths.py": [
+    "cfg_app_settings": {
+      "upbit_auto_trading\\domain\\repositories\\settings_repository.py": [
         {
-          "line_number": 71,
-          "line_content": "'tv_trading_variables': 'settings.sqlite3',",
+          "line_number": 21,
+          "line_content": "- cfg_app_settings: 애플리케이션 설정",
           "match_type": "sql_context_unknown",
-          "table_name": "tv_trading_variables",
+          "table_name": "cfg_app_settings",
+          "operation_type": "unknown"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\sqlite_settings_repository.py": [
+        {
+          "line_number": 19,
+          "line_content": "- cfg_app_settings: 앱 설정",
+          "match_type": "sql_context_unknown",
+          "table_name": "cfg_app_settings",
           "operation_type": "unknown"
         },
         {
-          "line_number": 261,
-          "line_content": "test_tables = ['trading_conditions', 'strategies', 'tv_trading_variables', 'market_data']",
+          "line_number": 341,
+          "line_content": "SELECT value FROM cfg_app_settings",
+          "match_type": "sql_context_read",
+          "table_name": "cfg_app_settings",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 390,
+          "line_content": "# TODO: cfg_app_settings 테이블 구현 필요",
+          "match_type": "sql_context_unknown",
+          "table_name": "cfg_app_settings",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "tv_trading_variables": {
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
+        {
+          "line_number": 416,
+          "line_content": "\"tv_trading_variables\", \"tv_variable_parameters\",",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_trading_variables",
+          "pattern": "[\"\\']tv_trading_variables[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 113,
+          "line_content": "'tv_trading_variables',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_trading_variables",
+          "pattern": "[\"\\']tv_trading_variables[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\sqlite_settings_repository.py": [
+        {
+          "line_number": 57,
+          "line_content": "FROM tv_trading_variables tv",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
@@ -31,7 +74,7 @@
       ],
       "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\variable_definitions.py": [
         {
-          "line_number": 74,
+          "line_number": 73,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
@@ -47,22 +90,14 @@
       ],
       "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\shared\\compatibility_validator.py": [
         {
-          "line_number": 74,
-          "line_content": "db_path = get_db_path('tv_trading_variables')",
-          "match_type": "quoted_strings_pattern",
-          "table_name": "tv_trading_variables",
-          "pattern": "[\"\\']tv_trading_variables[\"\\']",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 95,
+          "line_number": 108,
           "line_content": "cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='tv_trading_variables'\")",
           "match_type": "sql_context_read",
           "table_name": "tv_trading_variables",
           "operation_type": "read"
         },
         {
-          "line_number": 98,
+          "line_number": 111,
           "line_content": "self.db_error_message = f\"필수 테이블 'tv_trading_variables'가 없습니다: {self.db_path}\"",
           "match_type": "quoted_strings_pattern",
           "table_name": "tv_trading_variables",
@@ -70,21 +105,21 @@
           "operation_type": "reference"
         },
         {
-          "line_number": 101,
+          "line_number": 114,
           "line_content": "cursor.execute(\"SELECT COUNT(*) FROM tv_trading_variables WHERE is_active = 1\")",
           "match_type": "sql_context_read",
           "table_name": "tv_trading_variables",
           "operation_type": "read"
         },
         {
-          "line_number": 141,
+          "line_number": 154,
           "line_content": "cursor.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name='tv_trading_variables'\")",
           "match_type": "sql_context_read",
           "table_name": "tv_trading_variables",
           "operation_type": "read"
         },
         {
-          "line_number": 143,
+          "line_number": 156,
           "line_content": "self.logger.error(f\"필수 테이블 'tv_trading_variables'가 존재하지 않습니다: {self.db_path}\")",
           "match_type": "quoted_strings_pattern",
           "table_name": "tv_trading_variables",
@@ -92,105 +127,56 @@
           "operation_type": "reference"
         },
         {
-          "line_number": 240,
+          "line_number": 253,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 279,
+          "line_number": 292,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 368,
+          "line_number": 381,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 380,
+          "line_number": 393,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 477,
+          "line_number": 490,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 521,
+          "line_number": 534,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         },
         {
-          "line_number": 653,
+          "line_number": 660,
           "line_content": "FROM tv_trading_variables",
           "match_type": "sql_context_unknown",
           "table_name": "tv_trading_variables",
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\global_db_manager.py": [
-        {
-          "line_number": 166,
-          "line_content": "'tv_trading_variables': 'settings',",
-          "match_type": "sql_context_unknown",
-          "table_name": "tv_trading_variables",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\utils\\trading_variables\\migrate_db.py": [
-        {
-          "line_number": 234,
-          "line_content": "'tv_trading_variables',",
-          "match_type": "quoted_strings_pattern",
-          "table_name": "tv_trading_variables",
-          "pattern": "[\"\\']tv_trading_variables[\"\\']",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 260,
-          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM tv_trading_variables WHERE is_active = 1\")",
-          "match_type": "sql_context_read",
-          "table_name": "tv_trading_variables",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 268,
-          "line_content": "cursor.execute(\"SELECT purpose_category, COUNT(*) FROM tv_trading_variables GROUP BY purpose_category\")",
-          "match_type": "sql_context_read",
-          "table_name": "tv_trading_variables",
-          "operation_type": "read"
-        }
-      ],
-      "upbit_auto_trading\\utils\\trading_variables\\sync_db_to_code.py": [
-        {
-          "line_number": 83,
-          "line_content": "FROM tv_trading_variables",
-          "match_type": "sql_context_unknown",
-          "table_name": "tv_trading_variables",
-          "operation_type": "unknown"
-        },
-        {
-          "line_number": 185,
-          "line_content": "📝 **편집하려면**: data/app_settings.sqlite3의 tv_trading_variables 테이블을 수정 후 sync_db_to_code.py 실행",
-          "match_type": "sql_context_unknown",
-          "table_name": "tv_trading_variables",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\agent_info.py": [
+      "utils\\db_migration_gui\\components\\agent_info.py": [
         {
           "line_number": 128,
           "line_content": "if 'tv_trading_variables' in [t[0] for t in tables]:",
@@ -227,7 +213,7 @@
           "operation_type": "read"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\db_data_manager.py": [
+      "utils\\db_migration_gui\\components\\db_data_manager.py": [
         {
           "line_number": 68,
           "line_content": "FROM tv_trading_variables",
@@ -271,7 +257,7 @@
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\json_viewer.py": [
+      "utils\\db_migration_gui\\components\\json_viewer.py": [
         {
           "line_number": 177,
           "line_content": "cursor.execute(\"SELECT * FROM tv_trading_variables ORDER BY variable_id\")",
@@ -322,7 +308,7 @@
           "operation_type": "read"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\unified_code_generator.py": [
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
         {
           "line_number": 79,
           "line_content": "FROM tv_trading_variables tv",
@@ -331,7 +317,7 @@
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\variables_viewer.py": [
+      "utils\\db_migration_gui\\components\\variables_viewer.py": [
         {
           "line_number": 387,
           "line_content": "cursor.execute(\"SELECT name FROM sqlite_master WHERE name = 'tv_trading_variables'\")",
@@ -350,10 +336,30 @@
       ]
     },
     "tv_variable_parameters": {
-      "upbit_auto_trading\\config\\database_paths.py": [
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
         {
-          "line_number": 72,
-          "line_content": "'tv_variable_parameters': 'settings.sqlite3',",
+          "line_number": 416,
+          "line_content": "\"tv_trading_variables\", \"tv_variable_parameters\",",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_variable_parameters",
+          "pattern": "[\"\\']tv_variable_parameters[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 114,
+          "line_content": "'tv_variable_parameters',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_variable_parameters",
+          "pattern": "[\"\\']tv_variable_parameters[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\sqlite_settings_repository.py": [
+        {
+          "line_number": 176,
+          "line_content": "FROM tv_variable_parameters",
           "match_type": "sql_context_unknown",
           "table_name": "tv_variable_parameters",
           "operation_type": "unknown"
@@ -368,33 +374,7 @@
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\migrate_db.py": [
-        {
-          "line_number": 235,
-          "line_content": "'tv_variable_parameters',",
-          "match_type": "quoted_strings_pattern",
-          "table_name": "tv_variable_parameters",
-          "pattern": "[\"\\']tv_variable_parameters[\"\\']",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 264,
-          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM tv_variable_parameters\")",
-          "match_type": "sql_context_read",
-          "table_name": "tv_variable_parameters",
-          "operation_type": "read"
-        }
-      ],
-      "upbit_auto_trading\\utils\\trading_variables\\sync_db_to_code.py": [
-        {
-          "line_number": 105,
-          "line_content": "FROM tv_variable_parameters",
-          "match_type": "sql_context_unknown",
-          "table_name": "tv_variable_parameters",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\agent_info.py": [
+      "utils\\db_migration_gui\\components\\agent_info.py": [
         {
           "line_number": 143,
           "line_content": "if 'tv_variable_parameters' in [t[0] for t in tables]:",
@@ -452,7 +432,7 @@
           "operation_type": "read"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\db_data_manager.py": [
+      "utils\\db_migration_gui\\components\\db_data_manager.py": [
         {
           "line_number": 113,
           "line_content": "FROM tv_variable_parameters",
@@ -468,7 +448,7 @@
           "operation_type": "read"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\json_viewer.py": [
+      "utils\\db_migration_gui\\components\\json_viewer.py": [
         {
           "line_number": 187,
           "line_content": "cursor.execute(\"SELECT * FROM tv_variable_parameters ORDER BY variable_id, display_order\")",
@@ -512,7 +492,7 @@
           "operation_type": "read"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\unified_code_generator.py": [
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
         {
           "line_number": 108,
           "line_content": "FROM tv_variable_parameters",
@@ -521,7 +501,7 @@
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\trading_variables\\gui_variables_DB_migration_util\\components\\variables_viewer.py": [
+      "utils\\db_migration_gui\\components\\variables_viewer.py": [
         {
           "line_number": 401,
           "line_content": "cursor.execute(\"SELECT name FROM sqlite_master WHERE name = 'tv_variable_parameters'\")",
@@ -539,60 +519,560 @@
         }
       ]
     },
+    "tv_help_texts": {
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
+        {
+          "line_number": 417,
+          "line_content": "\"tv_comparison_groups\", \"tv_placeholder_texts\", \"tv_help_texts\"",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_help_texts",
+          "pattern": "[\"\\']tv_help_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 117,
+          "line_content": "'tv_help_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_help_texts",
+          "pattern": "[\"\\']tv_help_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\variable_definitions.py": [
+        {
+          "line_number": 276,
+          "line_content": "FROM tv_help_texts",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_help_texts",
+          "operation_type": "unknown"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 140,
+          "line_content": "cursor.execute(\"DELETE FROM tv_help_texts WHERE help_key LIKE 'yaml_%'\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_help_texts",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 148,
+          "line_content": "INSERT INTO tv_help_texts (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_help_texts",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 449,
+          "line_content": "'tv_help_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_help_texts",
+          "pattern": "[\"\\']tv_help_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 492,
+          "line_content": "'tv_help_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_help_texts",
+          "pattern": "[\"\\']tv_help_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 332,
+          "line_content": "'help_texts': 'tv_help_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_help_texts",
+          "pattern": "[\"\\']tv_help_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
+        {
+          "line_number": 147,
+          "line_content": "FROM tv_help_texts",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_help_texts",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "tv_placeholder_texts": {
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
+        {
+          "line_number": 417,
+          "line_content": "\"tv_comparison_groups\", \"tv_placeholder_texts\", \"tv_help_texts\"",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_placeholder_texts",
+          "pattern": "[\"\\']tv_placeholder_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 118,
+          "line_content": "'tv_placeholder_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_placeholder_texts",
+          "pattern": "[\"\\']tv_placeholder_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\variable_definitions.py": [
+        {
+          "line_number": 241,
+          "line_content": "FROM tv_placeholder_texts",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_placeholder_texts",
+          "operation_type": "unknown"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 189,
+          "line_content": "cursor.execute(\"DELETE FROM tv_placeholder_texts\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_placeholder_texts",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 197,
+          "line_content": "INSERT INTO tv_placeholder_texts (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_placeholder_texts",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 215,
+          "line_content": "INSERT INTO tv_placeholder_texts (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_placeholder_texts",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 450,
+          "line_content": "'tv_placeholder_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_placeholder_texts",
+          "pattern": "[\"\\']tv_placeholder_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 493,
+          "line_content": "'tv_placeholder_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_placeholder_texts",
+          "pattern": "[\"\\']tv_placeholder_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 333,
+          "line_content": "'placeholder_texts': 'tv_placeholder_texts',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_placeholder_texts",
+          "pattern": "[\"\\']tv_placeholder_texts[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
+        {
+          "line_number": 187,
+          "line_content": "FROM tv_placeholder_texts",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_placeholder_texts",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "tv_indicator_categories": {
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 115,
+          "line_content": "'tv_indicator_categories',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_categories",
+          "pattern": "[\"\\']tv_indicator_categories[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\sqlite_settings_repository.py": [
+        {
+          "line_number": 233,
+          "line_content": "FROM tv_indicator_categories",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 303,
+          "line_content": "FROM tv_indicator_categories",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "unknown"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 256,
+          "line_content": "cursor.execute(\"DELETE FROM tv_indicator_categories\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 261,
+          "line_content": "INSERT INTO tv_indicator_categories (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 451,
+          "line_content": "'tv_indicator_categories',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_categories",
+          "pattern": "[\"\\']tv_indicator_categories[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 503,
+          "line_content": "modified_tables = ['tv_indicator_categories']",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 616,
+          "line_content": "modified_tables_count = 1  # tv_indicator_categories",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "unknown"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 329,
+          "line_content": "'indicator_categories': 'tv_indicator_categories',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_categories",
+          "pattern": "[\"\\']tv_indicator_categories[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
+        {
+          "line_number": 129,
+          "line_content": "cursor.execute(\"SELECT category_id, category_name FROM tv_indicator_categories WHERE is_active = 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_indicator_categories",
+          "operation_type": "read"
+        }
+      ]
+    },
+    "tv_parameter_types": {
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 120,
+          "line_content": "'tv_parameter_types'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_parameter_types",
+          "pattern": "[\"\\']tv_parameter_types[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 301,
+          "line_content": "cursor.execute(\"DELETE FROM tv_parameter_types\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_parameter_types",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 308,
+          "line_content": "INSERT INTO tv_parameter_types (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_parameter_types",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 452,
+          "line_content": "'tv_parameter_types',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_parameter_types",
+          "pattern": "[\"\\']tv_parameter_types[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 494,
+          "line_content": "'tv_parameter_types',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_parameter_types",
+          "pattern": "[\"\\']tv_parameter_types[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 330,
+          "line_content": "'parameter_types': 'tv_parameter_types',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_parameter_types",
+          "pattern": "[\"\\']tv_parameter_types[\"\\']",
+          "operation_type": "reference"
+        }
+      ]
+    },
+    "tv_comparison_groups": {
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
+        {
+          "line_number": 417,
+          "line_content": "\"tv_comparison_groups\", \"tv_placeholder_texts\", \"tv_help_texts\"",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_comparison_groups",
+          "pattern": "[\"\\']tv_comparison_groups[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 116,
+          "line_content": "'tv_comparison_groups',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_comparison_groups",
+          "pattern": "[\"\\']tv_comparison_groups[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 491,
+          "line_content": "'tv_comparison_groups',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_comparison_groups",
+          "pattern": "[\"\\']tv_comparison_groups[\"\\']",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 615,
+          "line_content": "new_tables_count = 6  # tv_comparison_groups 등",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_comparison_groups",
+          "operation_type": "unknown"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 334,
+          "line_content": "'comparison_groups': 'tv_comparison_groups'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_comparison_groups",
+          "pattern": "[\"\\']tv_comparison_groups[\"\\']",
+          "operation_type": "reference"
+        }
+      ]
+    },
+    "tv_indicator_library": {
+      "upbit_auto_trading\\domain\\database_configuration\\value_objects\\database_type.py": [
+        {
+          "line_number": 119,
+          "line_content": "'tv_indicator_library',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_library",
+          "pattern": "[\"\\']tv_indicator_library[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 348,
+          "line_content": "cursor.execute(\"DELETE FROM tv_indicator_library\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_indicator_library",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 359,
+          "line_content": "INSERT INTO tv_indicator_library (",
+          "match_type": "sql_context_write",
+          "table_name": "tv_indicator_library",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 453,
+          "line_content": "'tv_indicator_library'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_library",
+          "pattern": "[\"\\']tv_indicator_library[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 495,
+          "line_content": "'tv_indicator_library',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_library",
+          "pattern": "[\"\\']tv_indicator_library[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_tab.py": [
+        {
+          "line_number": 331,
+          "line_content": "'indicator_library': 'tv_indicator_library',",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_indicator_library",
+          "pattern": "[\"\\']tv_indicator_library[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\unified_code_generator.py": [
+        {
+          "line_number": 223,
+          "line_content": "FROM tv_indicator_library",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_indicator_library",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "tv_schema_version": {
+      "utils\\db_migration_gui\\components\\agent_info.py": [
+        {
+          "line_number": 177,
+          "line_content": "cursor.execute(\"SELECT version, applied_at, description FROM tv_schema_version ORDER BY applied_at DESC LIMIT 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_schema_version",
+          "operation_type": "read"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\data_info_migrator.py": [
+        {
+          "line_number": 85,
+          "line_content": "cursor.execute(\"SELECT version FROM tv_schema_version ORDER BY applied_at DESC LIMIT 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_schema_version",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 479,
+          "line_content": "if 'tv_schema_version' in tables:",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_schema_version",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 480,
+          "line_content": "cursor.execute(\"SELECT version FROM tv_schema_version ORDER BY version DESC LIMIT 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_schema_version",
+          "operation_type": "read"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\json_viewer.py": [
+        {
+          "line_number": 168,
+          "line_content": "cursor.execute(\"SELECT version FROM tv_schema_version ORDER BY applied_at DESC LIMIT 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_schema_version",
+          "operation_type": "read"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_executor.py": [
+        {
+          "line_number": 419,
+          "line_content": "if 'tv_schema_version' in current_tables:",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_schema_version",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 420,
+          "line_content": "cursor.execute(\"SELECT version, description FROM tv_schema_version ORDER BY version DESC LIMIT 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "tv_schema_version",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 441,
+          "line_content": "version_match = re.search(r\"INSERT INTO tv_schema_version.*?VALUES.*?'([^']+)'\", schema_content, re.IGNORECASE | re.DOTALL)",
+          "match_type": "sql_context_write",
+          "table_name": "tv_schema_version",
+          "operation_type": "write"
+        }
+      ],
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 496,
+          "line_content": "'tv_schema_version'",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "tv_schema_version",
+          "pattern": "[\"\\']tv_schema_version[\"\\']",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 573,
+          "line_content": "cursor.execute(\"SELECT version FROM tv_schema_version ORDER BY created_at DESC LIMIT 1\")",
+          "match_type": "sql_context_write",
+          "table_name": "tv_schema_version",
+          "operation_type": "write"
+        }
+      ]
+    },
+    "tv_workflow_guides": {
+      "utils\\db_migration_gui\\components\\migration_preview.py": [
+        {
+          "line_number": 500,
+          "line_content": "removed_tables = ['tv_workflow_guides']",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_workflow_guides",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 617,
+          "line_content": "removed_tables_count = 1  # tv_workflow_guides",
+          "match_type": "sql_context_unknown",
+          "table_name": "tv_workflow_guides",
+          "operation_type": "unknown"
+        }
+      ]
+    },
     "trading_conditions": {
-      "upbit_auto_trading\\component_system\\__init__.py": [
+      "upbit_auto_trading\\application\\use_cases\\database_configuration\\database_validation_use_case.py": [
         {
-          "line_number": 46,
-          "line_content": "from .conditions.trading_conditions import (",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\component_system\\strategies\\pyramiding_example.py": [
-        {
-          "line_number": 20,
-          "line_content": "from ..conditions.trading_conditions import (",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\config\\database_paths.py": [
-        {
-          "line_number": 99,
-          "line_content": "'trading_conditions': 'strategies.sqlite3',  # 실제 사용자 생성 트리거들",
+          "line_number": 420,
+          "line_content": "\"trading_conditions\", \"strategy_profiles\", \"backtest_results\"",
           "match_type": "quoted_strings_pattern",
           "table_name": "trading_conditions",
           "pattern": "[\"\\']trading_conditions[\"\\']",
           "operation_type": "reference"
-        },
-        {
-          "line_number": 261,
-          "line_content": "test_tables = ['trading_conditions', 'strategies', 'tv_trading_variables', 'market_data']",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
         }
       ],
       "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\condition_storage.py": [
         {
-          "line_number": 47,
-          "line_content": "return get_db_connection('trading_conditions')",
-          "match_type": "quoted_strings_pattern",
-          "table_name": "trading_conditions",
-          "pattern": "[\"\\']trading_conditions[\"\\']",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 70,
+          "line_number": 88,
           "line_content": "if 'trading_conditions' not in existing_tables:",
           "match_type": "sql_context_unknown",
           "table_name": "trading_conditions",
           "operation_type": "unknown"
         },
         {
-          "line_number": 81,
+          "line_number": 99,
           "line_content": "def _create_trading_conditions_table(self, cursor):",
           "match_type": "class_table_names_pattern",
           "table_name": "trading_conditions",
@@ -600,284 +1080,119 @@
           "operation_type": "reference"
         },
         {
-          "line_number": 84,
+          "line_number": 102,
           "line_content": "CREATE TABLE IF NOT EXISTS trading_conditions (",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 110,
+          "line_number": 128,
           "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_name ON trading_conditions(name)\")",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 111,
+          "line_number": 129,
           "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_active ON trading_conditions(is_active)\")",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 112,
+          "line_number": 130,
           "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_category ON trading_conditions(category)\")",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 121,
+          "line_number": 139,
           "line_content": "CREATE TABLE IF NOT EXISTS trading_conditions (",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 183,
+          "line_number": 201,
           "line_content": "\"SELECT id, name FROM trading_conditions WHERE id = ?\",",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
           "operation_type": "read"
         },
         {
-          "line_number": 191,
+          "line_number": 209,
           "line_content": "UPDATE trading_conditions SET",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 221,
+          "line_number": 239,
           "line_content": "\"SELECT id FROM trading_conditions WHERE name = ?\",",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
           "operation_type": "read"
         },
         {
-          "line_number": 233,
+          "line_number": 251,
           "line_content": "UPDATE trading_conditions SET",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 259,
+          "line_number": 277,
           "line_content": "INSERT INTO trading_conditions (",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 296,
+          "line_number": 314,
           "line_content": "\"SELECT * FROM trading_conditions WHERE id = ?\",",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
           "operation_type": "read"
         },
         {
-          "line_number": 317,
+          "line_number": 335,
           "line_content": "\"SELECT * FROM trading_conditions WHERE name = ?\",",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
           "operation_type": "read"
         },
         {
-          "line_number": 337,
+          "line_number": 355,
           "line_content": "query = \"SELECT * FROM trading_conditions\"",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
           "operation_type": "read"
         },
         {
-          "line_number": 359,
+          "line_number": 377,
           "line_content": "\"SELECT * FROM trading_conditions WHERE category = ? AND is_active = 1 ORDER BY created_at DESC\",",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 399,
+          "line_number": 417,
           "line_content": "query = f\"UPDATE trading_conditions SET {', '.join(set_clauses)} WHERE id = ?\"",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 418,
+          "line_number": 436,
           "line_content": "\"UPDATE trading_conditions SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?\",",
           "match_type": "sql_context_write",
           "table_name": "trading_conditions",
           "operation_type": "write"
         },
         {
-          "line_number": 439,
-          "line_content": "SELECT * FROM trading_conditions",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 462,
-          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM trading_conditions WHERE is_active = 1\")",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 468,
-          "line_content": "FROM trading_conditions",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
-        },
-        {
-          "line_number": 477,
-          "line_content": "FROM trading_conditions",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
-        }
-      ],
-      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\condition_storage.py": [
-        {
-          "line_number": 42,
-          "line_content": "return get_db_connection('trading_conditions')",
-          "match_type": "quoted_strings_pattern",
-          "table_name": "trading_conditions",
-          "pattern": "[\"\\']trading_conditions[\"\\']",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 58,
-          "line_content": "if 'trading_conditions' not in existing_tables:",
-          "match_type": "sql_context_unknown",
-          "table_name": "trading_conditions",
-          "operation_type": "unknown"
-        },
-        {
-          "line_number": 76,
-          "line_content": "def _create_trading_conditions_table(self, cursor):",
-          "match_type": "class_table_names_pattern",
-          "table_name": "trading_conditions",
-          "pattern": "def\\s+.*trading_conditions.*\\(",
-          "operation_type": "reference"
-        },
-        {
-          "line_number": 79,
-          "line_content": "CREATE TABLE IF NOT EXISTS trading_conditions (",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 105,
-          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_name ON trading_conditions(name)\")",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 106,
-          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_active ON trading_conditions(is_active)\")",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 107,
-          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_category ON trading_conditions(category)\")",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 172,
-          "line_content": "\"SELECT id, name FROM trading_conditions WHERE id = ?\",",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 180,
-          "line_content": "UPDATE trading_conditions SET",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 214,
-          "line_content": "\"SELECT id FROM trading_conditions WHERE name = ?\",",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 226,
-          "line_content": "UPDATE trading_conditions SET",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 255,
-          "line_content": "INSERT INTO trading_conditions (",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 297,
-          "line_content": "\"SELECT * FROM trading_conditions WHERE id = ?\",",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 319,
-          "line_content": "\"SELECT * FROM trading_conditions WHERE name = ?\",",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 341,
-          "line_content": "query = \"SELECT * FROM trading_conditions\"",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 364,
-          "line_content": "\"SELECT * FROM trading_conditions WHERE category = ? AND is_active = 1 ORDER BY created_at DESC\",",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 405,
-          "line_content": "query = f\"UPDATE trading_conditions SET {', '.join(set_clauses)} WHERE id = ?\"",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 425,
-          "line_content": "cursor.execute(\"SELECT id, name FROM trading_conditions WHERE id = ?\", (condition_id,))",
-          "match_type": "sql_context_read",
-          "table_name": "trading_conditions",
-          "operation_type": "read"
-        },
-        {
-          "line_number": 434,
-          "line_content": "cursor.execute(\"DELETE FROM trading_conditions WHERE id = ?\", (condition_id,))",
-          "match_type": "sql_context_write",
-          "table_name": "trading_conditions",
-          "operation_type": "write"
-        },
-        {
-          "line_number": 456,
+          "line_number": 457,
           "line_content": "SELECT * FROM trading_conditions",
           "match_type": "sql_context_read",
           "table_name": "trading_conditions",
@@ -905,41 +1220,563 @@
           "operation_type": "unknown"
         }
       ],
-      "upbit_auto_trading\\utils\\global_db_manager.py": [
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\trigger_builder\\components\\core\\condition_storage.py": [
         {
-          "line_number": 40,
-          "line_content": "conn = db_manager.get_connection('trading_conditions')",
-          "match_type": "quoted_strings_pattern",
+          "line_number": 81,
+          "line_content": "if 'trading_conditions' not in existing_tables:",
+          "match_type": "sql_context_unknown",
           "table_name": "trading_conditions",
-          "pattern": "[\"\\']trading_conditions[\"\\']",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 99,
+          "line_content": "def _create_trading_conditions_table(self, cursor):",
+          "match_type": "class_table_names_pattern",
+          "table_name": "trading_conditions",
+          "pattern": "def\\s+.*trading_conditions.*\\(",
           "operation_type": "reference"
         },
         {
-          "line_number": 171,
-          "line_content": "'trading_conditions': 'strategies',  # 🔧 strategies DB로 수정",
-          "match_type": "quoted_strings_pattern",
+          "line_number": 102,
+          "line_content": "CREATE TABLE IF NOT EXISTS trading_conditions (",
+          "match_type": "sql_context_write",
           "table_name": "trading_conditions",
-          "pattern": "[\"\\']trading_conditions[\"\\']",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 128,
+          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_name ON trading_conditions(name)\")",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 129,
+          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_active ON trading_conditions(is_active)\")",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 130,
+          "line_content": "cursor.execute(\"CREATE INDEX IF NOT EXISTS idx_trading_conditions_category ON trading_conditions(category)\")",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 195,
+          "line_content": "\"SELECT id, name FROM trading_conditions WHERE id = ?\",",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 203,
+          "line_content": "UPDATE trading_conditions SET",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 237,
+          "line_content": "\"SELECT id FROM trading_conditions WHERE name = ?\",",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 249,
+          "line_content": "UPDATE trading_conditions SET",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 278,
+          "line_content": "INSERT INTO trading_conditions (",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 320,
+          "line_content": "\"SELECT * FROM trading_conditions WHERE id = ?\",",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 342,
+          "line_content": "\"SELECT * FROM trading_conditions WHERE name = ?\",",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 364,
+          "line_content": "query = \"SELECT * FROM trading_conditions\"",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 387,
+          "line_content": "\"SELECT * FROM trading_conditions WHERE category = ? AND is_active = 1 ORDER BY created_at DESC\",",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 428,
+          "line_content": "query = f\"UPDATE trading_conditions SET {', '.join(set_clauses)} WHERE id = ?\"",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 448,
+          "line_content": "cursor.execute(\"SELECT id, name FROM trading_conditions WHERE id = ?\", (condition_id,))",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 457,
+          "line_content": "cursor.execute(\"DELETE FROM trading_conditions WHERE id = ?\", (condition_id,))",
+          "match_type": "sql_context_write",
+          "table_name": "trading_conditions",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 479,
+          "line_content": "SELECT * FROM trading_conditions",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 503,
+          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM trading_conditions WHERE is_active = 1\")",
+          "match_type": "sql_context_read",
+          "table_name": "trading_conditions",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 509,
+          "line_content": "FROM trading_conditions",
+          "match_type": "sql_context_unknown",
+          "table_name": "trading_conditions",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 518,
+          "line_content": "FROM trading_conditions",
+          "match_type": "sql_context_unknown",
+          "table_name": "trading_conditions",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "component_strategy": {
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 54,
+          "line_content": "CREATE TABLE IF NOT EXISTS component_strategy (",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 138,
+          "line_content": "INSERT INTO component_strategy",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 222,
+          "line_content": "FROM component_strategy",
+          "match_type": "sql_context_unknown",
+          "table_name": "component_strategy",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 281,
+          "line_content": "FROM component_strategy",
+          "match_type": "sql_context_unknown",
+          "table_name": "component_strategy",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 336,
+          "line_content": "UPDATE component_strategy",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 374,
+          "line_content": "cursor.execute(\"DELETE FROM component_strategy WHERE id = ?\", (strategy_id,))",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 391,
+          "line_content": "UPDATE component_strategy",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 411,
+          "line_content": "UPDATE component_strategy",
+          "match_type": "sql_context_write",
+          "table_name": "component_strategy",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 432,
+          "line_content": "FROM component_strategy",
+          "match_type": "sql_context_unknown",
+          "table_name": "component_strategy",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "strategy_execution": {
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 74,
+          "line_content": "CREATE TABLE IF NOT EXISTS strategy_execution (",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_execution",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 371,
+          "line_content": "cursor.execute(\"DELETE FROM strategy_execution WHERE strategy_id = ?\", (strategy_id,))",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_execution",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 453,
+          "line_content": "def log_strategy_execution(self, strategy_id: str, symbol: str,",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategy_execution",
+          "pattern": "def\\s+.*strategy_execution.*\\(",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 465,
+          "line_content": "INSERT INTO strategy_execution",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_execution",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 489,
+          "line_content": "def get_strategy_execution_history(self, strategy_id: str, limit: int = 100) -> List[Dict[str, Any]]:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "strategy_execution",
+          "pattern": "def\\s+.*strategy_execution.*\\(",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 498,
+          "line_content": "FROM strategy_execution",
+          "match_type": "sql_context_unknown",
+          "table_name": "strategy_execution",
+          "operation_type": "unknown"
+        }
+      ]
+    },
+    "strategy_components": {
+      "upbit_auto_trading\\ui\\desktop\\screens\\strategy_management\\strategy_maker\\components\\strategy_storage.py": [
+        {
+          "line_number": 91,
+          "line_content": "CREATE TABLE IF NOT EXISTS strategy_components (",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 160,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 176,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 192,
+          "line_content": "INSERT INTO strategy_components",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 233,
+          "line_content": "FROM strategy_components",
+          "match_type": "sql_context_unknown",
+          "table_name": "strategy_components",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 313,
+          "line_content": "cursor.execute(\"DELETE FROM strategy_components WHERE strategy_id = ?\", (strategy_id,))",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 368,
+          "line_content": "cursor.execute(\"DELETE FROM strategy_components WHERE strategy_id = ?\", (strategy_id,))",
+          "match_type": "sql_context_write",
+          "table_name": "strategy_components",
+          "operation_type": "write"
+        }
+      ]
+    },
+    "secure_keys": {
+      "upbit_auto_trading\\application\\services\\database_health_service.py": [
+        {
+          "line_number": 67,
+          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM secure_keys\")",
+          "match_type": "sql_context_read",
+          "table_name": "secure_keys",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 215,
+          "line_content": "# settings DB인 경우 secure_keys 확인",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 219,
+          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM secure_keys\")",
+          "match_type": "sql_context_read",
+          "table_name": "secure_keys",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 223,
+          "line_content": "cursor.execute(\"SELECT COUNT(*) FROM secure_keys WHERE key_type = 'encryption'\")",
+          "match_type": "sql_context_read",
+          "table_name": "secure_keys",
+          "operation_type": "read"
+        }
+      ],
+      "upbit_auto_trading\\domain\\repositories\\secure_keys_repository.py": [
+        {
+          "line_number": 15,
+          "line_content": "- settings.sqlite3의 secure_keys 테이블과 매핑",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 28,
+          "line_content": "settings.sqlite3 데이터베이스의 secure_keys 테이블과 매핑되며,",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\repository_container.py": [
+        {
+          "line_number": 151,
+          "line_content": "def get_secure_keys_repository(self) -> SecureKeysRepository:",
+          "match_type": "class_table_names_pattern",
+          "table_name": "secure_keys",
+          "pattern": "def\\s+.*secure_keys.*\\(",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 159,
+          "line_content": "if 'secure_keys' in self._mock_repositories:",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "secure_keys",
+          "pattern": "[\"\\']secure_keys[\"\\']",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 160,
+          "line_content": "return self._mock_repositories['secure_keys']",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "secure_keys",
+          "pattern": "[\"\\']secure_keys[\"\\']",
+          "operation_type": "reference"
+        },
+        {
+          "line_number": 285,
+          "line_content": "status['active_repositories'].append('secure_keys')",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "secure_keys",
+          "pattern": "[\"\\']secure_keys[\"\\']",
+          "operation_type": "reference"
+        }
+      ],
+      "upbit_auto_trading\\infrastructure\\repositories\\sqlite_secure_keys_repository.py": [
+        {
+          "line_number": 6,
+          "line_content": "settings.sqlite3 데이터베이스의 secure_keys 테이블을 위한 Repository 구현입니다.",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 23,
+          "line_content": "- Table: secure_keys",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 76,
+          "line_content": "INSERT OR REPLACE INTO secure_keys (key_type, key_value)",
+          "match_type": "sql_context_write",
+          "table_name": "secure_keys",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 105,
+          "line_content": "SELECT key_value FROM secure_keys",
+          "match_type": "sql_context_read",
+          "table_name": "secure_keys",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 140,
+          "line_content": "DELETE FROM secure_keys WHERE key_type = ?",
+          "match_type": "sql_context_write",
+          "table_name": "secure_keys",
+          "operation_type": "write"
+        },
+        {
+          "line_number": 184,
+          "line_content": "SELECT key_type FROM secure_keys",
+          "match_type": "sql_context_read",
+          "table_name": "secure_keys",
+          "operation_type": "read"
+        },
+        {
+          "line_number": 222,
+          "line_content": "FROM secure_keys",
+          "match_type": "sql_context_unknown",
+          "table_name": "secure_keys",
+          "operation_type": "unknown"
+        },
+        {
+          "line_number": 299,
+          "line_content": "cursor.execute(\"DELETE FROM secure_keys\")",
+          "match_type": "sql_context_write",
+          "table_name": "secure_keys",
+          "operation_type": "write"
+        }
+      ],
+      "upbit_auto_trading\\ui\\desktop\\screens\\settings\\database_settings\\widgets\\database_status_widget.py": [
+        {
+          "line_number": 195,
+          "line_content": "elif \"secure_keys\" in error_message:",
+          "match_type": "quoted_strings_pattern",
+          "table_name": "secure_keys",
+          "pattern": "[\"\\']secure_keys[\"\\']",
           "operation_type": "reference"
         }
       ]
     }
   },
   "summary": {
+    "cfg_app_settings": {
+      "total_references": 4,
+      "affected_files": 2,
+      "avg_refs_per_file": 2.0
+    },
     "tv_trading_variables": {
-      "total_references": 44,
-      "affected_files": 11,
-      "avg_refs_per_file": 4.0
+      "total_references": 38,
+      "affected_files": 10,
+      "avg_refs_per_file": 3.8
     },
     "tv_variable_parameters": {
-      "total_references": 24,
+      "total_references": 23,
       "affected_files": 9,
-      "avg_refs_per_file": 2.67
+      "avg_refs_per_file": 2.56
+    },
+    "tv_help_texts": {
+      "total_references": 9,
+      "affected_files": 7,
+      "avg_refs_per_file": 1.29
+    },
+    "tv_placeholder_texts": {
+      "total_references": 10,
+      "affected_files": 7,
+      "avg_refs_per_file": 1.43
+    },
+    "tv_indicator_categories": {
+      "total_references": 10,
+      "affected_files": 6,
+      "avg_refs_per_file": 1.67
+    },
+    "tv_parameter_types": {
+      "total_references": 6,
+      "affected_files": 4,
+      "avg_refs_per_file": 1.5
+    },
+    "tv_comparison_groups": {
+      "total_references": 5,
+      "affected_files": 4,
+      "avg_refs_per_file": 1.25
+    },
+    "tv_indicator_library": {
+      "total_references": 7,
+      "affected_files": 5,
+      "avg_refs_per_file": 1.4
+    },
+    "tv_schema_version": {
+      "total_references": 10,
+      "affected_files": 5,
+      "avg_refs_per_file": 2.0
+    },
+    "tv_workflow_guides": {
+      "total_references": 2,
+      "affected_files": 1,
+      "avg_refs_per_file": 2.0
     },
     "trading_conditions": {
-      "total_references": 52,
-      "affected_files": 6,
-      "avg_refs_per_file": 8.67
+      "total_references": 45,
+      "affected_files": 3,
+      "avg_refs_per_file": 15.0
+    },
+    "component_strategy": {
+      "total_references": 9,
+      "affected_files": 1,
+      "avg_refs_per_file": 9.0
+    },
+    "strategy_execution": {
+      "total_references": 6,
+      "affected_files": 1,
+      "avg_refs_per_file": 6.0
+    },
+    "strategy_components": {
+      "total_references": 7,
+      "affected_files": 1,
+      "avg_refs_per_file": 7.0
+    },
+    "secure_keys": {
+      "total_references": 19,
+      "affected_files": 5,
+      "avg_refs_per_file": 3.8
     }
   }
 }

@@ -51,20 +51,8 @@ class ApiSettingsPresenter:
         self.logger.info("✅ API 설정 프레젠터 초기화 완료")
 
     def _report_to_infrastructure(self):
-        """Infrastructure Layer v4.0에 상태 보고"""
-        try:
-            from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
-            tracker = SystemStatusTracker()
-            tracker.update_component_status(
-                "ApiSettingsPresenter",
-                "OK",
-                "API 설정 프레젠터 로드됨",
-                widget_type="security_settings",
-                encryption_enabled=True
-            )
-            self.logger.info("📊 SystemStatusTracker에 API 설정 프레젠터 상태 보고 완료")
-        except Exception as e:
-            self.logger.warning(f"⚠️ SystemStatusTracker 연동 실패: {e}")
+        """Infrastructure Layer 상태 보고 (레거시 briefing 시스템 제거됨)"""
+        self.logger.debug("API 설정 프레젠터 상태 보고 완료")
 
     def load_api_settings(self) -> Dict[str, Any]:
         """API 설정 로드 - 캐싱 최적화"""

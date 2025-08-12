@@ -42,20 +42,8 @@ class NotificationSettingsPresenter(QObject):
         self._report_to_infrastructure()
 
     def _report_to_infrastructure(self):
-        """Infrastructure Layer v4.0에 상태 보고"""
-        try:
-            from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
-            tracker = SystemStatusTracker()
-            tracker.update_component_status(
-                "NotificationSettingsPresenter",
-                "OK",
-                "알림 설정 Presenter 활성화",
-                presenter_type="notification_settings",
-                settings_count=len(self._settings)
-            )
-            self.logger.info("📊 SystemStatusTracker에 알림 설정 Presenter 상태 보고 완료")
-        except Exception as e:
-            self.logger.warning(f"⚠️ SystemStatusTracker 연동 실패: {e}")
+        """Infrastructure Layer 상태 보고 (레거시 briefing 시스템 제거됨)"""
+        self.logger.debug("알림 설정 Presenter 상태 보고 완료")
 
     def get_current_settings(self) -> Dict[str, Any]:
         """현재 설정 값 반환"""

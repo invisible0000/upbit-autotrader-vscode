@@ -205,11 +205,15 @@
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
     "data/settings.sqlite3-wal",
-    "logs/session_20250812_170322_PID100432.log",
-    "logs/session_20250812_170231_PID16232.log",
-    "logs/session_20250812_170144_PID77708.log",
-    "logs/session_20250812_170010_PID96412.log",
-    "logs/session_20250812_165057_PID49412.log",
+    "logs/application.log.1",
+    "logs/session_20250812_211359_PID102024.log",
+    "logs/session_20250812_205814_PID58996.log",
+    "logs/session_20250812_204743_PID76420.log",
+    "logs/session_20250812_203549_PID46380.log",
+    "docs/AI_DEVELOPMENT_EFFICIENCY_PROPOSALS.md",
+    "docs/TRIGGER_BUILDER_AI_VALIDATION_SYSTEM.md",
+    "examples/component_selector_test/AI_DEVELOPMENT_EFFICIENCY_PROPOSAL.md",
+    "examples/component_selector_test/README.md",
     "tasks/active/logging_management_widget_refactoring.md",
     "logs/README.md",
     "docs/PHASE_2_TASK_2_3_COMPLETION_REPORT.md",
@@ -230,10 +234,6 @@
     "upbit_auto_trading/application/README.md",
     "upbit_auto_trading/domain/README.md",
     "docs/TASK_5_1_5_2_COMPLETION_REPORT.md",
-    "tasks/active/README.md",
-    "tasks/active/TASK-20250811-01_환경_프로파일_전환.md",
-    "tasks/active/TASK-20250810-05_PROFILE_API_KEY_PERSISTENCE.md",
-    "tasks/active/TASK-20250810-01_API_KEY_LOAD_ERROR_FIX.md",
-    "tasks/active/TASK-20250810-04_LOG_VIEWER_SYNC_FIX.md"
+    "tasks/active/README.md"
   ]
 }

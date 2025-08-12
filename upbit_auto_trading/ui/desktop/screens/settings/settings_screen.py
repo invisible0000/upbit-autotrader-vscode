@@ -12,7 +12,6 @@ Phase 2 마이그레이션 적용:
 """
 
 import time
-from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel,
     QSpacerItem, QSizePolicy, QMessageBox
@@ -73,36 +72,11 @@ class SettingsScreen(QWidget):
         self.logger.info("🔧 Infrastructure Layer 통합 초기화 시작")
 
         try:
-            # SystemStatusTracker로 컴포넌트 상태 보고
-            try:
-                from upbit_auto_trading.infrastructure.logging.briefing.status_tracker import SystemStatusTracker
-                tracker = SystemStatusTracker()
-                tracker.update_component_status(
-                    "SettingsScreen",
-                    "OK",
-                    "설정 화면 초기화 완료",
-                    tabs_count=4,
-                    widgets_loaded=True
-                )
-                self.logger.info("📊 SystemStatusTracker에 상태 보고 완료")
-            except ImportError as e:
-                self.logger.debug(f"📊 SystemStatusTracker 모듈 없음: {e}")
-            # DashboardService로 실시간 대시보드 업데이트 (선택적)
-            try:
-                from upbit_auto_trading.infrastructure.logging.dashboard.dashboard_service import DashboardService
-                dashboard_service = DashboardService()
-                dashboard_data = dashboard_service.update_dashboard([
-                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - SettingsScreen - INFO - 설정 화면 초기화 완료"
-                ])
-                self.logger.info("📊 DashboardService 업데이트 완료")
-                self.logger.debug(f"📈 시스템 상태: {dashboard_data.system_health}")
-            except ImportError as e:
-                self.logger.debug(f"📊 DashboardService 모듈 없음: {e}")
-            except Exception as e:
-                self.logger.warning(f"⚠️ DashboardService 업데이트 실패: {e}")
+            # 설정 화면 초기화 완료 (레거시 briefing/dashboard 시스템 제거됨)
+            self.logger.info("✅ 설정 화면 초기화 완료")
 
         except Exception as e:
-            self.logger.error(f"❌ Infrastructure Layer 통합 초기화 실패: {e}")
+            self.logger.error(f"❌ 설정 화면 초기화 실패: {e}")
 
         self.logger.info("✅ Infrastructure Layer 통합 초기화 완료")
 

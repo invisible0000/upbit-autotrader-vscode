@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
+from logging.handlers import RotatingFileHandler
 
 # Infrastructure Layer Interfaces
 from upbit_auto_trading.infrastructure.logging.interfaces.logging_interface import (
@@ -267,7 +268,7 @@ class LoggingService(ILoggingService):
         )
 
     def _initialize_handlers(self) -> None:
-        """로그 핸들러 초기화 (설정 파일 기반)"""
+        """로그 핸들러 초기화 (설정 파일 기반) - RotatingFileHandler 포함"""
         try:
             # 🆕 설정 파일에서 로깅 설정 읽기
             logging_config = self._config_manager.get_logging_config()
@@ -275,15 +276,27 @@ class LoggingService(ILoggingService):
 
             # 파일 로깅이 활성화된 경우에만 파일 핸들러 생성
             if file_config.get('enabled', True):
-                # 🆕 설정 파일에서 경로 읽기
-                log_path = file_config.get('path', 'logs/upbit_auto_trading.log')
-                main_log_path = Path(log_path)
+                # 🆕 설정 파일에서 경로 읽기 (폴더 경로)
+                log_folder = file_config.get('path', 'logs')
+                log_dir = Path(log_folder)
 
                 # 디렉토리 생성
-                main_log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_dir.mkdir(parents=True, exist_ok=True)
 
-                # 메인 로그 파일 핸들러
-                main_handler = logging.FileHandler(main_log_path, mode='a', encoding='utf-8')
+                # 🆕 RotatingFileHandler로 메인 로그 파일 핸들러 생성
+                main_log_path = log_dir / "application.log"
+                max_size_mb = file_config.get('max_size_mb', 10)
+                backup_count = file_config.get('backup_count', 5)
+                max_bytes = max_size_mb * 1024 * 1024  # MB를 bytes로 변환
+
+                # RotatingFileHandler 사용 (자동 백업 시스템)
+                main_handler = RotatingFileHandler(
+                    main_log_path,
+                    mode='a',
+                    maxBytes=max_bytes,
+                    backupCount=backup_count,
+                    encoding='utf-8'
+                )
                 main_handler.setFormatter(self._formatters['default'])
 
                 # 🆕 설정 파일에서 파일 로그 레벨 읽기
@@ -292,13 +305,22 @@ class LoggingService(ILoggingService):
                 main_handler.setLevel(file_level)
                 self._handlers['main'] = main_handler
 
-                # 세션 로그 파일 핸들러 (설정된 경로 기준)
+                # 세션 로그 파일 핸들러 (일반 FileHandler - 세션별로 생성)
                 session_filename = self._generate_session_filename()
-                session_log_path = main_log_path.parent / session_filename
+                session_log_path = log_dir / session_filename
                 session_handler = logging.FileHandler(session_log_path, mode='a', encoding='utf-8')
                 session_handler.setFormatter(self._formatters['default'])
                 session_handler.setLevel(file_level)
                 self._handlers['session'] = session_handler
+
+                print(f"✅ 파일 로깅 활성화:")
+                print(f"   📁 로그 폴더: {log_dir}")
+                print(f"   📄 메인 로그: {main_log_path} (최대: {max_size_mb}MB, 백업: {backup_count}개)")
+                print(f"   📄 세션 로그: {session_log_path}")
+                print(f"   📊 로그 레벨: {file_level_str}")
+
+                # 기존 백업 파일 정리 (프로그램 시작 시)
+                self._cleanup_old_backups(log_dir, backup_count)
 
             # 🆕 설정 파일에서 콘솔 출력 설정 읽기
             console_output_enabled = logging_config.get('console_output', False)
@@ -316,6 +338,49 @@ class LoggingService(ILoggingService):
         except Exception as e:
             print(f"❌ 핸들러 초기화 실패: {e}")
             self._initialize_fallback_logging()
+
+    def _cleanup_old_backups(self, log_dir: Path, max_backup_count: int) -> None:
+        """오래된 백업 파일 정리
+
+        application.log.1, application.log.2, ... 형태의 백업 파일에서
+        max_backup_count를 초과하는 오래된 파일들을 삭제
+
+        Args:
+            log_dir: 로그 디렉토리
+            max_backup_count: 최대 백업 파일 개수
+        """
+        try:
+            # application.log.* 패턴의 백업 파일 찾기
+            backup_files = list(log_dir.glob("application.log.*"))
+
+            if len(backup_files) <= max_backup_count:
+                return  # 정리할 필요 없음
+
+            # 백업 번호 기준으로 정렬 (application.log.1, .2, .3, ...)
+            def get_backup_number(file_path: Path) -> int:
+                try:
+                    # application.log.5 -> 5
+                    return int(file_path.suffix.lstrip('.'))
+                except (ValueError, AttributeError):
+                    return 0
+
+            backup_files.sort(key=get_backup_number, reverse=True)
+
+            # max_backup_count를 초과하는 파일들 삭제
+            files_to_remove = backup_files[max_backup_count:]
+
+            for old_file in files_to_remove:
+                try:
+                    old_file.unlink()
+                    print(f"🗑️ 오래된 백업 파일 삭제: {old_file.name}")
+                except OSError as e:
+                    print(f"⚠️ 백업 파일 삭제 실패: {old_file.name} - {e}")
+
+            if files_to_remove:
+                print(f"✅ 백업 파일 정리 완료: {len(files_to_remove)}개 파일 삭제")
+
+        except Exception as e:
+            print(f"⚠️ 백업 파일 정리 중 오류: {e}")
 
     def _generate_session_filename(self) -> str:
         """세션별 로그 파일명 생성"""
