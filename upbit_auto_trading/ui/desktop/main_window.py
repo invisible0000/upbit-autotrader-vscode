@@ -247,12 +247,7 @@ class MainWindow(QMainWindow):
         else:
             print(f"DEBUG: {message}")
 
-    def _log_llm_report(self, operation: str, status: str, details: str = "") -> None:
-        """LLM 에이전트 구조화된 보고"""
-        if self.logger:
-            self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
-        else:
-            print(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
+
 
     def _setup_ui(self):
         """UI 설정"""
