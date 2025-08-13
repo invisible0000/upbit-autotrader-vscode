@@ -67,16 +67,10 @@ class CompatibilityValidator:
         """DDD 서비스를 통한 표준 DB 경로 사용"""
         try:
             # DDD 경로 관리 시스템 사용
-            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                FileSystemDatabaseConfigurationRepository
-            )
-            from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
-                DatabasePathService
-            )
+            from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 
-            repository = FileSystemDatabaseConfigurationRepository()
-            db_path_service = DatabasePathService(repository)
-            current_paths = db_path_service.get_all_paths()
+            path_service = PathServiceFactory.get_path_service()
+            current_paths = path_service.get_all_database_paths()
 
             from pathlib import Path
             db_path = Path(current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'))

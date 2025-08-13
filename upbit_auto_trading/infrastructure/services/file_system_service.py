@@ -25,7 +25,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.configuration import InfrastructurePaths
+from upbit_auto_trading.infrastructure.configuration import get_path_service
 
 logger = create_component_logger("FileSystemService")
 
@@ -35,8 +35,8 @@ class FileSystemService:
 
     def __init__(self):
         self._logger = logger
-        self._paths = InfrastructurePaths()
-        self._temp_dir = self._paths.DATA_DIR / ".tmp"
+        self._path_service = get_path_service()
+        self._temp_dir = self._path_service.get_directory_path('data') / ".tmp"
         self._temp_dir.mkdir(exist_ok=True)
 
     async def copy_database_file(self, source_path: Path, target_path: Path) -> bool:

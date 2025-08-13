@@ -83,12 +83,9 @@ class LegacyInfrastructurePaths:
         return success
 
 
-# Legacy 호환성 인스턴스 (단계적 제거 예정)
-infrastructure_paths = LegacyInfrastructurePaths()
-paths = infrastructure_paths  # Legacy 별칭
-
-# 새로운 Factory 기반 시스템 (권장 사용)
-path_service = get_path_service()
+# Legacy 호환성은 필요할 때만 생성 (자동 호출 방지)
+# infrastructure_paths, paths는 직접 접근 시에만 생성됨
+# path_service는 get_path_service() 함수로만 접근 권장
 
 __all__ = [
     # Factory 패턴 (권장)
@@ -96,11 +93,8 @@ __all__ = [
     'get_path_service',
     'get_test_path_service',
     'clear_path_service_cache',
-    'path_service',
 
-    # Legacy 호환성 (제거 예정)
-    'infrastructure_paths',
-    'paths',
+    # Legacy 호환성 (제거 예정) - 직접 사용 금지, 함수로만 접근
     'create_path_service',
     'get_shared_path_service',
 ]

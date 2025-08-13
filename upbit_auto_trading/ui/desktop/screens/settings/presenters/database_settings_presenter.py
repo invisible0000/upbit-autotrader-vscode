@@ -32,7 +32,7 @@
 🏗️ DDD 아키텍처 준수:
    - Domain Service: DatabaseBackupService (백업 검증용)
    - Application Layer: DatabaseReplacementUseCase (백업/복원/경로변경 통합)
-   - Infrastructure: DatabasePathService (경로 관리)
+   - Infrastructure: PathServiceFactory (경로 관리)
    - SQLite 직접 사용 금지 → Domain Service 통해서만 접근
 """
 
@@ -47,9 +47,7 @@ from typing import TYPE_CHECKING, Dict, Any, Optional
 from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
-    DatabasePathService
-)
+from upbit_auto_trading.infrastructure.configuration import get_path_service
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import (
     DatabaseInfoDto, DatabaseStatusDto
@@ -64,27 +62,35 @@ if TYPE_CHECKING:
 
 
 class DatabaseInfoWorker(QObject):
+
+    def _get_all_database_paths(self):
+        """모든 데이터베이스 경로를 반환하는 헬퍼 메서드"""
+        return {
+            'settings': self.path_service.get_database_path('settings'),
+            'strategies': self.path_service.get_database_path('strategies'),
+            'market_data': self.path_service.get_database_path('market_data')
+        }
     """데이터베이스 정보 로드를 위한 백그라운드 워커"""
     finished = pyqtSignal(object, object)  # info_dto, detailed_status
     error = pyqtSignal(str)
 
-    def __init__(self, db_path_service, get_detailed_status_func):
+    def __init__(self, path_service, get_detailed_status_func):
         super().__init__()
-        self.db_path_service = db_path_service
+        self.path_service = path_service
         self.get_detailed_status_func = get_detailed_status_func
 
     def run(self):
         """백그라운드에서 데이터베이스 정보 로드"""
         try:
             # DDD 도메인 서비스를 통한 경로 조회
-            paths = self.db_path_service.get_all_paths()
+            paths = self._get_all_database_paths()
 
             # DTO 생성
             from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import DatabaseInfoDto
             info_dto = DatabaseInfoDto(
-                settings_db_path=str(paths.get('settings', 'Unknown')),
-                strategies_db_path=str(paths.get('strategies', 'Unknown')),
-                market_data_db_path=str(paths.get('market_data', 'Unknown'))
+                settings_db_path=str(str(paths.get('settings', 'Unknown'))),
+                strategies_db_path=str(str(paths.get('strategies', 'Unknown'))),
+                market_data_db_path=str(str(paths.get('market_data', 'Unknown')))
             )
 
             # 상세 상태 정보 조회
@@ -96,6 +102,14 @@ class DatabaseInfoWorker(QObject):
 
 
 class DatabaseSettingsPresenter:
+
+    def _get_all_database_paths(self):
+        """모든 데이터베이스 경로를 반환하는 헬퍼 메서드"""
+        return {
+            'settings': self.path_service.get_database_path('settings'),
+            'strategies': self.path_service.get_database_path('strategies'),
+            'market_data': self.path_service.get_database_path('market_data')
+        }
     """데이터베이스 설정 통합 프레젠터
 
     MVP 패턴의 Presenter 역할을 담당합니다.
@@ -107,7 +121,7 @@ class DatabaseSettingsPresenter:
         self.logger = create_component_logger("DatabaseSettingsPresenter")
 
         # DDD 도메인 서비스 초기화 (싱글톤 사용)
-        self.db_path_service = DatabasePathService()  # 싱글톤이므로 Repository 자동 생성
+        self.path_service = get_path_service()  # 싱글톤이므로 Repository 자동 생성
         self.health_service = DatabaseHealthService()  # Application Service 추가
         # self.unified_config = UnifiedConfigService()  # 현재 사용하지 않음
 
@@ -219,7 +233,7 @@ class DatabaseSettingsPresenter:
         # 새 워커 스레드 생성
         self._worker_thread = QThread()
         self._worker = DatabaseInfoWorker(
-            self.db_path_service,
+            self.path_service,
             self._get_detailed_database_status
         )
 
@@ -330,13 +344,13 @@ class DatabaseSettingsPresenter:
             # 캐시에서 데이터 가져오기 또는 새로 계산
             def compute_database_info():
                 # DDD 도메인 서비스를 통한 경로 조회
-                paths = self.db_path_service.get_all_paths()
+                paths = self._get_all_database_paths()
 
                 # DTO 생성
                 info_dto = DatabaseInfoDto(
-                    settings_db_path=str(paths.get('settings', 'Unknown')),
-                    strategies_db_path=str(paths.get('strategies', 'Unknown')),
-                    market_data_db_path=str(paths.get('market_data', 'Unknown'))
+                    settings_db_path=str(str(paths.get('settings', 'Unknown'))),
+                    strategies_db_path=str(str(paths.get('strategies', 'Unknown'))),
+                    market_data_db_path=str(str(paths.get('market_data', 'Unknown')))
                 )
 
                 # 상세 상태 정보 조회
@@ -900,13 +914,13 @@ class DatabaseSettingsPresenter:
             error_count = 0
 
             # DDD 서비스를 통해 현재 경로 조회
-            all_paths = self.db_path_service.get_all_paths()
+            all_paths = self._get_all_database_paths()
 
             # 각 데이터베이스 파일 검증
             databases = [
-                ("설정 DB", all_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')),
-                ("전략 DB", all_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3')),
-                ("시장데이터 DB", all_paths.get('market_data', 'd:/projects/upbit-autotrader-vscode/data/market_data.sqlite3'))
+                ("설정 DB", str(all_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'))),
+                ("전략 DB", str(all_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3'))),
+                ("시장데이터 DB", str(all_paths.get('market_data', 'd:/projects/upbit-autotrader-vscode/data/market_data.sqlite3')))
             ]
 
             from pathlib import Path

@@ -101,13 +101,13 @@ class ApiKeyService(IApiKeyService):
                 return
 
             # 2. 보안 디렉토리 확보 (폴백용)
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            encryption_key_path = self.path_service.get_directory_path("config") / "secure" / "encryption_key.key"
             self.logger.debug(f"🔑 암호화 키 경로: {encryption_key_path}")
 
             # 보안 디렉토리가 없으면 생성 (파일은 생성하지 않음)
-            if not self.paths.SECURE_DIR.exists():
-                self.logger.debug(f"🔐 보안 디렉토리 생성: {self.paths.SECURE_DIR}")
-                self.paths.SECURE_DIR.mkdir(parents=True, exist_ok=True)
+            if not self.path_service.get_directory_path("config") / "secure".exists():
+                self.logger.debug(f"🔐 보안 디렉토리 생성: {self.path_service.get_directory_path("config") / "secure"}")
+                self.path_service.get_directory_path("config") / "secure".mkdir(parents=True, exist_ok=True)
 
             # 3. 레거시 파일 키 로드 (폴백)
             if encryption_key_path.exists():
@@ -137,7 +137,7 @@ class ApiKeyService(IApiKeyService):
         - 새 키로 새로운 자격증명 생성
         """
         try:
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            encryption_key_path = self.path_service.get_directory_path("config") / "secure" / "encryption_key.key"
 
             # 새 암호화 키 생성
             key = Fernet.generate_key()
@@ -167,13 +167,13 @@ class ApiKeyService(IApiKeyService):
         """
         try:
             # 보안 디렉토리 확보
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            encryption_key_path = self.path_service.get_directory_path("config") / "secure" / "encryption_key.key"
             self.logger.debug(f"🔑 암호화 키 경로: {encryption_key_path}")
 
             # 보안 디렉토리가 존재하는지 확인하고 생성
-            if not self.paths.SECURE_DIR.exists():
-                self.logger.info(f"🔐 보안 디렉토리 생성: {self.paths.SECURE_DIR}")
-                self.paths.SECURE_DIR.mkdir(parents=True, exist_ok=True)
+            if not self.path_service.get_directory_path("config") / "secure".exists():
+                self.logger.info(f"🔐 보안 디렉토리 생성: {self.path_service.get_directory_path("config") / "secure"}")
+                self.path_service.get_directory_path("config") / "secure".mkdir(parents=True, exist_ok=True)
 
             # 암호화 키 생성 또는 로드
             if not encryption_key_path.exists():
@@ -218,7 +218,7 @@ class ApiKeyService(IApiKeyService):
                 self._create_new_encryption_key()
 
             # 보안 경로에 저장
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
+            api_keys_path = self.path_service.get_directory_path("config") / "secure" / "api_credentials.json"
 
             # 키 암호화
             encrypted_access_key = self.fernet.encrypt(access_key.encode()).decode()
@@ -260,7 +260,7 @@ class ApiKeyService(IApiKeyService):
             Tuple[Optional[str], Optional[str], bool]: (access_key, secret_key, trade_permission)
         """
         try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
+            api_keys_path = self.path_service.get_directory_path("config") / "secure" / "api_credentials.json"
 
             if not api_keys_path.exists():
                 self.logger.debug("API 키 파일이 존재하지 않습니다.")
@@ -376,8 +376,8 @@ class ApiKeyService(IApiKeyService):
             bool: 삭제 성공 여부
         """
         try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
-            encryption_key_path = self.paths.SECURE_DIR / "encryption_key.key"
+            api_keys_path = self.path_service.get_directory_path("config") / "secure" / "api_credentials.json"
+            encryption_key_path = self.path_service.get_directory_path("config") / "secure" / "encryption_key.key"
 
             deleted = False
 
@@ -416,7 +416,7 @@ class ApiKeyService(IApiKeyService):
             bool: 유효한 키 존재 여부
         """
         try:
-            api_keys_path = self.paths.API_CREDENTIALS_FILE
+            api_keys_path = self.path_service.get_directory_path("config") / "secure" / "api_credentials.json"
             return api_keys_path.exists()
         except Exception:
             return False
@@ -650,7 +650,7 @@ class ApiKeyService(IApiKeyService):
             bool: 자격증명 파일 존재 여부
         """
         try:
-            return self.paths.API_CREDENTIALS_FILE.exists()
+            return self.path_service.get_directory_path("config") / "secure" / "api_credentials.json".exists()
         except Exception:
             return False
 
@@ -662,8 +662,8 @@ class ApiKeyService(IApiKeyService):
             bool: 삭제 성공 여부
         """
         try:
-            if self.paths.API_CREDENTIALS_FILE.exists():
-                self.paths.API_CREDENTIALS_FILE.unlink()
+            if self.path_service.get_directory_path("config") / "secure" / "api_credentials.json".exists():
+                self.path_service.get_directory_path("config") / "secure" / "api_credentials.json".unlink()
                 self.logger.debug("✅ 자격증명 파일 삭제 완료")
                 return True
             else:

@@ -32,7 +32,7 @@
 🏗️ DDD 아키텍처 준수:
    - Domain Service: DatabaseBackupService (백업 검증용)
    - Application Layer: DatabaseReplacementUseCase (백업/복원/경로변경 통합)
-   - Infrastructure: DatabasePathService (경로 관리)
+   - Infrastructure: PathServiceFactory (경로 관리)
    - SQLite 직접 사용 금지 → Domain Service 통해서만 접근
 """
 
@@ -45,9 +45,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
-    DatabasePathService
-)
+from upbit_auto_trading.infrastructure.configuration import get_path_service
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import (
     DatabaseInfoDto, DatabaseStatusDto
@@ -61,6 +59,14 @@ if TYPE_CHECKING:
     )
 
 class DatabaseSettingsPresenter:
+
+    def _get_all_database_paths(self):
+        """모든 데이터베이스 경로를 반환하는 헬퍼 메서드"""
+        return {
+            'settings': self.path_service.get_database_path('settings'),
+            'strategies': self.path_service.get_database_path('strategies'),
+            'market_data': self.path_service.get_database_path('market_data')
+        }
     """데이터베이스 설정 통합 프레젠터
 
     MVP 패턴의 Presenter 역할을 담당합니다.
@@ -71,8 +77,8 @@ class DatabaseSettingsPresenter:
         self.view = view
         self.logger = create_component_logger("DatabaseSettingsPresenter")
 
-        # DDD 도메인 서비스 초기화 (싱글톤 사용)
-        self.db_path_service = DatabasePathService()  # 싱글톤이므로 Repository 자동 생성
+        # Factory 패턴으로 Path Service 사용
+        self.path_service = get_path_service()
         self.health_service = DatabaseHealthService()  # Application Service 추가
         # self.unified_config = UnifiedConfigService()  # 현재 사용하지 않음
 
@@ -121,7 +127,7 @@ class DatabaseSettingsPresenter:
             self.logger.info("📊 데이터베이스 정보 로드 시작 (DDD)")
 
             # DDD 도메인 서비스를 통한 경로 조회
-            paths = self.db_path_service.get_all_paths()
+            paths = self._get_all_database_paths()
 
             # DTO 생성
             info_dto = DatabaseInfoDto(
@@ -678,7 +684,7 @@ class DatabaseSettingsPresenter:
             error_count = 0
 
             # DDD 서비스를 통해 현재 경로 조회
-            all_paths = self.db_path_service.get_all_paths()
+            all_paths = self._get_all_database_paths()
 
             # 각 데이터베이스 파일 검증
             databases = [

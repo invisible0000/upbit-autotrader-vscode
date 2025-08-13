@@ -8,49 +8,49 @@ from pathlib import Path
 
 def replace_path_usages_in_file(file_path: str):
     """파일의 모든 path 사용을 Factory 패턴으로 교체"""
-    
+
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
-    
+
     original_content = content
-    
+
     # 교체 패턴들
     replacements = [
         # self.paths.SECURE_DIR -> secure directory 경로
-        (r'self\.paths\.SECURE_DIR', 
+        (r'self\.paths\.SECURE_DIR',
          r'self.path_service.get_directory_path("config") / "secure"'),
-        
+
         # self.paths.API_CREDENTIALS_FILE -> api credentials 파일
         (r'self\.paths\.API_CREDENTIALS_FILE',
          r'self.path_service.get_directory_path("config") / "secure" / "api_credentials.json"'),
-        
+
         # self.paths.CONFIG_DIR -> config directory
         (r'self\.paths\.CONFIG_DIR',
          r'self.path_service.get_directory_path("config")'),
-        
-        # self.paths.DATA_DIR -> data directory  
+
+        # self.paths.DATA_DIR -> data directory
         (r'self\.paths\.DATA_DIR',
          r'self.path_service.get_directory_path("data")'),
-        
+
         # self.paths.LOGS_DIR -> logs directory
         (r'self\.paths\.LOGS_DIR',
          r'self.path_service.get_directory_path("logs")'),
-        
+
         # self.paths.BACKUPS_DIR -> backups directory
         (r'self\.paths\.BACKUPS_DIR',
          r'self.path_service.get_directory_path("backups")'),
-        
+
         # Database paths
         (r'self\.paths\.SETTINGS_DB',
          r'self.path_service.get_database_path("settings")'),
-         
+
         (r'self\.paths\.STRATEGIES_DB',
          r'self.path_service.get_database_path("strategies")'),
-         
+
         (r'self\.paths\.MARKET_DATA_DB',
          r'self.path_service.get_database_path("market_data")'),
     ]
-    
+
     # 교체 실행
     changes_made = 0
     for pattern, replacement in replacements:
@@ -59,7 +59,7 @@ def replace_path_usages_in_file(file_path: str):
             changes_made += 1
             content = new_content
             print(f"✅ 교체 완료: {pattern} -> {replacement}")
-    
+
     # 파일 업데이트
     if content != original_content:
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -76,7 +76,7 @@ def main():
         "upbit_auto_trading/infrastructure/services/api_key_service.py",
         "upbit_auto_trading/infrastructure/services/file_system_service.py",
     ]
-    
+
     total_updated = 0
     for file_path in files_to_update:
         full_path = Path("d:/projects/upbit-autotrader-vscode") / file_path
@@ -85,7 +85,7 @@ def main():
                 total_updated += 1
         else:
             print(f"❌ 파일 없음: {full_path}")
-    
+
     print(f"\n🎉 교체 완료: {total_updated}/{len(files_to_update)} 파일")
 
 if __name__ == "__main__":

@@ -11,9 +11,16 @@ import yaml
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
 
 class UnifiedConfigService:
+
+    def _get_all_database_paths(self):
+        """모든 데이터베이스 경로를 반환하는 헬퍼 메서드"""
+        return {
+            'settings': self.path_service.get_database_path('settings'),
+            'strategies': self.path_service.get_database_path('strategies'),
+            'market_data': self.path_service.get_database_path('market_data')
+        }
     """통합 설정 관리 도메인 서비스"""
 
     def __init__(self, db_path_service: DatabasePathService, config_root: str = "config"):
@@ -36,7 +43,7 @@ class UnifiedConfigService:
         """
         try:
             # 1차: DDD 서비스에서 동적 경로 조회
-            paths = self.db_path_service.get_all_paths()
+            paths = self._get_all_database_paths()
             self.logger.debug(f"✅ DDD 동적 경로 조회 성공: {len(paths)}개")
             return paths
 
@@ -171,7 +178,7 @@ class UnifiedConfigService:
         """DDD 시스템과 설정 동기화"""
         try:
             # DDD 서비스에서 현재 경로 조회
-            current_paths = self.db_path_service.get_all_paths()
+            current_paths = self._get_all_database_paths()
 
             # 메인 config.yaml 업데이트 (동적 참조 정보만)
             config = self._load_yaml(self.main_config_path)

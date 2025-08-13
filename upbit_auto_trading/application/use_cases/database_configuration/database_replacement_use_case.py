@@ -16,9 +16,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.use_cases.database_configuration.system_safety_check_use_case import (
     SystemSafetyCheckUseCase, SystemSafetyRequestDto
 )
-from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
-    DatabasePathService
-)
+from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
 
 class DatabaseReplacementType(Enum):
@@ -60,7 +58,7 @@ class DatabaseReplacementUseCase:
     def __init__(self):
         self.logger = create_component_logger("DatabaseReplacementUseCase")
         self.safety_check = SystemSafetyCheckUseCase()
-        self.path_service = DatabasePathService()
+        self.path_service = PathServiceFactory.get_path_service()
         self.repository_container = RepositoryContainer()
 
         self.logger.info("✅ 데이터베이스 교체 통합 Use Case 초기화 완료")

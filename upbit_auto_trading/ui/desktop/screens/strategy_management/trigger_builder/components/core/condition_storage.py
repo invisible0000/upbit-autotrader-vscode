@@ -32,16 +32,10 @@ class ConditionStorage:
         # DDD 경로 시스템 사용 시도
         if USE_DDD_PATHS:
             try:
-                from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                    FileSystemDatabaseConfigurationRepository
-                )
-                from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
-                    DatabasePathService
-                )
+                from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 
-                repository = FileSystemDatabaseConfigurationRepository()
-                db_path_service = DatabasePathService(repository)
-                current_paths = db_path_service.get_all_paths()
+                path_service = PathServiceFactory.get_path_service()
+                current_paths = path_service.get_all_database_paths()
                 self.db_path = current_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3')
                 logger.info(f"✅ DDD 경로 시스템 사용: {self.db_path}")
             except Exception as e:

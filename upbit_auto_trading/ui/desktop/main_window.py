@@ -1136,14 +1136,10 @@ class MainWindow(QMainWindow):
                 from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
                 from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
                 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
-                from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
-                from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                    FileSystemDatabaseConfigurationRepository
-                )
+                from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 
                 # DDD 서비스를 통한 설정 DB 경로 가져오기
-                repository = FileSystemDatabaseConfigurationRepository()
-                db_path_service = DatabasePathService(repository)
+                path_service = PathServiceFactory.get_path_service()
                 current_paths = db_path_service.get_all_paths()
                 settings_db_path = current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')
 
@@ -1288,14 +1284,8 @@ class MainWindow(QMainWindow):
         """애플리케이션 시작 시 DB 연결 상태 확인 - DDD 서비스 활용"""
         try:
             # DDD 서비스를 통한 DB 경로 가져오기
-            from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
-            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                FileSystemDatabaseConfigurationRepository
-            )
-
-            repository = FileSystemDatabaseConfigurationRepository()
-            db_path_service = DatabasePathService(repository)
-            current_paths = db_path_service.get_all_paths()
+            path_service = PathServiceFactory.get_path_service()
+            current_paths = path_service.get_all_database_paths()
 
             from pathlib import Path
             db_path = Path(current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'))
@@ -1358,15 +1348,10 @@ class MainWindow(QMainWindow):
             from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
             from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
             from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
-            from upbit_auto_trading.domain.database_configuration.services.database_path_service import DatabasePathService
-            from upbit_auto_trading.infrastructure.persistence.database_configuration_repository_impl import (
-                FileSystemDatabaseConfigurationRepository
-            )
 
             # DDD 서비스를 통한 설정 DB 경로 가져오기
-            repository = FileSystemDatabaseConfigurationRepository()
-            db_path_service = DatabasePathService(repository)
-            current_paths = db_path_service.get_all_paths()
+            path_service = PathServiceFactory.get_path_service()
+            current_paths = path_service.get_all_database_paths()
             settings_db_path = current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3')
 
             # DatabaseManager 생성 후 Repository 주입으로 ApiKeyService 생성
