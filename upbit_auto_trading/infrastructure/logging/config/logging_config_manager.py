@@ -383,6 +383,8 @@ class LoggingConfigManager:
                 handler(config)
             except Exception as e:
                 print(f"⚠️ 설정 변경 핸들러 오류: {e}")
+                import traceback
+                traceback.print_exc()
 
     def get_status_summary(self) -> Dict[str, Any]:
         """상태 요약 조회

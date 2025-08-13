@@ -12,8 +12,7 @@ from PyQt6.QtWidgets import QWidget
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.logging import create_component_logger, get_logging_service
 from upbit_auto_trading.infrastructure.logging.terminal.terminal_capturer import (
     get_global_terminal_capturer,
     start_global_terminal_capture,
@@ -40,7 +39,12 @@ class LoggingManagementPresenter(QObject):
 
         # Infrastructure 로깅 시스템
         self.logger = create_component_logger("LoggingManagementPresenter")
-        self.config_manager = LoggingConfigManager()
+
+        # ✅ LoggingService의 config_manager 사용 (중요!)
+        logging_service = get_logging_service()
+        self.config_manager = logging_service._config_manager
+
+        self.logger.info(f"✅ LoggingService의 config_manager 사용 - 핸들러 수: {len(self.config_manager._change_handlers)}")
 
         # View 참조 (MVP 패턴)
         self.view = None

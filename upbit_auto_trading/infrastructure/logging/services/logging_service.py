@@ -52,9 +52,9 @@ class LoggingService(ILoggingService):
 
         # 🆕 설정 파일 관리자 초기화
         self._config_manager = LoggingConfigManager()
-        self._config_manager.add_change_handler(self._on_config_changed)
 
-        # 🆕 설정 파일에서 컨텍스트 및 스코프 읽기 (환경변수 대신)
+        # 변경 핸들러 등록
+        self._config_manager.add_change_handler(self._on_config_changed)        # 🆕 설정 파일에서 컨텍스트 및 스코프 읽기 (환경변수 대신)
         logging_config = self._config_manager.get_logging_config()
         self._current_context = self._get_context_from_config(logging_config)
         self._current_scope = self._get_scope_from_config(logging_config)
@@ -89,18 +89,25 @@ class LoggingService(ILoggingService):
             return LogScope.NORMAL
 
     def _on_config_changed(self, new_config: Dict[str, Any]) -> None:
-        """설정 파일 변경 시 콜백"""
+        """설정 파일 변경 시 콜백 - 완전한 즉시 반영"""
         try:
             logging_config = new_config.get('logging', {})
 
-            # 컨텍스트 및 스코프 업데이트
+            # 이전 설정 백업
             old_context = self._current_context
             old_scope = self._current_scope
             old_focus = self._component_focus
 
+            # 새 설정 적용
             self._current_context = self._get_context_from_config(logging_config)
             self._current_scope = self._get_scope_from_config(logging_config)
             self._component_focus = logging_config.get('component_focus', '')
+
+            # 🆕 실제 로깅 시스템 설정 즉시 반영
+            self._apply_immediate_logging_changes(logging_config)
+
+            # 🆕 모든 로거 업데이트 (컴포넌트 포커스 포함)
+            self._update_all_loggers()
 
             # 변경 사항 출력
             changes = []
@@ -119,6 +126,111 @@ class LoggingService(ILoggingService):
 
         except Exception as e:
             print(f"❌ 설정 변경 적용 실패: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _apply_immediate_logging_changes(self, logging_config: Dict[str, Any]) -> None:
+        """로깅 설정을 즉시 반영"""
+        try:
+            with self._lock:
+                # 1. 로그 레벨 즉시 변경
+                new_level = logging_config.get('level', 'INFO').upper()
+                log_level = getattr(logging, new_level, logging.INFO)
+
+                # 모든 기존 로거의 레벨 업데이트
+                for logger_name, logger in self._loggers.items():
+                    logger.setLevel(log_level)
+
+                # 2. 콘솔 핸들러 즉시 제어 (오토 모드 지원)
+                console_output_setting = logging_config.get('console_output', 'false')
+                console_enabled = self._resolve_console_output_auto(console_output_setting)
+                self._update_console_handlers(console_enabled)
+
+                # 3. 파일 로깅 설정 즉시 반영
+                file_config = logging_config.get('file_logging', {})
+                if file_config.get('enabled', True):
+                    file_level = file_config.get('level', 'DEBUG').upper()
+                    file_log_level = getattr(logging, file_level, logging.DEBUG)
+                    self._update_file_handlers(file_log_level)
+
+                print(f"🔧 로깅 레벨 변경: {new_level}")
+                console_display = f"{'활성화' if console_enabled else '비활성화'}"
+                if console_output_setting == 'auto':
+                    current_profile = self._config_manager.get_current_profile()
+                    console_display += f" (오토: {current_profile} 프로파일)"
+                print(f"🔧 콘솔 출력: {console_display}")
+                print(f"🔧 파일 로깅 레벨: {file_config.get('level', 'DEBUG')}")
+
+        except Exception as e:
+            print(f"❌ 로깅 설정 즉시 반영 실패: {e}")
+
+    def _resolve_console_output_auto(self, console_setting: Any) -> bool:
+        """콘솔 출력 오토 모드 해석
+
+        Args:
+            console_setting: 'auto', 'true', 'false', True, False
+
+        Returns:
+            bool: 실제 콘솔 출력 활성화 여부
+        """
+        setting_str = str(console_setting).lower()
+
+        if setting_str == 'auto':
+            # 🔧 단순한 오토 모드: 개발환경에서는 활성화 (context 의존성 제거)
+            # 향후 프로파일 시스템 완성시 프로파일 기반으로 변경 예정
+            current_profile = self._config_manager.get_current_profile()
+            if current_profile == 'production':
+                return False  # 프로덕션 프로파일: 콘솔 출력 비활성화
+            else:
+                return True   # 기타 프로파일: 콘솔 출력 활성화
+        elif setting_str in ['true', '1', 'on']:
+            return True
+        else:
+            return False
+
+    def _update_console_handlers(self, enabled: bool) -> None:
+        """콘솔 핸들러 즉시 업데이트"""
+        try:
+            with self._lock:
+                for logger_name, logger in self._loggers.items():
+                    # 기존 콘솔 핸들러 모두 제거
+                    handlers_to_remove = [
+                        h for h in logger.handlers
+                        if isinstance(h, logging.StreamHandler) and h.stream == sys.stdout
+                    ]
+                    for handler in handlers_to_remove:
+                        logger.removeHandler(handler)
+                        handler.close()
+
+                    # 새로운 콘솔 핸들러 추가 (활성화된 경우만)
+                    if enabled:
+                        console_handler = logging.StreamHandler(sys.stdout)
+                        console_handler.setFormatter(self._formatters.get('console'))
+                        console_handler.setLevel(self._get_console_log_level())
+                        logger.addHandler(console_handler)
+
+                # 전역 핸들러 상태도 업데이트
+                if enabled and 'console' not in self._handlers:
+                    console_handler = logging.StreamHandler(sys.stdout)
+                    console_handler.setFormatter(self._formatters.get('console'))
+                    console_handler.setLevel(self._get_console_log_level())
+                    self._handlers['console'] = console_handler
+                elif not enabled and 'console' in self._handlers:
+                    self._handlers['console'].close()
+                    del self._handlers['console']
+
+        except Exception as e:
+            print(f"❌ 콘솔 핸들러 업데이트 실패: {e}")
+
+    def _update_file_handlers(self, file_level: int) -> None:
+        """파일 핸들러 레벨 즉시 업데이트"""
+        try:
+            for logger_name, logger in self._loggers.items():
+                for handler in logger.handlers:
+                    if isinstance(handler, (logging.FileHandler, RotatingFileHandler)):
+                        handler.setLevel(file_level)
+        except Exception as e:
+            print(f"❌ 파일 핸들러 업데이트 실패: {e}")
 
     def _print_current_config(self) -> None:
         """현재 설정 상태 출력"""
@@ -322,8 +434,9 @@ class LoggingService(ILoggingService):
                 # 기존 백업 파일 정리 (프로그램 시작 시)
                 self._cleanup_old_backups(log_dir, backup_count)
 
-            # 🆕 설정 파일에서 콘솔 출력 설정 읽기
-            console_output_enabled = logging_config.get('console_output', False)
+            # 🆕 설정 파일에서 콘솔 출력 설정 읽기 (오토 모드 지원)
+            console_output_setting = logging_config.get('console_output', False)
+            console_output_enabled = self._resolve_console_output_auto(console_output_setting)
 
             if console_output_enabled:
                 console_handler = logging.StreamHandler(sys.stdout)
@@ -331,9 +444,11 @@ class LoggingService(ILoggingService):
                 console_handler.setLevel(self._get_console_log_level())
                 self._handlers['console'] = console_handler
 
-                print(f"✅ 콘솔 핸들러 활성화 - 레벨: {console_handler.level}")
+                auto_info = " (오토모드)" if console_output_setting == 'auto' else ""
+                print(f"✅ 콘솔 핸들러 활성화{auto_info} - 레벨: {console_handler.level}")
             else:
-                print("ℹ️ 콘솔 출력 비활성화 (설정 파일 기준)")
+                auto_info = " (오토모드)" if console_output_setting == 'auto' else ""
+                print(f"ℹ️ 콘솔 출력 비활성화{auto_info} (설정 파일 기준)")
 
         except Exception as e:
             print(f"❌ 핸들러 초기화 실패: {e}")
@@ -500,13 +615,21 @@ class LoggingService(ILoggingService):
         }
 
     def _update_all_loggers(self) -> None:
-        """모든 로거의 설정 업데이트"""
+        """모든 로거의 설정 업데이트 - 핸들러 포함"""
         for component_name, logger in self._loggers.items():
+            # 기존 핸들러 제거
+            logger.handlers.clear()
+
             # 로거 레벨 재설정
             if self._component_focus and component_name != self._component_focus:
                 logger.setLevel(logging.WARNING)
             else:
                 logger.setLevel(logging.DEBUG)
+
+            # 핸들러 다시 추가 (필터링 적용)
+            for handler_name, handler in self._handlers.items():
+                if self._should_add_handler(component_name, handler_name):
+                    logger.addHandler(handler)
 
     def _update_console_handler_level(self) -> None:
         """콘솔 핸들러 레벨 업데이트"""

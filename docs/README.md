@@ -27,6 +27,7 @@
 - **[DB_SCHEMA.md](DB_SCHEMA.md)**: 데이터베이스 스키마 (241줄)
 
 ### ⚙️ 핵심 기능
+- **[UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md](UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md)**: **통합 설정 관리 시스템** (NEW! ⭐)
 - **[TRIGGER_BUILDER_GUIDE.md](TRIGGER_BUILDER_GUIDE.md)**: 트리거 빌더 (219줄)
 - **[STRATEGY_SYSTEM.md](STRATEGY_SYSTEM.md)**: 매매 전략 시스템 (259줄)
 - **[VARIABLE_COMPATIBILITY.md](VARIABLE_COMPATIBILITY.md)**: 변수 호환성 (156줄)
@@ -60,19 +61,18 @@
 
 ### 🔧 백엔드 개발 시
 ```
-1. COMPONENT_ARCHITECTURE.md (시스템 구조)
-2. ERROR_HANDLING_POLICY.md (오류 처리)
-3. STYLE_GUIDE.md (코딩 표준)
-4. INFRASTRUCTURE_SMART_LOGGING_GUIDE.md (스마트 로깅 시스템)
+1. UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md (설정 관리 표준)
+2. COMPONENT_ARCHITECTURE.md (시스템 구조)
+3. ERROR_HANDLING_POLICY.md (오류 처리)
+4. STYLE_GUIDE.md (코딩 표준)
 ```
 
 ### 🔍 Infrastructure Layer 개발 시
 ```
-1. INFRASTRUCTURE_SMART_LOGGING_GUIDE.md (스마트 로깅 시스템 - 개발 첫 단계)
-2. LLM_LOG_SEPARATION_GUIDE.md (LLM 로그 분리 시스템 - 사람/LLM 로그 구분)
-3. COMPONENT_ARCHITECTURE.md (DDD 기반 아키텍처)
-4. ERROR_HANDLING_POLICY.md (에러 처리 정책)
-5. DEV_CHECKLIST.md (개발 검증)
+1. UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md (통합 설정 관리 시스템)
+2. COMPONENT_ARCHITECTURE.md (DDD 기반 아키텍처)
+3. ERROR_HANDLING_POLICY.md (에러 처리 정책)
+4. DEV_CHECKLIST.md (개발 검증)
 ```
 
 ## 📝 특별 문서들
