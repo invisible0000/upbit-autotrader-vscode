@@ -90,17 +90,17 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
 
         if is_dark:
             # 다크 테마 색상
-            self.timestamp_format.setForeground(QColor("#B0B0B0"))    # 밝은 회색
+            self.timestamp_format.setForeground(QColor("#34D399"))    # 연한 초록 (타임스탬프)
 
             # 로그 레벨별 색상 (다크 테마)
-            self.debug_format.setForeground(QColor("#A0A0A0"))        # 회색
-            self.info_format.setForeground(QColor("#87CEEB"))         # 스카이 블루
-            self.warning_format.setForeground(QColor("#FFD700"))      # 골드
-            self.error_format.setForeground(QColor("#FF6B6B"))        # 라이트 레드
-            self.critical_format.setForeground(QColor("#FF4444"))     # 레드
+            self.debug_format.setForeground(QColor("#FBBF24"))        # 노랑 (DEBUG)
+            self.info_format.setForeground(QColor("#10B981"))         # 초록 (INFO)
+            self.warning_format.setForeground(QColor("#F59E0B"))      # 앰버 (WARNING)
+            self.error_format.setForeground(QColor("#EF4444"))        # 레드 (ERROR)
+            self.critical_format.setForeground(QColor("#DC2626"))     # 진한 레드 (CRITICAL)
             self.critical_format.setFontWeight(QFont.Weight.Bold)
 
-            self.component_format.setForeground(QColor("#90EE90"))    # 라이트 그린
+            self.component_format.setForeground(QColor("#60A5FA"))    # 파란 계열 (컴포넌트/로거)
 
             # 특별 메시지 색상
             self.success_format.setForeground(QColor("#98FB98"))      # 연두색
@@ -113,17 +113,17 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
 
         else:
             # 라이트 테마 색상
-            self.timestamp_format.setForeground(QColor("#666666"))    # 회색
+            self.timestamp_format.setForeground(QColor("#059669"))    # 초록 (타임스탬프)
 
             # 로그 레벨별 색상 (라이트 테마)
-            self.debug_format.setForeground(QColor("#808080"))        # 회색
-            self.info_format.setForeground(QColor("#0066CC"))         # 블루
-            self.warning_format.setForeground(QColor("#FF8C00"))      # 다크 오렌지
-            self.error_format.setForeground(QColor("#DC143C"))        # 크림슨
-            self.critical_format.setForeground(QColor("#B22222"))     # 파이어 브릭
+            self.debug_format.setForeground(QColor("#D97706"))        # 앰버/노랑 (DEBUG)
+            self.info_format.setForeground(QColor("#16A34A"))         # 초록 (INFO)
+            self.warning_format.setForeground(QColor("#F59E0B"))      # 앰버 (WARNING)
+            self.error_format.setForeground(QColor("#DC2626"))        # 레드 (ERROR)
+            self.critical_format.setForeground(QColor("#B91C1C"))     # 진한 레드 (CRITICAL)
             self.critical_format.setFontWeight(QFont.Weight.Bold)
 
-            self.component_format.setForeground(QColor("#228B22"))    # 포레스트 그린
+            self.component_format.setForeground(QColor("#2563EB"))    # 파란 계열 (컴포넌트/로거)
 
             # 특별 메시지 색상
             self.success_format.setForeground(QColor("#228B22"))      # 포레스트 그린
@@ -140,28 +140,51 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
         """로그 구문 강조 규칙 설정"""
         self.highlighting_rules.clear()
 
-        # 1. 타임스탬프 패턴 (Infrastructure 로깅 시스템 형식)
-        # 예: [2025-08-12 14:30:45,123]
-        timestamp_pattern = re.compile(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}\]')
-        self.highlighting_rules.append((timestamp_pattern, self.timestamp_format))
+        # 1. 타임스탬프 패턴 (다양한 형태 지원)
+        timestamp_patterns = [
+            # [YYYY-MM-DD HH:MM:SS], [YYYY-MM-DD HH:MM:SS,mmm], [YYYY-MM-DD HH:MM:SS.mmm]
+            re.compile(r'\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?\]'),
+            # [HH:MM:SS], [HH:MM:SS,mmm], [HH:MM:SS.mmm]
+            re.compile(r'\[\d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?\]'),
+            # YYYY-MM-DD HH:MM:SS(,mmm|.mmm)? (브라켓 없이)
+            re.compile(r'\b\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?\b'),
+            # HH:MM:SS(,mmm|.mmm)? (브라켓 없이)
+            re.compile(r'\b\d{2}:\d{2}:\d{2}(?:[\.,]\d{3})?\b'),
+        ]
+        for tp in timestamp_patterns:
+            self.highlighting_rules.append((tp, self.timestamp_format))
 
-        # 2. 로그 레벨 패턴
-        debug_pattern = re.compile(r'\[DEBUG\]', re.IGNORECASE)
-        info_pattern = re.compile(r'\[INFO\]', re.IGNORECASE)
-        warning_pattern = re.compile(r'\[WARNING\]', re.IGNORECASE)
-        error_pattern = re.compile(r'\[ERROR\]', re.IGNORECASE)
-        critical_pattern = re.compile(r'\[CRITICAL\]', re.IGNORECASE)
+        # 2. 로그 레벨 패턴 (브라켓 및 일반 토큰 모두 지원)
+        level_specs = [
+            (r'\[DEBUG\]', self.debug_format),
+            (r'\bDEBUG\b', self.debug_format),
+            (r'\[INFO\]', self.info_format),
+            (r'\bINFO\b', self.info_format),
+            (r'\[WARNING\]', self.warning_format),
+            (r'\bWARNING\b', self.warning_format),
+            (r'\[ERROR\]', self.error_format),
+            (r'\bERROR\b', self.error_format),
+            (r'\[CRITICAL\]', self.critical_format),
+            (r'\bCRITICAL\b', self.critical_format),
+        ]
+        for patt, fmt in level_specs:
+            self.highlighting_rules.append((re.compile(patt, re.IGNORECASE), fmt))
 
-        self.highlighting_rules.append((debug_pattern, self.debug_format))
-        self.highlighting_rules.append((info_pattern, self.info_format))
-        self.highlighting_rules.append((warning_pattern, self.warning_format))
-        self.highlighting_rules.append((error_pattern, self.error_format))
-        self.highlighting_rules.append((critical_pattern, self.critical_format))
-
-        # 3. 컴포넌트명 패턴
-        # 예: [ComponentName]
-        component_pattern = re.compile(r'\[([A-Za-z_][A-Za-z0-9_]*)\]')
-        self.highlighting_rules.append((component_pattern, self.component_format))
+        # 3. 컴포넌트/로거명 패턴
+        # - 대괄호로 둘러싼 컴포넌트 [Component]
+        component_bracket_pattern = re.compile(
+            r'\[(?!DEBUG|INFO|WARNING|ERROR|CRITICAL)([A-Za-z_][A-Za-z0-9_]*)\]'
+        )
+        self.highlighting_rules.append(
+            (component_bracket_pattern, self.component_format)
+        )
+        # - 점 표기 로거명 upbit.SomeScreen (공백 또는 하이픈 전까지)
+        dotted_logger_pattern = re.compile(
+            r'\b(?:upbit|uvicorn|werkzeug|root)(?:\.[A-Za-z0-9_]+)+\b'
+        )
+        self.highlighting_rules.append(
+            (dotted_logger_pattern, self.component_format)
+        )
 
         # 4. 특별 메시지 이모지/기호 패턴
         success_pattern = re.compile(r'✅[^✅❌⚠️📊]*')
@@ -169,42 +192,74 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
         warning_symbol_pattern = re.compile(r'⚠️[^✅❌⚠️📊]*')
         info_symbol_pattern = re.compile(r'📊[^✅❌⚠️📊]*')
 
+        # 4-b. STDOUT/STDERR 태그 패턴 (콘솔/로그 공통)
+        stdout_tag = re.compile(r'\[STDOUT\]', re.IGNORECASE)
+        stderr_tag = re.compile(r'\[STDERR\]', re.IGNORECASE)
+        self.highlighting_rules.append((stdout_tag, self.info_format))
+        self.highlighting_rules.append((stderr_tag, self.error_format))
+
         self.highlighting_rules.append((success_pattern, self.success_format))
         self.highlighting_rules.append((failure_pattern, self.failure_format))
-        self.highlighting_rules.append((warning_symbol_pattern, self.warning_symbol_format))
-        self.highlighting_rules.append((info_symbol_pattern, self.info_symbol_format))
+        self.highlighting_rules.append(
+            (warning_symbol_pattern, self.warning_symbol_format)
+        )
+        self.highlighting_rules.append(
+            (info_symbol_pattern, self.info_symbol_format)
+        )
 
         # 5. 파일 경로 패턴
         # 예: /path/to/file.py, C:\path\to\file.py
-        path_pattern = re.compile(r'(?:[A-Za-z]:\\|/)(?:[\w\s.-][\\\\/])*[\w\s.-]+\.[\w]+')
+        path_pattern = re.compile(
+            r'(?:[A-Za-z]:\\|/)(?:[\w\s.-][\\\\/])*[\w\s.-]+\.[\w]+'
+        )
         self.highlighting_rules.append((path_pattern, self.path_format))
 
         # 6. 대괄호 구조 (일반)
         bracket_pattern = re.compile(r'[\[\]]')
         self.highlighting_rules.append((bracket_pattern, self.bracket_format))
 
-        # 7. 중요한 키워드 강조
-        important_keywords = [
+        # 7. 중요한 키워드 강조 (한글과 영문을 분리해 경계 처리 개선)
+        korean_keywords = [
             '시작', '완료', '실패', '성공', '에러', '경고',
             '초기화', '종료', '연결', '해제', '로드', '저장',
-            'started', 'completed', 'failed', 'success', 'error', 'warning'
+        ]
+        english_keywords = [
+            'start', 'started', 'complete', 'completed', 'fail', 'failed',
+            'success', 'error', 'warning', 'retry', 'timeout'
         ]
 
-        for keyword in important_keywords:
-            keyword_pattern = re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE)
-            # 키워드별로 적절한 포맷 선택
-            if keyword in ['실패', 'failed', '에러', 'error']:
-                format_to_use = self.failure_format
-            elif keyword in ['성공', 'success', '완료', 'completed']:
-                format_to_use = self.success_format
-            elif keyword in ['경고', 'warning']:
-                format_to_use = self.warning_symbol_format
+        # 한글 키워드는 한글/영문/숫자/언더스코어에 둘러싸이지 않은 곳에서만 일치하게 함
+        # -> 부분 문자열(예: '초기') 과다 매칭 방지
+        for keyword in korean_keywords:
+            pattern = re.compile(
+                rf'(?<![가-힣A-Za-z0-9_]){re.escape(keyword)}(?![가-힣A-Za-z0-9_])'
+            )
+            if keyword in ['실패', '에러']:
+                fmt = self.failure_format
+            elif keyword in ['성공', '완료']:
+                fmt = self.success_format
+            elif keyword in ['경고']:
+                fmt = self.warning_symbol_format
             else:
-                format_to_use = self.info_format
+                fmt = self.info_format
+            self.highlighting_rules.append((pattern, fmt))
 
-            self.highlighting_rules.append((keyword_pattern, format_to_use))
+        # 영문 키워드는 \\b 경계 사용
+        for keyword in english_keywords:
+            pattern = re.compile(rf'\b{re.escape(keyword)}\b', re.IGNORECASE)
+            if keyword in ['failed', 'fail', 'error']:
+                fmt = self.failure_format
+            elif keyword in ['success', 'completed', 'complete']:
+                fmt = self.success_format
+            elif keyword in ['warning']:
+                fmt = self.warning_symbol_format
+            else:
+                fmt = self.info_format
+            self.highlighting_rules.append((pattern, fmt))
 
-        logger.debug(f"로그 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙")
+        logger.debug(
+            f"로그 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙"
+        )
 
     def highlightBlock(self, text: Optional[str]) -> None:
         """
@@ -214,7 +269,8 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
             text: 강조할 로그 텍스트 라인 (None 가능)
         """
         if not text:
-            return        # 모든 강조 규칙 적용
+            return
+        # 모든 강조 규칙 적용
         for pattern, char_format in self.highlighting_rules:
             # 컴포넌트 패턴은 그룹 1만 강조 (대괄호 제외하고 컴포넌트명만)
             if pattern.pattern == r'\[([A-Za-z_][A-Za-z0-9_]*)\]':
@@ -235,8 +291,11 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
 
     def _highlight_error_line(self, text: str) -> None:
         """에러 라인 전체를 미묘하게 강조"""
-        # 배경색 설정은 필요시 구현 (현재는 텍스트 색상만 사용)
-        pass
+        # 현재 블록 전체에 살짝 배경 적용 (가독성 높임)
+        color = QColor(255, 0, 0, 30)  # 투명한 빨간 배경
+        fmt = QTextCharFormat()
+        fmt.setBackground(color)
+        self.setFormat(0, len(text), fmt)
 
     def _on_theme_changed(self, is_dark: bool) -> None:
         """

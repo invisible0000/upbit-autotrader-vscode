@@ -13,9 +13,9 @@ from datetime import datetime
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QPushButton, QCheckBox, QLabel, QSpinBox
+    QPushButton, QCheckBox, QLabel, QSpinBox, QLineEdit, QComboBox
 )
-from PyQt6.QtGui import QFont, QTextCursor
+from PyQt6.QtGui import QFont, QTextCursor, QTextDocument
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .log_syntax_highlighter import LogSyntaxHighlighter
@@ -33,7 +33,6 @@ class LogViewerWidget(QWidget):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("log-viewer-widget")
-
         # 로깅
         self.logger = create_component_logger("LogViewerWidget")
         self.logger.info("📄 로그 뷰어 위젯 초기화 시작")
@@ -43,6 +42,9 @@ class LogViewerWidget(QWidget):
         self._max_lines = 1000  # 최대 로그 라인 수
         self._current_lines = 0
         self._font_size = 12  # 기본 폰트 크기 (12px로 변경)
+        self._buffer_lines = []  # (line, level)
+        self._text_filter = ""
+        self._level_filter = "all"  # all|debug|info|warning|error|critical
 
         # UI 구성
         self._setup_ui()
@@ -88,6 +90,19 @@ class LogViewerWidget(QWidget):
         # 스페이서
         layout.addStretch()
 
+        # 레벨 필터 콤보박스 (전체/ERROR/DEBUG/INFO)
+        self.level_filter_combo = QComboBox()
+        self.level_filter_combo.addItems(["전체", "ERROR", "DEBUG", "INFO"])  # 요청된 4개 옵션만 제공
+        self.level_filter_combo.setToolTip("로그 레벨 필터")
+        layout.addWidget(self.level_filter_combo)
+
+        # 텍스트 필터
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText("텍스트 필터... (대소문자 구분 없음)")
+        self.filter_edit.setClearButtonEnabled(True)
+        self.filter_edit.setFixedWidth(200)
+        layout.addWidget(self.filter_edit)
+
         # 폰트 크기 조절
         font_label = QLabel("폰트:")
         layout.addWidget(font_label)
@@ -123,6 +138,9 @@ class LogViewerWidget(QWidget):
 
         # 폰트 크기 변경
         self.font_size_spinbox.valueChanged.connect(self._on_font_size_changed)
+        # 필터 변경
+        self.filter_edit.textChanged.connect(self._on_filter_text_changed)
+        self.level_filter_combo.currentTextChanged.connect(self._on_level_filter_changed)
 
     def _setup_syntax_highlighter(self):
         """로그 구문 강조기 설정"""
@@ -165,7 +183,12 @@ class LogViewerWidget(QWidget):
         Args:
             log_message: 추가할 로그 메시지
         """
-        self.append_log(log_message)
+        # 대량 문자열이 들어올 수 있으므로 줄 단위로 처리
+        if '\n' in log_message:
+            for line in log_message.splitlines():
+                self.append_log(line)
+        else:
+            self.append_log(log_message)
 
     def append_log(self, log_message: str):
         """로그 메시지 추가
@@ -180,24 +203,29 @@ class LogViewerWidget(QWidget):
         if self._current_lines >= self._max_lines:
             self._remove_old_lines()
 
-        # 타임스탬프가 없으면 추가
+        # 타임스탬프가 없으면 추가 (파일 포맷과 중복 방지)
         if not log_message.startswith('['):
             timestamp = datetime.now().strftime("%H:%M:%S")
             log_message = f"[{timestamp}] {log_message}"
 
-        # 로그 추가
-        cursor = self.log_text_edit.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.insertText(log_message + "\n")
+        # 레벨 추출 및 버퍼 저장
+        level = self._extract_level(log_message)
+        self._buffer_lines.append((log_message, level))
+        if len(self._buffer_lines) > self._max_lines:
+            overflow = len(self._buffer_lines) - self._max_lines
+            if overflow > 0:
+                self._buffer_lines = self._buffer_lines[overflow:]
 
-        self._current_lines += 1
+        # 필터 통과 시만 화면에 추가
+        if self._should_display(log_message, level):
+            cursor = self.log_text_edit.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            cursor.insertText(log_message + "\n")
 
-        # 자동 스크롤
-        if self._auto_scroll:
-            self._scroll_to_bottom()
-
-        # 상태 업데이트
-        self._update_status()
+            self._current_lines += 1
+            if self._auto_scroll:
+                self._scroll_to_bottom()
+            self._update_status()
 
     def append_logs(self, log_messages: list):
         """여러 로그 메시지 일괄 추가
@@ -206,7 +234,11 @@ class LogViewerWidget(QWidget):
             log_messages: 로그 메시지 리스트
         """
         for message in log_messages:
-            self.append_log(message)
+            if '\n' in message:
+                for line in message.splitlines():
+                    self.append_log(line)
+            else:
+                self.append_log(message)
 
     def clear_log_viewer(self):
         """로그 뷰어 클리어 (MVP Presenter 인터페이스)
@@ -214,6 +246,7 @@ class LogViewerWidget(QWidget):
         Phase 5.1 MVP 패턴을 위한 메서드
         """
         self._clear_logs()
+        self._buffer_lines.clear()
 
     def _clear_logs(self):
         """로그 내용 지우기"""
@@ -224,7 +257,8 @@ class LogViewerWidget(QWidget):
     def _scroll_to_bottom(self):
         """스크롤을 맨 아래로 이동"""
         scrollbar = self.log_text_edit.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        if scrollbar is not None:
+            scrollbar.setValue(scrollbar.maximum())
 
     def _remove_old_lines(self):
         """오래된 로그 라인 제거 (최대 라인 수 유지)"""
@@ -243,6 +277,52 @@ class LogViewerWidget(QWidget):
     def _update_status(self):
         """상태 레이블 업데이트"""
         self.status_label.setText(f"로그 활성 - {self._current_lines:,}개 메시지")
+
+    def _extract_level(self, message: str) -> str:
+        # [LEVEL] 이 있으면 사용, 없으면 info로 처리
+        up = message.upper()
+        for lv in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            if f"[{lv}]" in up:
+                return lv.lower()
+        return "info"
+
+    def _should_display(self, message: str, level: str) -> bool:
+        # 레벨 필터
+        if self._level_filter != "all" and level != self._level_filter:
+            return False
+        # 텍스트 필터 (대소문자 무시)
+        if self._text_filter and self._text_filter.lower() not in message.lower():
+            return False
+        return True
+
+    def _rebuild_display(self):
+        # 버퍼에서 다시 그리기
+        self.log_text_edit.clear()
+        self._current_lines = 0
+        for msg, lv in self._buffer_lines:
+            if self._should_display(msg, lv):
+                cursor = self.log_text_edit.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                cursor.insertText(msg + "\n")
+                self._current_lines += 1
+        if self._auto_scroll:
+            self._scroll_to_bottom()
+        self._update_status()
+
+    def _on_filter_text_changed(self, text: str):
+        self._text_filter = text.strip()
+        self._rebuild_display()
+
+    def _on_level_filter_changed(self, text: str):
+        # 제공되는 옵션만 매핑: 전체/ERROR/DEBUG/INFO
+        mapping = {
+            "전체": "all",
+            "ERROR": "error",
+            "DEBUG": "debug",
+            "INFO": "info",
+        }
+        self._level_filter = mapping.get(text.strip(), "all")
+        self._rebuild_display()
 
     def get_log_content(self) -> str:
         """현재 로그 내용 반환
@@ -288,7 +368,8 @@ class LogViewerWidget(QWidget):
     def scroll_to_top(self):
         """스크롤을 맨 위로 이동"""
         scrollbar = self.log_text_edit.verticalScrollBar()
-        scrollbar.setValue(0)
+        if scrollbar is not None:
+            scrollbar.setValue(0)
 
     def scroll_to_bottom(self):
         """스크롤을 맨 아래로 이동 (공개 메서드)"""
@@ -304,8 +385,8 @@ class LogViewerWidget(QWidget):
         Returns:
             bool: 검색 성공 여부
         """
-        flags = QTextCursor.FindFlag(0)
         if case_sensitive:
-            flags |= QTextCursor.FindFlag.FindCaseSensitively
-
+            flags = QTextDocument.FindFlag.FindCaseSensitively
+        else:
+            flags = QTextDocument.FindFlag(0)
         return self.log_text_edit.find(text, flags)
