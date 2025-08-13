@@ -34,11 +34,11 @@ class ConsoleViewerWidget(QWidget):
         self.logger.info("💻 콘솔 뷰어 위젯 초기화 시작")
 
         # 내부 상태
-        self._max_lines = 500  # 최대 콘솔 라인 수 (표시 기준)
+        self._max_lines = 1000  # 최대 콘솔 라인 수 (표시 기준) - 1000라인으로 증가
         self._current_lines = 0
         self._buffer_lines = []  # (message, type)
         self._text_filter = ""
-        self._stream_filter = "all"  # all|stdout|stderr|system
+        self._stream_filter = "all"  # all|error|warning|debug|info
 
         # 텍스트 포맷 설정
         self._setup_formats()
@@ -118,8 +118,8 @@ class ConsoleViewerWidget(QWidget):
 
         # 스트림 필터 콤보박스
         self.stream_filter_combo = QComboBox()
-        self.stream_filter_combo.addItems(["전체", "표준 출력", "오류 출력", "시스템"])
-        self.stream_filter_combo.setToolTip("출력 종류 필터")
+        self.stream_filter_combo.addItems(["전체", "ERROR", "WARNING", "DEBUG", "INFO"])
+        self.stream_filter_combo.setToolTip("메시지 레벨 필터")
         layout.addWidget(self.stream_filter_combo)
 
         # 텍스트 필터
@@ -156,11 +156,13 @@ class ConsoleViewerWidget(QWidget):
         self._rebuild_display()
 
     def _on_stream_filter_changed(self, text: str):
+        """스트림 필터 변경 핸들러"""
         mapping = {
             "전체": "all",
-            "표준 출력": "stdout",
-            "오류 출력": "stderr",
-            "시스템": "system",
+            "ERROR": "error",
+            "WARNING": "warning",
+            "DEBUG": "debug",
+            "INFO": "info",
         }
         self._stream_filter = mapping.get(text, "all")
         self._rebuild_display()
@@ -279,13 +281,30 @@ class ConsoleViewerWidget(QWidget):
             cursor.insertText(text[pos:])
 
     def _should_display(self, message: str, message_type: str) -> bool:
-        # 스트림 필터 체크
-        if self._stream_filter != "all" and message_type != self._stream_filter:
-            return False
+        """메시지 표시 여부 결정"""
+        # 레벨 필터 체크 (메시지 내용에서 레벨 추출)
+        if self._stream_filter != "all":
+            message_level = self._extract_log_level(message)
+            if message_level != self._stream_filter:
+                return False
+
         # 텍스트 필터 체크 (대소문자 무시)
         if self._text_filter:
             return self._text_filter.lower() in message.lower()
         return True
+
+    def _extract_log_level(self, message: str) -> str:
+        """메시지에서 로그 레벨 추출"""
+        message_upper = message.upper()
+        if "ERROR" in message_upper or "CRITICAL" in message_upper:
+            return "error"
+        elif "WARNING" in message_upper or "WARN" in message_upper:
+            return "warning"
+        elif "DEBUG" in message_upper:
+            return "debug"
+        elif "INFO" in message_upper:
+            return "info"
+        return "debug"  # 기본값은 debug
 
     def _rebuild_display(self):
         # 현재 뷰를 버퍼로부터 재구성

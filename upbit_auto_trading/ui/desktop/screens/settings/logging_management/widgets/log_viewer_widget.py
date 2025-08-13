@@ -90,9 +90,9 @@ class LogViewerWidget(QWidget):
         # 스페이서
         layout.addStretch()
 
-        # 레벨 필터 콤보박스 (전체/ERROR/DEBUG/INFO)
+        # 레벨 필터 콤보박스 (전체/ERROR/DEBUG/INFO/WARNING)
         self.level_filter_combo = QComboBox()
-        self.level_filter_combo.addItems(["전체", "ERROR", "DEBUG", "INFO"])  # 요청된 4개 옵션만 제공
+        self.level_filter_combo.addItems(["전체", "ERROR", "WARNING", "DEBUG", "INFO"])
         self.level_filter_combo.setToolTip("로그 레벨 필터")
         layout.addWidget(self.level_filter_combo)
 
@@ -279,12 +279,26 @@ class LogViewerWidget(QWidget):
         self.status_label.setText(f"로그 활성 - {self._current_lines:,}개 메시지")
 
     def _extract_level(self, message: str) -> str:
-        # [LEVEL] 이 있으면 사용, 없으면 info로 처리
+        """로그 메시지에서 레벨 추출"""
         up = message.upper()
-        for lv in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+
+        # 브라켓 형태 우선 검색: [DEBUG], [INFO], [WARNING], [ERROR], [CRITICAL]
+        for lv in ("CRITICAL", "ERROR", "WARNING", "DEBUG", "INFO"):  # 우선순위 순
             if f"[{lv}]" in up:
                 return lv.lower()
-        return "info"
+
+        # 브라켓 없이 레벨 키워드 검색 (- upbit.Component - LEVEL - 형태)
+        for lv in ("CRITICAL", "ERROR", "WARNING", "DEBUG", "INFO"):
+            if f" - {lv} - " in up:
+                return lv.lower()
+
+        # 단독 키워드 검색 (공백 경계)
+        import re
+        for lv in ("CRITICAL", "ERROR", "WARNING", "DEBUG", "INFO"):
+            if re.search(rf'\b{lv}\b', up):
+                return lv.lower()
+
+        return "info"  # 기본값
 
     def _should_display(self, message: str, level: str) -> bool:
         # 레벨 필터
@@ -314,10 +328,12 @@ class LogViewerWidget(QWidget):
         self._rebuild_display()
 
     def _on_level_filter_changed(self, text: str):
-        # 제공되는 옵션만 매핑: 전체/ERROR/DEBUG/INFO
+        """레벨 필터 변경 핸들러"""
+        # 제공되는 옵션만 매핑: 전체/ERROR/WARNING/DEBUG/INFO
         mapping = {
             "전체": "all",
             "ERROR": "error",
+            "WARNING": "warning",
             "DEBUG": "debug",
             "INFO": "info",
         }

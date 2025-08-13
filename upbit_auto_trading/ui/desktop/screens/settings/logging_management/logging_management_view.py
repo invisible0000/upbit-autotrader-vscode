@@ -153,31 +153,13 @@ class LoggingManagementView(QWidget):
         )
         self.reset_settings_requested.connect(self.presenter.reset_to_defaults)
 
-        # 초기 설정 로드 및 실시간 모니터링 시작
+        # 초기 설정 로드
         self.presenter.load_current_config()
 
-        # Phase 5.2: 초기 세션 로그 표시
-        self._load_initial_logs()
-
-        # Phase 5.3: 실시간 모니터링 시작 (파일 로그 + 콘솔 캡처)
+        # Phase 5.2: 실시간 모니터링 시작 (초기 로그 로딩 포함)
         self.presenter.start_real_time_monitoring()
 
         self.logger.debug("🔗 프레젠터 시그널 연결 완료 - 실시간 로그 스트리밍 활성화")
-
-    def _load_initial_logs(self):
-        """초기 세션 로그 로딩 - Phase 5.2"""
-        try:
-            # 프레젠터에서 전체 로그 내용 가져오기
-            initial_content = self.presenter.get_full_log_content()
-            if initial_content and initial_content.strip():
-                self.log_viewer_widget.append_log_message(initial_content)
-                self.logger.debug("📜 초기 세션 로그 로딩 완료")
-            else:
-                self.log_viewer_widget.append_log_message("로깅 관리 탭이 시작되었습니다.")
-                self.logger.debug("📜 로그 파일이 비어있음 - 환영 메시지 표시")
-        except Exception as e:
-            self.logger.error(f"❌ 초기 로그 로딩 실패: {e}")
-            self.log_viewer_widget.append_log_message(f"초기 로그 로딩 중 오류 발생: {str(e)}")
 
     # ===== MVP Passive View 인터페이스 =====
     # Presenter에서 호출할 메서드들

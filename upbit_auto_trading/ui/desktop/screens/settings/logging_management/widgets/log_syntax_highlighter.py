@@ -220,29 +220,35 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
 
         # 7. 중요한 키워드 강조 (한글과 영문을 분리해 경계 처리 개선)
         korean_keywords = [
-            '시작', '완료', '실패', '성공', '에러', '경고',
-            '초기화', '종료', '연결', '해제', '로드', '저장',
+            '시작됨', '시작중', '시작완료', '초기화완료', '초기화됨', '로딩완료',
+            '완료됨', '처리완료', '생성완료', '연결완료', '설정완료',
+            '실패함', '실패됨', '처리실패', '연결실패', '로드실패',
+            '성공함', '성공됨', '처리성공', '연결성공', '생성성공',
+            '에러발생', '오류발생',
+            '경고발생', '주의사항',
+            '초기화중', '종료중', '연결중', '해제중', '로드중', '저장중',
         ]
         english_keywords = [
-            'start', 'started', 'complete', 'completed', 'fail', 'failed',
-            'success', 'error', 'warning', 'retry', 'timeout'
+            'started', 'starting', 'complete', 'completed', 'finished',
+            'failed', 'failure', 'success', 'successful', 'error', 'warning',
+            'initialized', 'initializing', 'loading', 'loaded', 'saving', 'saved'
         ]
 
-        # 한글 키워드는 한글/영문/숫자/언더스코어에 둘러싸이지 않은 곳에서만 일치하게 함
-        # -> 부분 문자열(예: '초기') 과다 매칭 방지
+        # 한글 키워드는 2글자 이상이고 앞뒤가 한글/영문/숫자/언더스코어가 아닌 경우만
         for keyword in korean_keywords:
-            pattern = re.compile(
-                rf'(?<![가-힣A-Za-z0-9_]){re.escape(keyword)}(?![가-힣A-Za-z0-9_])'
-            )
-            if keyword in ['실패', '에러']:
-                fmt = self.failure_format
-            elif keyword in ['성공', '완료']:
-                fmt = self.success_format
-            elif keyword in ['경고']:
-                fmt = self.warning_symbol_format
-            else:
-                fmt = self.info_format
-            self.highlighting_rules.append((pattern, fmt))
+            if len(keyword) >= 2:  # 2글자 이상만 매칭
+                pattern = re.compile(
+                    rf'(?<![가-힣A-Za-z0-9_]){re.escape(keyword)}(?![가-힣A-Za-z0-9_])'
+                )
+                if any(word in keyword for word in ['실패', '에러', '오류']):
+                    fmt = self.failure_format
+                elif any(word in keyword for word in ['성공', '완료']):
+                    fmt = self.success_format
+                elif any(word in keyword for word in ['경고', '주의']):
+                    fmt = self.warning_symbol_format
+                else:
+                    fmt = self.info_format
+                self.highlighting_rules.append((pattern, fmt))
 
         # 영문 키워드는 \\b 경계 사용
         for keyword in english_keywords:

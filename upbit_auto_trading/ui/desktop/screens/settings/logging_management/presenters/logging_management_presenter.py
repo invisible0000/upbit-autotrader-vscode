@@ -67,6 +67,9 @@ class LoggingManagementPresenter(QObject):
         # 라이브 로그 버퍼 시퀀스 추적 (인메모리 구독)
         self._live_last_seq = 0
 
+        # 중복 로딩 방지 플래그
+        self._monitoring_started = False
+
         self.logger.info("로깅 관리 프레젠터 초기화 완료")
 
     def set_view(self, view: QWidget) -> None:
@@ -104,6 +107,10 @@ class LoggingManagementPresenter(QObject):
 
     def start_real_time_monitoring(self) -> None:
         """실시간 로그 모니터링 시작"""
+        if self._monitoring_started:
+            self.logger.debug("실시간 모니터링이 이미 시작됨 - 중복 호출 방지")
+            return
+
         try:
             self._update_current_log_file()
             if self._current_log_file and self._current_log_file.exists():
@@ -126,6 +133,8 @@ class LoggingManagementPresenter(QObject):
             # 라이브 로그 핸들러 연결 및 시퀀스 초기화
             attach_live_log_handler()
             self._live_last_seq = get_live_log_buffer().last_seq()
+
+            self._monitoring_started = True
         except Exception as e:
             self.logger.error(f"❌ 실시간 모니터링 시작 실패: {e}")
 
@@ -143,6 +152,7 @@ class LoggingManagementPresenter(QObject):
         self._last_console_len = 0
         # 라이브 로그 핸들러 해제
         detach_live_log_handler()
+        self._monitoring_started = False
 
     def _update_current_log_file(self) -> None:
         """현재 활성 로그 파일 경로 업데이트"""
