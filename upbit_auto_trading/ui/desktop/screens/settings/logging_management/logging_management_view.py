@@ -142,10 +142,10 @@ class LoggingManagementView(QWidget):
 
     def _connect_presenter_signals(self):
         """프레젠터와의 시그널 연결 - Phase 5.1 실시간 로그 스트리밍"""
-
         # Presenter → View 시그널 연결
         self.presenter.config_loaded.connect(self.update_settings_display)
         self.presenter.log_content_updated.connect(self.append_log_message)
+        self.presenter.console_output_updated.connect(self.append_console_output)
 
         # View → Presenter 시그널 연결
         self.apply_settings_requested.connect(
@@ -159,6 +159,7 @@ class LoggingManagementView(QWidget):
         # Phase 5.2: 초기 세션 로그 표시
         self._load_initial_logs()
 
+        # Phase 5.3: 실시간 모니터링 시작 (파일 로그 + 콘솔 캡처)
         self.presenter.start_real_time_monitoring()
 
         self.logger.debug("🔗 프레젠터 시그널 연결 완료 - 실시간 로그 스트리밍 활성화")
@@ -176,7 +177,9 @@ class LoggingManagementView(QWidget):
                 self.logger.debug("📜 로그 파일이 비어있음 - 환영 메시지 표시")
         except Exception as e:
             self.logger.error(f"❌ 초기 로그 로딩 실패: {e}")
-            self.log_viewer_widget.append_log_message(f"초기 로그 로딩 중 오류 발생: {str(e)}")    # ===== MVP Passive View 인터페이스 =====
+            self.log_viewer_widget.append_log_message(f"초기 로그 로딩 중 오류 발생: {str(e)}")
+
+    # ===== MVP Passive View 인터페이스 =====
     # Presenter에서 호출할 메서드들
 
     def update_settings_display(self, settings: dict):
@@ -194,7 +197,7 @@ class LoggingManagementView(QWidget):
 
     def append_console_output(self, output: str, is_error: bool = False):
         """콘솔 출력 추가 (Presenter → View)"""
-        self.console_viewer_widget.append_console_output(output, is_error)
+        self.console_viewer_widget.append_console_output(output, is_error)  # type: ignore[attr-defined]
 
     def clear_log_viewer(self):
         """로그 뷰어 클리어 (Presenter → View)"""
@@ -202,7 +205,12 @@ class LoggingManagementView(QWidget):
 
     def clear_console_viewer(self):
         """콘솔 뷰어 클리어 (Presenter → View)"""
-        self.console_viewer_widget.clear_console_viewer()
+        self.console_viewer_widget.clear_console_viewer()  # type: ignore[attr-defined]
+        # Presenter의 버퍼도 초기화
+        try:
+            self.presenter.clear_console_buffer()
+        except Exception:
+            pass
 
     def show_status_message(self, message: str, level: str = "info"):
         """상태 메시지 표시 (Presenter → View)"""

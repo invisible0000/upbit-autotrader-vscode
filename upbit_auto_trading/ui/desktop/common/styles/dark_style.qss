@@ -183,6 +183,13 @@ QTextEdit {
     selection-color: white;
 }
 
+/* 콘솔 뷰어 전용 텍스트 영역 (다크) */
+QTextEdit#console-text-display {
+    background-color: #1f1f1f; /* 기본 다크보다 약간 더 어둡게 */
+    color: #e6e6e6;            /* 살짝 더 밝은 전경색 */
+    border: 1px solid #404040;
+}
+
 QTextEdit:focus {
     border: 1px solid #3498db;
 }
@@ -398,7 +405,7 @@ QLabel {
 }
 
 /* 트리거 빌더 전용 스타일 - 간소화된 버전 */
-QLabel#titleLabel, QLabel#statusLabel, QLabel#fallbackLabel, 
+QLabel#titleLabel, QLabel#statusLabel, QLabel#fallbackLabel,
 QLabel#dataSourceFallback, QLabel#conditionBuilderFallback {
     color: #e0e0e0;
     padding: 8px;

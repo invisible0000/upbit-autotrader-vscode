@@ -1,9 +1,9 @@
 logging:
-  level: INFO
-  console_output: false
-  scope: normal
+  level: DEBUG
+  console_output: 'true'
+  scope: debug_all
   component_focus: ''
-  context: development
+  context: debug
   file_logging:
     enabled: true
     path: logs
@@ -15,4 +15,4 @@ logging:
 runtime:
   watch_config_file: true
   notify_on_change: true
-  last_modified: '2025-08-12T22:39:56.495392'
+  last_modified: '2025-08-12T23:22:13.555610'
