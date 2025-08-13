@@ -45,7 +45,9 @@ class ProfileSelectorSection(QWidget):
         super().__init__(parent)
         self.setObjectName("ProfileSelectorSection")
 
-        logger.info("📂 프로파일 선택기 섹션 초기화 시작")
+        logger.warning("🚫 프로파일 선택기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
+        logger.info("📂 프로파일 선택기 섹션 초기화 시작 - UI만 보존, 기능 비활성화")
+        logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         # 상태 관리
         self._current_profile = ""

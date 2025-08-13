@@ -119,8 +119,17 @@ class EnvironmentProfilePresenter(QObject):
     # ===============================================================================
 
     def load_profile(self, profile_name: str) -> bool:
-        """프로파일 로드 및 UI 업데이트 - 실제 YAML 파일 로드 기능 추가"""
-        logger.info(f"📂 프로파일 로드 요청: {profile_name}")
+        """프로파일 로드 및 UI 업데이트 - ⚠️ 기능 정지됨
+
+        ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
+        향후 config/ 폴더 기반으로 재구현될 예정입니다.
+        """
+        logger.warning(f"� 프로파일 로드 기능이 정지되었습니다: {profile_name}")
+        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+
+        error_msg = "프로파일 기능이 정지되었습니다. config/ 폴더 기반 설정을 사용하세요."
+        self.error_occurred.emit(error_msg)
+        return False
 
         try:
             # 서비스 초기화 보장
@@ -283,9 +292,17 @@ class EnvironmentProfilePresenter(QObject):
     # ===============================================================================
 
     def start_edit_mode(self, profile_name: str = "") -> bool:
-        """편집 모드 시작"""
-        target_profile = profile_name or self._current_profile
-        logger.info(f"✏️ 편집 모드 시작: {target_profile}")
+        """편집 모드 시작 - ⚠️ 기능 정지됨
+
+        ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
+        향후 config/ 폴더 기반으로 재구현될 예정입니다.
+        """
+        logger.warning(f"🚫 편집 모드 기능이 정지되었습니다: {profile_name}")
+        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+
+        error_msg = "프로파일 편집 기능이 정지되었습니다."
+        self.error_occurred.emit(error_msg)
+        return False
 
         try:
             # 서비스 초기화 보장
@@ -411,8 +428,17 @@ class EnvironmentProfilePresenter(QObject):
             return False
 
     def save_current_profile(self) -> bool:
-        """현재 프로파일 저장"""
-        logger.info(f"💾 프로파일 저장: {self._current_profile}")
+        """현재 프로파일 저장 - ⚠️ 기능 정지됨
+
+        ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
+        향후 config/ 폴더 기반으로 재구현될 예정입니다.
+        """
+        logger.warning(f"� 프로파일 저장 기능이 정지되었습니다: {self._current_profile}")
+        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+
+        error_msg = "프로파일 저장 기능이 정지되었습니다."
+        self.error_occurred.emit(error_msg)
+        return False
 
         try:
             if not self._current_profile:

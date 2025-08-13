@@ -42,6 +42,9 @@ class CodeEditorWithLineNumbers(QPlainTextEdit):
     def __init__(self):
         super().__init__()
 
+        logger.warning("🚫 YAML 편집기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
+        logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
+
         self.line_number_area = LineNumberArea(self)
 
         self.blockCountChanged.connect(self.update_line_number_area_width)

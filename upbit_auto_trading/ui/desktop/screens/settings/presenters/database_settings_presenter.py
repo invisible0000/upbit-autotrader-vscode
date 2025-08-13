@@ -40,9 +40,11 @@ import os
 import json
 import subprocess
 import platform
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Dict, Any, Optional
+from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.domain.database_configuration.services.database_path_service import (
@@ -59,6 +61,39 @@ if TYPE_CHECKING:
     from upbit_auto_trading.ui.desktop.screens.settings.interfaces.database_tab_view_interface import (
         IDatabaseTabView
     )
+
+
+class DatabaseInfoWorker(QObject):
+    """데이터베이스 정보 로드를 위한 백그라운드 워커"""
+    finished = pyqtSignal(object, object)  # info_dto, detailed_status
+    error = pyqtSignal(str)
+
+    def __init__(self, db_path_service, get_detailed_status_func):
+        super().__init__()
+        self.db_path_service = db_path_service
+        self.get_detailed_status_func = get_detailed_status_func
+
+    def run(self):
+        """백그라운드에서 데이터베이스 정보 로드"""
+        try:
+            # DDD 도메인 서비스를 통한 경로 조회
+            paths = self.db_path_service.get_all_paths()
+
+            # DTO 생성
+            from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import DatabaseInfoDto
+            info_dto = DatabaseInfoDto(
+                settings_db_path=str(paths.get('settings', 'Unknown')),
+                strategies_db_path=str(paths.get('strategies', 'Unknown')),
+                market_data_db_path=str(paths.get('market_data', 'Unknown'))
+            )
+
+            # 상세 상태 정보 조회
+            detailed_status = self.get_detailed_status_func(paths)
+
+            self.finished.emit(info_dto, detailed_status)
+        except Exception as e:
+            self.error.emit(str(e))
+
 
 class DatabaseSettingsPresenter:
     """데이터베이스 설정 통합 프레젠터
@@ -80,6 +115,15 @@ class DatabaseSettingsPresenter:
         self._replacement_use_case = None
         # self._profile_management_use_case = None  # 향후 구현
         self._dto_classes_loaded = False
+
+        # 캐싱 시스템 추가 - UI 프리징 방지
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._cache_ttl = 5.0  # 5초 캐시 유지
+
+        # 비동기 처리를 위한 워커 스레드
+        self._worker_thread = None
+        self._worker = None
 
         self.logger.info("✅ 데이터베이스 설정 통합 프레젠터 초기화 완료")
 
@@ -115,23 +159,193 @@ class DatabaseSettingsPresenter:
                 self.logger.error(f"❌ DTO 클래스 로드 실패: {e}")
                 raise
 
-    def load_database_info(self):
-        """데이터베이스 정보 로드 - DDD 도메인 서비스 활용"""
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """캐시가 유효한지 확인"""
+        if cache_key not in self._cache_timestamps:
+            return False
+
+        elapsed = time.time() - self._cache_timestamps[cache_key]
+        return elapsed < self._cache_ttl
+
+    def _get_cached_or_compute(self, cache_key: str, compute_func):
+        """캐시에서 데이터를 가져오거나 새로 계산"""
+        if self._is_cache_valid(cache_key):
+            self.logger.debug(f"📋 캐시에서 데이터 반환: {cache_key}")
+            return self._cache[cache_key]
+
+        # 캐시가 없거나 만료된 경우 새로 계산
+        start_time = time.time()
+        result = compute_func()
+        self._cache[cache_key] = result
+        self._cache_timestamps[cache_key] = time.time()
+
+        elapsed = time.time() - start_time
+        self.logger.debug(f"🔄 데이터 새로 계산 완료: {cache_key} ({elapsed:.2f}초)")
+        return result
+
+    def _clear_cache(self):
+        """캐시 초기화"""
+        self._cache.clear()
+        self._cache_timestamps.clear()
+        self.logger.debug("🗑️ 캐시 초기화됨")
+
+    def load_database_info_async(self):
+        """데이터베이스 정보 비동기 로드 - UI 프리징 없음"""
         try:
-            self.logger.info("📊 데이터베이스 정보 로드 시작 (DDD)")
+            self.logger.info("🚀 데이터베이스 정보 비동기 로드 시작")
 
-            # DDD 도메인 서비스를 통한 경로 조회
-            paths = self.db_path_service.get_all_paths()
+            # 캐시가 유효하면 즉시 반환
+            if self._is_cache_valid("database_info"):
+                self.logger.debug("📋 캐시에서 즉시 데이터 반환")
+                info_dto, detailed_status = self._cache["database_info"]
+                self._update_view_with_database_info(info_dto, detailed_status)
+                return
 
-            # DTO 생성
-            info_dto = DatabaseInfoDto(
-                settings_db_path=str(paths.get('settings', 'Unknown')),
-                strategies_db_path=str(paths.get('strategies', 'Unknown')),
-                market_data_db_path=str(paths.get('market_data', 'Unknown'))
+            # 캐시가 없으면 비동기로 로드
+            self._start_async_loading()
+
+        except Exception as e:
+            self.logger.error(f"❌ 비동기 데이터베이스 정보 로드 실패: {e}")
+
+    def _start_async_loading(self):
+        """비동기 로딩 시작"""
+        if self._worker_thread and self._worker_thread.isRunning():
+            self.logger.debug("🔄 이미 로딩 중 - 건너뜀")
+            return
+
+        # 워커 스레드 정리
+        self._cleanup_worker()
+
+        # 새 워커 스레드 생성
+        self._worker_thread = QThread()
+        self._worker = DatabaseInfoWorker(
+            self.db_path_service,
+            self._get_detailed_database_status
+        )
+
+        # 워커를 스레드로 이동
+        self._worker.moveToThread(self._worker_thread)
+
+        # 시그널 연결
+        self._worker_thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_async_load_finished)
+        self._worker.error.connect(self._on_async_load_error)
+        self._worker.finished.connect(self._worker_thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._worker_thread.finished.connect(self._worker_thread.deleteLater)
+
+        # 스레드 시작
+        self._worker_thread.start()
+        self.logger.debug("🚀 비동기 워커 스레드 시작됨")
+
+    def _on_async_load_finished(self, info_dto, detailed_status):
+        """비동기 로딩 완료 핸들러"""
+        try:
+            # 캐시에 저장
+            self._cache["database_info"] = (info_dto, detailed_status)
+            self._cache_timestamps["database_info"] = time.time()
+
+            # UI 업데이트
+            self._update_view_with_database_info(info_dto, detailed_status)
+
+            self.logger.debug("✅ 비동기 데이터베이스 정보 로드 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 비동기 로딩 완료 처리 실패: {e}")
+
+    def _on_async_load_error(self, error_message):
+        """비동기 로딩 에러 핸들러"""
+        self.logger.error(f"❌ 비동기 데이터베이스 정보 로드 에러: {error_message}")
+
+    def _cleanup_worker(self):
+        """워커 스레드 정리"""
+        if self._worker_thread:
+            if self._worker_thread.isRunning():
+                self._worker_thread.quit()
+                self._worker_thread.wait()
+            self._worker_thread = None
+        self._worker = None
+
+    def _update_view_with_database_info(self, info_dto, detailed_status):
+        """데이터베이스 정보로 뷰 업데이트"""
+        # 상태 메시지 생성 (기존 로직 재사용)
+        status_parts = []
+        settings_exists = detailed_status['settings']['is_healthy']
+        strategies_exists = detailed_status['strategies']['is_healthy']
+        market_data_exists = detailed_status['market_data']['is_healthy']
+
+        if settings_exists:
+            response_time = detailed_status['settings'].get('response_time_ms', 0)
+            file_size = detailed_status['settings'].get('file_size_mb', 0)
+            status_parts.append(f"⚙️ 설정 DB: 정상 ({response_time:.1f}ms, {file_size:.1f}MB)")
+        else:
+            error_msg = detailed_status['settings'].get('error_message', '파일 없음')
+            status_parts.append(f"⚙️ 설정 DB: {error_msg}")
+
+        if strategies_exists:
+            response_time = detailed_status['strategies'].get('response_time_ms', 0)
+            file_size = detailed_status['strategies'].get('file_size_mb', 0)
+            status_parts.append(f"🎯 전략 DB: 정상 ({response_time:.1f}ms, {file_size:.1f}MB)")
+        else:
+            error_msg = detailed_status['strategies'].get('error_message', '파일 없음')
+            status_parts.append(f"🎯 전략 DB: {error_msg}")
+
+        if detailed_status['market_data']['is_healthy']:
+            response_time = detailed_status['market_data'].get('response_time_ms', 0)
+            file_size = detailed_status['market_data'].get('file_size_mb', 0)
+            status_parts.append(f"📈 시장데이터 DB: 정상 ({response_time:.1f}ms, {file_size:.1f}MB)")
+        else:
+            error_msg = detailed_status['market_data'].get('error_message', '파일 없음')
+            status_parts.append(f"📈 시장데이터 DB: {error_msg}")
+
+        status_message = " | ".join(status_parts)
+
+        # 인터페이스에 맞춰 View 업데이트
+        info_dict = {
+            'settings_db_path': info_dto.settings_db_path,
+            'strategies_db_path': info_dto.strategies_db_path,
+            'market_data_db_path': info_dto.market_data_db_path
+        }
+
+        status_dict = {
+            'settings_exists': settings_exists,
+            'strategies_exists': strategies_exists,
+            'market_data_exists': market_data_exists,
+            'status_message': status_message
+        }
+
+        # 기존 인터페이스 메서드 사용
+        if hasattr(self.view, 'display_database_info'):
+            self.view.display_database_info(info_dict)
+
+        if hasattr(self.view, 'display_status'):
+            self.view.display_status(status_dict)
+
+        self.logger.info(f"✅ 데이터베이스 정보 로드 완료 (비동기): {status_message}")
+
+    def load_database_info(self):
+        """데이터베이스 정보 로드 - DDD 도메인 서비스 활용 (캐싱 적용)"""
+        try:
+            self.logger.info("📊 데이터베이스 정보 로드 시작 (DDD + 캐싱)")
+
+            # 캐시에서 데이터 가져오기 또는 새로 계산
+            def compute_database_info():
+                # DDD 도메인 서비스를 통한 경로 조회
+                paths = self.db_path_service.get_all_paths()
+
+                # DTO 생성
+                info_dto = DatabaseInfoDto(
+                    settings_db_path=str(paths.get('settings', 'Unknown')),
+                    strategies_db_path=str(paths.get('strategies', 'Unknown')),
+                    market_data_db_path=str(paths.get('market_data', 'Unknown'))
+                )
+
+                # 상세 상태 정보 조회
+                detailed_status = self._get_detailed_database_status(paths)
+                return info_dto, detailed_status
+
+            info_dto, detailed_status = self._get_cached_or_compute(
+                "database_info", compute_database_info
             )
-
-            # 상세 상태 정보 조회
-            detailed_status = self._get_detailed_database_status(paths)
 
             # 상태 메시지 생성
             status_parts = []
@@ -335,6 +549,8 @@ class DatabaseSettingsPresenter:
                 except Exception as refresh_error:
                     self.logger.warning(f"⚠️ 백업 목록 갱신 실패: {refresh_error}")
 
+                # 백업 생성 후 캐시 무효화
+                self._clear_cache()
                 return True
             else:
                 self.logger.error("❌ 백업 파일이 생성되지 않았거나 비어있음")
@@ -439,11 +655,15 @@ class DatabaseSettingsPresenter:
                         # 즉시 새로고침
                         if hasattr(self.view, 'refresh_backup_list'):
                             self.view.refresh_backup_list()
+                        # 복원 후 캐시 무효화 및 DB 정보 다시 로드
+                        self._clear_cache()
                         self.load_database_info()
                 else:
                     # show_info_message가 없으면 바로 새로고침
                     if hasattr(self.view, 'refresh_backup_list'):
                         self.view.refresh_backup_list()
+                    # 복원 후 캐시 무효화 및 DB 정보 다시 로드
+                    self._clear_cache()
                     self.load_database_info()
 
                 return True
@@ -574,6 +794,8 @@ class DatabaseSettingsPresenter:
                 # UI 새로고침 - 백업 목록과 상태 모두 업데이트
                 if hasattr(self.view, 'refresh_backup_list'):
                     self.view.refresh_backup_list()
+                # 경로 변경 후 캐시 무효화 및 DB 정보 다시 로드
+                self._clear_cache()
                 self.load_database_info()
 
                 return True
@@ -806,7 +1028,8 @@ class DatabaseSettingsPresenter:
         try:
             self.logger.info("🔄 데이터베이스 상태 새로고침 시작")
 
-            # 상태 정보 로드
+            # 캐시 무효화 후 상태 정보 로드
+            self._clear_cache()
             self.load_database_info()
 
             # 백업 목록도 함께 새로고침

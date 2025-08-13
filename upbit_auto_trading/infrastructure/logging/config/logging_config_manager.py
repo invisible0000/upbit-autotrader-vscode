@@ -324,7 +324,8 @@ class LoggingConfigManager:
         Returns:
             str: 현재 프로파일명
         """
-        return self._current_profile
+        # ⚠️ 프로파일 기능 정지 - 고정값 반환
+        return 'development (프로파일 기능 정지됨)'
 
     def reset_to_defaults(self, save_to_file: bool = True) -> bool:
         """기본값으로 리셋

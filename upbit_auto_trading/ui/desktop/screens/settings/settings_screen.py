@@ -311,6 +311,10 @@ class SettingsScreen(QWidget):
         main_layout.addLayout(button_layout)
         self.logger.info("✅ UI 컴포넌트 설정 완료")
 
+        # 초기화 완료 플래그 설정 (탭 변경 시 과도한 로그 방지)
+        self._initial_tab_setup_done = True
+        self.logger.debug("🚀 초기 탭 설정 완료 - 자동 새로고침 활성화")
+
     def connect_view_signals(self) -> None:
         """View 내부 시그널 연결 (Presenter와 연결은 별도)"""
         # 하위 위젯들의 시그널을 상위로 중계
@@ -378,14 +382,19 @@ class SettingsScreen(QWidget):
             self.tab_widget.setCurrentIndex(index)
 
     def _on_tab_changed(self, index: int) -> None:
-        """탭 변경 시 자동 새로고침 - UX 편의 기능"""
+        """탭 변경 시 자동 새로고침 - UX 편의 기능 (최적화된 캐싱)"""
         try:
             tab_names = ["UI 설정", "API 키", "데이터베이스", "프로파일", "로깅 관리", "알림"]
             tab_name = tab_names[index] if 0 <= index < len(tab_names) else f"탭 {index}"
 
             self.logger.debug(f"🔄 탭 변경 감지: {tab_name} (인덱스: {index})")
 
-            # 각 탭별 자동 새로고침 처리
+            # 초기화 시에는 자동 새로고침 건너뛰기 (초기 캐시 보호)
+            if not hasattr(self, '_initial_tab_setup_done'):
+                self.logger.debug("🚀 초기 탭 설정 중 - 자동 새로고침 건너뛰기")
+                return
+
+            # 각 탭별 자동 새로고침 처리 (더 긴 캐싱 시간 적용)
             if index == 0:  # UI 설정 탭
                 self.logger.debug("🎨 UI 설정 탭 선택 - 자동 새로고침 시작")
                 ui_settings = getattr(self, 'ui_settings', None)
@@ -406,43 +415,39 @@ class SettingsScreen(QWidget):
                     except Exception as e:
                         self.logger.warning(f"⚠️ API 키 새로고침 실패: {e}")
 
-            elif index == 2:  # 데이터베이스 탭
+            elif index == 2:  # 데이터베이스 탭 - 캐싱 시간 대폭 증가
                 self.logger.debug("💾 데이터베이스 탭 선택 - 자동 새로고침 시작")
                 if hasattr(self, 'database_settings'):
                     try:
-                        # 캐싱된 데이터가 있는지 확인 후 조건부 새로고침
+                        # 강화된 캐싱 로직 (5분 이내 재조회 방지)
                         presenter = getattr(self.database_settings, 'presenter', None)
                         if presenter:
-                            # 간단한 캐싱 로직 (30초 이내 재조회 방지)
                             current_time = time.time()
                             last_refresh = getattr(presenter, '_last_auto_refresh_time', 0)
 
-                            if current_time - last_refresh > 30:  # 30초 이후에만 자동 새로고침
+                            if current_time - last_refresh > 300:  # 5분 이후에만 자동 새로고침
                                 if hasattr(presenter, 'refresh_status'):
                                     presenter.refresh_status()
                                     presenter._last_auto_refresh_time = current_time
                                     self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (Presenter)")
                                 else:
-                                    self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (30초 이내)")
+                                    self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (Presenter 없음)")
                             else:
-                                self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (30초 이내)")
-                        # View 직접 새로고침 (폴백)
-                        elif hasattr(self.database_settings, 'refresh_display'):
-                            getattr(self.database_settings, 'refresh_display')()
-                            self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (View)")
+                                self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (5분 이내)")
+                        # View 직접 새로고침 (폴백) - 제거하여 로그 감소
                     except Exception as e:
                         self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
 
-            elif index == 3:  # 프로파일 탭 (Task 4.3 완료) - 캐싱 최적화
+            elif index == 3:  # 프로파일 탭 - 캐싱 시간 대폭 증가
                 self.logger.debug("⚙️ 프로파일 탭 선택 - 프로파일 데이터 로드 시작")
                 environment_profile = getattr(self, 'environment_profile', None)
                 if environment_profile:
                     try:
-                        # 캐싱 로직: 프로파일 탭은 1분마다만 자동 새로고침
+                        # 강화된 캐싱 로직: 프로파일 탭은 10분마다만 자동 새로고침
                         current_time = time.time()
                         last_refresh = getattr(self, '_profile_last_refresh_time', 0)
 
-                        if current_time - last_refresh > 60:  # 1분 이후에만 자동 새로고침
+                        if current_time - last_refresh > 600:  # 10분 이후에만 자동 새로고침
                             # 프로파일 목록 새로고침
                             if hasattr(environment_profile, 'refresh_profiles'):
                                 environment_profile.refresh_profiles()
@@ -455,7 +460,7 @@ class SettingsScreen(QWidget):
 
                             self._profile_last_refresh_time = current_time
                         else:
-                            self.logger.debug("⏭️ 프로파일 탭 캐시 사용 (1분 이내 - 성능 최적화)")
+                            self.logger.debug("⏭️ 프로파일 탭 캐시 사용 (10분 이내 - 성능 최적화)")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 프로파일 탭 활성화 실패: {e}")
 
@@ -464,11 +469,11 @@ class SettingsScreen(QWidget):
                 logging_management = getattr(self, 'logging_management', None)
                 if logging_management:
                     try:
-                        # 캐싱 로직: 로깅 관리 탭은 10초마다만 새로고침
+                        # 강화된 캐싱 로직: 로깅 관리 탭은 1분마다만 새로고침 (자주 변경되지 않음)
                         current_time = time.time()
                         last_refresh = getattr(self, '_logging_last_refresh_time', 0)
 
-                        if current_time - last_refresh > 10:  # 10초 이후에만 자동 새로고침
+                        if current_time - last_refresh > 60:  # 1분 이후에만 자동 새로고침
                             # Presenter를 통한 새로고침 (MVP 패턴)
                             presenter = getattr(self, 'logging_management_presenter', None)
                             if presenter and hasattr(presenter, 'refresh'):
@@ -477,17 +482,27 @@ class SettingsScreen(QWidget):
 
                             self._logging_last_refresh_time = current_time
                         else:
-                            self.logger.debug("⏭️ 로깅 관리 탭 캐시 사용 (10초 이내 - 성능 최적화)")
+                            self.logger.debug("⏭️ 로깅 관리 탭 캐시 사용 (1분 이내 - 성능 최적화)")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 로깅 관리 새로고침 실패: {e}")
 
-            elif index == 5:  # 알림 탭
+            elif index == 5:  # 알림 탭 - 캐싱 적용
                 self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
                 notification_settings = getattr(self, 'notification_settings', None)
-                if notification_settings and hasattr(notification_settings, 'load_settings'):
+                if notification_settings:
                     try:
-                        getattr(notification_settings, 'load_settings')()
-                        self.logger.debug("✅ 알림 설정 자동 새로고침 완료")
+                        # 강화된 캐싱 로직: 알림 탭은 5분마다만 새로고침 (설정이 자주 변경되지 않음)
+                        current_time = time.time()
+                        last_refresh = getattr(self, '_notification_last_refresh_time', 0)
+
+                        if current_time - last_refresh > 300:  # 5분 이후에만 자동 새로고침
+                            if hasattr(notification_settings, 'load_settings'):
+                                notification_settings.load_settings()
+                                self.logger.debug("✅ 알림 설정 자동 새로고침 완료")
+
+                            self._notification_last_refresh_time = current_time
+                        else:
+                            self.logger.debug("⏭️ 알림 탭 캐시 사용 (5분 이내 - 성능 최적화)")
                     except Exception as e:
                         self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
 

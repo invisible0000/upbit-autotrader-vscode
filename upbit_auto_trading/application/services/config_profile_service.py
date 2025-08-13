@@ -1,6 +1,9 @@
 """
-Configuration Profile Service
+Configuration Profile Service - ⚠️ 기능 정지됨
 YAML 프로파일 기반 환경 설정 관리 서비스
+
+⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 이 서비스는 정지되었습니다.
+향후 config/ 폴더 기반 설정 시스템으로 재구현될 예정입니다.
 """
 
 import os
@@ -8,7 +11,6 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
-from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -94,54 +96,28 @@ class ProfileSwitcher:
         logger.info("ProfileSwitcher 초기화 완료")
 
     def switch_to_profile(self, profile_name: str) -> ProfileSwitchResult:
-        """지정된 프로파일로 스위칭
+        """지정된 프로파일로 스위칭 - ⚠️ 기능 정지됨
+
+        ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
+        향후 config/ 폴더 기반으로 재구현될 예정입니다.
 
         Args:
             profile_name: 전환할 프로파일 이름
 
         Returns:
-            ProfileSwitchResult: 스위칭 결과
+            ProfileSwitchResult: 스위칭 결과 (항상 실패)
         """
-        logger.info(f"🔄 프로파일 스위칭 시작: {profile_name}")
-        errors = []
-        env_vars_applied = {}
+        logger.warning(f"🚫 프로파일 스위칭 기능이 정지되었습니다: {profile_name}")
+        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
-        try:
-            # 1. 프로파일 설정 로드
-            config_data = self.config_loader.load_profile(profile_name)
+        error_msg = "프로파일 기능이 정지되었습니다. config/ 폴더 기반 설정을 사용하세요."
 
-            # 2. 로깅 설정을 환경변수로 매핑
-            if 'logging' in config_data:
-                logging_env_vars = self._map_config_to_env_vars(config_data['logging'])
-
-                # 3. 환경변수 일괄 적용
-                self._apply_env_vars_bulk(logging_env_vars)
-                env_vars_applied.update(logging_env_vars)
-
-                logger.info(f"✅ 로깅 환경변수 {len(logging_env_vars)}개 적용 완료")
-
-            # 4. 현재 프로파일 업데이트
-            self.current_profile = profile_name
-
-            logger.info(f"🎯 프로파일 스위칭 완료: {profile_name}")
-            return ProfileSwitchResult(
-                success=True,
-                profile_name=profile_name,
-                env_vars_applied=env_vars_applied,
-                errors=errors
-            )
-
-        except Exception as e:
-            error_msg = f"프로파일 스위칭 실패 ({profile_name}): {e}"
-            logger.error(error_msg)
-            errors.append(error_msg)
-
-            return ProfileSwitchResult(
-                success=False,
-                profile_name=profile_name,
-                env_vars_applied=env_vars_applied,
-                errors=errors
-            )
+        return ProfileSwitchResult(
+            success=False,
+            profile_name=profile_name,
+            env_vars_applied={},
+            errors=[error_msg]
+        )
 
     def _map_config_to_env_vars(self, logging_config: Dict[str, Any]) -> Dict[str, str]:
         """로깅 설정을 환경변수로 매핑
@@ -255,11 +231,15 @@ class ConfigProfileService:
         return sorted(all_profiles)
 
     def switch_profile(self, profile_name: str) -> ProfileSwitchResult:
-        """프로파일 스위칭 (기본 + 커스텀 지원)"""
-        if profile_name.startswith("custom_"):
-            return self._switch_custom_profile(profile_name)
-        else:
-            return self.profile_switcher.switch_to_profile(profile_name)
+        """프로파일 스위칭 (기본 + 커스텀 지원) - ⚠️ 기능 정지됨"""
+        logger.warning(f"🚫 프로파일 스위칭 기능이 정지되었습니다: {profile_name}")
+        error_msg = "프로파일 기능이 정지되었습니다. config/ 폴더 기반 설정을 사용하세요."
+        return ProfileSwitchResult(
+            success=False,
+            profile_name=profile_name,
+            env_vars_applied={},
+            errors=[error_msg]
+        )
 
     def _switch_custom_profile(self, profile_name: str) -> ProfileSwitchResult:
         """커스텀 프로파일 스위칭"""
@@ -312,68 +292,21 @@ class ConfigProfileService:
             )
 
     def save_current_as_profile(self, profile_name: str, description: str = "") -> bool:
-        """현재 환경변수 상태를 커스텀 프로파일로 저장
+        """현재 환경변수 상태를 커스텀 프로파일로 저장 - ⚠️ 기능 정지됨
+
+        ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
+        향후 config/ 폴더 기반으로 재구현될 예정입니다.
 
         Args:
             profile_name: 저장할 프로파일명 (영문, 숫자, _ 만 허용)
             description: 프로파일 설명
 
         Returns:
-            bool: 저장 성공 여부
+            bool: 저장 성공 여부 (항상 False)
         """
-        logger.info(f"💾 현재 상태를 커스텀 프로파일로 저장: {profile_name}")
-
-        try:
-            # 프로파일명 유효성 검사
-            if not profile_name.replace('_', '').replace('-', '').isalnum():
-                logger.error(f"❌ 유효하지 않은 프로파일명: {profile_name}")
-                return False
-
-            # 현재 환경변수 상태 수집
-            current_env_state = {
-                'UPBIT_LOG_LEVEL': os.getenv('UPBIT_LOG_LEVEL', 'INFO'),
-                'UPBIT_LOG_CONTEXT': os.getenv('UPBIT_LOG_CONTEXT', 'development'),
-                'UPBIT_LOG_SCOPE': os.getenv('UPBIT_LOG_SCOPE', 'normal'),
-                'UPBIT_CONSOLE_OUTPUT': os.getenv('UPBIT_CONSOLE_OUTPUT', 'false'),
-                'UPBIT_COMPONENT_FOCUS': os.getenv('UPBIT_COMPONENT_FOCUS', ''),
-                'UPBIT_LLM_BRIEFING_ENABLED': os.getenv('UPBIT_LLM_BRIEFING_ENABLED', 'false'),
-                'UPBIT_FEATURE_DEVELOPMENT': os.getenv('UPBIT_FEATURE_DEVELOPMENT', ''),
-                'UPBIT_PERFORMANCE_MONITORING': os.getenv('UPBIT_PERFORMANCE_MONITORING', 'false'),
-                'UPBIT_BRIEFING_UPDATE_INTERVAL': os.getenv('UPBIT_BRIEFING_UPDATE_INTERVAL', '30')
-            }
-
-            # 환경변수 → YAML 구조로 변환
-            config_data = {
-                'profile_info': {
-                    'name': profile_name,
-                    'description': description,
-                    'created_at': datetime.now().isoformat(),
-                    'created_from': 'environment_variables'
-                },
-                'logging': {
-                    'level': current_env_state['UPBIT_LOG_LEVEL'],
-                    'context': current_env_state['UPBIT_LOG_CONTEXT'],
-                    'scope': current_env_state['UPBIT_LOG_SCOPE'],
-                    'console_enabled': current_env_state['UPBIT_CONSOLE_OUTPUT'].lower() == 'true',
-                    'component_focus': current_env_state['UPBIT_COMPONENT_FOCUS'],
-                    'llm_briefing_enabled': current_env_state['UPBIT_LLM_BRIEFING_ENABLED'].lower() == 'true',
-                    'feature_development': current_env_state['UPBIT_FEATURE_DEVELOPMENT'],
-                    'performance_monitoring': current_env_state['UPBIT_PERFORMANCE_MONITORING'].lower() == 'true',
-                    'briefing_update_interval': int(current_env_state['UPBIT_BRIEFING_UPDATE_INTERVAL'])
-                }
-            }
-
-            # YAML 파일로 저장
-            custom_path = self.custom_profiles_dir / f"{profile_name}.yaml"
-            with open(custom_path, 'w', encoding='utf-8') as f:
-                yaml.safe_dump(config_data, f, default_flow_style=False, allow_unicode=True, indent=2)
-
-            logger.info(f"✅ 커스텀 프로파일 저장 완료: {custom_path}")
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ 커스텀 프로파일 저장 실패 ({profile_name}): {e}")
-            return False
+        logger.warning(f"🚫 프로파일 저장 기능이 정지되었습니다: {profile_name}")
+        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        return False
 
     def delete_custom_profile(self, profile_name: str) -> bool:
         """커스텀 프로파일 삭제

@@ -43,7 +43,9 @@ class EnvironmentProfileView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        logger.info("🎯 EnvironmentProfileView 초기화 시작")
+        logger.warning("🚫 환경 프로파일 기능이 정지되었습니다 (통합 설정 관리 가이드)")
+        logger.info("🎯 EnvironmentProfileView 초기화 시작 - UI만 보존, 기능 비활성화")
+        logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         # 내부 위젯들 (타입 힌팅 명시)
         self.profile_selector: Optional[ProfileSelectorSection] = None
@@ -67,7 +69,39 @@ class EnvironmentProfileView(QWidget):
         # 메인 레이아웃 생성
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(10)
+
+        # ⚠️ 기능 정지 안내 메시지 추가
+        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtCore import Qt
+
+        warning_label = QLabel("⚠️ 프로파일 기능이 정지되었습니다")
+        warning_label.setStyleSheet("""
+            QLabel {
+                background-color: #fff3cd;
+                color: #856404;
+                border: 1px solid #ffeaa7;
+                border-radius: 4px;
+                padding: 10px;
+                font-weight: bold;
+            }
+        """)
+        warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(warning_label)
+
+        info_label = QLabel("이 기능은 config/ 폴더 기반으로 재구현될 예정입니다. 자세한 내용은 docs/PROFILE_FEATURE_DISABLED_NOTICE.md를 참조하세요.")
+        info_label.setStyleSheet("""
+            QLabel {
+                background-color: #d1ecf1;
+                color: #0c5460;
+                border: 1px solid #bee5eb;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_label.setWordWrap(True)
+        main_layout.addWidget(info_label)
 
         try:
             # QSplitter로 1:2 비율 강제 적용

@@ -128,9 +128,10 @@ class LoggingConfigPresenter:
                 self.view.log_context_combo.setCurrentIndex(index)
                 self.view.append_log(f"  ✅ LOG_CONTEXT: {log_context}")
 
-            # 프로파일 정보
-            profile = self._config_manager.get_current_profile()
-            self.view.append_log(f"  🌍 CURRENT_PROFILE: {profile}")
+            # 프로파일 정보 - ⚠️ 프로파일 기능 정지됨
+            # profile = self._config_manager.get_current_profile()
+            # self.view.append_log(f"  🌍 CURRENT_PROFILE: {profile}")
+            self.view.append_log("  🚫 PROFILE_FEATURE: 기능 정지됨 (config/ 기반으로 재구현 예정)")
 
             self.view.append_log(f"[{timestamp}] 🎯 설정 파일 로드 완료")
 
