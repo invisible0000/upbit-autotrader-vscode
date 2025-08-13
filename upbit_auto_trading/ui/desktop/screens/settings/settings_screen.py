@@ -81,148 +81,170 @@ class SettingsScreen(QWidget):
         self.logger.info("✅ Infrastructure Layer 통합 초기화 완료")
 
     def _init_sub_widgets(self):
-        """하위 설정 위젯들 초기화"""
-        self.logger.debug("🔧 하위 설정 위젯들 초기화 시작")
+        """하위 설정 위젯들 초기화 - Lazy Loading 적용 (첫 탭만 초기화)"""
+        self.logger.debug("🔧 하위 설정 위젯들 lazy loading 초기화 시작")
+
+        # 위젯 참조 초기화 (lazy loading용)
+        self.api_key_manager = None
+        self.database_settings = None
+        self.environment_profile = None
+        self.notification_settings = None
+        self.ui_settings = None
+        self.logging_management = None
+
+        # Presenter 참조 초기화
+        self.api_settings_presenter = None
+        self.environment_profile_presenter = None
+        self.logging_management_presenter = None
+
+        # DI 컨테이너에서 ApiKeyService 가져오기 (미리 준비)
+        self._api_key_service = None
+        try:
+            main_window = self.parent()
+            search_count = 0
+            while main_window and not hasattr(main_window, 'di_container') and search_count < 5:
+                main_window = main_window.parent()
+                search_count += 1
+
+            if main_window and hasattr(main_window, 'di_container'):
+                di_container = getattr(main_window, 'di_container', None)
+                if di_container:
+                    from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
+                    self._api_key_service = di_container.resolve(IApiKeyService)
+                    self.logger.info(f"✅ ApiKeyService 주입 성공: {type(self._api_key_service).__name__}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ ApiKeyService 해결 중 오류 (무시): {e}")
+
+        # 첫 번째 탭(UI 설정)만 즉시 초기화
+        self._initialize_ui_settings()
+
+        self.logger.info("✅ 하위 설정 위젯들 lazy loading 초기화 완료 (첫 탭만 로드)")
+
+    def _initialize_ui_settings(self):
+        """UI 설정 위젯 초기화 (첫 탭 - 즉시 로드)"""
+        try:
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
+            self.ui_settings = UISettingsView(self)
+            self.logger.debug("🎨 UI 설정 위젯 즉시 초기화 완료")
+        except Exception as e:
+            self.logger.error(f"❌ UI 설정 위젯 초기화 실패: {e}")
+            self.ui_settings = self._create_fallback_widget("UI 설정")
+
+    def _initialize_api_settings(self):
+        """API 설정 위젯 lazy 초기화"""
+        if self.api_key_manager is not None:
+            return  # 이미 초기화됨
 
         try:
-            # 실제 설정 위젯들 import 및 생성
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management import LoggingManagementView
-            # 🆕 새로운 설정 파일 기반 Presenter 사용
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters.logging_management_presenter import (
-                LoggingManagementPresenter
-            )
-
-            self.logger.info("📦 설정 위젯 모듈들 import 성공 (직접 경로, alias 제거, 로깅 관리 탭 추가)")
-
-            # DI 컨테이너에서 ApiKeyService 가져오기
-            api_key_service = None
-            try:
-                # MainWindow에서 DI Container 가져오기 (getattr 사용으로 안전하게)
-                main_window = self.parent()
-                self.logger.debug(f"🔍 현재 parent: {type(main_window).__name__ if main_window else 'None'}")
-                self.logger.debug(f"🔍 현재 parent 주소: {id(main_window) if main_window else 'None'}")
-
-                # parent 체인을 따라 MainWindow 찾기 (상세 로깅)
-                search_count = 0
-                original_parent = main_window
-                while main_window and not hasattr(main_window, 'di_container') and search_count < 5:
-                    self.logger.debug(f"🔍 부모 탐색 중 [{search_count}]: {type(main_window).__name__} (id: {id(main_window)})")
-                    main_window = main_window.parent()
-                    search_count += 1
-
-                self.logger.debug(f"🔍 최종 main_window: {type(main_window).__name__ if main_window else 'None'}")
-                success_msg = '성공' if main_window and hasattr(main_window, 'di_container') else '실패'
-                self.logger.debug(f"🔍 부모 탐색 결과: {search_count}번 탐색 후 {success_msg}")
-
-                if main_window and hasattr(main_window, 'di_container'):
-                    di_container = getattr(main_window, 'di_container', None)
-                    self.logger.debug(f"🔍 DI Container 발견: {type(di_container).__name__ if di_container else 'None'}")
-
-                    if di_container:
-                        from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
-                        api_key_service = di_container.resolve(IApiKeyService)
-                        self.logger.info(f"✅ ApiKeyService 주입 성공: {type(api_key_service).__name__}")
-                    else:
-                        self.logger.warning("⚠️ DI Container가 None입니다")
-                else:
-                    self.logger.warning("⚠️ MainWindow의 DI Container를 찾을 수 없음")
-                    # 디버깅: 부모 체인 전체 출력
-                    parent_chain = []
-                    current = original_parent
-                    depth = 0
-                    while current and depth < 10:
-                        has_di = hasattr(current, 'di_container')
-                        parent_info = f"[{depth}] {type(current).__name__} (id: {id(current)}, hasattr di_container: {has_di})"
-                        parent_chain.append(parent_info)
-                        current = current.parent()
-                        depth += 1
-                    self.logger.debug(f"🔍 부모 체인 상세: {' -> '.join(parent_chain) if parent_chain else 'Empty'}")
-            except Exception as e:
-                self.logger.error(f"❌ ApiKeyService 해결 중 오류: {e}")
-                import traceback
-                self.logger.error(f"❌ 스택 트레이스: {traceback.format_exc()}")
-
-            # 실제 위젯 인스턴스 생성 (Infrastructure Layer 기반)
-            # MVP 패턴 적용: ApiSettingsView + ApiSettingsPresenter
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (
                 ApiSettingsPresenter
             )
 
-            self.api_key_manager = ApiSettingsView(self, api_key_service=api_key_service)
-            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager, api_key_service)
+            self.api_key_manager = ApiSettingsView(self, api_key_service=self._api_key_service)
+            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager, self._api_key_service)
             self.api_key_manager.set_presenter(self.api_settings_presenter)
-            self.logger.debug("🔑 API 설정 View + Presenter 생성 완료 (순수 MVP 패턴)")
-
-            # 데이터베이스 설정 View 사용 (MVP 패턴 이미 적용됨)
-            self.database_settings = DatabaseSettingsView(self)
-            self.logger.debug("💾 데이터베이스 설정 생성 완료 (DatabaseSettingsView - MVP 적용)")
-
-            # Environment Profile 위젯 추가 (Task 4.3 완료 - 레거시 교체)
-            from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.environment_profile_view import (
-                EnvironmentProfileView
-            )
-            from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.presenters import (
-                EnvironmentProfilePresenter
-            )
-            self.environment_profile = EnvironmentProfileView(self)
-            self.environment_profile_presenter = EnvironmentProfilePresenter(self.environment_profile)
-            self.logger.debug("⚙️ Environment Profile 위젯 + Presenter 생성 완료 (Task 4.3 - DDD+MVP 패턴)")
-
-            self.notification_settings = NotificationSettingsView(self)
-            self.logger.debug("🔔 알림 설정 생성 완료")
-
-            # UI 설정 매니저 생성 (DDD+MVP 구조)
-            if self.settings_service is None:
-                self.logger.error("❌ SettingsScreen에서 SettingsService가 None - MainWindow에서 주입 실패")
-            else:
-                self.logger.info(f"✅ SettingsScreen에서 SettingsService 확인됨: {type(self.settings_service).__name__}")
-
-            self.ui_settings = UISettingsView(self)
-            self.logger.debug("🎨 UI 설정 생성 완료 (DDD+MVP 구조)")
-
-            # 🆕 로깅 설정 파일 관리 View + Presenter 생성 (환경변수 방식 대체)
-            self.logging_management = LoggingManagementView()
-            self.logging_management_presenter = LoggingManagementPresenter(self.logging_management)
-            self.logger.debug("📝 로깅 설정 파일 관리 View + Presenter 생성 완료 (안전한 설정 파일 기반)")
-
-            self.logger.info("✅ 모든 실제 설정 위젯들 생성 완료 (Infrastructure Layer 연동)")
-
+            self.logger.debug("🔑 API 설정 위젯 lazy 초기화 완료")
         except Exception as e:
-            self.logger.error(f"❌ 설정 위젯 생성 실패: {e}")
-            self.logger.warning("⚠️ 더미 위젯으로 폴백")
+            self.logger.error(f"❌ API 설정 위젯 lazy 초기화 실패: {e}")
+            self.api_key_manager = self._create_fallback_widget("API 키 관리")
 
-            # 폴백 위젯들 생성
-            self.api_key_manager = QWidget()
-            self.database_settings = QWidget()
-            self.environment_profile = QWidget()
-            self.notification_settings = QWidget()
-            self.ui_settings = QWidget()
-            self.logging_management = QWidget()
+    def _initialize_database_settings(self):
+        """데이터베이스 설정 위젯 lazy 초기화"""
+        if self.database_settings is not None:
+            return  # 이미 초기화됨
 
-            # Environment Profile 위젯 추가 (Task 4.3 완료 - 레거시 대체) - 폴백 처리
+        try:
+            from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
+            self.database_settings = DatabaseSettingsView(self)
+            self.logger.debug("💾 데이터베이스 설정 위젯 lazy 초기화 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 데이터베이스 설정 위젯 lazy 초기화 실패: {e}")
+            self.database_settings = self._create_fallback_widget("데이터베이스 설정")
 
-            # 각 위젯에 임시 레이블 추가
-            widgets_info = [
-                (self.api_key_manager, "API 키 관리"),
-                (self.database_settings, "데이터베이스 설정"),
-                (self.environment_profile, "Environment Profile (Task 4.3 - 레거시 대체)"),
-                (self.notification_settings, "알림 설정"),
-                (self.ui_settings, "UI 설정"),
-                (self.logging_management, "로깅 관리 (Phase 1 MVP)")
-            ]
+    def _initialize_environment_profile(self):
+        """환경 프로파일 위젯 lazy 초기화 - 정지된 기능"""
+        if self.environment_profile is not None:
+            return  # 이미 초기화됨
 
-            for widget, name in widgets_info:
-                layout = QVBoxLayout(widget)
-                label = QLabel(f"{name} (개발 중)")
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                layout.addWidget(label)
-                self.logger.debug(f"📝 {name} 위젯 생성 완료")
+        self.logger.warning("🚫 프로파일 기능 정지 - 간단한 안내 위젯으로 대체")
+        self.environment_profile = self._create_disabled_profile_widget()
 
-        self.logger.info("✅ 하위 설정 위젯들 초기화 완료")
+    def _initialize_logging_management(self):
+        """로깅 관리 위젯 lazy 초기화"""
+        if self.logging_management is not None:
+            return  # 이미 초기화됨
+
+        try:
+            from upbit_auto_trading.ui.desktop.screens.settings.logging_management import LoggingManagementView
+            # 긴 임포트를 여러 줄로 분할
+            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters import (
+                logging_management_presenter
+            )
+
+            self.logging_management = LoggingManagementView()
+            self.logging_management_presenter = logging_management_presenter.LoggingManagementPresenter(
+                self.logging_management
+            )
+            self.logger.debug("📝 로깅 관리 위젯 lazy 초기화 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 로깅 관리 위젯 lazy 초기화 실패: {e}")
+            self.logging_management = self._create_fallback_widget("로깅 관리")
+
+    def _initialize_notification_settings(self):
+        """알림 설정 위젯 lazy 초기화"""
+        if self.notification_settings is not None:
+            return  # 이미 초기화됨
+
+        try:
+            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
+            self.notification_settings = NotificationSettingsView(self)
+            self.logger.debug("🔔 알림 설정 위젯 lazy 초기화 완료")
+        except Exception as e:
+            self.logger.error(f"❌ 알림 설정 위젯 lazy 초기화 실패: {e}")
+            self.notification_settings = self._create_fallback_widget("알림 설정")
+
+    def _create_fallback_widget(self, name: str):
+        """폴백 위젯 생성"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        label = QLabel(f"{name} (로드 실패)")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(label)
+        return widget
+
+    def _create_disabled_profile_widget(self):
+        """정지된 프로파일 기능 안내 위젯"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        # 제목
+        title = QLabel("⚠️ 프로파일 기능 정지")
+        title.setObjectName("disabled-feature-title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = title.font()
+        font.setPointSize(16)
+        font.setBold(True)
+        title.setFont(font)
+        layout.addWidget(title)
+
+        # 설명
+        desc = QLabel("""이 기능은 현재 정지되었습니다.
+
+config/ 폴더 기반으로 재구현될 예정입니다.
+자세한 내용은 docs/PROFILE_FEATURE_DISABLED_NOTICE.md를 참조하세요.""")
+        desc.setObjectName("disabled-feature-description")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        # 스페이서
+        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        layout.addItem(spacer)
+
+        return widget
 
     def setup_ui(self) -> None:
         """UI 컴포넌트 설정 (순수 UI 로직만)"""
@@ -264,36 +286,26 @@ class SettingsScreen(QWidget):
         self.tab_widget.setObjectName("settings-tab-widget")
         self.logger.debug("📂 탭 위젯 생성 시작")
 
-        # UI 설정 탭 (첫 번째 탭으로 배치)
-        self.tab_widget.addTab(self.ui_settings, "UI 설정")
-        self.logger.debug("📋 UI 설정 탭 추가 완료")
+        # 탭 추가 (위젯은 lazy loading으로 나중에 생성)
+        self.tab_widget.addTab(QWidget(), "UI 설정")      # index 0
+        self.tab_widget.addTab(QWidget(), "API 키")       # index 1
+        self.tab_widget.addTab(QWidget(), "데이터베이스")   # index 2
+        self.tab_widget.addTab(QWidget(), "프로파일")     # index 3
+        self.tab_widget.addTab(QWidget(), "로깅 관리")     # index 4
+        self.tab_widget.addTab(QWidget(), "알림")         # index 5
 
-        # API 키 탭
-        self.tab_widget.addTab(self.api_key_manager, "API 키")
-        self.logger.debug("🔑 API 키 탭 추가 완료")
-
-        # 데이터베이스 탭
-        self.tab_widget.addTab(self.database_settings, "데이터베이스")
-        self.logger.debug("💾 데이터베이스 탭 추가 완료")
-
-        # Environment Profile 탭 (Task 3.1-3.2 완료) - 유일한 프로파일 탭
-        self.tab_widget.addTab(self.environment_profile, "프로파일")
-        self.logger.debug("⚙️ Environment Profile 탭 추가 완료 (Task 3.1-3.2)")
-
-        # 로깅 관리 탭 (Phase 1 MVP - 실시간 로깅 관리)
-        self.tab_widget.addTab(self.logging_management, "로깅 관리")
-        self.logger.debug("📝 로깅 관리 탭 추가 완료 (Phase 1 MVP)")
-
-        # 알림 탭
-        self.tab_widget.addTab(self.notification_settings, "알림")
-        self.logger.debug("🔔 알림 탭 추가 완료")
+        # 첫 번째 탭에 실제 UI 설정 위젯 배치
+        if self.ui_settings:
+            self.tab_widget.removeTab(0)
+            self.tab_widget.insertTab(0, self.ui_settings, "UI 설정")
+            self.tab_widget.setCurrentIndex(0)
 
         main_layout.addWidget(self.tab_widget)
-        self.logger.info(f"📂 탭 위젯 완성: {self.tab_widget.count()}개 탭")
+        self.logger.info(f"📂 탭 위젯 완성: {self.tab_widget.count()}개 탭 (lazy loading)")
 
-        # 탭 변경 시그널 연결 - 자동 새로고침
+        # 탭 변경 시그널 연결 - lazy loading
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
-        self.logger.debug("🔄 탭 변경 시그널 연결 완료")
+        self.logger.debug("🔄 탭 변경 시그널 연결 완료 (lazy loading)")
 
         # 버튼 레이아웃
         button_layout = QHBoxLayout()
@@ -304,16 +316,12 @@ class SettingsScreen(QWidget):
         spacer = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         button_layout.addItem(spacer)
 
-        # 저장 버튼 제거 (UISettingsManager에서 자체 처리하므로 불필요)
-        # 참고: 배치 저장 방식으로 변경됨에 따라 각 탭에서 자체 저장 버튼 관리
-        self.logger.debug("💾 설정 화면 하단 저장 버튼 제거 (탭별 자체 관리)")
-
         main_layout.addLayout(button_layout)
-        self.logger.info("✅ UI 컴포넌트 설정 완료")
+        self.logger.info("✅ UI 컴포넌트 설정 완료 (lazy loading 지원)")
 
-        # 초기화 완료 플래그 설정 (탭 변경 시 과도한 로그 방지)
+        # 초기화 완료 플래그 설정
         self._initial_tab_setup_done = True
-        self.logger.debug("🚀 초기 탭 설정 완료 - 자동 새로고침 활성화")
+        self.logger.debug("🚀 초기 탭 설정 완료 - lazy loading 활성화")
 
     def connect_view_signals(self) -> None:
         """View 내부 시그널 연결 (Presenter와 연결은 별도)"""
@@ -382,146 +390,162 @@ class SettingsScreen(QWidget):
             self.tab_widget.setCurrentIndex(index)
 
     def _on_tab_changed(self, index: int) -> None:
-        """탭 변경 시 자동 새로고침 - UX 편의 기능 (최적화된 캐싱)"""
+        """탭 변경 시 lazy loading 및 자동 새로고침 - 재귀 방지"""
         try:
+            # 재귀 호출 방지 플래그 확인
+            if getattr(self, '_tab_changing', False):
+                return
+
             tab_names = ["UI 설정", "API 키", "데이터베이스", "프로파일", "로깅 관리", "알림"]
             tab_name = tab_names[index] if 0 <= index < len(tab_names) else f"탭 {index}"
 
             self.logger.debug(f"🔄 탭 변경 감지: {tab_name} (인덱스: {index})")
 
-            # 초기화 시에는 자동 새로고침 건너뛰기 (초기 캐시 보호)
+            # 초기화 시에는 처리 건너뛰기
             if not hasattr(self, '_initial_tab_setup_done'):
-                self.logger.debug("🚀 초기 탭 설정 중 - 자동 새로고침 건너뛰기")
+                self.logger.debug("🚀 초기 탭 설정 중 - 처리 건너뛰기")
                 return
 
-            # 각 탭별 자동 새로고침 처리 (더 긴 캐싱 시간 적용)
-            if index == 0:  # UI 설정 탭
-                self.logger.debug("🎨 UI 설정 탭 선택 - 자동 새로고침 시작")
-                ui_settings = getattr(self, 'ui_settings', None)
-                if ui_settings and hasattr(ui_settings, 'load_settings'):
-                    try:
-                        ui_settings.load_settings()
-                        self.logger.debug("✅ UI 설정 상태 자동 새로고침 완료")
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ UI 설정 새로고침 실패: {e}")
+            # 재귀 호출 방지 플래그 설정
+            self._tab_changing = True
 
-            elif index == 1:  # API 키 탭
-                self.logger.debug("🔑 API 키 탭 선택 - 자동 새로고침 시작")
-                api_key_manager = getattr(self, 'api_key_manager', None)
-                if api_key_manager and hasattr(api_key_manager, 'load_settings'):
-                    try:
-                        api_key_manager.load_settings()
-                        self.logger.debug("✅ API 키 상태 자동 새로고침 완료")
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ API 키 새로고침 실패: {e}")
+            try:
+                # 각 탭별 lazy loading 및 자동 새로고침
+                if index == 0:  # UI 설정 탭 (이미 로드됨)
+                    if self.ui_settings and hasattr(self.ui_settings, 'load_settings'):
+                        try:
+                            self.ui_settings.load_settings()  # type: ignore
+                            self.logger.debug("✅ UI 설정 새로고침 완료")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ UI 설정 새로고침 실패: {e}")
 
-            elif index == 2:  # 데이터베이스 탭 - 캐싱 시간 대폭 증가
-                self.logger.debug("💾 데이터베이스 탭 선택 - 자동 새로고침 시작")
-                if hasattr(self, 'database_settings'):
-                    try:
-                        # 강화된 캐싱 로직 (5분 이내 재조회 방지)
-                        presenter = getattr(self.database_settings, 'presenter', None)
-                        if presenter:
-                            current_time = time.time()
-                            last_refresh = getattr(presenter, '_last_auto_refresh_time', 0)
+                elif index == 1:  # API 키 탭
+                    self._initialize_api_settings()
+                    if self.api_key_manager and hasattr(self.api_key_manager, 'load_settings'):
+                        # 시그널 일시 차단하고 탭 위젯 교체
+                        self.tab_widget.currentChanged.disconnect()
+                        try:
+                            self.tab_widget.removeTab(1)
+                            self.tab_widget.insertTab(1, self.api_key_manager, "API 키")
+                            self.tab_widget.setCurrentIndex(1)
+                        finally:
+                            self.tab_widget.currentChanged.connect(self._on_tab_changed)
 
-                            if current_time - last_refresh > 300:  # 5분 이후에만 자동 새로고침
-                                if hasattr(presenter, 'refresh_status'):
-                                    presenter.refresh_status()
-                                    presenter._last_auto_refresh_time = current_time
-                                    self.logger.debug("✅ 데이터베이스 상태 자동 새로고침 완료 (Presenter)")
-                                else:
-                                    self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (Presenter 없음)")
-                            else:
-                                self.logger.debug("⏭️ 데이터베이스 상태 캐시 사용 (5분 이내)")
-                        # View 직접 새로고침 (폴백) - 제거하여 로그 감소
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
+                        try:
+                            self.api_key_manager.load_settings()  # type: ignore
+                            self.logger.debug("✅ API 키 lazy 로드 및 새로고침 완료")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ API 키 새로고침 실패: {e}")
 
-            elif index == 3:  # 프로파일 탭 - 캐싱 시간 대폭 증가
-                self.logger.debug("⚙️ 프로파일 탭 선택 - 프로파일 데이터 로드 시작")
-                environment_profile = getattr(self, 'environment_profile', None)
-                if environment_profile:
-                    try:
-                        # 강화된 캐싱 로직: 프로파일 탭은 10분마다만 자동 새로고침
+                elif index == 2:  # 데이터베이스 탭
+                    self._initialize_database_settings()
+                    if self.database_settings:
+                        # 시그널 일시 차단하고 탭 위젯 교체
+                        self.tab_widget.currentChanged.disconnect()
+                        try:
+                            self.tab_widget.removeTab(2)
+                            self.tab_widget.insertTab(2, self.database_settings, "데이터베이스")
+                            self.tab_widget.setCurrentIndex(2)
+                        finally:
+                            self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
+                        # 캐싱으로 성능 최적화 (5분 이내 재조회 방지)
                         current_time = time.time()
-                        last_refresh = getattr(self, '_profile_last_refresh_time', 0)
-
-                        if current_time - last_refresh > 600:  # 10분 이후에만 자동 새로고침
-                            # 프로파일 목록 새로고침
-                            if hasattr(environment_profile, 'refresh_profiles'):
-                                environment_profile.refresh_profiles()
-                                self.logger.debug("✅ 프로파일 목록 새로고침 완료")
-
-                            # 위젯 상태 업데이트
-                            if hasattr(environment_profile, 'refresh_display'):
-                                environment_profile.refresh_display()
-                                self.logger.debug("✅ 프로파일 상태 자동 새로고침 완료")
-
-                            self._profile_last_refresh_time = current_time
+                        last_refresh = getattr(self, '_db_last_refresh_time', 0)
+                        if current_time - last_refresh > 300:
+                            try:
+                                presenter = getattr(self.database_settings, 'presenter', None)
+                                if presenter and hasattr(presenter, 'refresh_status'):
+                                    presenter.refresh_status()
+                                    self._db_last_refresh_time = current_time
+                                    self.logger.debug("✅ 데이터베이스 lazy 로드 및 새로고침 완료")
+                                else:
+                                    self.logger.debug("✅ 데이터베이스 lazy 로드 완료 (새로고침 스킵)")
+                            except Exception as e:
+                                self.logger.warning(f"⚠️ 데이터베이스 새로고침 실패: {e}")
                         else:
-                            self.logger.debug("⏭️ 프로파일 탭 캐시 사용 (10분 이내 - 성능 최적화)")
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ 프로파일 탭 활성화 실패: {e}")
+                            self.logger.debug("⏭️ 데이터베이스 캐시 사용 (5분 이내)")
 
-            elif index == 4:  # 로깅 관리 탭 (Phase 2 Infrastructure Integration) - 캐싱 최적화
-                self.logger.debug("📝 로깅 관리 탭 선택 - 자동 새로고침 시작")
-                logging_management = getattr(self, 'logging_management', None)
-                if logging_management:
-                    try:
-                        # 강화된 캐싱 로직: 로깅 관리 탭은 1분마다만 새로고침 (자주 변경되지 않음)
+                elif index == 3:  # 프로파일 탭 (정지된 기능)
+                    self._initialize_environment_profile()
+                    if self.environment_profile:
+                        # 시그널 일시 차단하고 탭 위젯 교체
+                        self.tab_widget.currentChanged.disconnect()
+                        try:
+                            self.tab_widget.removeTab(3)
+                            self.tab_widget.insertTab(3, self.environment_profile, "프로파일")
+                            self.tab_widget.setCurrentIndex(3)
+                        finally:
+                            self.tab_widget.currentChanged.connect(self._on_tab_changed)
+                        self.logger.debug("✅ 프로파일 탭 lazy 로드 완료 (정지된 기능)")
+
+                elif index == 4:  # 로깅 관리 탭
+                    self._initialize_logging_management()
+                    if self.logging_management:
+                        # 시그널 일시 차단하고 탭 위젯 교체
+                        self.tab_widget.currentChanged.disconnect()
+                        try:
+                            self.tab_widget.removeTab(4)
+                            self.tab_widget.insertTab(4, self.logging_management, "로깅 관리")
+                            self.tab_widget.setCurrentIndex(4)
+                        finally:
+                            self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
+                        # 캐싱으로 성능 최적화 (1분 이내 재조회 방지)
                         current_time = time.time()
                         last_refresh = getattr(self, '_logging_last_refresh_time', 0)
-
-                        if current_time - last_refresh > 60:  # 1분 이후에만 자동 새로고침
-                            # Presenter를 통한 새로고침 (MVP 패턴)
-                            presenter = getattr(self, 'logging_management_presenter', None)
-                            if presenter and hasattr(presenter, 'refresh'):
-                                presenter.refresh()
-                                self.logger.debug("✅ 로깅 관리 탭 새로고침 완료 (refresh 메서드)")
-
-                            self._logging_last_refresh_time = current_time
+                        if current_time - last_refresh > 60:
+                            try:
+                                presenter = getattr(self, 'logging_management_presenter', None)
+                                if presenter and hasattr(presenter, 'refresh'):
+                                    presenter.refresh()
+                                    self._logging_last_refresh_time = current_time
+                                    self.logger.debug("✅ 로깅 관리 lazy 로드 및 새로고침 완료")
+                                else:
+                                    self.logger.debug("✅ 로깅 관리 lazy 로드 완료 (새로고침 스킵)")
+                            except Exception as e:
+                                self.logger.warning(f"⚠️ 로깅 관리 새로고침 실패: {e}")
                         else:
-                            self.logger.debug("⏭️ 로깅 관리 탭 캐시 사용 (1분 이내 - 성능 최적화)")
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ 로깅 관리 새로고침 실패: {e}")
+                            self.logger.debug("⏭️ 로깅 관리 캐시 사용 (1분 이내)")
 
-            elif index == 5:  # 알림 탭 - 캐싱 적용
-                self.logger.debug("🔔 알림 탭 선택 - 자동 새로고침 시작")
-                notification_settings = getattr(self, 'notification_settings', None)
-                if notification_settings:
-                    try:
-                        # 강화된 캐싱 로직: 알림 탭은 5분마다만 새로고침 (설정이 자주 변경되지 않음)
+                elif index == 5:  # 알림 탭
+                    self._initialize_notification_settings()
+                    if self.notification_settings:
+                        # 시그널 일시 차단하고 탭 위젯 교체
+                        self.tab_widget.currentChanged.disconnect()
+                        try:
+                            self.tab_widget.removeTab(5)
+                            self.tab_widget.insertTab(5, self.notification_settings, "알림")
+                            self.tab_widget.setCurrentIndex(5)
+                        finally:
+                            self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
+                        # 캐싱으로 성능 최적화 (5분 이내 재조회 방지)
                         current_time = time.time()
                         last_refresh = getattr(self, '_notification_last_refresh_time', 0)
-
-                        if current_time - last_refresh > 300:  # 5분 이후에만 자동 새로고침
-                            if hasattr(notification_settings, 'load_settings'):
-                                notification_settings.load_settings()
-                                self.logger.debug("✅ 알림 설정 자동 새로고침 완료")
-
-                            self._notification_last_refresh_time = current_time
+                        if current_time - last_refresh > 300:
+                            try:
+                                if hasattr(self.notification_settings, 'load_settings'):
+                                    self.notification_settings.load_settings()  # type: ignore
+                                    self._notification_last_refresh_time = current_time
+                                    self.logger.debug("✅ 알림 설정 lazy 로드 및 새로고침 완료")
+                                else:
+                                    self.logger.debug("✅ 알림 설정 lazy 로드 완료 (새로고침 스킵)")
+                            except Exception as e:
+                                self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
                         else:
-                            self.logger.debug("⏭️ 알림 탭 캐시 사용 (5분 이내 - 성능 최적화)")
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ 알림 설정 새로고침 실패: {e}")
+                            self.logger.debug("⏭️ 알림 설정 캐시 사용 (5분 이내)")
 
-            # 환경 프로파일 탭이 아닌 경우 리소스 절약을 위한 정리 (옵션)
-            if index != 3:
-                environment_profile = getattr(self, 'environment_profile', None)
-                if environment_profile and hasattr(environment_profile, 'cleanup_resources'):
-                    try:
-                        environment_profile.cleanup_resources()
-                        self.logger.debug("🛑 환경 프로파일 리소스 정리 (절약)")
-                    except Exception as e:
-                        self.logger.debug(f"⚠️ 환경 프로파일 리소스 정리 실패 (무시): {e}")
+                self.logger.info(f"✅ {tab_name} 탭 lazy loading 및 새로고침 완료")
 
-            self.logger.info(f"✅ {tab_name} 탭 자동 새로고침 처리 완료")
+            finally:
+                # 재귀 호출 방지 플래그 해제
+                self._tab_changing = False
 
         except Exception as e:
-            self.logger.warning(f"⚠️ 탭 변경 시 자동 새로고침 실패: {e}")
-
-    # 기존 호환성을 위한 메서드들 (Presenter가 호출)
+            # 재귀 호출 방지 플래그 해제
+            self._tab_changing = False
+            self.logger.warning(f"⚠️ 탭 변경 시 lazy loading 실패: {e}")    # 기존 호환성을 위한 메서드들 (Presenter가 호출)
 
     def save_all_settings(self):
         """모든 설정 저장 - save_all_requested 시그널 발생"""

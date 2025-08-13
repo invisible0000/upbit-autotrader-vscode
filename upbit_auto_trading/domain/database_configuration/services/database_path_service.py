@@ -228,8 +228,8 @@ class DatabasePathService:
             # 1. config/simple_paths.py 업데이트 (있다면)
             self._update_simple_paths_config(database_type, new_path)
 
-            # 2. infrastructure/configuration/paths.py 인스턴스 업데이트
-            self._update_infrastructure_paths(database_type, new_path)
+            # 2. Infrastructure 경로 변경 알림 (DDD 원칙 준수)
+            self._notify_infrastructure_path_change(database_type, new_path)
 
             # 3. 설정 파일들 업데이트
             self._update_config_files(database_type, new_path)
@@ -264,32 +264,40 @@ class DatabasePathService:
         except Exception as e:
             self.logger.debug(f"simple_paths 모듈 업데이트 실패 (정상): {e}")
 
-    def _update_infrastructure_paths(self, database_type: str, new_path: str) -> None:
-        """infrastructure/configuration/paths.py 인스턴스들 업데이트"""
+    def _notify_infrastructure_path_change(self, database_type: str, new_path: str) -> None:
+        """
+        Infrastructure 계층에 경로 변경 알림 (DDD 원칙 준수)
+
+        올바른 의존성 방향: Domain → Infrastructure (Repository를 통한 알림)
+        ❌ 잘못된 방향: Domain이 Infrastructure 직접 조작
+        ✅ 올바른 방향: Domain이 Repository를 통해 알림
+        """
         try:
-            import sys
-            # paths 모듈이 이미 로드되어 있다면 인스턴스 업데이트
-            paths_modules = [name for name in sys.modules.keys() if 'infrastructure.configuration.paths' in name]
-
-            for module_name in paths_modules:
-                module = sys.modules[module_name]
-
-                # infrastructure_paths 전역 인스턴스 찾기
-                if hasattr(module, 'infrastructure_paths'):
-                    paths_instance = module.infrastructure_paths
-
-                    if database_type == 'settings' and hasattr(paths_instance, 'SETTINGS_DB'):
-                        paths_instance.SETTINGS_DB = Path(new_path)
-                        self.logger.debug(f"📝 infrastructure_paths.SETTINGS_DB 업데이트: {new_path}")
-                    elif database_type == 'strategies' and hasattr(paths_instance, 'STRATEGIES_DB'):
-                        paths_instance.STRATEGIES_DB = Path(new_path)
-                        self.logger.debug(f"📝 infrastructure_paths.STRATEGIES_DB 업데이트: {new_path}")
-                    elif database_type == 'market_data' and hasattr(paths_instance, 'MARKET_DATA_DB'):
-                        paths_instance.MARKET_DATA_DB = Path(new_path)
-                        self.logger.debug(f"📝 infrastructure_paths.MARKET_DATA_DB 업데이트: {new_path}")
+            # Repository를 통한 Infrastructure 업데이트 요청
+            if hasattr(self, 'path_configuration_service'):
+                # 새로운 Config 기반 시스템 사용
+                success = self.path_configuration_service.change_database_location(
+                    database_type, Path(new_path)
+                )
+                if success:
+                    self.logger.info(f"✅ Infrastructure 경로 업데이트 완료: {database_type}")
+                else:
+                    self.logger.warning(f"⚠️ Infrastructure 경로 업데이트 실패: {database_type}")
+            else:
+                # Legacy 시스템 호환성 (Event 기반 알림)
+                self._publish_infrastructure_change_event(database_type, new_path)
 
         except Exception as e:
-            self.logger.debug(f"infrastructure_paths 인스턴스 업데이트 실패 (정상): {e}")
+            self.logger.warning(f"⚠️ Infrastructure 알림 실패 (정상): {e}")
+
+    def _publish_infrastructure_change_event(self, database_type: str, new_path: str) -> None:
+        """Infrastructure 변경 이벤트 발행 (Legacy 호환)"""
+        try:
+            # Event Bus를 통한 알림 (향후 구현)
+            self.logger.debug(f"📡 Infrastructure 변경 이벤트 발행: {database_type} -> {new_path}")
+
+        except Exception as e:
+            self.logger.debug(f"이벤트 발행 실패 (정상): {e}")
 
     def _update_config_files(self, database_type: str, new_path: str) -> None:
         """설정 파일들 업데이트"""

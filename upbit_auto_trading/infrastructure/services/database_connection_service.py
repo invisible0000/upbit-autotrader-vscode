@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 from contextlib import contextmanager
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
+from upbit_auto_trading.infrastructure.configuration import get_path_service
 
 logger = create_component_logger("DatabaseConnectionService")
 
@@ -60,20 +60,23 @@ class DatabaseConnectionService:
         self._health_cache: Dict[str, DatabaseHealthStatus] = {}
         self._health_cache_ttl = timedelta(seconds=30)  # 30초 캐시
 
+        # Factory 패턴으로 Path Service 사용
+        path_service = get_path_service()
+
         # 데이터베이스 설정
         self._db_configs = {
             'settings': {
-                'path': infrastructure_paths.SETTINGS_DB,
+                'path': path_service.get_database_path('settings'),
                 'timeout': 30.0,
                 'check_same_thread': False
             },
             'strategies': {
-                'path': infrastructure_paths.STRATEGIES_DB,
+                'path': path_service.get_database_path('strategies'),
                 'timeout': 30.0,
                 'check_same_thread': False
             },
             'market_data': {
-                'path': infrastructure_paths.MARKET_DATA_DB,
+                'path': path_service.get_database_path('market_data'),
                 'timeout': 30.0,
                 'check_same_thread': False
             }

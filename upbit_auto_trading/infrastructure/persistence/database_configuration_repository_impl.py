@@ -22,10 +22,11 @@ class FileSystemDatabaseConfigurationRepository(IDatabaseConfigurationRepository
     def __init__(self, config_file_path: Optional[str] = None):
         self.logger = create_component_logger("DatabaseConfigRepository")
 
-        # 기본 설정 파일 경로
+        # 기본 설정 파일 경로 - Factory 패턴 사용
         if config_file_path is None:
-            from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
-            self.config_file = infrastructure_paths.CONFIG_DIR / "database_config.yaml"  # ✅ 올바른 파일명
+            from upbit_auto_trading.infrastructure.configuration import get_path_service
+            path_service = get_path_service()
+            self.config_file = path_service.get_directory_path('config') / "database_config.yaml"
         else:
             self.config_file = Path(config_file_path)
 
@@ -180,9 +181,10 @@ class FileSystemDatabaseConfigurationRepository(IDatabaseConfigurationRepository
     def initialize_default_configurations(self) -> None:
         """기본 데이터베이스 구성 초기화"""
         try:
-            # 기본 데이터 디렉토리 경로
-            from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
-            data_dir = infrastructure_paths.DATA_DIR
+            # 기본 데이터 디렉토리 경로 - Factory 패턴 사용
+            from upbit_auto_trading.infrastructure.configuration import get_path_service
+            path_service = get_path_service()
+            data_dir = path_service.get_directory_path('data')
 
             # 기본 구성들
             default_configs = [

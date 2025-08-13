@@ -14,7 +14,7 @@ from typing import Optional, Tuple, Dict, Any
 from cryptography.fernet import Fernet
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.configuration import paths
+from upbit_auto_trading.infrastructure.configuration import get_path_service
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import mark_api_success, mark_api_failure
 
@@ -66,8 +66,8 @@ class ApiKeyService(IApiKeyService):
         # DDD Repository 주입
         self.secure_keys_repo = secure_keys_repository
 
-        # DDD Infrastructure Layer 경로 관리자 사용
-        self.paths = paths
+        # Factory 패턴으로 Path Service 사용
+        self.path_service = get_path_service()
 
         # 보안 컴포넌트 설정 - 프로그램 시작 시에는 키 생성하지 않음
         self._try_load_existing_encryption_key()

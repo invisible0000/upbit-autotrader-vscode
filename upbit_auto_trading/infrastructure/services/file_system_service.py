@@ -25,16 +25,18 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
+from upbit_auto_trading.infrastructure.configuration import InfrastructurePaths
 
 logger = create_component_logger("FileSystemService")
+
 
 class FileSystemService:
     """파일 시스템 작업을 위한 Infrastructure Service"""
 
     def __init__(self):
         self._logger = logger
-        self._temp_dir = infrastructure_paths.DATA_DIR / ".tmp"
+        self._paths = InfrastructurePaths()
+        self._temp_dir = self._paths.DATA_DIR / ".tmp"
         self._temp_dir.mkdir(exist_ok=True)
 
     async def copy_database_file(self, source_path: Path, target_path: Path) -> bool:
@@ -368,6 +370,7 @@ class FileSystemService:
 
         except Exception:
             return False
+
 
 # 전역 인스턴스 (Singleton 패턴)
 file_system_service = FileSystemService()

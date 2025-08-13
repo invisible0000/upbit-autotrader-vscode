@@ -258,13 +258,14 @@ class ApplicationContext:
         self._logger.info("📊 필수 데이터베이스 파일 무결성 검증 중...")
 
         try:
-            # 필수 DB 경로들 확인
-            from upbit_auto_trading.infrastructure.configuration.paths import infrastructure_paths
+            # 필수 DB 경로들 확인 - Factory 패턴 사용
+            from upbit_auto_trading.infrastructure.configuration import get_path_service
 
+            path_service = get_path_service()
             critical_databases = {
-                'settings': infrastructure_paths.SETTINGS_DB,
-                'strategies': infrastructure_paths.STRATEGIES_DB,
-                'market_data': infrastructure_paths.MARKET_DATA_DB
+                'settings': path_service.get_database_path('settings'),
+                'strategies': path_service.get_database_path('strategies'),
+                'market_data': path_service.get_database_path('market_data')
             }
 
             failed_databases = []
@@ -274,13 +275,13 @@ class ApplicationContext:
                     # 기본 파일 존재 확인
                     if not Path(db_path).exists():
                         self._logger.warning(f"⚠️ {db_name} DB 파일 없음: {db_path}")
-                        self._create_default_database(db_name, db_path)
+                        self._create_default_database(db_name, str(db_path))
                         continue
 
                     # SQLite 무결성 검증
-                    if not self._verify_sqlite_integrity(db_path):
+                    if not self._verify_sqlite_integrity(str(db_path)):
                         self._logger.error(f"❌ {db_name} DB 손상 감지: {db_path}")
-                        self._handle_corrupted_database(db_name, db_path)
+                        self._handle_corrupted_database(db_name, str(db_path))
                         failed_databases.append(db_name)
                         continue
 

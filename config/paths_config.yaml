@@ -1,0 +1,47 @@
+# Infrastructure Paths Configuration
+# DDD 기반 경로 관리 - 단순하고 명확한 설정
+
+# 기본 디렉토리 구조
+directories:
+  data: "data"
+  config: "config"
+  logs: "logs"
+  backups: "backups"
+  temp: "temp"
+
+# 보안 디렉토리
+security:
+  secure_dir: "config/secure"
+  api_credentials: "config/secure/api_credentials.json"
+
+# 데이터베이스 파일 경로
+databases:
+  settings: "data/settings.sqlite3"
+  strategies: "data/strategies.sqlite3"
+  market_data: "data/market_data.sqlite3"
+
+# 로그 파일 설정
+logging:
+  main_log: "logs/application.log"
+  session_log_pattern: "logs/session_{timestamp}_PID{pid}.log"
+  max_size_mb: 10
+  backup_count: 5
+
+# 백업 설정
+backup:
+  directory: "backups"
+  auto_cleanup_days: 30
+  keep_last_count: 10
+
+# 유효성 검증 설정
+validation:
+  # 필수 파일 체크
+  required_files:
+    - "pyproject.toml"
+    - "run_desktop_ui.py"
+  # 필수 디렉토리 자동 생성
+  auto_create_dirs: true
+
+# 환경변수 오버라이드 지원 (선택적)
+# UPBIT_DATA_DIR, UPBIT_LOGS_DIR 등으로 개별 디렉토리 오버라이드 가능
+env_override_enabled: true

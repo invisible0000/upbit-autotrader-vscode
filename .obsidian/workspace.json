@@ -163,18 +163,21 @@
   },
   "active": "f240a362df9e0cab",
   "lastOpenFiles": [
+    "tools/auto_replace_paths.py",
+    "upbit_auto_trading/infrastructure/configuration/__init___legacy.py",
+    "upbit_auto_trading/infrastructure/configuration/path_service_factory.py",
+    "tools/recommended_factory_pattern.py",
+    "tools/maintenance_complexity_report.md",
+    "tools/pattern_comparison_analysis.py",
+    "logs/session_20250814_002036_PID101784.log",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
-    "data/settings.sqlite3-wal",
-    "logs/session_20250813_222819_PID20104.log",
-    "logs/session_20250813_222421_PID43464.log",
-    "logs/session_20250813_222111_PID101736.log",
-    "logs/session_20250813_221649_PID104832.log",
+    "tests/ui/settings/api_settings/README.md",
+    "docs/DDD_Ubiquitous_Language_Dictionary.md",
     "UI_FREEZING_ISSUE_REPORT.md",
-    "logs/session_20250813_221229_PID96860.log",
     "docs/ENVIRONMENT_PROFILE_SUSPENSION_REPORT.md",
     "docs/PROFILE_FEATURE_DISABLED_NOTICE.md",
     "docs/DDD 데이터베이스 통합 프로젝트.md",
@@ -195,9 +198,6 @@
     "tasks/archived/TASK-20250809-04_UI_SETTINGS_OPTIMIZATION.md",
     "tasks/archived/TASK-20250809-03_SYSTEM_SETTINGS_TAB.md",
     "tasks/archived/TASK-20250809-02_TRADING_SETTINGS_TAB.md",
-    "tasks/archived/TASK-20250808-07_ADVANCED_SETTINGS_DDD.md",
-    "tasks/archived/TASK-20250808-06_NOTIFICATION_DDD.md",
-    "tasks/archived/TASK-20250808-05_API_SECURITY_DDD.md",
-    "tasks/archived/TASK-20250808-04_UI_SETTINGS_DDD.md"
+    "tasks/archived/TASK-20250808-07_ADVANCED_SETTINGS_DDD.md"
   ]
 }
