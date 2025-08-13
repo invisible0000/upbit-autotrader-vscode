@@ -13,9 +13,9 @@ VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 *
 
 ### 🔥 최우선 규칙
 - **TDD 우선**: 테스트 스텁 → 최소 구현 → 리팩터링. `pytest` 기반 Given-When-Then
-- **Dry-Run 기본**: 모든 거래는 `dry_run=True`. 실거래는 `dry_run=False + 2단계 확인`
-- **7규칙 전략**: RSI 과매도, 수익시 불타기, 익절, 트레일링 스탑, 하락시 물타기, 급락/급등 감지
-- **Infrastructure 로깅**: `create_component_logger("ComponentName")` 필수, `print()` 금지
+- **Dry-Run 기본**: 모든 거래는 `dry_run=True` (모의 실행). 실거래는 `dry_run=False + 2단계 확인`만
+- **7규칙 전략**: RSI 과매도 진입, 수익시 불타기, 계획된 익절, 트레일링 스탑, 하락시 물타기, 급락/급등 감지
+- **Infrastructure 로깅**: `create_component_logger("ComponentName")` 필수, `print()` 절대 금지
 
 ### 🏗️ 아키텍처 수행
 - **DDD 4계층**: Presentation → Application → Domain ← Infrastructure
@@ -67,12 +67,12 @@ VS Code **GitHub Copilot Agent**로서 업비트 GUI 자동매매 시스템의 *
 - 주문: **dry-run**, 수수료 0.05%, 슬리피지 1틱
 - DB: 로컬 SQLite 3-DB, Infrastructure 로깅, Decimal 정밀도 고정
 
-### 3) 출력 계약 (순서대로)
-1. **Plan**: 목표·범위·의존성·리스크 (간결)
-2. **Planned Changes**: `A/M/D · 경로 · 한줄 요약`
-3. **Diff**: 파일별 unified diff
-4. **Tests**: 테스트 코드 + `pytest` 실행 명령
-5. **Verify & Rollback**: 검증 체크리스트 + 복구 절차
+### 3) 출력 계약 (반드시 이 순서로 답변)
+1. **Plan**: 목표·범위·의존성·리스크 (간결하게)
+2. **Planned Changes**: `A/M/D · 파일경로 · 한줄요약` 형식으로
+3. **Diff**: 파일별 unified diff (실제 변경 코드)
+4. **Tests**: 테스트 코드 + `pytest -q` 실행 명령
+5. **Verify & Rollback**: 수동 검증 체크리스트 + 실패시 복구 절차
 
 ---
 
@@ -96,12 +96,16 @@ grep -r "import sqlite3|import requests|from PyQt6" upbit_auto_trading/domain/
 grep -r "print(" upbit_auto_trading/ --exclude-dir=tests --exclude-dir=tools
 ```
 
-### 환경 설정
+### 환경 설정 (실시간 적용)
 ```powershell
-# 로깅 제어
-$env:UPBIT_CONSOLE_OUTPUT='true'           # 콘솔 출력
-$env:UPBIT_LOG_SCOPE='verbose'             # 로그 레벨
+# 로깅 제어 (config/logging_config.yaml도 함께 작동)
+$env:UPBIT_CONSOLE_OUTPUT='true'           # 콘솔 출력 활성화
+$env:UPBIT_LOG_SCOPE='verbose'             # 상세 로그 레벨
 $env:UPBIT_COMPONENT_FOCUS='ComponentName' # 특정 컴포넌트 집중
+
+# API 키 설정 (필수)
+$env:UPBIT_ACCESS_KEY='your_access_key'
+$env:UPBIT_SECRET_KEY='your_secret_key'
 ```
 
 ---
