@@ -106,6 +106,19 @@ $env:UPBIT_SECRET_KEY = 'your_secret_key'
 
 ---
 
+## 📋 태스크 관리 & 진행 마커 규칙
+### 태스크 진행 마커 표준
+- **[ ]**: 미완료 (미시작 상태)
+- **[-]**: 진행 중 (현재 작업 중)
+- **[x]**: 완료 (작업 완료)
+
+### 태스크 문서 관리 원칙
+- 모든 태스크 문서에서 위 마커 규칙을 일관성 있게 적용
+- 진행 상황을 명확히 표시하여 프로젝트 추적 용이성 확보
+- tasks/active/ 폴더의 모든 마크다운 파일에 적용
+
+---
+
 ## 🧱 에러 처리 모범사례
 ```python
 from upbit_auto_trading.infrastructure.logging import create_component_logger

@@ -2,23 +2,31 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, Optional
 import uuid
+from dataclasses import dataclass, field
 
+
+@dataclass(frozen=True)
 class DomainEvent(ABC):
     """
     모든 도메인 이벤트의 기본 클래스
 
-    dataclass 상속 규칙을 준수하기 위해 일반 클래스로 설계:
-    - 자식 클래스에서 필수 필드(기본값 없음)를 자유롭게 정의 가능
-    - 공통 메타데이터는 __post_init__에서 자동 생성
+    dataclass 기반으로 설계하여 자식 클래스와 일관성 유지:
+    - 공통 메타데이터는 field(init=False)로 자동 생성
+    - 자식 클래스에서 __post_init__에서 초기화 가능
     """
 
-    def __init__(self):
-        self._event_id = str(uuid.uuid4())
-        self._occurred_at = datetime.now()
-        self._version = 1
-        self._correlation_id = None
-        self._causation_id = None
-        self._metadata = {}
+    # 메타데이터는 자동 생성되므로 __init__에서 제외
+    _event_id: str = field(init=False)
+    _occurred_at: datetime = field(init=False)
+    _version: int = field(init=False, default=1)
+    _correlation_id: Optional[str] = field(init=False, default=None)
+    _causation_id: Optional[str] = field(init=False, default=None)
+    _metadata: Dict[str, Any] = field(init=False, default_factory=dict)
+
+    def __post_init__(self):
+        """메타데이터 자동 초기화"""
+        object.__setattr__(self, '_event_id', str(uuid.uuid4()))
+        object.__setattr__(self, '_occurred_at', datetime.now())
 
     @property
     def event_id(self) -> str:

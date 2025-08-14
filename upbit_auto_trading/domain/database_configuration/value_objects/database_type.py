@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Any, List
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.domain.logging import create_domain_logger
 
-logger = create_component_logger("DatabaseType")
+logger = create_domain_logger("DatabaseType")
 
 class DatabaseCategory(Enum):
     """데이터베이스 카테고리"""

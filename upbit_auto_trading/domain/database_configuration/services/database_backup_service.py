@@ -10,13 +10,15 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.domain.logging import create_domain_logger
 from ..entities.database_profile import DatabaseProfile
 from ..entities.backup_record import BackupRecord, BackupType, BackupStatus
 from ..value_objects.database_path import DatabasePath
 from ..value_objects.database_type import DatabaseType
+from ..repositories.database_verification_repository import IDatabaseVerificationRepository
 
-logger = create_component_logger("DatabaseBackupService")
+logger = create_domain_logger("DatabaseBackupService")
+
 
 class DatabaseBackupService:
     """
@@ -25,7 +27,14 @@ class DatabaseBackupService:
     데이터베이스 백업 생성, 복원, 검증 등의 도메인 로직을 담당합니다.
     """
 
-    def __init__(self):
+    def __init__(self, verification_repository: IDatabaseVerificationRepository):
+        """
+        DatabaseBackupService를 초기화합니다.
+
+        Args:
+            verification_repository: 데이터베이스 검증을 위한 Repository
+        """
+        self._verification_repository = verification_repository
         logger.debug("DatabaseBackupService 초기화됨")
 
     def create_backup(self, profile: DatabaseProfile, backup_type: BackupType = BackupType.MANUAL) -> BackupRecord:
@@ -313,22 +322,16 @@ class DatabaseBackupService:
     def _verify_sqlite_structure(self, file_path: Path) -> bool:
         """SQLite 파일 구조 기본 검증"""
         try:
-            import sqlite3
+            # Repository를 통한 데이터베이스 무결성 검증
+            is_valid = self._verification_repository.verify_sqlite_integrity(file_path)
 
-            with sqlite3.connect(file_path) as conn:
-                cursor = conn.cursor()
-
-                # SQLite 헤더 검증
-                cursor.execute("PRAGMA integrity_check(1)")
-                result = cursor.fetchone()
-
-                if result and result[0] == 'ok':
-                    logger.debug(f"SQLite 구조 검증 성공: {file_path}")
-                    return True
-                else:
-                    logger.warning(f"SQLite 무결성 검사 실패: {result}")
-                    return False
+            if is_valid:
+                logger.debug(f"SQLite 구조 검증 성공: {file_path}")
+                return True
+            else:
+                logger.warning(f"SQLite 무결성 검사 실패: {file_path}")
+                return False
 
         except Exception as e:
-            logger.warning(f"SQLite 구조 검증 실패: {e}")
+            logger.error(f"SQLite 구조 검증 중 오류 발생: {e}")
             return False

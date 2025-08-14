@@ -69,6 +69,9 @@ class LoggingService(ILoggingService):
         # 핵심 서비스 초기화
         self._initialize_core_service()
 
+        # Domain Events 로깅 핸들러 등록
+        self._setup_domain_log_handler()
+
         print("🔧 Infrastructure 로깅 시스템 - 설정 파일 기반으로 초기화 완료!")
         self._print_current_config()
 
@@ -262,6 +265,41 @@ class LoggingService(ILoggingService):
 
         except Exception as e:
             print(f"❌ 설정 상태 출력 실패: {e}")
+
+    def _setup_domain_log_handler(self) -> None:
+        """Domain Layer 로그 이벤트 핸들러 설정"""
+        try:
+            from upbit_auto_trading.domain.logging import DomainLogEvent
+            from upbit_auto_trading.domain.events import get_domain_event_publisher
+
+            def handle_domain_log_event(event: DomainLogEvent):
+                """Domain 로그 이벤트를 Infrastructure 로깅 시스템으로 전달"""
+                try:
+                    logger = self.get_logger(event.component_name)
+
+                    # LogLevel enum을 logging 레벨로 변환
+                    level_mapping = {
+                        'DEBUG': 10,    # logging.DEBUG
+                        'INFO': 20,     # logging.INFO
+                        'WARNING': 30,  # logging.WARNING
+                        'ERROR': 40,    # logging.ERROR
+                        'CRITICAL': 50  # logging.CRITICAL
+                    }
+
+                    level = level_mapping.get(event.log_level.value, 20)
+                    logger.log(level, event.message)
+
+                except Exception as e:
+                    # 로깅 시스템 오류가 발생해도 Domain 이벤트 처리는 계속 진행
+                    print(f"Domain log handler error: {e}")
+
+            # 이벤트 핸들러 등록
+            publisher = get_domain_event_publisher()
+            publisher.subscribe(DomainLogEvent, handle_domain_log_event)
+
+        except Exception as e:
+            # Domain Events 시스템이 없어도 기본 로깅은 계속 동작
+            print(f"Domain log handler setup failed: {e}")
 
     def _initialize_core_service(self) -> None:
         """핵심 로깅 서비스 초기화"""

@@ -218,7 +218,15 @@ def setup_application() -> tuple[QApplication, ApplicationContext]:
     # 1. ApplicationContext 초기화
     app_context = create_application_context()
 
-    # 2. Repository Container 초기화 (DDD Infrastructure Layer)
+    # 2. Domain Events Subscriber 초기화 (DDD Architecture Phase 2)
+    try:
+        from upbit_auto_trading.infrastructure.logging.domain_event_subscriber import initialize_domain_logging_subscriber
+        initialize_domain_logging_subscriber()
+        logger.info("✅ Domain Events 로깅 구독자 초기화 완료")
+    except Exception as e:
+        logger.warning(f"⚠️ Domain Events 구독자 초기화 실패: {e}")
+
+    # 3. Repository Container 초기화 (DDD Infrastructure Layer)
     try:
         from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
         repository_container = RepositoryContainer()

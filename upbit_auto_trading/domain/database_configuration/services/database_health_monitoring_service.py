@@ -8,16 +8,19 @@
 동작 중 점검은 위험하므로 수행하지 않습니다.
 """
 
-import sqlite3
 import time
 from pathlib import Path
 from typing import Dict
 from datetime import datetime
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.domain.logging import create_domain_logger
 from upbit_auto_trading.domain.database_configuration.value_objects.database_health_report import (
     DatabaseHealthReport, SystemDatabaseHealth, DatabaseHealthLevel
 )
+from upbit_auto_trading.domain.database_configuration.repositories.database_verification_repository import (
+    IDatabaseVerificationRepository
+)
+
 
 class DatabaseHealthMonitoringService:
     """
@@ -26,8 +29,15 @@ class DatabaseHealthMonitoringService:
     도메인 서비스로서 DB 건강 상태를 안전하게 점검합니다.
     """
 
-    def __init__(self):
-        self._logger = create_component_logger("DatabaseHealthMonitoring")
+    def __init__(self, verification_repository: IDatabaseVerificationRepository):
+        """
+        DatabaseHealthMonitoringService를 초기화합니다.
+
+        Args:
+            verification_repository: 데이터베이스 검증을 위한 Repository
+        """
+        self._verification_repository = verification_repository
+        self._logger = create_domain_logger("DatabaseHealthMonitoring")
         self._logger.info("DB 건강 모니터링 서비스 초기화")
 
     def check_system_database_health(self, database_paths: Dict[str, str]) -> SystemDatabaseHealth:
@@ -80,7 +90,6 @@ class DatabaseHealthMonitoringService:
 
     def _check_individual_database(self, db_type: str, file_path: str) -> DatabaseHealthReport:
         """개별 데이터베이스 건강 상태 점검"""
-        start_time = time.time()
         path_obj = Path(file_path)
 
         issues = []
@@ -117,56 +126,51 @@ class DatabaseHealthMonitoringService:
             file_size_mb = 0.0
             issues.append(f"파일 정보 읽기 실패: {str(e)}")
 
-        # 3. SQLite 연결 및 기본 점검
+        # 3. 데이터베이스 연결 및 기본 점검 (Repository 패턴 사용)
         connection_time_ms = 0.0
         table_count = 0
         health_level = DatabaseHealthLevel.ERROR
 
         try:
-            with sqlite3.connect(str(path_obj), timeout=5.0) as conn:
-                # 연결 시간 측정
-                connection_time_ms = (time.time() - start_time) * 1000
+            # Repository를 통한 연결 테스트
+            start_connection = time.time()
+            is_accessible, connection_message = self._verification_repository.test_connection(path_obj)
+            connection_time_ms = (time.time() - start_connection) * 1000
 
-                cursor = conn.cursor()
+            if not is_accessible:
+                issues.append(f"데이터베이스 연결 실패: {connection_message}")
+                health_level = DatabaseHealthLevel.CRITICAL
+                recommendations.append("데이터베이스 파일 경로와 권한을 확인하세요")
+            else:
+                # 무결성 검증
+                is_integrity_ok = self._verification_repository.verify_sqlite_integrity(path_obj)
 
-                # 기본 연결 테스트
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-
-                # 무결성 검사
-                cursor.execute("PRAGMA integrity_check")
-                integrity_result = cursor.fetchone()
-
-                if integrity_result[0] != "ok":
-                    issues.append(f"데이터베이스 무결성 검사 실패: {integrity_result[0]}")
+                if not is_integrity_ok:
+                    issues.append("데이터베이스 무결성 검사 실패")
                     health_level = DatabaseHealthLevel.CRITICAL
                     recommendations.append("데이터베이스를 복구하거나 백업에서 복원하세요")
+                else:
+                    # 데이터베이스 정보 조회
+                    db_info = self._verification_repository.get_database_info(path_obj)
 
-                # 테이블 수 확인
-                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
-                table_count = cursor.fetchone()[0]
+                    if db_info and "table_count" in db_info:
+                        table_count = db_info["table_count"]
 
-                if table_count == 0:
-                    issues.append("데이터베이스에 테이블이 없습니다")
-                    health_level = DatabaseHealthLevel.ERROR
-                    recommendations.append("스키마를 초기화하세요")
-                elif health_level != DatabaseHealthLevel.CRITICAL:
-                    # 무결성이 OK이고 테이블이 있으면
-                    if connection_time_ms > 1000:  # 1초 이상
-                        health_level = DatabaseHealthLevel.WARNING
-                        issues.append(f"연결 시간이 느립니다: {connection_time_ms:.1f}ms")
-                        recommendations.append("데이터베이스 최적화를 고려하세요")
+                    if table_count == 0:
+                        issues.append("데이터베이스에 테이블이 없습니다")
+                        health_level = DatabaseHealthLevel.ERROR
+                        recommendations.append("스키마를 초기화하세요")
                     else:
-                        health_level = DatabaseHealthLevel.HEALTHY
-
-        except sqlite3.DatabaseError as e:
-            issues.append(f"데이터베이스 오류: {str(e)}")
-            health_level = DatabaseHealthLevel.CRITICAL
-            recommendations.append("데이터베이스 파일이 손상되었을 수 있습니다")
-            recommendations.append("백업에서 복원하거나 새로 생성하세요")
+                        # 연결 시간 기반 성능 평가
+                        if connection_time_ms > 1000:  # 1초 이상
+                            health_level = DatabaseHealthLevel.WARNING
+                            issues.append(f"연결 시간이 느립니다: {connection_time_ms:.1f}ms")
+                            recommendations.append("데이터베이스 최적화를 고려하세요")
+                        else:
+                            health_level = DatabaseHealthLevel.HEALTHY
 
         except Exception as e:
-            issues.append(f"연결 오류: {str(e)}")
+            issues.append(f"데이터베이스 검증 오류: {str(e)}")
             health_level = DatabaseHealthLevel.ERROR
             recommendations.append("파일 권한이나 경로를 확인하세요")
 
