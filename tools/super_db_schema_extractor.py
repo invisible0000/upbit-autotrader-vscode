@@ -43,17 +43,17 @@ from typing import List, Optional
 class SuperDBSchemaExtractor:
     """
     🔄 현재 DB에서 완전한 스키마 추출 도구
-    
+
     🤖 LLM 사용 패턴:
     extractor = SuperSchemaExtractor()
     extractor.extract_schema()                    # 📊 settings DB 스키마 추출 (기본)
     extractor.extract_schema('market_data')      # 🔍 특정 DB 스키마 추출
     extractor.extract_schema('settings', True)   # 💾 백업 파일로 저장
-    
+
     💡 지원 DB: settings, market_data, strategies
     💡 출력 위치: gui_variables_DB_migration_util/data_info/
     """
-    
+
     def __init__(self):
         self.db_paths = {
             'settings': 'data/settings.sqlite3',
@@ -61,19 +61,19 @@ class SuperDBSchemaExtractor:
             'strategies': 'data/strategies.sqlite3'
         }
         self.output_dir = 'upbit_auto_trading/utils/trading_variables/gui_variables_DB_migration_util/data_info'
-    
+
     def extract_schema(self, db_name: str = 'settings', create_backup: bool = False) -> Optional[str]:
         """
         🤖 LLM 추천: 메인 스키마 추출 메서드
         현재 DB 상태를 완전한 스키마 파일로 추출
-        
+
         Args:
             db_name: 추출할 DB ('settings', 'market_data', 'strategies')
             create_backup: True면 타임스탬프 백업 파일 생성, False면 기본 파일 덮어쓰기
-        
+
         Returns:
             str: 생성된 스키마 파일 경로 (성공시), None (실패시)
-        
+
         출력 예시:
         🔄 === SETTINGS DB 스키마 추출 ===
         📊 총 27개 테이블 추출 완료
@@ -84,45 +84,45 @@ class SuperDBSchemaExtractor:
             print(f"❌ 지원하지 않는 DB: {db_name}")
             print(f"📋 지원 DB 목록: {list(self.db_paths.keys())}")
             return None
-            
+
         db_path = self.db_paths[db_name]
         if not os.path.exists(db_path):
             print(f"❌ DB 파일이 존재하지 않습니다: {db_path}")
             return None
-        
+
         print(f"🔄 === {db_name.upper()} DB 스키마 추출 ===")
-        
+
         try:
             # 스키마 추출 실행
             schema_content, table_count = self._extract_schema_content(db_path, db_name)
-            
+
             # 출력 파일 경로 결정
             output_path = self._get_output_path(create_backup)
-            
+
             # 스키마 파일 저장
             self._save_schema_file(output_path, schema_content)
-            
+
             # 결과 검증 및 출력
             verified_count = self._verify_schema_file(output_path)
-            
+
             print(f"📊 총 {table_count}개 테이블 추출 완료")
             print(f"💾 스키마 파일 생성: {os.path.basename(output_path)}")
             print(f"✅ 검증 완료: {verified_count}개 테이블 확인됨")
-            
+
             if table_count != verified_count:
                 print(f"⚠️ 경고: 추출({table_count})과 검증({verified_count}) 테이블 수 불일치")
-            
+
             return output_path
-            
+
         except Exception as e:
             print(f"❌ 스키마 추출 중 오류: {e}")
             return None
-    
+
     def _extract_schema_content(self, db_path: str, db_name: str) -> tuple[str, int]:
         """DB에서 스키마 내용 추출"""
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            
+
             # 스키마 헤더 생성
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             schema_lines = [
@@ -133,49 +133,49 @@ class SuperDBSchemaExtractor:
                 "PRAGMA foreign_keys = ON;",
                 ""
             ]
-            
+
             # 모든 테이블 추출 (sqlite_sequence 제외)
             cursor.execute("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name != 'sqlite_sequence' 
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name != 'sqlite_sequence'
                 ORDER BY name
             """)
             tables = [row[0] for row in cursor.fetchall()]
-            
+
             # 각 테이블의 CREATE 문 추출
             for table_name in tables:
                 cursor.execute("""
-                    SELECT sql FROM sqlite_master 
+                    SELECT sql FROM sqlite_master
                     WHERE type='table' AND name=?
                 """, (table_name,))
-                
+
                 create_sql = cursor.fetchone()
                 if create_sql and create_sql[0]:
                     schema_lines.append(f"-- Table: {table_name}")
                     schema_lines.append(create_sql[0] + ";")
                     schema_lines.append("")
-            
+
             # 인덱스 추출
             cursor.execute("""
-                SELECT sql FROM sqlite_master 
-                WHERE type='index' AND sql IS NOT NULL 
+                SELECT sql FROM sqlite_master
+                WHERE type='index' AND sql IS NOT NULL
                 ORDER BY name
             """)
             indexes = cursor.fetchall()
-            
+
             if indexes:
                 schema_lines.append("-- Indexes")
                 for index in indexes:
                     if index[0]:
                         schema_lines.append(index[0] + ";")
                 schema_lines.append("")
-            
+
             return '\n'.join(schema_lines), len(tables)
-    
+
     def _get_output_path(self, create_backup: bool) -> str:
         """출력 파일 경로 생성"""
         os.makedirs(self.output_dir, exist_ok=True)
-        
+
         if create_backup:
             # 타임스탬프 백업 파일명 생성
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -183,35 +183,35 @@ class SuperDBSchemaExtractor:
         else:
             # 기본 파일명 (GUI 도구가 사용하는 파일)
             filename = "upbit_autotrading_unified_schema.sql"
-        
+
         return os.path.join(self.output_dir, filename)
-    
+
     def _save_schema_file(self, output_path: str, content: str) -> None:
         """스키마 파일 저장"""
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(content)
-    
+
     def _verify_schema_file(self, file_path: str) -> int:
         """생성된 스키마 파일 검증"""
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
+
         # CREATE TABLE 문 개수 확인
         create_patterns = re.findall(
             r'CREATE TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(\w+)\s*\(',
             content,
             re.IGNORECASE
         )
-        
+
         return len(create_patterns)
-    
+
     def list_available_databases(self) -> None:
         """
         🤖 LLM 추천: 사용 가능한 DB 목록 확인
         현재 시스템에서 스키마 추출 가능한 DB들을 표시
         """
         print("🔍 === 스키마 추출 가능한 DB 목록 ===")
-        
+
         for db_name, db_path in self.db_paths.items():
             if os.path.exists(db_path):
                 # 테이블 수 확인
@@ -220,7 +220,7 @@ class SuperDBSchemaExtractor:
                         cursor = conn.cursor()
                         cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
                         table_count = cursor.fetchone()[0]
-                    
+
                     print(f"  ✅ {db_name:<12} ({table_count}개 테이블) - {db_path}")
                 except:
                     print(f"  ⚠️ {db_name:<12} (접근 오류) - {db_path}")
@@ -231,29 +231,29 @@ class SuperDBSchemaExtractor:
 def main():
     """
     🤖 LLM 사용 가이드: 메인 실행 함수
-    
+
     명령행 인수에 따라 다른 동작 수행:
     - 인수 없음: settings DB 스키마 추출 (기본값, GUI 파일 업데이트)
     - 'settings'/'market_data'/'strategies': 특정 DB 스키마 추출
     - 'list': 사용 가능한 DB 목록 표시
     - 'backup': settings DB 스키마를 백업 파일로 추출
-    
+
     🎯 LLM이 자주 사용할 패턴:
     1. python super_schema_extractor.py              # GUI 스키마 파일 업데이트
     2. python super_schema_extractor.py backup       # 현재 상태 백업
     3. python super_schema_extractor.py list         # DB 상태 확인
     """
     import sys
-    
+
     extractor = SuperDBSchemaExtractor()
-    
+
     if len(sys.argv) == 1:
         # 기본값: settings DB 스키마 추출 (GUI 파일 업데이트)
         extractor.extract_schema('settings', create_backup=False)
-        
+
     elif len(sys.argv) == 2:
         cmd = sys.argv[1].lower()
-        
+
         if cmd == 'list':
             extractor.list_available_databases()
         elif cmd == 'backup':
