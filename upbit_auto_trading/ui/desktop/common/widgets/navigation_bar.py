@@ -72,7 +72,7 @@ class NavigationBar(QWidget):
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         title_label.setMinimumHeight(60)
-        title_label.setStyleSheet("background-color: #2c3e50; color: white;")
+        title_label.setObjectName("nav-title")  # QSS 스타일링을 위한 objectName 설정
 
         layout.addWidget(title_label)
 
