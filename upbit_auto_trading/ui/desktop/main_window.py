@@ -467,7 +467,8 @@ class MainWindow(QMainWindow):
             "dashboard": "대시보드",
             "chart_view": "차트 뷰",
             "screener": "종목 스크리닝",
-            "strategy": "매매전략 관리",
+            "strategy": "매매전략 관리 (신규)",
+            "strategy_backup": "매매전략 관리 (백업)",
             "backtest": "백테스팅",
             "trading": "실시간 거래",
             "portfolio": "포트폴리오 구성",
@@ -517,9 +518,15 @@ class MainWindow(QMainWindow):
                 from upbit_auto_trading.ui.desktop.screens.asset_screener.asset_screener_screen import AssetScreenerScreen
                 screen = AssetScreenerScreen()
 
-            elif screen_name == "매매전략 관리":
+            elif screen_name == "매매전략 관리 (신규)":
+                # 새로운 DDD/MVP 기반 전략 관리 화면 (구현 예정)
+                from upbit_auto_trading.ui.desktop.common.placeholder_screen import create_placeholder_screen
+                screen = create_placeholder_screen("매매전략 관리 (신규) - DDD/MVP 기반")
+
+            elif screen_name == "매매전략 관리 (백업)":
                 # 기존 탭 구조 유지하면서 전략 메이커 탭에만 MVP 패턴 적용 (TASK-13)
-                from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import StrategyManagementScreen
+                from upbit_auto_trading.ui.desktop.screens.strategy_management_backup \
+                    .strategy_management_screen import StrategyManagementScreen
                 screen = StrategyManagementScreen()
 
                 # MVP Container를 전략 관리 화면에 전달 (전략 메이커 탭에서 사용)

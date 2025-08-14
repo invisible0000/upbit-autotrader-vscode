@@ -1,0 +1,49 @@
+# TASK-07: MainWindow DDD/MVP 리팩터링
+
+## 📋 태스크 개요
+- **목표**: 1148줄의 거대한 MainWindow를 DDD/MVP 패턴으로 분산 리팩터링
+- **우선순위**: 높음 (아키텍처 개선 핵심)
+- **예상 결과**: MainWindow 200-300줄로 축소, 서비스별 분리
+
+## 🎯 분산 전략
+### Phase 1: ScreenManagerService 분리 [-]
+- `_load_screen_lazy()` → Application Layer의 ScreenManagerService
+- `_change_screen()` → NavigationService
+- `_add_screens()` → ScreenRegistryService
+
+### Phase 2: WindowStateService 분리 [ ]
+- `_load_window_state()` → WindowStateService
+- `_reset_window_size()` → WindowStateService
+
+### Phase 3: MenuService 분리 [ ]
+- `_setup_menu_bar()` → MenuService
+
+### Phase 4: MainWindowPresenter 생성 [ ]
+- Presentation Logic 분리
+- 의존성 주입 패턴 적용
+
+## 🏗️ 목표 구조
+```
+MainWindow (View - PyQt6 UI만)
+├── MainWindowPresenter (Presentation Logic)
+├── WindowStateService (Application Service)
+├── ScreenManagerService (Application Service)
+├── ThemeManagerService (Application Service)
+└── NavigationService (Application Service)
+```
+
+## 📍 현재 상태
+- [x] 문제 인식 및 분석 완료
+- [-] Phase 1 시작 예정 (ScreenManagerService)
+- [ ] 테스트 코드 작성
+- [ ] 점진적 마이그레이션
+
+## 🔗 연관 파일
+- `upbit_auto_trading/ui/desktop/main_window.py` (1148줄)
+- `upbit_auto_trading/application/` (서비스 레이어)
+- `upbit_auto_trading/infrastructure/` (DI Container)
+
+## 📝 참고사항
+- DDD Golden Rules 준수
+- 기존 기능 무결성 보장
+- 점진적 리팩터링 (Big Bang 방식 금지)
