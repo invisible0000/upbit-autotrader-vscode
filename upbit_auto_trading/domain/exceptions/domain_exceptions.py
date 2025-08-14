@@ -17,6 +17,12 @@ class DomainException(Exception):
     def __str__(self):
         return f"[{self.error_code}] {self.message}"
 
+class ValidationError(DomainException):
+    """도메인 검증 실패 예외"""
+    def __init__(self, message: str = "도메인 검증에 실패했습니다"):
+        super().__init__(message, "VALIDATION_ERROR")
+
+
 class InvalidStrategyIdError(DomainException):
     """잘못된 전략 ID 예외"""
     def __init__(self, message: str = "잘못된 전략 ID입니다"):
