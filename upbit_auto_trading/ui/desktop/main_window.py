@@ -19,6 +19,7 @@ from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeySe
 
 # Application Layer 서비스
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
+from upbit_auto_trading.application.services.screen_manager_service import IScreenManagerService, ScreenManagerService
 
 # 공통 위젯 임포트
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
@@ -194,6 +195,10 @@ class MainWindow(QMainWindow):
 
         # 설정 로드
         self._load_settings()
+
+        # ScreenManagerService 초기화 (DDD/MVP 패턴)
+        self.screen_manager = ScreenManagerService()
+        self._log_info("✅ ScreenManagerService 초기화 완료")
 
         # UI 설정
         self._setup_ui()
@@ -410,7 +415,17 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
     def _add_screens(self):
-        """화면 추가 (지연 로딩 방식)"""
+        """화면 추가 (ScreenManagerService 사용)"""
+        try:
+            self.screen_manager.initialize_screens(self.stack_widget, self._screen_widgets)
+            self._log_info("ScreenManagerService를 통한 화면 초기화 완료")
+        except Exception as e:
+            self._log_error(f"ScreenManagerService 화면 초기화 실패: {e}")
+            # 기존 방식으로 폴백
+            self._add_screens_legacy()
+
+    def _add_screens_legacy(self):
+        """화면 추가 (기존 방식 - 폴백용)"""
         # 대시보드 화면만 먼저 로드 (기본 화면)
         dashboard_screen = DashboardScreen()
         self.stack_widget.addWidget(dashboard_screen)
@@ -419,14 +434,15 @@ class MainWindow(QMainWindow):
         # 나머지 화면들은 지연 로딩을 위해 None으로 초기화
         self._screen_widgets['차트 뷰'] = None
         self._screen_widgets['종목 스크리닝'] = None
-        self._screen_widgets['매매전략 관리'] = None
+        self._screen_widgets['매매전략 관리 (신규)'] = None
+        self._screen_widgets['매매전략 관리 (백업)'] = None
         self._screen_widgets['백테스팅'] = None
         self._screen_widgets['실시간 거래'] = None
         self._screen_widgets['포트폴리오 구성'] = None
         self._screen_widgets['모니터링/알림'] = None
         self._screen_widgets['설정'] = None
 
-        self._log_info("대시보드 화면만 초기화 완료, 나머지는 지연 로딩됩니다")
+        self._log_info("대시보드 화면만 초기화 완료, 나머지는 지연 로딩됩니다 (Legacy)")
 
     def _add_placeholder_screens(self, screens):
         """임시 화면 추가"""
@@ -444,12 +460,42 @@ class MainWindow(QMainWindow):
             self.stack_widget.addWidget(placeholder)
 
     def _change_screen(self, screen_name):
-        """
-        화면 전환 (지연 로딩 방식)
+        """화면 전환 (ScreenManagerService 사용)"""
+        try:
+            # 의존성 준비
+            dependencies = self._prepare_screen_dependencies()
 
-        Args:
-            screen_name (str): 화면 이름
-        """
+            # ScreenManagerService를 통한 화면 전환
+            success = self.screen_manager.change_screen(
+                screen_name,
+                self.stack_widget,
+                self._screen_widgets,
+                dependencies
+            )
+
+            if not success:
+                self._log_warning("ScreenManagerService 화면 전환 실패, Legacy 방식으로 폴백")
+                self._change_screen_legacy(screen_name)
+
+        except Exception as e:
+            self._log_error(f"ScreenManagerService 화면 전환 중 오류: {e}")
+            # 기존 방식으로 폴백
+            self._change_screen_legacy(screen_name)
+
+    def _prepare_screen_dependencies(self):
+        """화면 의존성 준비"""
+        return {
+            'mvp_container': self.mvp_container,
+            'settings_service': self.settings_service,
+            'parent': self,
+            'backtest_callback': self._on_backtest_requested,
+            'settings_changed_callback': self._on_settings_changed_from_screen,
+            'theme_changed_callback': self._on_theme_changed_from_ui_settings,
+            'api_status_changed_callback': getattr(self, '_on_api_status_changed', None)
+        }
+
+    def _change_screen_legacy(self, screen_name):
+        """화면 전환 (기존 방식 - 폴백용)"""
         self._log_info(f"화면 전환 요청: {screen_name}")
 
         # 현재 활성 화면에서 차트뷰인 경우 업데이트 일시정지
@@ -481,7 +527,6 @@ class MainWindow(QMainWindow):
         # 해당 화면이 이미 로드되었는지 확인
         if self._screen_widgets.get(mapped_name) is None:
             self._log_info(f"{mapped_name} 화면 지연 로딩 중...")
-
             self._load_screen_lazy(mapped_name)
 
         # 화면 전환
@@ -498,15 +543,13 @@ class MainWindow(QMainWindow):
                         widget.resume_chart_updates()
                 except Exception as e:
                     self._log_warning(f"차트뷰 업데이트 재개 중 오류: {e}")
-
             else:
                 self._log_error(f"{mapped_name} 화면을 스택에서 찾을 수 없습니다")
-
         else:
             self._log_error(f"{mapped_name} 화면 로딩 실패")
 
     def _load_screen_lazy(self, screen_name):
-        """지연 로딩으로 화면 생성"""
+        """지연 로딩으로 화면 생성 (Legacy 폴백용)"""
         try:
             if screen_name == "차트 뷰":
                 self._log_info("차트뷰 화면 로딩 중...")
