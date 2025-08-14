@@ -1,20 +1,6 @@
 """
-Domain Events - 로깅 이벤트 정의 (LEGACY)
-=========================================
-
-⚠️ 중요: 이 파일의 로깅 관련 이벤트들은 LEGACY입니다.
-새로운 의존성 주입 기반 로깅 시스템으로 교체되었습니다.
-
-성능 문제:
-- DomainLogRequested: 24.2배 느림 (54.78ms vs 2.26ms)
-- UUID + datetime 생성 오버헤드
-- 복잡한 이벤트 객체 생성
-
-새 시스템 사용:
-- from upbit_auto_trading.domain.logging import create_domain_logger
-
-이벤트들은 Domain Events 시스템의 다른 용도로 여전히 필요할 수 있어서 유지하지만,
-실제 로깅에는 사용하지 마세요.
+Domain Events - 로깅 이벤트 정의
+DDD 원칙에 따른 Domain Layer 로깅을 위한 이벤트들
 """
 
 from dataclasses import dataclass
@@ -36,16 +22,10 @@ class LogLevel(Enum):
 @dataclass(frozen=True)
 class DomainLogRequested(DomainEvent):
     """
-    Domain 로그 요청 이벤트 - ⚠️ DEPRECATED ⚠️
+    Domain 로그 요청 이벤트
 
-    이 이벤트는 성능 문제로 사용 중단되었습니다:
-    - 24.2배 느림 (54.78ms vs 2.26ms)
-    - UUID + datetime 생성 오버헤드
-
-    새 시스템 사용:
-    from upbit_auto_trading.domain.logging import create_domain_logger
-
-    Legacy용으로만 유지 - 실제 로깅에 사용 금지
+    Domain Layer에서 로깅이 필요할 때 발행되는 이벤트
+    Infrastructure Layer에서 이 이벤트를 구독하여 실제 로깅을 수행
     """
 
     component_name: str
@@ -78,12 +58,9 @@ class DomainLogRequested(DomainEvent):
 @dataclass(frozen=True)
 class DomainComponentInitialized(DomainEvent):
     """
-    Domain 컴포넌트 초기화 완료 이벤트 - ⚠️ 로깅용으로는 DEPRECATED ⚠️
+    Domain 컴포넌트 초기화 완료 이벤트
 
     Domain Service나 Entity가 초기화될 때 발행
-
-    로깅 목적으로는 새 시스템 사용:
-    from upbit_auto_trading.domain.logging import create_domain_logger
     """
 
     component_name: str

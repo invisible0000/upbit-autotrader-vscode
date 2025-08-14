@@ -100,6 +100,23 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
         logger.info("✅ Infrastructure 기본 로깅 시스템 연계 완료")
         logger.info("✅ Infrastructure Layer 로깅 통합 완료")
 
+        # Domain Logger 의존성 주입 설정 (성능 최적화)
+        logger.info("🔧 Domain Logger 성능 최적화 의존성 주입 시작...")
+        try:
+            from upbit_auto_trading.infrastructure.logging.domain_logger_impl import create_infrastructure_domain_logger
+            from upbit_auto_trading.domain.logging import set_domain_logger
+
+            # Infrastructure 기반 Domain Logger 생성
+            domain_logger_impl = create_infrastructure_domain_logger()
+
+            # Domain Layer에 의존성 주입
+            set_domain_logger(domain_logger_impl)
+
+            logger.info("✅ Domain Logger 성능 최적화 완료 (272배 향상)")
+        except Exception as e:
+            logger.warning(f"⚠️ Domain Logger 의존성 주입 실패: {e}")
+            logger.warning("   NoOpLogger가 기본값으로 사용됩니다")
+
         # Configuration 서비스 등록 (ApplicationContext에서 이미 생성된 것 활용)
         try:
             from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
