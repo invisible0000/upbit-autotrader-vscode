@@ -20,6 +20,7 @@ from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeySe
 # Application Layer 서비스
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.application.services.screen_manager_service import IScreenManagerService, ScreenManagerService
+from upbit_auto_trading.application.services.window_state_service import IWindowStateService, WindowStateService
 
 # 공통 위젯 임포트
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
@@ -200,6 +201,10 @@ class MainWindow(QMainWindow):
         self.screen_manager = ScreenManagerService()
         self._log_info("✅ ScreenManagerService 초기화 완료")
 
+        # WindowStateService 초기화 (DDD/MVP 패턴)
+        self.window_state_service = WindowStateService()
+        self._log_info("✅ WindowStateService 초기화 완료")
+
         # UI 설정
         self._setup_ui()
 
@@ -319,11 +324,11 @@ class MainWindow(QMainWindow):
         # 메뉴 바 설정
         self._setup_menu_bar()
 
-        # 저장된 창 상태 로드 (설정 서비스 기반)
-        self._load_window_state()
+        # 저장된 창 상태 로드 (WindowStateService 사용)
+        self.window_state_service.load_window_state(self, self.settings_service)
 
-    def _load_window_state(self):
-        """저장된 창 크기/위치 로드 (SettingsService 우선, 실패 시 QSettings 폴백)"""
+    def _load_window_state_legacy(self):
+        """저장된 창 크기/위치 로드 (Legacy 폴백용)"""
         if self.settings_service:
             try:
                 window_state = self.settings_service.load_window_state()
@@ -398,12 +403,12 @@ class MainWindow(QMainWindow):
 
         # 창 크기 초기화 액션
         reset_size_action = QAction("창 크기 초기화", self)
-        reset_size_action.triggered.connect(self._reset_window_size)
+        reset_size_action.triggered.connect(lambda: self.window_state_service.reset_window_size(self))
         view_menu.addAction(reset_size_action)
 
         # 창 크기 초기화 (중간) 액션 추가
         reset_size_medium_action = QAction("창 크기 초기화(중간)", self)
-        reset_size_medium_action.triggered.connect(self._reset_window_size_medium)
+        reset_size_medium_action.triggered.connect(lambda: self.window_state_service.reset_window_size_medium(self))
         view_menu.addAction(reset_size_medium_action)
 
         # 도움말 메뉴
@@ -872,8 +877,8 @@ class MainWindow(QMainWindow):
             self._log_warning(f"테마 저장 오류, 기본값 저장: {e}")
             settings.setValue("theme", "light")
 
-    def _reset_window_size(self):
-        """창 크기 초기화"""
+    def _reset_window_size_legacy(self):
+        """창 크기 초기화 (Legacy 폴백용)"""
         # 현재 위치 저장
         current_pos = self.pos()
 
@@ -883,8 +888,8 @@ class MainWindow(QMainWindow):
         # 모든 스플리터와 차트들을 다시 업데이트
         self._update_all_widgets()
 
-    def _reset_window_size_medium(self):
-        """창 크기 초기화 (중간 크기)"""
+    def _reset_window_size_medium_legacy(self):
+        """창 크기 초기화 (중간 크기) (Legacy 폴백용)"""
         # 현재 위치 저장
         current_pos = self.pos()
 
@@ -1008,7 +1013,20 @@ class MainWindow(QMainWindow):
         self.move(position)
 
     def _save_settings(self):
-        """설정 저장 (SettingsService 우선, 실패 시 QSettings 폴백)"""
+        """설정 저장 (WindowStateService 사용)"""
+        try:
+            success = self.window_state_service.save_window_state(self, self.settings_service)
+            if success:
+                self._log_info("WindowStateService를 통한 창 상태 저장 완료")
+            else:
+                self._log_warning("WindowStateService 창 상태 저장 실패")
+        except Exception as e:
+            self._log_error(f"WindowStateService 창 상태 저장 중 오류: {e}")
+            # Legacy 폴백
+            self._save_settings_legacy()
+
+    def _save_settings_legacy(self):
+        """설정 저장 (Legacy 폴백용)"""
         if self.settings_service:
             try:
                 # SettingsService를 통한 창 상태 저장

@@ -11,9 +11,11 @@
 - `_change_screen()` → ScreenManagerService.change_screen() ✅
 - `_add_screens()` → ScreenManagerService.initialize_screens() ✅
 
-### Phase 2: WindowStateService 분리 [ ]
-- `_load_window_state()` → WindowStateService
-- `_reset_window_size()` → WindowStateService
+### Phase 2: WindowStateService 분리 [✅]
+- `_load_window_state()` → WindowStateService.load_window_state() ✅
+- `_save_settings()` → WindowStateService.save_window_state() ✅
+- `_reset_window_size()` → WindowStateService.reset_window_size() ✅
+- `_reset_window_size_medium()` → WindowStateService.reset_window_size_medium() ✅
 
 ### Phase 3: MenuService 분리 [ ]
 - `_setup_menu_bar()` → MenuService
@@ -41,7 +43,14 @@ MainWindow (View - PyQt6 UI만)
   - ✅ 기존 메서드들 리팩터링 (_add_screens, _change_screen, _load_screen_lazy)
   - ✅ Legacy 폴백 메커니즘 구현
   - ✅ 동작 검증 완료 (`python run_desktop_ui.py`)
-- [ ] Phase 2 시작 예정 (WindowStateService)
+- [✅] **Phase 2 완료** (WindowStateService)
+  - ✅ IWindowStateService 인터페이스 정의
+  - ✅ WindowStateService 구현 (Application Layer)
+  - ✅ MainWindow에서 의존성 주입 및 사용
+  - ✅ 기존 메서드들 리팩터링 (_load_window_state, _save_settings, _reset_window_size)
+  - ✅ SettingsService 우선, QSettings 폴백 메커니즘 구현
+  - ✅ 동작 검증 완료 (창 상태 로드/저장 정상 동작)
+- [ ] Phase 3 시작 예정 (MenuService)
 - [ ] 테스트 코드 작성
 - [ ] 점진적 마이그레이션
 
