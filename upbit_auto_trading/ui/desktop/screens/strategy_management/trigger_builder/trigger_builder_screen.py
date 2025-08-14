@@ -120,8 +120,6 @@ class TriggerBuilderScreen(QWidget):
         self.setWindowTitle("🎯 트리거 빌더 v2.0 (완전 리팩토링)")
         self.logger = create_component_logger("TriggerBuilder")
 
-        # LLM_REPORT 초기화 보고
-
         # 메인 윈도우에 맞춘 최소 크기 설정 (1280x720) - 반응형
         self.setMinimumSize(1280, 720)
         self.resize(1600, 1000)  # 초기 크기 설정
@@ -162,11 +160,6 @@ class TriggerBuilderScreen(QWidget):
         # 메인 애플리케이션의 스타일을 상속받음 (부모에서 적용된 스타일 재적용)
         self.ensure_style_inheritance()
         self.logger.debug("트리거 빌더 초기화 완료")
-
-        # LLM_REPORT 완료 보고
-
-        """LLM 에이전트 구조화된 보고"""
-        self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
 
     def ensure_style_inheritance(self):
         """메인 애플리케이션의 스타일 상속 보장"""

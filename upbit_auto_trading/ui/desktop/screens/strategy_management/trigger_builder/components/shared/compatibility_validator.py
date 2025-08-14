@@ -69,11 +69,10 @@ class CompatibilityValidator:
             # DDD 경로 관리 시스템 사용
             from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 
-            path_service = PathServiceFactory.get_path_service()
-            current_paths = path_service.get_all_database_paths()
+            path_service = PathServiceFactory.get_service()
 
             from pathlib import Path
-            db_path = Path(current_paths.get('settings', 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3'))
+            db_path = Path(path_service.get_database_path('settings'))
 
             if db_path.exists():
                 self.db_connection_status = "standard_path_success"

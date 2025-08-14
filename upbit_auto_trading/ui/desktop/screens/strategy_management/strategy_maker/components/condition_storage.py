@@ -33,9 +33,8 @@ class ConditionStorage:
             try:
                 from upbit_auto_trading.infrastructure.configuration import PathServiceFactory
 
-                path_service = PathServiceFactory.get_path_service()
-                current_paths = path_service.get_all_database_paths()
-                self.db_path = current_paths.get('strategies', 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3')
+                path_service = PathServiceFactory.get_service()
+                self.db_path = str(path_service.get_database_path('strategies'))
                 self.use_infrastructure_paths = True
                 logger.info(f"✅ DDD 경로 시스템 사용: {self.db_path}")
             except Exception as e:

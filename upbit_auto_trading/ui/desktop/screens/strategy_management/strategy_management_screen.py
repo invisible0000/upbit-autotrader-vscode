@@ -41,22 +41,12 @@ class StrategyManagementScreen(QWidget):
         # MVP Container 저장용
         self.mvp_container = None
 
-        # LLM_REPORT 초기화 보고
-
         self.init_ui()
-
-        # LLM_REPORT 완료 보고
 
     def set_mvp_container(self, mvp_container):
         """MVP Container 설정 (Main Window에서 주입)"""
         self.mvp_container = mvp_container
         self.logger.info("✅ MVP Container 주입 완료 - 전략 메이커 탭에 적용 예정")
-
-        """LLM 에이전트 구조화된 보고"""
-        if self.logger:
-            self.logger.info(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
-        else:
-            print(f"🤖 LLM_REPORT: Operation={operation}, Status={status}, Details={details}")
 
     def init_ui(self):
         """UI 초기화"""
