@@ -77,6 +77,11 @@ class TradingVariable:
         self.parameters = [p for p in self.parameters if p.parameter_name != parameter_name]
         self.updated_at = datetime.now()
 
+    def remove_unified_parameter(self, parameter_name: str) -> None:
+        """통합 파라미터 제거"""
+        self.unified_parameters = [p for p in self.unified_parameters if p.name != parameter_name]
+        self.updated_at = datetime.now()
+
     def add_change_detection_parameter(self, parameter: ChangeDetectionParameter) -> None:
         """변화 감지 파라미터 추가 (메타 변수용)"""
         # 중복 파라미터 체크

@@ -27,6 +27,7 @@ from upbit_auto_trading.domain.repositories.strategy_repository import StrategyR
 from upbit_auto_trading.domain.repositories.trigger_repository import TriggerRepository
 from upbit_auto_trading.domain.repositories.settings_repository import SettingsRepository
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
+from upbit_auto_trading.domain.trigger_builder.repositories.i_trading_variable_repository import ITradingVariableRepository
 
 # Domain Services
 from upbit_auto_trading.domain.services.strategy_compatibility_service import StrategyCompatibilityService
@@ -36,6 +37,7 @@ from upbit_auto_trading.infrastructure.repositories.sqlite_strategy_repository i
 from upbit_auto_trading.infrastructure.repositories.sqlite_trigger_repository import SqliteTriggerRepository
 from upbit_auto_trading.infrastructure.repositories.sqlite_settings_repository import SqliteSettingsRepository
 from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
+from upbit_auto_trading.infrastructure.repositories.sqlite_trading_variable_repository import SqliteTradingVariableRepository
 from upbit_auto_trading.infrastructure.database.database_manager import (
     DatabaseConnectionProvider
 )
@@ -87,6 +89,7 @@ class RepositoryContainer:
         self._trigger_repository: Optional[TriggerRepository] = None
         self._settings_repository: Optional[SettingsRepository] = None
         self._secure_keys_repository: Optional[SecureKeysRepository] = None
+        self._trading_variable_repository: Optional[ITradingVariableRepository] = None
 
         # Domain Services (Lazy Loading용)
         self._compatibility_service: Optional[StrategyCompatibilityService] = None
@@ -129,6 +132,24 @@ class RepositoryContainer:
             self._logger.debug("🔧 SqliteTriggerRepository 인스턴스 생성")
 
         return self._trigger_repository
+
+    def get_trading_variable_repository(self) -> ITradingVariableRepository:
+        """
+        Trading Variable Repository 반환
+
+        Returns:
+            ITradingVariableRepository: 트레이딩 변수 도메인 Repository 인터페이스
+        """
+        # Mock Repository 확인
+        if 'trading_variable' in self._mock_repositories:
+            return self._mock_repositories['trading_variable']
+
+        # Lazy Loading
+        if self._trading_variable_repository is None:
+            self._trading_variable_repository = SqliteTradingVariableRepository(self._db_manager)
+            self._logger.info("✅ SqliteTradingVariableRepository 초기화 완료")
+
+        return self._trading_variable_repository
 
     def get_settings_repository(self) -> SettingsRepository:
         """
