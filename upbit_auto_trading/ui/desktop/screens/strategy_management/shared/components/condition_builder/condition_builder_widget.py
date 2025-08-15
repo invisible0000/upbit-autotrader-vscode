@@ -5,10 +5,9 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
-    QLabel, QComboBox, QLineEdit, QProgressBar
+    QLabel, QComboBox, QLineEdit, QProgressBar, QMessageBox
 )
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QMessageBox
 from typing import Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -94,9 +93,10 @@ class ConditionBuilderWidget(QWidget):
         self.variable_combo.setMinimumWidth(200)
         main_row.addWidget(self.variable_combo)
 
-        # 헬프 버튼
-        self.help_button = QPushButton("?")
-        self.help_button.setFixedSize(24, 24)
+        # 헬프 버튼 - 기본 QSS 스타일 사용
+        self.help_button = QPushButton("📖")
+        self.help_button.setFixedSize(50, 28)
+        self.help_button.setToolTip("변수 상세 도움말 보기")
         main_row.addWidget(self.help_button)
 
         main_row.addStretch()  # 나머지 공간
@@ -168,9 +168,10 @@ class ConditionBuilderWidget(QWidget):
         self.external_variable_combo.setMinimumWidth(200)
         ext_main_row.addWidget(self.external_variable_combo)
 
-        # 외부 변수 헬프 버튼
-        self.external_help_button = QPushButton("?")
-        self.external_help_button.setFixedSize(24, 24)
+        # 외부 변수 헬프 버튼 - 기본 QSS 스타일 사용
+        self.external_help_button = QPushButton("📖")
+        self.external_help_button.setFixedSize(50, 28)
+        self.external_help_button.setToolTip("외부 변수 상세 도움말 보기")
         ext_main_row.addWidget(self.external_help_button)
 
         ext_main_row.addStretch()
@@ -473,32 +474,68 @@ class ConditionBuilderWidget(QWidget):
             return self._help_repository.generate_basic_help_info(variable_id, variable_name)
 
     def _on_help_clicked(self):
-        """헬프 버튼 클릭 처리 - DB에서 실제 도움말 정보 가져오기"""
+        """헬프 버튼 클릭 처리 - 새로운 헬프 다이얼로그 표시"""
         variable_id = self.variable_combo.currentData()
         variable_name = self.variable_combo.currentText()
 
         if variable_id:
-            help_info = self._get_variable_help_info(variable_id)
-            QMessageBox.information(
-                self,
-                f"변수 도움말 - {variable_name}",
-                help_info
-            )
+            try:
+                # 새로운 헬프 다이얼로그 import (지연 로드)
+                from upbit_auto_trading.ui.desktop.screens.strategy_management.shared.dialogs.variable_help_dialog import (
+                    VariableHelpDialog
+                )
+
+                dialog = VariableHelpDialog(
+                    variable_id=variable_id,
+                    variable_name=variable_name,
+                    parent=self
+                )
+                dialog.exec()
+
+                self._logger.info(f"헬프 다이얼로그 표시: {variable_id}")
+
+            except Exception as e:
+                self._logger.error(f"헬프 다이얼로그 표시 중 오류: {e}")
+                # 폴백: 기본 메시지박스
+                help_info = self._get_variable_help_info(variable_id)
+                QMessageBox.information(
+                    self,
+                    f"변수 도움말 - {variable_name}",
+                    help_info
+                )
         else:
             QMessageBox.warning(self, "알림", "먼저 변수를 선택해주세요.")
 
     def _on_external_help_clicked(self):
-        """외부 변수 헬프 버튼 클릭 처리"""
+        """외부 변수 헬프 버튼 클릭 처리 - 새로운 헬프 다이얼로그 표시"""
         variable_id = self.external_variable_combo.currentData()
         variable_name = self.external_variable_combo.currentText()
 
         if variable_id:
-            help_info = self._get_variable_help_info(variable_id)
-            QMessageBox.information(
-                self,
-                f"외부 변수 도움말 - {variable_name}",
-                help_info
-            )
+            try:
+                # 새로운 헬프 다이얼로그 import (지연 로드)
+                from upbit_auto_trading.ui.desktop.screens.strategy_management.shared.dialogs.variable_help_dialog import (
+                    VariableHelpDialog
+                )
+
+                dialog = VariableHelpDialog(
+                    variable_id=variable_id,
+                    variable_name=variable_name,
+                    parent=self
+                )
+                dialog.exec()
+
+                self._logger.info(f"외부 변수 헬프 다이얼로그 표시: {variable_id}")
+
+            except Exception as e:
+                self._logger.error(f"외부 변수 헬프 다이얼로그 표시 중 오류: {e}")
+                # 폴백: 기본 메시지박스
+                help_info = self._get_variable_help_info(variable_id)
+                QMessageBox.information(
+                    self,
+                    f"외부 변수 도움말 - {variable_name}",
+                    help_info
+                )
         else:
             QMessageBox.warning(self, "알림", "먼저 외부 변수를 선택해주세요.")
 

@@ -140,6 +140,43 @@ class VariableHelpRepository:
             self._logger.error(f"변수 상세 정보 조회 실패: {e}")
             return None
 
+    def get_variable_help_documents(self, variable_id: str) -> list:
+        """변수의 상세 도움말 문서들 조회 (tv_variable_help_documents 테이블)"""
+        try:
+            if not self._db_path.exists():
+                self._logger.warning(f"DB 파일이 존재하지 않음: {self._db_path}")
+                return []
+
+            conn = sqlite3.connect(self._db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT help_category, title_ko, content_ko, display_order
+                FROM tv_variable_help_documents
+                WHERE variable_id = ?
+                ORDER BY help_category, display_order
+            """, (variable_id,))
+
+            results = cursor.fetchall()
+            conn.close()
+
+            documents = []
+            for result in results:
+                doc = {
+                    'help_category': result[0],
+                    'title_ko': result[1],
+                    'content_ko': result[2],
+                    'display_order': result[3]
+                }
+                documents.append(doc)
+
+            self._logger.debug(f"도움말 문서 조회: {variable_id}, {len(documents)}개 문서")
+            return documents
+
+        except Exception as e:
+            self._logger.error(f"도움말 문서 조회 실패: {e}")
+            return []
+
     def generate_basic_help_info(self, variable_id: str, variable_name: str = "") -> str:
         """DB 조회 실패 시 기본 도움말 정보 생성"""
         help_text = f"변수 ID: {variable_id}\n"

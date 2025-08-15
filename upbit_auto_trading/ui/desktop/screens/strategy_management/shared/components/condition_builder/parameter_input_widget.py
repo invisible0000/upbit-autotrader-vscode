@@ -29,6 +29,8 @@ class ParameterInputWidget(QWidget):
         self._help_repository = VariableHelpRepository()  # Repository 의존성 주입
         self._current_base_variable = "현재가"  # 현재 기본 변수 저장
         self._meta_target_label = None  # 메타 변수 대상 라벨 참조
+        self._current_variable_id = ""  # 현재 선택된 변수 ID
+        self._current_variable_name = ""  # 현재 선택된 변수 이름
         self._init_ui()
 
     def set_base_variable(self, variable_name: str):
@@ -51,7 +53,7 @@ class ParameterInputWidget(QWidget):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 10, 8, 8)
 
-        # 파라미터 정보 라벨
+        # 파라미터 정보 영역
         self.parameter_info_label = QLabel("변수를 선택하면 파라미터 설정이 표시됩니다.")
         self.parameter_info_label.setStyleSheet("color: gray; font-style: italic;")
         layout.addWidget(self.parameter_info_label)
@@ -112,6 +114,10 @@ class ParameterInputWidget(QWidget):
         try:
             variable_name = details_dto.variable_id or details_dto.display_name_ko or 'Unknown'
             self.parameter_info_label.setText(f"선택된 변수: {variable_name}")
+
+            # 현재 변수 정보 저장
+            self._current_variable_id = details_dto.variable_id or ""
+            self._current_variable_name = details_dto.display_name_ko or variable_name
 
             # 기존 파라미터 위젯들 제거
             self.clear_parameters()
