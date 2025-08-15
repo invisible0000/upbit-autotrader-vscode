@@ -24,6 +24,7 @@ class TriggerBuilderWidget(QWidget):
 
     # 시그널 정의
     variable_selected = pyqtSignal(str)  # 변수 선택
+    trigger_selected = pyqtSignal(object, int)  # 트리거 선택
     search_requested = pyqtSignal(str, str)  # 검색 요청 (검색어, 카테고리)
     simulation_start_requested = pyqtSignal()  # 시뮬레이션 시작
     simulation_stop_requested = pyqtSignal()  # 시뮬레이션 중지
@@ -108,10 +109,29 @@ class TriggerBuilderWidget(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
 
-        # TODO: 트리거 리스트 위젯 임베드
-        placeholder = QLabel("트리거 목록 영역\n(TriggerListWidget 예정)")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
+        # 트리거 리스트 위젯 사용
+        try:
+            from .trigger_list_widget import TriggerListWidget
+            self.trigger_list = TriggerListWidget()
+
+            # 시그널 연결
+            self.trigger_list.trigger_selected.connect(
+                lambda item, column: self._on_trigger_selected(item, column)
+            )
+
+            layout.addWidget(self.trigger_list)
+            self._logger.debug("트리거 리스트 위젯 생성 완료")
+
+        except ImportError as e:
+            self._logger.error(f"트리거 리스트 위젯 임포트 실패: {e}")
+            # 임시 플레이스홀더
+            placeholder = QLabel("트리거 리스트 (로딩 실패)")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("background-color: #fff2cc; border: 1px dashed #d6b656; padding: 20px;")
+            layout.addWidget(placeholder)
+
+        group.setLayout(layout)
+        return group
 
         group.setLayout(layout)
         return group
@@ -147,10 +167,20 @@ class TriggerBuilderWidget(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
 
-        # TODO: 트리거 상세 위젯 임베드
-        placeholder = QLabel("트리거 상세 정보 영역\n(TriggerDetailWidget 예정)")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
+        # 트리거 상세 위젯 사용
+        try:
+            from .trigger_detail_widget import TriggerDetailWidget
+            self.trigger_detail = TriggerDetailWidget()
+            layout.addWidget(self.trigger_detail)
+            self._logger.debug("트리거 상세 위젯 생성 완료")
+
+        except ImportError as e:
+            self._logger.error(f"트리거 상세 위젯 임포트 실패: {e}")
+            # 임시 플레이스홀더
+            placeholder = QLabel("트리거 상세 정보 (로딩 실패)")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("background-color: #f0f0f0; border: 1px dashed #ccc; padding: 20px;")
+            layout.addWidget(placeholder)
 
         group.setLayout(layout)
         return group
@@ -209,3 +239,23 @@ class TriggerBuilderWidget(QWidget):
         """시뮬레이션 진행률 업데이트"""
         self._logger.info(f"시뮬레이션 진행률: {progress}%")
         # TODO: 시뮬레이션 영역에 진행률 표시
+
+    def _on_trigger_selected(self, item, column):
+        """트리거 선택 시 처리"""
+        if item and hasattr(self, 'trigger_detail'):
+            # 아이템에서 트리거 데이터 추출
+            trigger_data = item.data(0, Qt.ItemDataRole.UserRole)
+            if not trigger_data:
+                # UserRole 데이터가 없으면 텍스트로 구성
+                trigger_data = {
+                    "name": item.text(0),
+                    "variable": item.text(1),
+                    "condition": item.text(2)
+                }
+
+            # 트리거 상세 정보 업데이트
+            self.trigger_detail.update_trigger_detail(trigger_data)
+            self._logger.debug(f"트리거 선택됨: {trigger_data.get('name', 'Unknown')}")
+
+        # 외부로 시그널 전파
+        self.trigger_selected.emit(item, column)
