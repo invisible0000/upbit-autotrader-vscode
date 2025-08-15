@@ -23,6 +23,11 @@ class ITriggerBuilderView(ABC):
         pass
 
     @abstractmethod
+    def show_external_variable_details(self, details_dto: TradingVariableDetailDTO) -> None:
+        """외부 변수 상세 정보를 UI에 표시"""
+        pass
+
+    @abstractmethod
     def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
         """호환성 검증 결과를 UI에 표시"""
         pass

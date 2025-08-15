@@ -24,6 +24,7 @@ class TriggerBuilderWidget(QWidget):
 
     # 시그널 정의
     variable_selected = pyqtSignal(str)  # 변수 선택
+    external_variable_selected = pyqtSignal(str)  # 외부 변수 선택
     trigger_selected = pyqtSignal(object, int)  # 트리거 선택
     search_requested = pyqtSignal(str, str)  # 검색 요청 (검색어, 카테고리)
     simulation_start_requested = pyqtSignal()  # 시뮬레이션 시작
@@ -96,6 +97,10 @@ class TriggerBuilderWidget(QWidget):
         # 시그널 연결
         self.condition_builder.variable_selected.connect(
             lambda var: self.variable_selected.emit(var)
+        )
+        # 외부 변수 선택 시그널 - 별도 시그널로 처리
+        self.condition_builder.external_variable_selected.connect(
+            lambda var: self.external_variable_selected.emit(var)
         )
 
         layout.addWidget(self.condition_builder)
@@ -232,6 +237,13 @@ class TriggerBuilderWidget(QWidget):
         if hasattr(self, 'condition_builder'):
             self.condition_builder.show_variable_details(details_dto)
 
+    def show_external_variable_details(self, details_dto: TradingVariableDetailDTO) -> None:
+        """외부 변수 상세 정보를 UI에 표시 - ConditionBuilder에 전달"""
+        self._logger.info(f"외부 변수 상세 정보 표시: {details_dto.variable_id}")
+        # ConditionBuilder에 외부 변수 상세 정보 전달
+        if hasattr(self, 'condition_builder'):
+            self.condition_builder.show_external_variable_details(details_dto)
+
     def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
         """호환성 검증 결과를 UI에 표시"""
         self._logger.info(f"호환성 상태 업데이트: {is_compatible}, {message}")
@@ -256,6 +268,18 @@ class TriggerBuilderWidget(QWidget):
         """시뮬레이션 진행률 업데이트"""
         self._logger.info(f"시뮬레이션 진행률: {progress}%")
         # TODO: 시뮬레이션 영역에 진행률 표시
+
+    def run_simulation(self, scenario_type: str) -> None:
+        """시뮬레이션 실행"""
+        self._logger.info(f"시뮬레이션 실행: {scenario_type}")
+        # TODO: 시뮬레이션 결과 위젯에 실행 요청
+        # if hasattr(self, 'simulation_result'):
+        #     self.simulation_result.start_simulation(scenario_type)
+
+    def update_data_source(self, source_type: str) -> None:
+        """데이터 소스 변경"""
+        self._logger.info(f"데이터 소스 변경: {source_type}")
+        # TODO: 데이터 소스 변경 처리
 
     def _on_trigger_selected(self, item, column):
         """트리거 선택 시 처리"""

@@ -64,6 +64,23 @@ class TriggerBuilderPresenter:
             self._logger.error(f"변수 선택 처리 중 오류: {e}")
             self._view.show_error_message(f"변수 선택 처리 실패: {str(e)}")
 
+    async def handle_external_variable_selected(self, variable_name: str) -> None:
+        """외부 변수 선택 처리"""
+        try:
+            self._logger.info(f"외부 변수 선택: {variable_name}")
+
+            # 외부 변수 상세 정보 로드
+            details_result = await self._get_variable_details_usecase.execute(variable_name)
+            if details_result.success:
+                self._view.show_external_variable_details(details_result)
+                self._logger.info(f"외부 변수 상세 정보 로드 완료: {variable_name}")
+            else:
+                self._view.show_error_message(f"외부 변수 상세 정보 로드 실패: {details_result.error_message}")
+
+        except Exception as e:
+            self._logger.error(f"외부 변수 선택 처리 중 오류: {e}")
+            self._view.show_error_message(f"외부 변수 선택 처리 실패: {str(e)}")
+
     async def handle_search_variables(self, search_term: str, category: str = "") -> None:
         """변수 검색 처리"""
         try:

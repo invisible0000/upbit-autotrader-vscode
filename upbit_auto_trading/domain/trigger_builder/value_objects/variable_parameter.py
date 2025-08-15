@@ -14,11 +14,12 @@ class VariableParameter:
     parameter_name: str
     display_name_ko: str
     display_name_en: str
-    parameter_type: str  # integer, decimal, string, boolean
+    parameter_type: str  # integer, decimal, string, boolean, enum, external_variable
     default_value: Any
     min_value: Optional[Any] = None
     max_value: Optional[Any] = None
     description: Optional[str] = None
+    enum_values: Optional[str] = None  # JSON 문자열로 저장된 enum 값들
 
     def __post_init__(self):
         """생성 후 검증"""

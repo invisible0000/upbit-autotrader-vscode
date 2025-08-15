@@ -22,6 +22,11 @@ class IConditionBuilderView(ABC):
         pass
 
     @abstractmethod
+    def show_external_variable_details(self, details_dto: TradingVariableDetailDTO) -> None:
+        """선택된 외부 변수의 상세 정보 표시"""
+        pass
+
+    @abstractmethod
     def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
         """변수 호환성 검증 결과 표시"""
         pass

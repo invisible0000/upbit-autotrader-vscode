@@ -5,8 +5,10 @@
 from typing import Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.application.use_cases.trading_variables.list_trading_variables_use_case import ListTradingVariablesUseCase
-from upbit_auto_trading.application.use_cases.trading_variables.get_variable_parameters_use_case import GetVariableParametersUseCase
+from upbit_auto_trading.application.use_cases.trigger_builder.trading_variable_use_cases import (
+    ListTradingVariablesUseCase,
+    GetVariableParametersUseCase
+)
 from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto import (
     VariableSearchRequestDTO,
     TradingVariableListDTO,
@@ -96,6 +98,22 @@ class ConditionBuilderPresenter:
 
         except Exception as e:
             self._logger.error(f"변수 선택 중 오류: {e}")
+
+    async def select_external_variable(self, variable_id: str) -> None:
+        """외부 변수 선택 - 상세 정보 로드"""
+        try:
+            self._logger.info(f"외부 변수 선택: {variable_id}")
+
+            result = await self._get_variable_details_usecase.execute(variable_id)
+
+            if result.success:
+                self._view.show_external_variable_details(result)
+                self._logger.info(f"외부 변수 상세 정보 로드 완료: {variable_id}")
+            else:
+                self._logger.error(f"외부 변수 상세 정보 로드 실패: {result.error_message}")
+
+        except Exception as e:
+            self._logger.error(f"외부 변수 선택 중 오류: {e}")
 
     async def filter_by_category(self, category: str) -> None:
         """카테고리별 필터링"""

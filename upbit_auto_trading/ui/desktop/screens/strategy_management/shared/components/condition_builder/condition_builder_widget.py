@@ -274,6 +274,19 @@ class ConditionBuilderWidget(QWidget):
         except Exception as e:
             self._logger.error(f"변수 상세 정보 표시 중 오류: {e}")
 
+    def show_external_variable_details(self, details_dto: TradingVariableDetailDTO) -> None:
+        """선택된 외부 변수의 상세 정보 표시"""
+        try:
+            if details_dto.success:
+                # 외부 파라미터 입력 위젯에 상세 정보 전달
+                self.external_parameter_input.show_variable_details(details_dto)
+                self._logger.info(f"외부 변수 상세 정보 표시: {details_dto.variable_id}")
+            else:
+                self._logger.error(f"외부 변수 상세 정보 오류: {details_dto.error_message}")
+
+        except Exception as e:
+            self._logger.error(f"외부 변수 상세 정보 표시 중 오류: {e}")
+
     def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
         """변수 호환성 검증 결과 표시"""
         try:
@@ -420,10 +433,8 @@ class ConditionBuilderWidget(QWidget):
         variable_id = self.external_variable_combo.currentData()
         if variable_id:
             self._logger.info(f"외부 변수 선택: {variable_name} (ID: {variable_id})")
-            # 외부 변수 선택 시 해당 변수의 파라미터 표시
+            # DDD 준수: 시그널을 통해 Presenter에게 위임
             self.external_variable_selected.emit(variable_id)
-            # 즉시 파라미터 정보 요청 (presenter가 없는 경우 대비)
-            self._request_external_variable_details(variable_id)
 
     def _on_variable_changed(self, variable_name: str):
         """변수 변경 처리"""
@@ -568,31 +579,3 @@ class ConditionBuilderWidget(QWidget):
         except Exception as e:
             self._logger.error(f"미리보기 텍스트 생성 중 오류: {e}")
             return "미리보기 생성 중 오류가 발생했습니다."
-
-    def _request_external_variable_details(self, variable_id: str):
-        """외부 변수 상세 정보 요청 - Repository 패턴 사용"""
-        try:
-            # Repository에서 변수 상세 정보 조회
-            var_data = self._help_repository.get_variable_details_from_db(variable_id)
-
-            if not var_data:
-                self._logger.warning(f"외부 변수를 찾을 수 없음: {variable_id}")
-                return
-
-            # DTO 생성
-            details_dto = TradingVariableDetailDTO(
-                success=True,
-                variable_id=var_data['variable_id'],
-                display_name_ko=var_data['display_name_ko'],
-                display_name_en=var_data['display_name_en'],
-                description=var_data['description'],
-                parameters=var_data['parameters'],
-                error_message=None
-            )
-
-            # 외부 파라미터 입력 위젯에 표시
-            self.external_parameter_input.show_variable_details(details_dto)
-            self._logger.info(f"외부 변수 상세 정보 로딩 완료: {variable_id}")
-
-        except Exception as e:
-            self._logger.error(f"외부 변수 상세 정보 요청 중 오류: {e}")

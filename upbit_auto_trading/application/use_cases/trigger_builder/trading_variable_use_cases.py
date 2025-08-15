@@ -100,7 +100,8 @@ class GetVariableParametersUseCase:
                     'default_value': param.default_value,
                     'min_value': param.min_value,
                     'max_value': param.max_value,
-                    'description': param.description
+                    'description': param.description,
+                    'enum_values': param.enum_values  # enum_values 추가
                 })
 
             return TradingVariableDetailDTO(

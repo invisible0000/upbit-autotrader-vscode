@@ -366,7 +366,7 @@ class SqliteTradingVariableRepository(ITradingVariableRepository):
         try:
             cursor.execute("""
                 SELECT parameter_name, display_name_ko, display_name_en,
-                       parameter_type, default_value, min_value, max_value, description
+                       parameter_type, default_value, min_value, max_value, description, enum_values
                 FROM tv_variable_parameters
                 WHERE variable_id = ?
             """, (variable.variable_id,))
@@ -377,6 +377,7 @@ class SqliteTradingVariableRepository(ITradingVariableRepository):
                 default_value = self._convert_parameter_value(param_row[4], parameter_type)
                 min_value = self._convert_parameter_value(param_row[5], parameter_type) if param_row[5] is not None else None
                 max_value = self._convert_parameter_value(param_row[6], parameter_type) if param_row[6] is not None else None
+                enum_values = param_row[8]  # enum_values 추가
 
                 parameter = VariableParameter(
                     parameter_name=param_row[0],
@@ -386,7 +387,8 @@ class SqliteTradingVariableRepository(ITradingVariableRepository):
                     default_value=default_value,
                     min_value=min_value,
                     max_value=max_value,
-                    description=param_row[7]
+                    description=param_row[7],
+                    enum_values=enum_values  # enum_values 전달
                 )
                 variable.add_parameter(parameter)
 

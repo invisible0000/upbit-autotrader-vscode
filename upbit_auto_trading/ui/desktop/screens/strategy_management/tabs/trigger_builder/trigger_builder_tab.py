@@ -82,6 +82,11 @@ class TriggerBuilderTab(QWidget):
                 lambda name: self._run_async(self._presenter.handle_variable_selected(name))
             )
 
+            # 외부 변수 선택 시그널 연결
+            self._view.external_variable_selected.connect(
+                lambda name: self._run_async(self._presenter.handle_external_variable_selected(name))
+            )
+
             # 검색 요청 시그널 연결
             self._view.search_requested.connect(
                 lambda term, category: self._run_async(
