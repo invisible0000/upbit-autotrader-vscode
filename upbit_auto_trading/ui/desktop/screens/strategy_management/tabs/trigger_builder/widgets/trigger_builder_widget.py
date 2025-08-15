@@ -82,17 +82,23 @@ class TriggerBuilderWidget(QWidget):
         self._logger.info("트리거 빌더 UI 초기화 완료")
 
     def _create_condition_builder_area(self) -> QGroupBox:
-        """1+4: 조건 빌더 영역 - Legacy UI 복사"""
+        """1+4: 조건 빌더 영역 - 실제 ConditionBuilderWidget 사용"""
+        from ....shared.components.condition_builder.condition_builder_widget import ConditionBuilderWidget
+
         group = QGroupBox("🎯 조건 빌더")
         layout = QVBoxLayout()
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
 
-        # TODO: 조건 빌더 컴포넌트 임베드
-        placeholder = QLabel("조건 빌더 영역\n(컨디션 빌더 컴포넌트 예정)")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
+        # 실제 ConditionBuilderWidget 사용
+        self.condition_builder = ConditionBuilderWidget()
 
+        # 시그널 연결
+        self.condition_builder.variable_selected.connect(
+            lambda var: self.variable_selected.emit(var)
+        )
+
+        layout.addWidget(self.condition_builder)
         group.setLayout(layout)
         return group
 
@@ -167,14 +173,18 @@ class TriggerBuilderWidget(QWidget):
 
     # ITriggerBuilderView 인터페이스 구현
     def display_variables(self, variables_dto: TradingVariableListDTO) -> None:
-        """변수 목록을 UI에 표시"""
+        """변수 목록을 UI에 표시 - ConditionBuilder에 전달"""
         self._logger.info(f"변수 목록 표시: {variables_dto.total_count}개")
-        # TODO: 조건 빌더 영역에 변수 목록 표시
+        # ConditionBuilder에 변수 목록 전달
+        if hasattr(self, 'condition_builder'):
+            self.condition_builder.display_variables(variables_dto)
 
     def show_variable_details(self, details_dto: TradingVariableDetailDTO) -> None:
-        """변수 상세 정보를 UI에 표시"""
+        """변수 상세 정보를 UI에 표시 - ConditionBuilder에 전달"""
         self._logger.info(f"변수 상세 정보 표시: {details_dto.variable_id}")
-        # TODO: 트리거 상세 영역에 변수 정보 표시
+        # ConditionBuilder에 변수 상세 정보 전달
+        if hasattr(self, 'condition_builder'):
+            self.condition_builder.show_variable_details(details_dto)
 
     def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
         """호환성 검증 결과를 UI에 표시"""
