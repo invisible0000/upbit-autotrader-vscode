@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import QMessageBox
 from typing import Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.repositories.variable_help_repository import VariableHelpRepository
 from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto import (
     TradingVariableListDTO,
     TradingVariableDetailDTO
@@ -30,7 +31,7 @@ class ConditionBuilderWidget(QWidget):
 
     # 시그널 정의
     variable_selected = pyqtSignal(str)  # 변수 선택
-    search_requested = pyqtSignal(str)   # 검색 요청
+    external_variable_selected = pyqtSignal(str)  # 외부 변수 선택 (파라미터 표시용)
     category_changed = pyqtSignal(str)   # 카테고리 변경
     condition_created = pyqtSignal(dict)  # 조건 생성
     condition_preview_requested = pyqtSignal(dict)  # 미리보기 요청
@@ -38,6 +39,7 @@ class ConditionBuilderWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._logger = create_component_logger("ConditionBuilderWidget")
+        self._help_repository = VariableHelpRepository()  # Repository 의존성 주입
         self._current_variables_dto: Optional[TradingVariableListDTO] = None
         self._init_ui()
         self._connect_signals()
@@ -100,20 +102,6 @@ class ConditionBuilderWidget(QWidget):
         main_row.addStretch()  # 나머지 공간
         var_layout.addLayout(main_row)
 
-        # 검색 영역
-        search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel("검색:"))
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("변수 이름으로 검색...")
-        self.search_input.setMinimumWidth(200)
-        search_layout.addWidget(self.search_input)
-
-        self.search_button = QPushButton("🔍 검색")
-        self.search_button.setFixedHeight(self.search_input.sizeHint().height())
-        search_layout.addWidget(self.search_button)
-        search_layout.addStretch()
-        var_layout.addLayout(search_layout)
-
         layout.addLayout(var_layout)
 
         # 파라미터 입력 임베딩
@@ -123,36 +111,35 @@ class ConditionBuilderWidget(QWidget):
         parent_layout.addWidget(group)
 
     def _create_condition_setup_area(self, parent_layout):
-        """조건 설정 영역 - 1열 배치"""
+        """조건 설정 영역 - 1줄 배치"""
         group = QGroupBox("⚙️ 조건 설정")
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 10, 8, 8)
 
+        # 모든 조건 요소를 한 줄에 배치
+        condition_layout = QHBoxLayout()
+
         # 연산자 선택
-        op_layout = QHBoxLayout()
-        op_layout.addWidget(QLabel("연산자:"))
+        condition_layout.addWidget(QLabel("연산자:"))
         self.operator_combo = QComboBox()
         self.operator_combo.addItems([">", ">=", "<", "<=", "==", "!=", "상향 돌파", "하향 돌파"])
-        op_layout.addWidget(self.operator_combo)
-        op_layout.addStretch()
-        layout.addLayout(op_layout)
+        self.operator_combo.setMinimumWidth(100)
+        condition_layout.addWidget(self.operator_combo)
 
-        # 비교값 타입
-        value_type_layout = QHBoxLayout()
-        value_type_layout.addWidget(QLabel("비교값:"))
+        condition_layout.addWidget(QLabel("비교값:"))
         self.value_type_combo = QComboBox()
         self.value_type_combo.addItems(["직접 입력", "외부 변수"])
-        value_type_layout.addWidget(self.value_type_combo)
-        value_type_layout.addStretch()
-        layout.addLayout(value_type_layout)
+        self.value_type_combo.setMinimumWidth(100)
+        condition_layout.addWidget(self.value_type_combo)
 
-        # 비교값 입력
-        value_input_layout = QHBoxLayout()
-        value_input_layout.addWidget(QLabel("입력값:"))
+        condition_layout.addWidget(QLabel("값:"))
         self.value_input = QLineEdit()
-        self.value_input.setPlaceholderText("비교값을 입력하세요")
-        value_input_layout.addWidget(self.value_input)
-        layout.addLayout(value_input_layout)
+        self.value_input.setPlaceholderText("비교할 값을 입력하세요")
+        self.value_input.setMinimumWidth(120)
+        condition_layout.addWidget(self.value_input)
+
+        condition_layout.addStretch()
+        layout.addLayout(condition_layout)
 
         parent_layout.addWidget(group)
 
@@ -163,22 +150,31 @@ class ConditionBuilderWidget(QWidget):
         layout = QVBoxLayout(self.external_group)
         layout.setContentsMargins(8, 10, 8, 8)
 
-        # 외부 변수 범주
-        ext_cat_layout = QHBoxLayout()
-        ext_cat_layout.addWidget(QLabel("범주:"))
-        self.external_category_combo = QComboBox()
-        self.external_category_combo.addItems(["전체", "추세", "모멘텀", "변동성", "거래량", "가격"])
-        ext_cat_layout.addWidget(self.external_category_combo)
-        ext_cat_layout.addStretch()
-        layout.addLayout(ext_cat_layout)
+        # 외부 변수 범주, 변수, 헬프 버튼을 한 줄에 배치
+        ext_main_row = QHBoxLayout()
 
-        # 외부 변수 선택
-        ext_var_layout = QHBoxLayout()
-        ext_var_layout.addWidget(QLabel("변수:"))
+        # 범주
+        ext_main_row.addWidget(QLabel("범주:"))
+        self.external_category_combo = QComboBox()
+        self.external_category_combo.addItems(["전체", "추세", "모멘텀", "변동성", "거래량", "가격", "메타변수"])
+        self.external_category_combo.setMinimumWidth(80)
+        ext_main_row.addWidget(self.external_category_combo)
+
+        ext_main_row.addSpacing(15)  # 간격
+
+        # 변수
+        ext_main_row.addWidget(QLabel("변수:"))
         self.external_variable_combo = QComboBox()
-        ext_var_layout.addWidget(self.external_variable_combo)
-        ext_var_layout.addStretch()
-        layout.addLayout(ext_var_layout)
+        self.external_variable_combo.setMinimumWidth(200)
+        ext_main_row.addWidget(self.external_variable_combo)
+
+        # 외부 변수 헬프 버튼
+        self.external_help_button = QPushButton("?")
+        self.external_help_button.setFixedSize(24, 24)
+        ext_main_row.addWidget(self.external_help_button)
+
+        ext_main_row.addStretch()
+        layout.addLayout(ext_main_row)
 
         # 외부 변수용 파라미터 설정
         self.external_parameter_input = ParameterInputWidget()
@@ -204,14 +200,22 @@ class ConditionBuilderWidget(QWidget):
         self.category_combo.currentTextChanged.connect(self._on_category_changed)
         self.variable_combo.currentTextChanged.connect(self._on_variable_changed)
         self.help_button.clicked.connect(self._on_help_clicked)
-        self.search_button.clicked.connect(self._on_search_clicked)
-        self.search_input.returnPressed.connect(self._on_search_clicked)
         self.value_type_combo.currentTextChanged.connect(self._on_value_type_changed)
 
         # 조건 설정 관련 시그널들
         self.operator_combo.currentTextChanged.connect(self._on_condition_changed)
         self.value_input.textChanged.connect(self._on_condition_changed)
+        self.value_type_combo.currentTextChanged.connect(self._on_value_type_changed)
         self.external_variable_combo.currentTextChanged.connect(self._on_condition_changed)
+
+        # 외부 변수 범주 변경 시그널 추가
+        self.external_category_combo.currentTextChanged.connect(self._on_external_category_changed)
+
+        # 외부 변수 선택 시그널 추가 (파라미터 표시용)
+        self.external_variable_combo.currentTextChanged.connect(self._on_external_variable_changed)
+
+        # 외부 변수 헬프 버튼 시그널 추가
+        self.external_help_button.clicked.connect(self._on_external_help_clicked)
 
         # 파라미터 입력 위젯 시그널들
         self.parameter_input.parameters_changed.connect(self._on_condition_changed)
@@ -246,6 +250,11 @@ class ConditionBuilderWidget(QWidget):
                 current_category = self.category_combo.currentText()
                 if current_category != "전체":
                     self._filter_variables_by_category(current_category)
+
+                # 외부 변수도 현재 선택된 범주에 따라 필터링
+                current_external_category = self.external_category_combo.currentText()
+                if current_external_category != "전체":
+                    self._filter_external_variables_by_category(current_external_category)
 
             self._logger.info(f"변수 목록 표시 완료: {variables_dto.total_count}개")
 
@@ -308,7 +317,6 @@ class ConditionBuilderWidget(QWidget):
             self.value_type_combo.setCurrentIndex(0)
             self.value_input.clear()
             self.external_group.setEnabled(False)
-            self.search_input.clear()
 
             # 하위 위젯들 초기화
             if hasattr(self.parameter_input, 'clear_parameters'):
@@ -348,7 +356,8 @@ class ConditionBuilderWidget(QWidget):
             "모멘텀": "momentum",
             "변동성": "volatility",
             "거래량": "volume",
-            "가격": "price"
+            "가격": "price",
+            "메타변수": "dynamic_management"
         }
 
         selected_category = category_mapping.get(category)
@@ -368,6 +377,54 @@ class ConditionBuilderWidget(QWidget):
 
         self._logger.info(f"카테고리 '{category}'로 필터링 완료: {self.variable_combo.count()}개 변수")
 
+    def _on_external_category_changed(self, category: str):
+        """외부 변수 범주 변경 처리"""
+        self._logger.info(f"외부 변수 범주 변경: {category}")
+        self._filter_external_variables_by_category(category)
+
+    def _filter_external_variables_by_category(self, category: str) -> None:
+        """외부 변수 범주별 필터링"""
+        if not hasattr(self, '_current_variables_dto') or not self._current_variables_dto:
+            return
+
+        # 카테고리 한글->영문 매핑 (동일한 매핑 사용)
+        category_mapping = {
+            "전체": None,
+            "추세": "trend",
+            "모멘텀": "momentum",
+            "변동성": "volatility",
+            "거래량": "volume",
+            "가격": "price",
+            "메타변수": "dynamic_management"
+        }
+
+        selected_category = category_mapping.get(category)
+
+        # 외부 변수 콤보박스 클리어
+        self.external_variable_combo.clear()
+
+        # 변수 필터링 및 추가
+        if self._current_variables_dto.success and self._current_variables_dto.grouped_variables:
+            for cat, variables in self._current_variables_dto.grouped_variables.items():
+                # 전체 선택이거나 선택된 카테고리와 일치하는 경우
+                if selected_category is None or cat == selected_category:
+                    for var in variables:
+                        display_name = var.get('display_name_ko', var.get('variable_id', ''))
+                        variable_id = var.get('variable_id', '')
+                        self.external_variable_combo.addItem(display_name, variable_id)
+
+        self._logger.info(f"외부 변수 범주 '{category}'로 필터링 완료: {self.external_variable_combo.count()}개 변수")
+
+    def _on_external_variable_changed(self, variable_name: str):
+        """외부 변수 선택 시 파라미터 표시"""
+        variable_id = self.external_variable_combo.currentData()
+        if variable_id:
+            self._logger.info(f"외부 변수 선택: {variable_name} (ID: {variable_id})")
+            # 외부 변수 선택 시 해당 변수의 파라미터 표시
+            self.external_variable_selected.emit(variable_id)
+            # 즉시 파라미터 정보 요청 (presenter가 없는 경우 대비)
+            self._request_external_variable_details(variable_id)
+
     def _on_variable_changed(self, variable_name: str):
         """변수 변경 처리"""
         variable_id = self.variable_combo.currentData()
@@ -375,31 +432,80 @@ class ConditionBuilderWidget(QWidget):
             self._logger.info(f"변수 변경: {variable_name} (ID: {variable_id})")
             self.variable_selected.emit(variable_id)
 
+            # 메타 변수 대상 업데이트 (외부 변수 메타 변수용)
+            if hasattr(self, 'external_parameter_input'):
+                self.external_parameter_input.set_base_variable(variable_name)
+
+    def _get_variable_help_info(self, variable_id: str) -> str:
+        """변수 ID로 도움말 정보 제공 - Repository 패턴 사용"""
+        variable_name = ""
+
+        # 현재 선택된 변수 이름 찾기
+        if hasattr(self, 'variable_combo') and self.variable_combo.currentData() == variable_id:
+            variable_name = self.variable_combo.currentText()
+        elif hasattr(self, 'external_variable_combo') and self.external_variable_combo.currentData() == variable_id:
+            variable_name = self.external_variable_combo.currentText()
+
+        # DB에서 도움말 조회 시도
+        help_text_ko, tooltip_ko = self._help_repository.get_help_text(variable_id, None)
+
+        if help_text_ko:
+            # DB에서 조회 성공
+            help_text = f"변수 ID: {variable_id}\n"
+            help_text += f"이름: {variable_name}\n\n"
+            help_text += help_text_ko
+            if tooltip_ko:
+                help_text += f"\n\n💡 팁: {tooltip_ko}"
+            return help_text
+        else:
+            # DB 조회 실패 시 기본 도움말 사용
+            return self._help_repository.generate_basic_help_info(variable_id, variable_name)
+
     def _on_help_clicked(self):
-        """헬프 버튼 클릭 처리"""
-        current_variable = self.variable_combo.currentText()
-        if current_variable:
+        """헬프 버튼 클릭 처리 - DB에서 실제 도움말 정보 가져오기"""
+        variable_id = self.variable_combo.currentData()
+        variable_name = self.variable_combo.currentText()
+
+        if variable_id:
+            help_info = self._get_variable_help_info(variable_id)
             QMessageBox.information(
                 self,
-                "변수 도움말",
-                f"선택된 변수: {current_variable}\n\n"
-                "이 변수에 대한 상세 도움말이 표시됩니다.\n"
-                "(실제 도움말 시스템은 구현 예정)"
+                f"변수 도움말 - {variable_name}",
+                help_info
             )
         else:
             QMessageBox.warning(self, "알림", "먼저 변수를 선택해주세요.")
 
-    def _on_search_clicked(self):
-        """검색 버튼 클릭 처리"""
-        search_term = self.search_input.text().strip()
-        self._logger.info(f"검색 요청: {search_term}")
-        self.search_requested.emit(search_term)
+    def _on_external_help_clicked(self):
+        """외부 변수 헬프 버튼 클릭 처리"""
+        variable_id = self.external_variable_combo.currentData()
+        variable_name = self.external_variable_combo.currentText()
+
+        if variable_id:
+            help_info = self._get_variable_help_info(variable_id)
+            QMessageBox.information(
+                self,
+                f"외부 변수 도움말 - {variable_name}",
+                help_info
+            )
+        else:
+            QMessageBox.warning(self, "알림", "먼저 외부 변수를 선택해주세요.")
 
     def _on_value_type_changed(self, value_type: str):
         """비교값 타입 변경 처리"""
         self._logger.info(f"비교값 타입 변경: {value_type}")
-        # 외부 변수 선택 시 외부 변수 영역 활성화
-        self.external_group.setEnabled(value_type == "외부 변수")
+
+        # 외부 변수 선택 시 외부 변수 영역 활성화, 입력값 비활성화
+        is_external = (value_type == "외부 변수")
+        self.external_group.setEnabled(is_external)
+        self.value_input.setEnabled(not is_external)
+
+        if is_external:
+            self.value_input.clear()
+            self.value_input.setPlaceholderText("외부 변수 선택 시 입력 불가")
+        else:
+            self.value_input.setPlaceholderText("비교할 값을 입력하세요")
+
         # 조건 미리보기 업데이트
         self._update_condition_preview()
 
@@ -462,3 +568,31 @@ class ConditionBuilderWidget(QWidget):
         except Exception as e:
             self._logger.error(f"미리보기 텍스트 생성 중 오류: {e}")
             return "미리보기 생성 중 오류가 발생했습니다."
+
+    def _request_external_variable_details(self, variable_id: str):
+        """외부 변수 상세 정보 요청 - Repository 패턴 사용"""
+        try:
+            # Repository에서 변수 상세 정보 조회
+            var_data = self._help_repository.get_variable_details_from_db(variable_id)
+
+            if not var_data:
+                self._logger.warning(f"외부 변수를 찾을 수 없음: {variable_id}")
+                return
+
+            # DTO 생성
+            details_dto = TradingVariableDetailDTO(
+                success=True,
+                variable_id=var_data['variable_id'],
+                display_name_ko=var_data['display_name_ko'],
+                display_name_en=var_data['display_name_en'],
+                description=var_data['description'],
+                parameters=var_data['parameters'],
+                error_message=None
+            )
+
+            # 외부 파라미터 입력 위젯에 표시
+            self.external_parameter_input.show_variable_details(details_dto)
+            self._logger.info(f"외부 변수 상세 정보 로딩 완료: {variable_id}")
+
+        except Exception as e:
+            self._logger.error(f"외부 변수 상세 정보 요청 중 오류: {e}")
