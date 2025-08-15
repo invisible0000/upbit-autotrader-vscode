@@ -1,0 +1,627 @@
+variable_parameters:
+  RSI_period:
+    variable_id: RSI
+    parameter_name: period
+    parameter_type: integer
+    default_value: '14'
+    min_value: '2'
+    max_value: '240'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: RSI 계산 기간
+    display_order: 1
+  RSI_timeframe:
+    variable_id: RSI
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간 (전략 기본값 사용 시 무시)
+    display_order: 2
+  SMA_period:
+    variable_id: SMA
+    parameter_name: period
+    parameter_type: integer
+    default_value: '20'
+    min_value: '1'
+    max_value: '240'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: '단기: 5,10,20 / 중기: 60,120 / 장기: 200,240'
+    display_order: 1
+  SMA_timeframe:
+    variable_id: SMA
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 2
+  EMA_period:
+    variable_id: EMA
+    parameter_name: period
+    parameter_type: integer
+    default_value: '12'
+    min_value: '1'
+    max_value: '240'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: 지수이동평균 계산 기간
+    display_order: 1
+  EMA_timeframe:
+    variable_id: EMA
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 3
+  EMA_exponential_factor:
+    variable_id: EMA
+    parameter_name: exponential_factor
+    parameter_type: decimal
+    default_value: '2.0'
+    min_value: '0.1'
+    max_value: '10.0'
+    is_required: false
+    display_name_ko: 지수 계수
+    display_name_en: Exponential Factor
+    description: 지수 가중치 (2/(기간+1)이 표준)
+    display_order: 2
+  STOCHASTIC_k_period:
+    variable_id: STOCHASTIC
+    parameter_name: k_period
+    parameter_type: integer
+    default_value: '14'
+    min_value: '5'
+    max_value: '50'
+    is_required: true
+    display_name_ko: '%K 기간'
+    display_name_en: '%K Period'
+    description: 스토캐스틱 %K 계산 기간
+    display_order: 1
+  STOCHASTIC_d_period:
+    variable_id: STOCHASTIC
+    parameter_name: d_period
+    parameter_type: integer
+    default_value: '3'
+    min_value: '1'
+    max_value: '10'
+    is_required: true
+    display_name_ko: '%D 기간'
+    display_name_en: '%D Period'
+    description: 스토캐스틱 %D 평활화 기간
+    display_order: 2
+  STOCHASTIC_timeframe:
+    variable_id: STOCHASTIC
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 3
+  MACD_fast_period:
+    variable_id: MACD
+    parameter_name: fast_period
+    parameter_type: integer
+    default_value: '12'
+    min_value: '5'
+    max_value: '50'
+    is_required: true
+    display_name_ko: 빠른선 기간
+    display_name_en: Fast Period
+    description: MACD 빠른 이동평균 기간
+    display_order: 1
+  MACD_slow_period:
+    variable_id: MACD
+    parameter_name: slow_period
+    parameter_type: integer
+    default_value: '26'
+    min_value: '10'
+    max_value: '100'
+    is_required: true
+    display_name_ko: 느린선 기간
+    display_name_en: Slow Period
+    description: MACD 느린 이동평균 기간
+    display_order: 2
+  MACD_signal_period:
+    variable_id: MACD
+    parameter_name: signal_period
+    parameter_type: integer
+    default_value: '9'
+    min_value: '5'
+    max_value: '20'
+    is_required: true
+    display_name_ko: 시그널선 기간
+    display_name_en: Signal Period
+    description: MACD 시그널선 기간
+    display_order: 3
+  MACD_timeframe:
+    variable_id: MACD
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 5
+  MACD_macd_type:
+    variable_id: MACD
+    parameter_name: macd_type
+    parameter_type: string
+    default_value: MACD선
+    enum_values:
+    - MACD선
+    - 시그널선
+    - 히스토그램
+    is_required: true
+    display_name_ko: MACD 종류
+    display_name_en: MACD Type
+    description: 'MACD선: 빠른선-느린선, 시그널선: MACD의 이평, 히스토그램: MACD-시그널'
+    display_order: 4
+  BOLLINGER_BAND_period:
+    variable_id: BOLLINGER_BAND
+    parameter_name: period
+    parameter_type: integer
+    default_value: '20'
+    min_value: '5'
+    max_value: '100'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: 볼린저밴드 이동평균 기간
+    display_order: 1
+  BOLLINGER_BAND_std_dev:
+    variable_id: BOLLINGER_BAND
+    parameter_name: std_dev
+    parameter_type: decimal
+    default_value: '2.0'
+    min_value: '1.0'
+    max_value: '3.0'
+    is_required: true
+    display_name_ko: 표준편차
+    display_name_en: Standard Deviation
+    description: 볼린저밴드 표준편차 배수
+    display_order: 2
+  BOLLINGER_BAND_timeframe:
+    variable_id: BOLLINGER_BAND
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 4
+  BOLLINGER_BAND_band_position:
+    variable_id: BOLLINGER_BAND
+    parameter_name: band_position
+    parameter_type: string
+    default_value: 상단
+    enum_values:
+    - 상단
+    - 중앙선
+    - 하단
+    is_required: true
+    display_name_ko: 밴드 위치
+    display_name_en: Band Position
+    description: 비교할 볼린저밴드 위치
+    display_order: 3
+  ATR_period:
+    variable_id: ATR
+    parameter_name: period
+    parameter_type: integer
+    default_value: '14'
+    min_value: '5'
+    max_value: '50'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: ATR 계산 기간
+    display_order: 1
+  ATR_timeframe:
+    variable_id: ATR
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 2
+  VOLUME_SMA_period:
+    variable_id: VOLUME_SMA
+    parameter_name: period
+    parameter_type: integer
+    default_value: '20'
+    min_value: '5'
+    max_value: '100'
+    is_required: true
+    display_name_ko: 기간
+    display_name_en: Period
+    description: 거래량 이동평균 기간
+    display_order: 1
+  VOLUME_SMA_timeframe:
+    variable_id: VOLUME_SMA
+    parameter_name: timeframe
+    parameter_type: string
+    default_value: 포지션 설정 따름
+    enum_values:
+    - 포지션 설정 따름
+    - 1분
+    - 3분
+    - 5분
+    - 15분
+    - 30분
+    - 1시간
+    - 4시간
+    - 1일
+    is_required: true
+    display_name_ko: 타임프레임
+    display_name_en: Timeframe
+    description: 봉 단위 시간
+    display_order: 2
+  PYRAMID_TARGET_tracking_variable:
+    variable_id: PYRAMID_TARGET
+    parameter_name: tracking_variable
+    parameter_type: string
+    default_value: RSI
+    is_required: true
+    display_name_ko: 추적 변수
+    display_name_en: Tracking Variable
+    description: 값 변화를 감지할 대상 변수
+    display_order: 1
+  PYRAMID_TARGET_direction:
+    variable_id: PYRAMID_TARGET
+    parameter_name: direction
+    parameter_type: string
+    default_value: up
+    enum_values:
+    - up
+    - down
+    - bidirectional
+    is_required: true
+    display_name_ko: 방향
+    display_name_en: Direction
+    description: 피라미딩 방향 (상향/하향/양방향)
+    display_order: 2
+  PYRAMID_TARGET_calculation_method:
+    variable_id: PYRAMID_TARGET
+    parameter_name: calculation_method
+    parameter_type: string
+    default_value: entry_price_percent
+    enum_values:
+    - static_value
+    - percentage_of_extreme
+    - entry_price_percent
+    - average_price_percent
+    is_required: true
+    display_name_ko: 계산 방식
+    display_name_en: Calculation Method
+    description: 계산 방식 (정적/극값%/진입가%p/평단가%p)
+    display_order: 3
+  PYRAMID_TARGET_difference_value:
+    variable_id: PYRAMID_TARGET
+    parameter_name: difference_value
+    parameter_type: decimal
+    default_value: '5.0'
+    min_value: '0.01'
+    max_value: '100.0'
+    is_required: true
+    display_name_ko: 차이값
+    display_name_en: Difference Value
+    description: 차이값 (계산방식에 따른 정적값/비율/%points)
+    display_order: 4
+  PYRAMID_TARGET_reset_trigger:
+    variable_id: PYRAMID_TARGET
+    parameter_name: reset_trigger
+    parameter_type: string
+    default_value: position_entry
+    enum_values:
+    - never
+    - position_entry
+    - position_exit
+    - manual_reset
+    - condition_met
+    is_required: false
+    display_name_ko: 초기화 트리거
+    display_name_en: Reset Trigger
+    description: 언제 초기화할지 설정
+    display_order: 5
+  META_TRAILING_STOP_tracking_variable:
+    variable_id: META_TRAILING_STOP
+    parameter_name: tracking_variable
+    parameter_type: string
+    default_value: HIGH_PRICE
+    is_required: true
+    display_name_ko: 추적 변수
+    display_name_en: Tracking Variable
+    description: 추적할 대상 변수 (가격, 지표 등 모든 변수 가능)
+    display_order: 1
+  META_TRAILING_STOP_trail_direction:
+    variable_id: META_TRAILING_STOP
+    parameter_name: trail_direction
+    parameter_type: string
+    default_value: down
+    enum_values:
+    - up
+    - down
+    - bidirectional
+    is_required: true
+    display_name_ko: 추적 방향
+    display_name_en: Trail Direction
+    description: 추적 방향 (상향/하향/양방향)
+    display_order: 2
+  META_TRAILING_STOP_calculation_method:
+    variable_id: META_TRAILING_STOP
+    parameter_name: calculation_method
+    parameter_type: string
+    default_value: percentage_of_extreme
+    enum_values:
+    - static_value
+    - percentage_of_extreme
+    - entry_price_percent
+    - average_price_percent
+    is_required: true
+    display_name_ko: 계산 방식
+    display_name_en: Calculation Method
+    description: 계산 방식 (정적/극값%/진입가%p/평단가%p)
+    display_order: 3
+  META_TRAILING_STOP_difference_value:
+    variable_id: META_TRAILING_STOP
+    parameter_name: difference_value
+    parameter_type: decimal
+    default_value: '2.0'
+    min_value: '0.01'
+    max_value: '100.0'
+    is_required: true
+    display_name_ko: 차이값
+    display_name_en: Difference Value
+    description: 차이값 (계산방식에 따른 정적값/비율/%points)
+    display_order: 4
+  META_TRAILING_STOP_reset_trigger:
+    variable_id: META_TRAILING_STOP
+    parameter_name: reset_trigger
+    parameter_type: string
+    default_value: position_entry
+    enum_values:
+    - never
+    - position_entry
+    - position_exit
+    - manual_reset
+    - condition_met
+    is_required: false
+    display_name_ko: 초기화 트리거
+    display_name_en: Reset Trigger
+    description: 언제 초기화할지 설정
+    display_order: 5
+  META_RSI_CHANGE_source_variable:
+    variable_id: META_RSI_CHANGE
+    parameter_name: source_variable
+    parameter_type: string
+    default_value: RSI
+    is_required: true
+    display_name_ko: 원본 변수
+    display_name_en: Source Variable
+    description: 변화를 감지할 원본 변수
+    display_order: 1
+  META_RSI_CHANGE_detection_type:
+    variable_id: META_RSI_CHANGE
+    parameter_name: detection_type
+    parameter_type: string
+    default_value: 퍼센트_변화
+    enum_values:
+    - 절대값_변화
+    - 퍼센트_변화
+    - 방향_변화
+    - 임계값_돌파
+    - 신고점_갱신
+    - 신저점_갱신
+    is_required: true
+    display_name_ko: 감지 방식
+    display_name_en: Detection Type
+    description: 변화 감지 방식
+    display_order: 2
+  META_RSI_CHANGE_threshold_value:
+    variable_id: META_RSI_CHANGE
+    parameter_name: threshold_value
+    parameter_type: decimal
+    default_value: '5.0'
+    min_value: '0.1'
+    max_value: '1000.0'
+    is_required: true
+    display_name_ko: 감지 임계값
+    display_name_en: Threshold Value
+    description: 변화 감지 임계값 (절대값 또는 퍼센트)
+    display_order: 3
+  META_RSI_CHANGE_comparison_window:
+    variable_id: META_RSI_CHANGE
+    parameter_name: comparison_window
+    parameter_type: integer
+    default_value: '1'
+    min_value: '1'
+    max_value: '100'
+    is_required: false
+    display_name_ko: 비교 윈도우
+    display_name_en: Comparison Window
+    description: 몇 틱 전과 비교할지 설정
+    display_order: 4
+  META_PRICE_BREAKOUT_source_variable:
+    variable_id: META_PRICE_BREAKOUT
+    parameter_name: source_variable
+    parameter_type: string
+    default_value: 종가
+    is_required: true
+    display_name_ko: 원본 변수
+    display_name_en: Source Variable
+    description: 돌파를 감지할 가격 변수
+    display_order: 1
+  META_PRICE_BREAKOUT_breakout_type:
+    variable_id: META_PRICE_BREAKOUT
+    parameter_name: breakout_type
+    parameter_type: string
+    default_value: 상승_돌파
+    enum_values:
+    - 상승_돌파
+    - 하락_돌파
+    - 양방향_돌파
+    - 저항선_돌파
+    - 지지선_돌파
+    is_required: true
+    display_name_ko: 돌파 유형
+    display_name_en: Breakout Type
+    description: 감지할 돌파의 유형
+    display_order: 2
+  META_PRICE_BREAKOUT_reference_value:
+    variable_id: META_PRICE_BREAKOUT
+    parameter_name: reference_value
+    parameter_type: string
+    default_value: 이동평균_20
+    is_required: true
+    display_name_ko: 기준값
+    display_name_en: Reference Value
+    description: 돌파 기준이 되는 값
+    display_order: 3
+  META_PRICE_BREAKOUT_confirmation_threshold:
+    variable_id: META_PRICE_BREAKOUT
+    parameter_name: confirmation_threshold
+    parameter_type: decimal
+    default_value: '0.5'
+    min_value: '0.01'
+    max_value: '10.0'
+    is_required: false
+    display_name_ko: 확인 임계값
+    display_name_en: Confirmation Threshold
+    description: 돌파 확인을 위한 최소 임계값 (%)
+    display_order: 4
+  META_VOLUME_SPIKE_source_variable:
+    variable_id: META_VOLUME_SPIKE
+    parameter_name: source_variable
+    parameter_type: string
+    default_value: 거래량
+    is_required: true
+    display_name_ko: 원본 변수
+    display_name_en: Source Variable
+    description: 급증을 감지할 거래량 변수
+    display_order: 1
+  META_VOLUME_SPIKE_spike_multiplier:
+    variable_id: META_VOLUME_SPIKE
+    parameter_name: spike_multiplier
+    parameter_type: decimal
+    default_value: '2.0'
+    min_value: '1.1'
+    max_value: '10.0'
+    is_required: true
+    display_name_ko: 급증 배수
+    display_name_en: Spike Multiplier
+    description: 평균 대비 몇 배 이상 급증할 때 감지할지
+    display_order: 2
+  META_VOLUME_SPIKE_baseline_period:
+    variable_id: META_VOLUME_SPIKE
+    parameter_name: baseline_period
+    parameter_type: integer
+    default_value: '20'
+    min_value: '5'
+    max_value: '100'
+    is_required: true
+    display_name_ko: 기준 기간
+    display_name_en: Baseline Period
+    description: 평균 거래량 계산 기간 (캔들 수)
+    display_order: 3
+  META_VOLUME_SPIKE_detection_sensitivity:
+    variable_id: META_VOLUME_SPIKE
+    parameter_name: detection_sensitivity
+    parameter_type: string
+    default_value: 중간
+    enum_values:
+    - 낮음
+    - 중간
+    - 높음
+    - 매우_높음
+    is_required: false
+    display_name_ko: 비교 윈도우
+    display_name_en: Comparison Window
+    description: 몇 틱 전과 비교할지 설정
+    display_order: 4

@@ -208,6 +208,15 @@ class ConditionBuilderWidget(QWidget):
         self.search_input.returnPressed.connect(self._on_search_clicked)
         self.value_type_combo.currentTextChanged.connect(self._on_value_type_changed)
 
+        # 조건 설정 관련 시그널들
+        self.operator_combo.currentTextChanged.connect(self._on_condition_changed)
+        self.value_input.textChanged.connect(self._on_condition_changed)
+        self.external_variable_combo.currentTextChanged.connect(self._on_condition_changed)
+
+        # 파라미터 입력 위젯 시그널들
+        self.parameter_input.parameters_changed.connect(self._on_condition_changed)
+        self.external_parameter_input.parameters_changed.connect(self._on_condition_changed)
+
         self._logger.info("컨디션 빌더 시그널 연결 완료")
 
     # =============================================================================
@@ -224,6 +233,7 @@ class ConditionBuilderWidget(QWidget):
             self.external_variable_combo.clear()
 
             if variables_dto.success and variables_dto.grouped_variables:
+                # 모든 변수를 우선 추가 (전체 카테고리 선택 상태)
                 for category, variables in variables_dto.grouped_variables.items():
                     for var in variables:
                         display_name = var.get('display_name_ko', var.get('variable_id', ''))
@@ -231,6 +241,11 @@ class ConditionBuilderWidget(QWidget):
 
                         self.variable_combo.addItem(display_name, variable_id)
                         self.external_variable_combo.addItem(display_name, variable_id)
+
+                # 현재 선택된 카테고리에 따라 필터링 적용
+                current_category = self.category_combo.currentText()
+                if current_category != "전체":
+                    self._filter_variables_by_category(current_category)
 
             self._logger.info(f"변수 목록 표시 완료: {variables_dto.total_count}개")
 
@@ -318,7 +333,40 @@ class ConditionBuilderWidget(QWidget):
     def _on_category_changed(self, category: str):
         """카테고리 변경 처리"""
         self._logger.info(f"카테고리 변경: {category}")
+        self._filter_variables_by_category(category)
         self.category_changed.emit(category)
+
+    def _filter_variables_by_category(self, category: str) -> None:
+        """카테고리별 변수 필터링"""
+        if not hasattr(self, '_current_variables_dto') or not self._current_variables_dto:
+            return
+
+        # 카테고리 한글->영문 매핑
+        category_mapping = {
+            "전체": None,
+            "추세": "trend",
+            "모멘텀": "momentum",
+            "변동성": "volatility",
+            "거래량": "volume",
+            "가격": "price"
+        }
+
+        selected_category = category_mapping.get(category)
+
+        # 변수 콤보박스 클리어
+        self.variable_combo.clear()
+
+        # 변수 필터링 및 추가
+        if self._current_variables_dto.success and self._current_variables_dto.grouped_variables:
+            for cat, variables in self._current_variables_dto.grouped_variables.items():
+                # 전체 선택이거나 선택된 카테고리와 일치하는 경우
+                if selected_category is None or cat == selected_category:
+                    for var in variables:
+                        display_name = var.get('display_name_ko', var.get('variable_id', ''))
+                        variable_id = var.get('variable_id', '')
+                        self.variable_combo.addItem(display_name, variable_id)
+
+        self._logger.info(f"카테고리 '{category}'로 필터링 완료: {self.variable_combo.count()}개 변수")
 
     def _on_variable_changed(self, variable_name: str):
         """변수 변경 처리"""
@@ -352,3 +400,65 @@ class ConditionBuilderWidget(QWidget):
         self._logger.info(f"비교값 타입 변경: {value_type}")
         # 외부 변수 선택 시 외부 변수 영역 활성화
         self.external_group.setEnabled(value_type == "외부 변수")
+        # 조건 미리보기 업데이트
+        self._update_condition_preview()
+
+    def _on_condition_changed(self):
+        """조건 설정 변경 시 미리보기 업데이트"""
+        self._update_condition_preview()
+
+    def _update_condition_preview(self):
+        """조건 미리보기 업데이트"""
+        try:
+            condition_data = self.get_current_condition()
+
+            # 기본 정보 확인
+            if not condition_data.get("variable_name") or not condition_data.get("operator"):
+                self.condition_preview.update_preview("조건을 완성해주세요.")
+                return
+
+            # 미리보기 텍스트 생성
+            preview_text = self._generate_preview_text(condition_data)
+            self.condition_preview.update_preview(preview_text)
+
+        except Exception as e:
+            self._logger.error(f"조건 미리보기 업데이트 중 오류: {e}")
+            self.condition_preview.update_preview("미리보기 생성 중 오류가 발생했습니다.")
+
+    def _generate_preview_text(self, condition_data: dict) -> str:
+        """조건 데이터로부터 미리보기 텍스트 생성"""
+        try:
+            variable_name = condition_data.get("variable_name", "")
+            operator = condition_data.get("operator", "")
+            value_type = condition_data.get("value_type", "직접 입력")
+            value = condition_data.get("value", "")
+            external_variable_name = condition_data.get("external_variable_name", "")
+
+            # 파라미터 정보 추가
+            main_params = self.parameter_input.get_current_parameters()
+            external_params = self.external_parameter_input.get_current_parameters()
+
+            # 기본 조건 텍스트
+            if value_type == "외부 변수" and external_variable_name:
+                preview = f"{variable_name} {operator} {external_variable_name}"
+            else:
+                preview = f"{variable_name} {operator} {value if value else '(값 없음)'}"
+
+            # 파라미터 정보 추가
+            param_parts = []
+            if main_params:
+                param_str = ", ".join([f"{k}={v}" for k, v in main_params.items()])
+                param_parts.append(f"주변수({param_str})")
+
+            if external_params and value_type == "외부 변수":
+                param_str = ", ".join([f"{k}={v}" for k, v in external_params.items()])
+                param_parts.append(f"비교변수({param_str})")
+
+            if param_parts:
+                preview += f" | {' / '.join(param_parts)}"
+
+            return preview
+
+        except Exception as e:
+            self._logger.error(f"미리보기 텍스트 생성 중 오류: {e}")
+            return "미리보기 생성 중 오류가 발생했습니다."

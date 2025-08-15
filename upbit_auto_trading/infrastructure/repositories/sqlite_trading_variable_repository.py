@@ -372,20 +372,49 @@ class SqliteTradingVariableRepository(ITradingVariableRepository):
             """, (variable.variable_id,))
 
             for param_row in cursor.fetchall():
+                # 타입별 값 변환
+                parameter_type = param_row[3]
+                default_value = self._convert_parameter_value(param_row[4], parameter_type)
+                min_value = self._convert_parameter_value(param_row[5], parameter_type) if param_row[5] is not None else None
+                max_value = self._convert_parameter_value(param_row[6], parameter_type) if param_row[6] is not None else None
+
                 parameter = VariableParameter(
                     parameter_name=param_row[0],
                     display_name_ko=param_row[1],
                     display_name_en=param_row[2],
-                    parameter_type=param_row[3],
-                    default_value=param_row[4],
-                    min_value=param_row[5],
-                    max_value=param_row[6],
+                    parameter_type=parameter_type,
+                    default_value=default_value,
+                    min_value=min_value,
+                    max_value=max_value,
                     description=param_row[7]
                 )
                 variable.add_parameter(parameter)
 
         except Exception as e:
             self._logger.error(f"파라미터 로드 실패 ({variable.variable_id}): {e}")
+
+    def _convert_parameter_value(self, value: Any, parameter_type: str) -> Any:
+        """파라미터 타입에 맞게 값 변환"""
+        if value is None:
+            return None
+
+        try:
+            if parameter_type == "integer":
+                return int(value)
+            elif parameter_type == "decimal":
+                return float(value)
+            elif parameter_type == "boolean":
+                if isinstance(value, str):
+                    return value.lower() in ('true', '1', 'yes', 'on')
+                return bool(value)
+            elif parameter_type in ("enum", "external_variable"):
+                # enum과 external_variable는 문자열로 처리
+                return str(value)
+            else:  # string and other types
+                return str(value)
+        except (ValueError, TypeError):
+            self._logger.warning(f"타입 변환 실패: {value} -> {parameter_type}")
+            return value
 
     async def _save_parameter(self, cursor, variable_id: str, parameter: VariableParameter) -> None:
         """파라미터를 DB에 저장"""

@@ -20,16 +20,10 @@ try:
     CHART_AVAILABLE = True
     logger.debug("matplotlib 차트 라이브러리 로드 성공")
 except ImportError:
-    try:
-        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-        from matplotlib.figure import Figure
-        CHART_AVAILABLE = True
-        logger.debug("matplotlib 차트 라이브러리 로드 성공 (qt5agg)")
-    except ImportError:
-        CHART_AVAILABLE = False
-        FigureCanvas = None
-        Figure = None
-        logger.warning("matplotlib 차트 라이브러리를 찾을 수 없습니다")
+    CHART_AVAILABLE = False
+    FigureCanvas = None
+    Figure = None
+    logger.warning("matplotlib 차트 라이브러리를 찾을 수 없습니다")
 
 
 class SimulationResultWidget(QWidget):
@@ -42,9 +36,44 @@ class SimulationResultWidget(QWidget):
         super().__init__(parent)
         self.current_scenario = None
         self.current_data_source = "embedded"
+
+        # matplotlib 폰트 설정을 초기화 시 한 번만 수행
+        self._setup_matplotlib_font_once()
+
         self.setup_ui()
         self.initialize_default_state()
         self.setup_use_cases()
+
+    def _setup_matplotlib_font_once(self):
+        """matplotlib 폰트를 초기화 시 한 번만 설정"""
+        if not CHART_AVAILABLE:
+            return
+
+        try:
+            import matplotlib
+            # matplotlib 폰트 매니저의 디버그 로깅 비활성화
+            matplotlib.set_loglevel('WARNING')
+
+            import matplotlib.pyplot as plt
+            import matplotlib.font_manager as fm
+
+            # 폰트 캐시 재구성 방지 및 한 번만 설정
+            plt.rcParams['font.family'] = 'Malgun Gothic'
+            plt.rcParams['axes.unicode_minus'] = False
+
+            # 폰트가 사용 가능한지 확인 (로그 최소화)
+            try:
+                available_fonts = [f.name for f in fm.fontManager.ttflist]
+                if 'Malgun Gothic' not in available_fonts:
+                    plt.rcParams['font.family'] = 'DejaVu Sans'
+                    logger.warning("Malgun Gothic font not available, using DejaVu Sans")
+                else:
+                    logger.debug("Malgun Gothic font configured successfully")
+            except Exception:
+                plt.rcParams['font.family'] = 'DejaVu Sans'
+
+        except Exception as e:
+            logger.warning(f"matplotlib font setup failed: {e}")
 
     def setup_ui(self):
         """UI 구성"""
@@ -116,23 +145,23 @@ class SimulationResultWidget(QWidget):
             self.create_text_area(parent_layout)
             return
 
-        # matplotlib 차트 캔버스
+        # matplotlib 차트 캔버스 (폰트는 __init__에서 이미 설정됨)
         self.figure = Figure(figsize=(8, 4), dpi=80)
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setMinimumHeight(200)
 
         # 기본 차트 설정
         self.ax = self.figure.add_subplot(111)
-        self.ax.set_title("시뮬레이션 결과 차트")
-        self.ax.set_xlabel("시간")
-        self.ax.set_ylabel("수익률 (%)")
+        self.ax.set_title("Simulation Results")
+        self.ax.set_xlabel("Time")
+        self.ax.set_ylabel("Return (%)")
         self.ax.grid(True, alpha=0.3)
 
         parent_layout.addWidget(self.canvas)
 
     def create_text_area(self, parent_layout):
         """텍스트 기반 결과 영역 (matplotlib 없을 때)"""
-        self.result_label = QLabel("시뮬레이션 결과가 여기에 표시됩니다.")
+        self.result_label = QLabel("Simulation results will be displayed here.")
         self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.result_label.setMinimumHeight(200)
         self.result_label.setStyleSheet("""
@@ -177,11 +206,11 @@ class SimulationResultWidget(QWidget):
 
     def initialize_default_state(self):
         """기본 상태 초기화"""
-        self.add_log("시뮬레이션 결과 위젯 초기화 완료")
+        self.add_log("Simulation result widget initialized")
 
         if CHART_AVAILABLE and hasattr(self, 'ax'):
             # 기본 차트 표시
-            self.ax.text(0.5, 0.5, '시뮬레이션을 실행하면\n결과가 표시됩니다',
+            self.ax.text(0.5, 0.5, 'Run simulation to see results',
                         horizontalalignment='center',
                         verticalalignment='center',
                         transform=self.ax.transAxes,
@@ -197,7 +226,7 @@ class SimulationResultWidget(QWidget):
             # 샘플 데이터로 시뮬레이션
             result_data = self._generate_sample_result(scenario_type)
 
-        self.add_log(f"[{timestamp}] {scenario_type} 시뮬레이션 완료")
+        self.add_log(f"[{timestamp}] {scenario_type} simulation completed")
 
         if CHART_AVAILABLE:
             self._update_chart(scenario_type, result_data)

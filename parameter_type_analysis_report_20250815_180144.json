@@ -1,0 +1,416 @@
+{
+  "reverted_changes": [
+    "tracking_variable → external_variable",
+    "source_variable → external_variable",
+    "reference_value → external_variable",
+    "direction → trail_direction",
+    "trail_direction → trail_direction",
+    "calculation_method → calculation_method",
+    "reset_trigger → reset_trigger",
+    "timeframe → enum",
+    "band_position → enum",
+    "detection_type → enum",
+    "breakout_type → enum",
+    "detection_sensitivity → enum"
+  ],
+  "logical_analysis": {
+    "ATR.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "ATR.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "BOLLINGER_BAND.band_position": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 3,
+      "recommendation": "enum",
+      "reason": "상단/하단 등 고정된 위치값, 실수 입력 방지"
+    },
+    "BOLLINGER_BAND.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "BOLLINGER_BAND.std_dev": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "BOLLINGER_BAND.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "EMA.exponential_factor": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "EMA.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "EMA.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "MACD.fast_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "MACD.macd_type": {
+      "current_type": "string",
+      "has_enum_values": true,
+      "enum_count": 3,
+      "recommendation": "enum",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    "MACD.signal_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "MACD.slow_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "MACD.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "META_PRICE_BREAKOUT.breakout_type": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 5,
+      "recommendation": "enum",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    "META_PRICE_BREAKOUT.confirmation_threshold": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "META_PRICE_BREAKOUT.reference_value": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "현재 타입 유지"
+    },
+    "META_PRICE_BREAKOUT.source_variable": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "다른 변수를 참조하는 특수 타입"
+    },
+    "META_RSI_CHANGE.comparison_window": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "META_RSI_CHANGE.detection_type": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 6,
+      "recommendation": "enum",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    "META_RSI_CHANGE.source_variable": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "다른 변수를 참조하는 특수 타입"
+    },
+    "META_RSI_CHANGE.threshold_value": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "META_TRAILING_STOP.calculation_method": {
+      "current_type": "calculation_method",
+      "has_enum_values": true,
+      "enum_count": 4,
+      "recommendation": "enum",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    "META_TRAILING_STOP.difference_value": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "META_TRAILING_STOP.reset_trigger": {
+      "current_type": "reset_trigger",
+      "has_enum_values": true,
+      "enum_count": 5,
+      "recommendation": "enum",
+      "reason": "enum_values에 5개 선택지 정의됨"
+    },
+    "META_TRAILING_STOP.tracking_variable": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "다른 변수를 참조하는 특수 타입"
+    },
+    "META_TRAILING_STOP.trail_direction": {
+      "current_type": "trail_direction",
+      "has_enum_values": true,
+      "enum_count": 3,
+      "recommendation": "enum",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    "META_VOLUME_SPIKE.baseline_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "META_VOLUME_SPIKE.detection_sensitivity": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 4,
+      "recommendation": "enum",
+      "reason": "enum_values에 4개 선택지 정의됨"
+    },
+    "META_VOLUME_SPIKE.source_variable": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "다른 변수를 참조하는 특수 타입"
+    },
+    "META_VOLUME_SPIKE.spike_multiplier": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "PYRAMID_TARGET.calculation_method": {
+      "current_type": "calculation_method",
+      "has_enum_values": true,
+      "enum_count": 4,
+      "recommendation": "enum",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    "PYRAMID_TARGET.difference_value": {
+      "current_type": "decimal",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "decimal",
+      "reason": "현재 타입 유지"
+    },
+    "PYRAMID_TARGET.direction": {
+      "current_type": "trail_direction",
+      "has_enum_values": true,
+      "enum_count": 3,
+      "recommendation": "enum",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    "PYRAMID_TARGET.reset_trigger": {
+      "current_type": "reset_trigger",
+      "has_enum_values": true,
+      "enum_count": 5,
+      "recommendation": "enum",
+      "reason": "enum_values에 5개 선택지 정의됨"
+    },
+    "PYRAMID_TARGET.tracking_variable": {
+      "current_type": "external_variable",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "external_variable",
+      "reason": "다른 변수를 참조하는 특수 타입"
+    },
+    "RSI.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "RSI.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "SMA.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "SMA.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "STOCHASTIC.d_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "STOCHASTIC.k_period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "STOCHASTIC.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    },
+    "VOLUME_SMA.period": {
+      "current_type": "integer",
+      "has_enum_values": false,
+      "enum_count": 0,
+      "recommendation": "integer",
+      "reason": "현재 타입 유지"
+    },
+    "VOLUME_SMA.timeframe": {
+      "current_type": "enum",
+      "has_enum_values": true,
+      "enum_count": 9,
+      "recommendation": "enum",
+      "reason": "업비트 API에서 고정된 timeframe 사용, 사용자 실수 방지 필수"
+    }
+  },
+  "enum_candidates": [
+    {
+      "parameter": "MACD.macd_type",
+      "current_type": "string",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    {
+      "parameter": "META_TRAILING_STOP.calculation_method",
+      "current_type": "calculation_method",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    {
+      "parameter": "META_TRAILING_STOP.reset_trigger",
+      "current_type": "reset_trigger",
+      "reason": "enum_values에 5개 선택지 정의됨"
+    },
+    {
+      "parameter": "META_TRAILING_STOP.trail_direction",
+      "current_type": "trail_direction",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    {
+      "parameter": "PYRAMID_TARGET.calculation_method",
+      "current_type": "calculation_method",
+      "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+    },
+    {
+      "parameter": "PYRAMID_TARGET.direction",
+      "current_type": "trail_direction",
+      "reason": "enum_values에 3개 선택지 정의됨"
+    },
+    {
+      "parameter": "PYRAMID_TARGET.reset_trigger",
+      "current_type": "reset_trigger",
+      "reason": "enum_values에 5개 선택지 정의됨"
+    }
+  ],
+  "decimal_vs_float": [],
+  "final_recommendations": {
+    "enum_changes": {
+      "MACD.macd_type": {
+        "from": "string",
+        "to": "enum",
+        "reason": "enum_values에 3개 선택지 정의됨"
+      },
+      "META_TRAILING_STOP.calculation_method": {
+        "from": "calculation_method",
+        "to": "enum",
+        "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+      },
+      "META_TRAILING_STOP.reset_trigger": {
+        "from": "reset_trigger",
+        "to": "enum",
+        "reason": "enum_values에 5개 선택지 정의됨"
+      },
+      "META_TRAILING_STOP.trail_direction": {
+        "from": "trail_direction",
+        "to": "enum",
+        "reason": "enum_values에 3개 선택지 정의됨"
+      },
+      "PYRAMID_TARGET.calculation_method": {
+        "from": "calculation_method",
+        "to": "enum",
+        "reason": "미리 정의된 알고리즘 방법, 선택지 제한 필요"
+      },
+      "PYRAMID_TARGET.direction": {
+        "from": "trail_direction",
+        "to": "enum",
+        "reason": "enum_values에 3개 선택지 정의됨"
+      },
+      "PYRAMID_TARGET.reset_trigger": {
+        "from": "reset_trigger",
+        "to": "enum",
+        "reason": "enum_values에 5개 선택지 정의됨"
+      }
+    },
+    "decimal_policy": "float → decimal for financial precision",
+    "external_variable_policy": "keep for variable references"
+  },
+  "backup_files": [
+    "legacy\\settings_before_revert_20250815_180144.sqlite3",
+    "legacy\\tv_variable_parameters_before_revert_20250815_180144.yaml"
+  ]
+}

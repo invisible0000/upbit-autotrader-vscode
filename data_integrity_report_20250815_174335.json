@@ -1,0 +1,207 @@
+{
+  "timestamp": "2025-08-15T17:43:35.288380",
+  "yaml_analysis": {
+    "trading_variables": {
+      "total_count": 28,
+      "categories": {
+        "trend": 2,
+        "momentum": 3,
+        "volatility": 2,
+        "volume": 2,
+        "price": 4,
+        "capital": 3,
+        "state": 4,
+        "dynamic_management": 8
+      },
+      "meta_variables": [
+        "PYRAMID_TARGET",
+        "META_TRAILING_STOP",
+        "META_RSI_CHANGE",
+        "META_PRICE_BREAKOUT",
+        "META_VOLUME_SPIKE"
+      ],
+      "required_parameters": [
+        "SMA",
+        "EMA",
+        "RSI",
+        "STOCHASTIC",
+        "MACD",
+        "BOLLINGER_BAND",
+        "ATR",
+        "VOLUME_SMA",
+        "PYRAMID_TARGET",
+        "MARTINGALE_TARGET",
+        "META_TRAILING_STOP",
+        "DYNAMIC_PROFIT_TARGET",
+        "DYNAMIC_LOSS_THRESHOLD",
+        "META_RSI_CHANGE",
+        "META_PRICE_BREAKOUT",
+        "META_VOLUME_SPIKE"
+      ],
+      "missing_fields": []
+    },
+    "variable_parameters": {
+      "total_count": 45,
+      "by_variable": {
+        "RSI": 2,
+        "SMA": 2,
+        "EMA": 3,
+        "STOCHASTIC": 3,
+        "MACD": 5,
+        "BOLLINGER_BAND": 4,
+        "ATR": 2,
+        "VOLUME_SMA": 2,
+        "PYRAMID_TARGET": 5,
+        "META_TRAILING_STOP": 5,
+        "META_RSI_CHANGE": 4,
+        "META_PRICE_BREAKOUT": 4,
+        "META_VOLUME_SPIKE": 4
+      },
+      "by_type": {
+        "integer": 13,
+        "enum": 13,
+        "float": 7,
+        "external_variable": 6,
+        "trail_direction": 2,
+        "calculation_method": 2,
+        "reset_trigger": 2
+      },
+      "meta_parameters": [
+        "PYRAMID_TARGET_tracking_variable",
+        "PYRAMID_TARGET_direction",
+        "PYRAMID_TARGET_calculation_method",
+        "PYRAMID_TARGET_difference_value",
+        "PYRAMID_TARGET_reset_trigger",
+        "META_TRAILING_STOP_tracking_variable",
+        "META_TRAILING_STOP_trail_direction",
+        "META_TRAILING_STOP_calculation_method",
+        "META_TRAILING_STOP_difference_value",
+        "META_TRAILING_STOP_reset_trigger",
+        "META_RSI_CHANGE_source_variable",
+        "META_RSI_CHANGE_detection_type",
+        "META_RSI_CHANGE_threshold_value",
+        "META_RSI_CHANGE_comparison_window",
+        "META_PRICE_BREAKOUT_source_variable",
+        "META_PRICE_BREAKOUT_breakout_type",
+        "META_PRICE_BREAKOUT_reference_value",
+        "META_PRICE_BREAKOUT_confirmation_threshold",
+        "META_VOLUME_SPIKE_source_variable",
+        "META_VOLUME_SPIKE_spike_multiplier",
+        "META_VOLUME_SPIKE_baseline_period",
+        "META_VOLUME_SPIKE_detection_sensitivity"
+      ],
+      "invalid_types": [
+        "RSI_timeframe: enum",
+        "SMA_timeframe: enum",
+        "EMA_timeframe: enum",
+        "EMA_exponential_factor: float",
+        "STOCHASTIC_timeframe: enum",
+        "MACD_timeframe: enum",
+        "MACD_macd_type: enum",
+        "BOLLINGER_BAND_std_dev: float",
+        "BOLLINGER_BAND_timeframe: enum",
+        "BOLLINGER_BAND_band_position: enum",
+        "ATR_timeframe: enum",
+        "VOLUME_SMA_timeframe: enum",
+        "PYRAMID_TARGET_tracking_variable: external_variable",
+        "PYRAMID_TARGET_direction: trail_direction",
+        "PYRAMID_TARGET_calculation_method: calculation_method",
+        "PYRAMID_TARGET_difference_value: float",
+        "PYRAMID_TARGET_reset_trigger: reset_trigger",
+        "META_TRAILING_STOP_tracking_variable: external_variable",
+        "META_TRAILING_STOP_trail_direction: trail_direction",
+        "META_TRAILING_STOP_calculation_method: calculation_method",
+        "META_TRAILING_STOP_difference_value: float",
+        "META_TRAILING_STOP_reset_trigger: reset_trigger",
+        "META_RSI_CHANGE_source_variable: external_variable",
+        "META_RSI_CHANGE_detection_type: enum",
+        "META_RSI_CHANGE_threshold_value: float",
+        "META_PRICE_BREAKOUT_source_variable: external_variable",
+        "META_PRICE_BREAKOUT_breakout_type: enum",
+        "META_PRICE_BREAKOUT_reference_value: external_variable",
+        "META_PRICE_BREAKOUT_confirmation_threshold: float",
+        "META_VOLUME_SPIKE_source_variable: external_variable",
+        "META_VOLUME_SPIKE_spike_multiplier: float",
+        "META_VOLUME_SPIKE_detection_sensitivity: enum"
+      ]
+    },
+    "tv_parameter_types.yaml": {
+      "sections": 5,
+      "parameter_types_count": 8,
+      "parameter_patterns_count": 9,
+      "parameter_creation_guidelines_count": 4,
+      "common_parameter_templates_count": 4,
+      "ui_widget_mapping_count": 3
+    },
+    "tv_indicator_categories.yaml": {
+      "sections": 4,
+      "indicator_categories_count": 9,
+      "category_relationships_count": 2,
+      "new_indicator_guidelines_count": 4,
+      "category_mapping_rules_count": 2
+    },
+    "tv_comparison_groups.yaml": {
+      "sections": 4,
+      "comparison_groups_count": 8,
+      "compatibility_matrix_count": 3,
+      "validation_rules_count": 7,
+      "usage_examples_count": 2
+    }
+  },
+  "db_analysis": {
+    "trading_variables": {
+      "total_count": 28,
+      "active_count": 28,
+      "categories": {
+        "dynamic_management": 8,
+        "price": 4,
+        "state": 4,
+        "momentum": 3,
+        "capital": 3,
+        "volume": 2,
+        "trend": 2,
+        "volatility": 2
+      },
+      "meta_variables": [
+        "PYRAMID_TARGET",
+        "META_TRAILING_STOP",
+        "META_RSI_CHANGE",
+        "META_PRICE_BREAKOUT",
+        "META_VOLUME_SPIKE"
+      ],
+      "parameter_required_count": 16,
+      "missing_display_names": []
+    },
+    "variable_parameters": {
+      "total_count": 45,
+      "by_variable": {
+        "MACD": 5,
+        "META_TRAILING_STOP": 5,
+        "PYRAMID_TARGET": 5,
+        "BOLLINGER_BAND": 4,
+        "META_RSI_CHANGE": 4,
+        "META_PRICE_BREAKOUT": 4,
+        "META_VOLUME_SPIKE": 4,
+        "EMA": 3,
+        "STOCHASTIC": 3,
+        "SMA": 2,
+        "RSI": 2,
+        "VOLUME_SMA": 2,
+        "ATR": 2
+      },
+      "by_type": {
+        "string": 25,
+        "integer": 13,
+        "decimal": 7
+      },
+      "meta_count": 22,
+      "required_count": 39,
+      "invalid_types": []
+    }
+  },
+  "mismatches": [],
+  "missing_data": [],
+  "recommendations": [
+    "YAML의 잘못된 parameter_type을 수정하세요"
+  ]
+}

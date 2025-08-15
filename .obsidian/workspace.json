@@ -179,20 +179,21 @@
   },
   "active": "653c0d7ff342fa88",
   "lastOpenFiles": [
-    "tasks/completed/TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md",
-    "tasks/completed/TASK_20250814_08_Strategy_Management_Screen_Implementation.md",
-    "tasks/completed/트리거 빌더 리펙토링 ui이식 방법.md",
-    "tasks/active/TASK_20250815_01_Trigger_Builder_Functional_Implementation.md",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
     "data/settings.sqlite3-wal",
-    "logs/session_20250815_160848_PID74596.log",
-    "logs/session_20250815_160428_PID69680.log",
-    "logs/session_20250815_155255_PID72804.log",
-    "venv/Lib/site-packages/numpy/rec/__pycache__/__init__.cpython-313.pyc",
+    "logs/session_20250815_191004_PID48756.log",
+    "venv/Scripts/wsdump.exe",
+    "venv/Lib/site-packages/websocket_client-1.6.3.dist-info/WHEEL",
+    "venv/Lib/site-packages/websocket_client-1.6.3.dist-info/top_level.txt",
+    "venv/Lib/site-packages/websocket_client-1.6.3.dist-info/RECORD",
+    "tasks/completed/TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md",
+    "tasks/completed/TASK_20250814_08_Strategy_Management_Screen_Implementation.md",
+    "tasks/completed/트리거 빌더 리펙토링 ui이식 방법.md",
+    "tasks/active/TASK_20250815_01_Trigger_Builder_Functional_Implementation.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",
@@ -223,7 +224,6 @@
     "docs/UI_GUIDE.md",
     "docs/STRATEGY_GUIDE.md",
     "docs/ARCHITECTURE_GUIDE.md",
-    "tasks/archived/TASK-20250809-07_UNIFIED_SETTINGS_MIGRATION.md",
-    "tasks/archived/TASK-20250809-06_ADVANCED_SETTINGS_TAB.md"
+    "tasks/archived/TASK-20250809-07_UNIFIED_SETTINGS_MIGRATION.md"
   ]
 }

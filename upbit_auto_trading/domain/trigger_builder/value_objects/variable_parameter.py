@@ -38,7 +38,7 @@ class VariableParameter:
         if not self.parameter_type or not self.parameter_type.strip():
             raise ValidationError("parameter_type은 비어있을 수 없습니다")
 
-        valid_types = {"integer", "decimal", "string", "boolean"}
+        valid_types = {"integer", "decimal", "string", "boolean", "enum", "external_variable"}
         if self.parameter_type not in valid_types:
             raise ValidationError(f"parameter_type은 {valid_types} 중 하나여야 합니다")
 
@@ -56,9 +56,9 @@ class VariableParameter:
         elif self.parameter_type == "decimal":
             if not isinstance(self.default_value, (int, float)):
                 raise ValidationError("decimal 타입의 기본값은 숫자여야 합니다")
-        elif self.parameter_type == "string":
+        elif self.parameter_type in ("string", "enum", "external_variable"):
             if not isinstance(self.default_value, str):
-                raise ValidationError("string 타입의 기본값은 문자열이어야 합니다")
+                raise ValidationError(f"{self.parameter_type} 타입의 기본값은 문자열이어야 합니다")
         elif self.parameter_type == "boolean":
             if not isinstance(self.default_value, bool):
                 raise ValidationError("boolean 타입의 기본값은 불린이어야 합니다")
@@ -86,7 +86,7 @@ class VariableParameter:
             elif self.parameter_type == "decimal":
                 if not isinstance(value, (int, float)):
                     return False
-            elif self.parameter_type == "string":
+            elif self.parameter_type in ("string", "enum", "external_variable"):
                 if not isinstance(value, str):
                     return False
             elif self.parameter_type == "boolean":
