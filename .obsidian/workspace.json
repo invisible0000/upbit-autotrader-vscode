@@ -183,18 +183,19 @@
   },
   "active": "653c0d7ff342fa88",
   "lastOpenFiles": [
-    "tasks/active/TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md",
-    "tasks/active/트리거 빌더 리펙토링 ui이식 방법.md",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
     "data/settings.sqlite3-wal",
-    "logs/session_20250814_005649_PID39824.log",
-    "logs/session_20250814_005530_PID54116.log",
-    "logs/session_20250814_005432_PID71800.log",
-    "tools/fix_all_legacy_paths.py",
+    "logs/session_20250815_112828_PID53324.log",
+    "upbit_auto_trading/ui/desktop/screens/strategy_management/tabs/trigger_builder/widgets/__pycache__/trigger_builder_widget.cpython-313.pyc",
+    "upbit_auto_trading/ui/desktop/screens/strategy_management/tabs/trigger_builder/widgets/__pycache__",
+    "upbit_auto_trading/ui/desktop/screens/strategy_management/tabs/trigger_builder/views/__pycache__/i_trigger_builder_view.cpython-313.pyc",
+    "upbit_auto_trading/ui/desktop/screens/strategy_management/tabs/trigger_builder/views/__pycache__",
+    "tasks/active/TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md",
+    "tasks/active/트리거 빌더 리펙토링 ui이식 방법.md",
     "tools/maintenance_complexity_report.md",
     "tests/ui/settings/api_settings/README.md",
     "docs/DDD_Ubiquitous_Language_Dictionary.md",
@@ -217,7 +218,6 @@
     "tasks/archived/TASK-20250809-06_ADVANCED_SETTINGS_TAB.md",
     "tasks/archived/TASK-20250809-05_API_KEYS_SECURITY.md",
     "tasks/archived/TASK-20250809-04_UI_SETTINGS_OPTIMIZATION.md",
-    "tasks/archived/TASK-20250809-03_SYSTEM_SETTINGS_TAB.md",
-    "tasks/archived/TASK-20250809-02_TRADING_SETTINGS_TAB.md"
+    "tasks/archived/TASK-20250809-03_SYSTEM_SETTINGS_TAB.md"
   ]
 }
