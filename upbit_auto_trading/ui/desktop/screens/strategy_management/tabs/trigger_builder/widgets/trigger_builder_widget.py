@@ -5,7 +5,7 @@ Legacy UI 레이아웃을 100% 그대로 복사하여 구현
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QGridLayout, QGroupBox,
-    QPushButton, QLabel, QMessageBox
+    QLabel, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -143,19 +143,26 @@ class TriggerBuilderWidget(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
 
-        # TODO: 시뮬레이션 컨트롤 위젯 임베드
-        placeholder = QLabel("시뮬레이션 컨트롤 영역\n(SimulationControlWidget 예정)")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
+        # 시뮬레이션 컨트롤 위젯 사용
+        try:
+            from .simulation_control_widget import SimulationControlWidget
+            self.simulation_control = SimulationControlWidget()
 
-        # 임시 시뮬레이션 버튼들
-        start_btn = QPushButton("▶️ 시뮬레이션 시작")
-        start_btn.clicked.connect(self.simulation_start_requested.emit)
-        layout.addWidget(start_btn)
+            # 시그널 연결
+            self.simulation_control.simulation_requested.connect(
+                lambda scenario: self._on_simulation_requested(scenario)
+            )
 
-        stop_btn = QPushButton("⏹️ 시뮬레이션 중지")
-        stop_btn.clicked.connect(self.simulation_stop_requested.emit)
-        layout.addWidget(stop_btn)
+            layout.addWidget(self.simulation_control)
+            self._logger.debug("시뮬레이션 컨트롤 위젯 생성 완료")
+
+        except ImportError as e:
+            self._logger.error(f"시뮬레이션 컨트롤 위젯 임포트 실패: {e}")
+            # 임시 플레이스홀더
+            placeholder = QLabel("시뮬레이션 컨트롤 (로딩 실패)")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("background-color: #fff2cc; border: 1px dashed #d6b656; padding: 20px;")
+            layout.addWidget(placeholder)
 
         group.setLayout(layout)
         return group
@@ -192,10 +199,20 @@ class TriggerBuilderWidget(QWidget):
         layout.setContentsMargins(5, 8, 5, 5)
         layout.setSpacing(3)
 
-        # TODO: 시뮬레이션 결과 위젯 임베드
-        placeholder = QLabel("시뮬레이션 결과 영역\n(SimulationResultWidget 예정)")
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(placeholder)
+        # 시뮬레이션 결과 위젯 사용
+        try:
+            from .simulation_result_widget import SimulationResultWidget
+            self.simulation_result = SimulationResultWidget()
+            layout.addWidget(self.simulation_result)
+            self._logger.debug("시뮬레이션 결과 위젯 생성 완료")
+
+        except ImportError as e:
+            self._logger.error(f"시뮬레이션 결과 위젯 임포트 실패: {e}")
+            # 임시 플레이스홀더
+            placeholder = QLabel("시뮬레이션 결과 (로딩 실패)")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet("background-color: #f0f0f0; border: 1px dashed #ccc; padding: 20px;")
+            layout.addWidget(placeholder)
 
         group.setLayout(layout)
         return group
@@ -259,3 +276,19 @@ class TriggerBuilderWidget(QWidget):
 
         # 외부로 시그널 전파
         self.trigger_selected.emit(item, column)
+
+    def _on_simulation_requested(self, scenario_type):
+        """시뮬레이션 요청 처리"""
+        if hasattr(self, 'simulation_result'):
+            # 시뮬레이션 결과 위젯에 결과 표시
+            self.simulation_result.update_simulation_result(scenario_type)
+            self._logger.info(f"시뮬레이션 실행: {scenario_type}")
+        else:
+            self._logger.warning("시뮬레이션 결과 위젯이 없습니다")
+
+        # 외부로 시그널 전파 (기존 방식 유지)
+        if scenario_type in ["full_test", "start"]:
+            self.simulation_start_requested.emit()
+        else:
+            # 새로운 시나리오별 시그널 (추후 확장 가능)
+            self._logger.debug(f"시나리오별 시뮬레이션: {scenario_type}")
