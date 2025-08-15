@@ -30,14 +30,19 @@ class StrategyManagementScreen(QWidget):
 
         # 트리거 빌더 탭 (DDD/MVP 기반) - 실제 구현
         try:
+            self.logger.info("🔧 트리거 빌더 탭 로드 시작...")
             from upbit_auto_trading.ui.desktop.screens.strategy_management.tabs.trigger_builder.trigger_builder_tab import (
                 TriggerBuilderTab
             )
+            self.logger.info("✅ TriggerBuilderTab 클래스 import 성공")
             trigger_tab = TriggerBuilderTab()
+            self.logger.info("✅ TriggerBuilderTab 인스턴스 생성 성공")
             self.tab_widget.addTab(trigger_tab, "트리거 빌더")
             self.logger.info("✅ 트리거 빌더 탭 실제 구현 로드 완료")
         except Exception as e:
             self.logger.error(f"❌ 트리거 빌더 탭 로드 실패: {e}")
+            import traceback
+            self.logger.error(f"❌ 상세 오류: {traceback.format_exc()}")
             from upbit_auto_trading.ui.desktop.common.placeholder_screen import create_placeholder_screen
             trigger_tab = create_placeholder_screen(f"트리거 빌더 로드 실패: {str(e)}")
             self.tab_widget.addTab(trigger_tab, "트리거 빌더")

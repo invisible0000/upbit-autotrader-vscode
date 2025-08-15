@@ -7,23 +7,26 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QPushButton,
     QLabel, QComboBox, QLineEdit, QProgressBar
 )
-from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QMessageBox
+from typing import Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto import (
     TradingVariableListDTO,
     TradingVariableDetailDTO
 )
-from upbit_auto_trading.ui.desktop.screens.strategy_management.shared.views.i_condition_builder_view import IConditionBuilderView
 
 # 하위 위젯들 임포트
 from .parameter_input_widget import ParameterInputWidget
 from .condition_preview_widget import ConditionPreviewWidget
 
 
-class ConditionBuilderWidget(QWidget, IConditionBuilderView):
-    """컨디션 빌더 위젯 - DB 연동 가능한 MVP View 구현체"""
+class ConditionBuilderWidget(QWidget):
+    """컨디션 빌더 위젯 - DB 연동 가능한 MVP View 구현체
+
+    IConditionBuilderView 인터페이스를 컴포지션으로 구현하여 메타클래스 충돌 방지
+    """
 
     # 시그널 정의
     variable_selected = pyqtSignal(str)  # 변수 선택
@@ -35,7 +38,7 @@ class ConditionBuilderWidget(QWidget, IConditionBuilderView):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._logger = create_component_logger("ConditionBuilderWidget")
-        self._current_variables_dto: TradingVariableListDTO = None
+        self._current_variables_dto: Optional[TradingVariableListDTO] = None
         self._init_ui()
         self._connect_signals()
 
@@ -268,8 +271,14 @@ class ConditionBuilderWidget(QWidget, IConditionBuilderView):
                 "operator": self.operator_combo.currentText(),
                 "value_type": self.value_type_combo.currentText(),
                 "value": self.value_input.text(),
-                "external_variable_id": self.external_variable_combo.currentData() if self.external_group.isEnabled() else None,
-                "external_variable_name": self.external_variable_combo.currentText() if self.external_group.isEnabled() else None
+                "external_variable_id": (
+                    self.external_variable_combo.currentData()
+                    if self.external_group.isEnabled() else None
+                ),
+                "external_variable_name": (
+                    self.external_variable_combo.currentText()
+                    if self.external_group.isEnabled() else None
+                )
             }
 
         except Exception as e:
@@ -287,10 +296,10 @@ class ConditionBuilderWidget(QWidget, IConditionBuilderView):
             self.search_input.clear()
 
             # 하위 위젯들 초기화
-            if hasattr(self.parameter_input, 'reset'):
-                self.parameter_input.reset()
-            if hasattr(self.external_parameter_input, 'reset'):
-                self.external_parameter_input.reset()
+            if hasattr(self.parameter_input, 'clear_parameters'):
+                self.parameter_input.clear_parameters()
+            if hasattr(self.external_parameter_input, 'clear_parameters'):
+                self.external_parameter_input.clear_parameters()
 
             self._logger.info("조건 설정 초기화 완료")
 

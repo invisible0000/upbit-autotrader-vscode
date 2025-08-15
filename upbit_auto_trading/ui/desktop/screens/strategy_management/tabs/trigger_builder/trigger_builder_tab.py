@@ -65,6 +65,9 @@ class TriggerBuilderTab(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(self._view)
 
+            # 즉시 초기화 실행
+            self._run_async(self.initialize())
+
             self._logger.info("트리거 빌더 탭 MVP 패턴 설정 완료")
 
         except Exception as e:

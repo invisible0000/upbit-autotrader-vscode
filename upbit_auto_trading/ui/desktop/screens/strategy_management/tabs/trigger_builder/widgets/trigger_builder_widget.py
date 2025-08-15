@@ -19,8 +19,7 @@ from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto imp
 class TriggerBuilderWidget(QWidget):
     """트리거 빌더 메인 Widget - MVP View 구현체
 
-    ITriggerBuilderView 인터페이스를 구현하지만 다중 상속을 피하기 위해
-    메타클래스 충돌을 방지합니다.
+    ITriggerBuilderView 인터페이스를 컴포지션으로 구현하여 메타클래스 충돌 방지
     """
 
     # 시그널 정의

@@ -146,9 +146,11 @@ class ScreenManagerService(IScreenManagerService):
                 screen = AssetScreenerScreen()
 
             elif screen_name == "매매전략 관리 (신규)":
-                # 새로운 DDD/MVP 기반 전략 관리 화면 (구현 예정)
-                from upbit_auto_trading.ui.desktop.common.placeholder_screen import create_placeholder_screen
-                screen = create_placeholder_screen("매매전략 관리 (신규) - DDD/MVP 기반")
+                # 새로운 DDD/MVP 기반 전략 관리 화면
+                from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import (
+                    StrategyManagementScreen
+                )
+                screen = StrategyManagementScreen()
 
             elif screen_name == "매매전략 관리 (백업)":
                 screen = self._load_strategy_management_backup(dependencies)
