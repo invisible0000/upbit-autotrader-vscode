@@ -3,7 +3,7 @@
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QPushButton, QLabel, QGridLayout, QFrame
+    QWidget, QVBoxLayout, QPushButton, QGridLayout, QFrame
 )
 from PyQt6.QtCore import pyqtSignal
 
@@ -41,11 +41,17 @@ class SimulationControlWidget(QWidget):
         self.create_simulation_buttons(main_layout)
 
     def create_data_source_area(self, parent_layout):
-        """데이터 소스 선택 영역"""
-        # 간소화된 데이터 소스 정보
-        info_label = QLabel("📊 데이터 소스: 업비트 1분봉")
-        info_label.setStyleSheet("font-size: 11px; color: #666; margin: 5px;")
-        parent_layout.addWidget(info_label)
+        """데이터 소스 선택 영역 - 실제 데이터 소스 선택기 통합"""
+        from upbit_auto_trading.ui.desktop.screens.strategy_management.shared.components.data_source_selector import (
+            create_data_source_selector
+        )
+
+        # 실제 데이터 소스 선택기 위젯
+        self.data_source_selector = create_data_source_selector(self)
+        self.data_source_selector.source_changed.connect(self.on_data_source_changed)
+        parent_layout.addWidget(self.data_source_selector)
+
+        logger.debug("데이터 소스 선택기 통합 완료")
 
     def create_simulation_buttons(self, parent_layout):
         """시뮬레이션 버튼들 생성"""
@@ -134,6 +140,11 @@ class SimulationControlWidget(QWidget):
             "#17a2b8": "#148892"
         }
         return color_map.get(color, color)
+
+    def on_data_source_changed(self, source_type: str):
+        """데이터 소스 변경 시 호출"""
+        logger.info(f"데이터 소스 변경됨: {source_type}")
+        self.data_source_changed.emit(source_type)
 
     def update_status(self, message):
         """상태 메시지 업데이트"""

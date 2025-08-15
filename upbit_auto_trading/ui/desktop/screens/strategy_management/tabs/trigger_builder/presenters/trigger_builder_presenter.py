@@ -87,18 +87,30 @@ class TriggerBuilderPresenter:
             self._logger.error(f"변수 검색 중 오류: {e}")
             self._view.show_error_message(f"검색 실패: {str(e)}")
 
-    def handle_simulation_start(self) -> None:
-        """시뮬레이션 시작 처리"""
+    def handle_simulation_start(self, scenario_type: str) -> None:
+        """시뮬레이션 시작 처리 - 실제 데이터 연동"""
         try:
-            self._logger.info("시뮬레이션 시작 요청")
+            self._logger.info(f"시뮬레이션 시작 요청: {scenario_type}")
             self._view.enable_simulation_controls(False)
             self._view.update_simulation_progress(0)
-            # TODO: 실제 시뮬레이션 로직 구현
+
+            # 시뮬레이션 결과 위젯에 직접 실행 요청
+            self._view.run_simulation(scenario_type)
 
         except Exception as e:
             self._logger.error(f"시뮬레이션 시작 중 오류: {e}")
             self._view.show_error_message(f"시뮬레이션 시작 실패: {str(e)}")
             self._view.enable_simulation_controls(True)
+
+    def handle_data_source_changed(self, source_type: str) -> None:
+        """데이터 소스 변경 처리"""
+        try:
+            self._logger.info(f"데이터 소스 변경: {source_type}")
+            self._view.update_data_source(source_type)
+
+        except Exception as e:
+            self._logger.error(f"데이터 소스 변경 중 오류: {e}")
+            self._view.show_error_message(f"데이터 소스 변경 실패: {str(e)}")
 
     def handle_simulation_stop(self) -> None:
         """시뮬레이션 중지 처리"""

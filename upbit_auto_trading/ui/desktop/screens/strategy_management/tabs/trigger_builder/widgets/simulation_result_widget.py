@@ -40,8 +40,11 @@ class SimulationResultWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.current_scenario = None
+        self.current_data_source = "embedded"
         self.setup_ui()
         self.initialize_default_state()
+        self.setup_use_cases()
 
     def setup_ui(self):
         """UI 구성"""
@@ -290,3 +293,111 @@ class SimulationResultWidget(QWidget):
         """결과 저장 (추후 구현)"""
         self.add_log("결과 저장 기능 (추후 구현 예정)")
         logger.info("시뮬레이션 결과 저장 요청")
+
+    def setup_use_cases(self):
+        """UseCase 설정 - DDD 패턴"""
+        try:
+            from upbit_auto_trading.infrastructure.repositories.simulation_data_repository import SimulationDataRepository
+            from upbit_auto_trading.application.use_cases.simulation.load_simulation_data_use_case import LoadSimulationDataUseCase
+
+            # Repository와 UseCase 초기화
+            self.repository = SimulationDataRepository()
+            self.load_data_use_case = LoadSimulationDataUseCase(self.repository)
+
+            logger.debug("SimulationResultWidget UseCase 설정 완료")
+        except Exception as e:
+            logger.error(f"UseCase 설정 실패: {e}")
+            self.load_data_use_case = None
+
+    def run_simulation(self, scenario_type: str):
+        """시뮬레이션 실행 - 실제 데이터 연동"""
+        try:
+            self.current_scenario = scenario_type
+            self.add_log(f"시뮬레이션 시작: {scenario_type}")
+
+            if self.load_data_use_case is None:
+                self.add_log("❌ 데이터 로드 기능 초기화 실패")
+                return
+
+            # UseCase를 통한 실제 데이터 로드
+            scenario_data = self.load_data_use_case.execute(scenario_type, length=100)
+
+            # 차트 업데이트
+            if CHART_AVAILABLE and scenario_data.price_data:
+                self._update_chart_with_real_data(scenario_data)
+
+            # 텍스트 결과 업데이트
+            self._update_text_with_real_data(scenario_data)
+
+            self.add_log(f"✅ 시뮬레이션 완료: {scenario_data.data_source}")
+
+        except Exception as e:
+            logger.error(f"시뮬레이션 실행 실패: {e}")
+            self.add_log(f"❌ 시뮬레이션 실패: {e}")
+
+    def _update_chart_with_real_data(self, scenario_data):
+        """실제 데이터로 차트 업데이트"""
+        try:
+            self.ax.clear()
+
+            # 실제 가격 데이터 플롯
+            x_data = range(len(scenario_data.price_data))
+            self.ax.plot(x_data, scenario_data.price_data, 'b-', linewidth=2, alpha=0.8)
+
+            # 차트 설정
+            self.ax.set_title(f'{scenario_data.scenario} 시나리오 ({scenario_data.data_source})', fontsize=14, fontweight='bold')
+            self.ax.set_xlabel('시간 (데이터 포인트)')
+            self.ax.set_ylabel('가격 (KRW)')
+            self.ax.grid(True, alpha=0.3)
+
+            # 수익률 표시
+            if scenario_data.change_percent != 0:
+                color = 'red' if scenario_data.change_percent < 0 else 'green'
+                self.ax.text(0.02, 0.98, f'수익률: {scenario_data.change_percent:.2f}%',
+                           transform=self.ax.transAxes,
+                           fontsize=12,
+                           color=color,
+                           fontweight='bold',
+                           verticalalignment='top')
+
+            # 기간 정보 표시
+            self.ax.text(0.02, 0.02, f'기간: {scenario_data.period}',
+                        transform=self.ax.transAxes,
+                        fontsize=10,
+                        alpha=0.7,
+                        verticalalignment='bottom')
+
+            self.canvas.draw()
+
+        except Exception as e:
+            logger.error(f"차트 업데이트 실패: {e}")
+
+    def _update_text_with_real_data(self, scenario_data):
+        """실제 데이터로 텍스트 결과 업데이트"""
+        try:
+            result_text = f"""
+시뮬레이션 결과: {scenario_data.scenario}
+
+📊 수익률: {scenario_data.change_percent:.2f}%
+📈 시작가: {scenario_data.base_value:,.0f} KRW
+💰 현재가: {scenario_data.current_value:,.0f} KRW
+📊 데이터 포인트: {scenario_data.data_points}개
+🗓 기간: {scenario_data.period}
+🔄 데이터 소스: {scenario_data.data_source}
+
+실행 시간: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """.strip()
+
+            self.result_label.setText(result_text)
+
+        except Exception as e:
+            logger.error(f"텍스트 결과 업데이트 실패: {e}")
+
+    def update_data_source(self, source_type: str):
+        """데이터 소스 변경"""
+        self.current_data_source = source_type
+        self.add_log(f"데이터 소스 변경: {source_type}")
+
+        # 현재 시나리오가 있으면 다시 실행
+        if self.current_scenario:
+            self.run_simulation(self.current_scenario)

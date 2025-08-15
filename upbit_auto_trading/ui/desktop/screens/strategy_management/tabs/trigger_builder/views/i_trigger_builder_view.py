@@ -46,3 +46,13 @@ class ITriggerBuilderView(ABC):
     def update_simulation_progress(self, progress: int) -> None:
         """시뮬레이션 진행률 업데이트"""
         pass
+
+    @abstractmethod
+    def run_simulation(self, scenario_type: str) -> None:
+        """시뮬레이션 실행"""
+        pass
+
+    @abstractmethod
+    def update_data_source(self, source_type: str) -> None:
+        """데이터 소스 변경"""
+        pass
