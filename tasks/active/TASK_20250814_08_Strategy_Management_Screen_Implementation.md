@@ -179,102 +179,31 @@ trigger_builder/
 
 ---
 
-## 🎨 Phase 4: 재사용 가능한 컨디션 빌더 UI 구현
+## 🎨 Phase 4: 기존 UI 기반 트리거 빌더 스크린 재구현 ➡️ **별도 태스크로 분리**
 
-### [ ] 4.0 재사용성 기반 설계 (사전 준비)
-- [ ] **ComponentModeInterface** 정의
-  - `EmbeddedMode` - 트리거 빌더용 임베딩 모드
-  - `DialogMode` - 전략 메이커용 다이얼로그 모드
-  - `CompactMode` - 간소화된 UI 모드
+**📋 전용 태스크**: `TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md`
 
-- [ ] **ResizeableComponentBase** 추상 클래스
-  - 크기 조절 가능한 기본 클래스
-  - 최소/최대/기본 크기 정의
-  - 레이아웃 자동 조정 기능
+### ✅ **분리 완료 - Phase 4 전략 변경**
+- ✅ **Legacy UI 완전 복사**: 기존 UI를 100% 그대로 따라하여 재구현
+- ✅ **폴더 구조 체계화**: legacy 파일 보존 + 새 DDD 구조 병행
+- ✅ **단계별 마이그레이션**: 위젯별 개별 마이그레이션 + 스크린샷 비교 검증
+- ✅ **롤백 대응 준비**: 실패 시 legacy 직접 수정으로 전환하는 안전 장치
 
-- [ ] **ComponentContextManager** 서비스
-  - 컴포넌트별 상태 저장/복원
-  - 사용 컨텍스트별 설정 관리
-  - 다중 인스턴스 상태 동기화
+### 🎯 **Phase 4 핵심 전략 (별도 태스크에서 진행)**
+- **완전 동일 UI**: 기존 스크린샷과 픽셀 단위 동일성 확보
+- **자동 크기 대응**: 윈도우 크기 변경 시 상위 레이아웃에만 영향 받도록 제어
+- **DDD 패턴 통합**: MVP + UseCase + Repository 완전 적용하되 UI는 변경 없음
+- **Legacy 안전 보존**: 모든 기존 파일을 _legacy로 보존하여 롤백 가능
 
-### [ ] 4.1 핵심 UI 컴포넌트 구현 (재사용 우선 설계)
-- [ ] **ConditionBuilderWidget** - 멀티 모드 지원
-  - **EmbeddedMode**: 트리거 빌더 좌측 영역용
-    - 컴팩트한 레이아웃
-    - 실시간 미리보기
-    - 최소 크기: 400x300
-  - **DialogMode**: 전략 메이커 조건 수정용
-    - 전체 기능 다이얼로그
-    - 확인/취소 버튼
-    - 크기: 600x500
-  - **CompactMode**: 스크리너용 필터
-    - 단순화된 UI
-    - 기본 연산자만 지원
-    - 최소 크기: 300x200
-
-- [ ] **VariableSelectorWidget** - 범용 변수 선택기
-  - 트리 구조 (카테고리 → 변수)
-  - 검색 및 필터링
-  - 즐겨찾기 기능
-  - 상세 정보 툴팁
-  - **크기별 자동 UI 조정**:
-    - Large: 전체 트리 + 상세 정보
-    - Medium: 트리 + 기본 정보
-    - Small: 콤보박스 + 검색
-
-- [ ] **ParameterInputWidget** - 동적 파라미터 입력
-  - 변수별 맞춤형 입력 UI
-  - 유효성 검증 (실시간)
-  - 기본값 제공
-  - 히스토리 기능
-  - **모드별 입력 방식**:
-    - Detailed: 모든 파라미터 + 설명
-    - Standard: 주요 파라미터만
-    - Quick: 기본값 + 간단 수정
-
-### [ ] 4.2 재사용 가능한 미니 차트 시뮬레이터
-- [ ] **MiniChartSimulatorWidget** - 크기 조절 대응
-  - **Large Mode (600x400)**: 트리거 빌더용
-    - 상세 차트 + 컨트롤 패널
-    - 다중 지표 표시
-    - 줌/팬 기능
-  - **Medium Mode (400x250)**: 전략 메이커용
-    - 기본 차트 + 간단 컨트롤
-    - 주요 지표만 표시
-  - **Compact Mode (250x150)**: 대시보드용
-    - 미니 차트만
-    - 툴팁으로 상세 정보
-
-- [ ] **SimulationControlWidget** - 모드별 기능 조정
-  - **Full Mode**: 모든 시뮬레이션 옵션
-  - **Essential Mode**: 핵심 옵션만
-  - **Quick Mode**: 원클릭 실행
-
-### [ ] 4.3 컴포넌트 통합 및 어댑터 패턴
-- [ ] **ComponentModeAdapter** 구현
-  - 각 모드별 특화 설정
-  - 자동 레이아웃 조정
-  - 기능 활성화/비활성화
-
-- [ ] **LayoutResponsiveManager** 구현
-  - 부모 컨테이너 크기 감지
-  - 자동 모드 전환
-  - 컴포넌트 간 크기 조율
-
-### [ ] 4.4 MVP 패턴 재사용 적용
-- [ ] **ConditionBuilderPresenter** - 모드 독립적 로직
-  - 비즈니스 로직은 모드와 무관
-  - View 인터페이스 추상화
-  - 컨텍스트별 상태 관리
-
-- [ ] **IConditionBuilderView** 인터페이스 정의
-  - 모든 모드가 구현해야 할 인터페이스
-  - 모드별 특화 메서드 분리
-  - 일관된 이벤트 처리
+### 🔄 **향후 재사용성 확장 계획 (Phase 4 완료 후)**
+- **멀티 모드 지원**: EmbeddedMode/DialogMode/CompactMode 확장
+- **크기 조절 시스템**: ResizeableComponentBase 도입
+- **컴포넌트 상태 관리**: ComponentContextManager 구현
+- **다른 화면 연동**: 전략 메이커, 스크리너 등에서 재사용
 
 ---
 
-## 🏗️ Phase 5: 트리거 빌더 Domain Layer 확장
+## 🏗️ Phase 5: 트리거 빌더 Domain Layer 확장 (Phase 4 완료 후 진행)
 
 ### [ ] 5.1 트리거 도메인 모델링
 - [ ] `Trigger` Entity (조건들의 조합)
