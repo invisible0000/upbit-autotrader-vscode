@@ -179,17 +179,19 @@
   },
   "active": "653c0d7ff342fa88",
   "lastOpenFiles": [
-    "data/settings.sqlite3-wal",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
-    "logs/session_20250816_175944_PID96752.log",
-    "logs/session_20250816_175752_PID11560.log",
-    "legacy/indicator_registry.yaml",
-    "legacy/merge_indicators_to_db.py",
-    "legacy/migrate_from_legacy.py",
+    "data/settings.sqlite3-wal",
+    "logs/session_20250817_063053_PID92020.log",
+    "situation_summary.py",
+    "analyze_data_consistency.py",
+    "logs/session_20250816_211211_PID100780.log",
+    "cleanup_meta_variables.py",
+    "tasks/planned/TASK_20250815_01_Trigger_Builder_Functional_Implementation.md",
+    "tasks/active/meta_variables_yaml_standardization.md",
     "tools/legacy_tools/README.md",
     "legacy/utils/db_migration_gui/README.md",
     "legacy/utils/README.md",
@@ -222,8 +224,6 @@
     "docs/PROFILE_FEATURE_DISABLED_NOTICE.md",
     "docs/DDD 데이터베이스 통합 프로젝트.md",
     "docs/Ubiquitous Language Dictionary.md",
-    "docs/개발 방법론 완전 가이드.md",
-    "tasks/active/TASK-20250813-01_DOCS_대정리및최소화.md",
-    "tasks/active/logging_management_widget_refactoring.md"
+    "docs/개발 방법론 완전 가이드.md"
   ]
 }

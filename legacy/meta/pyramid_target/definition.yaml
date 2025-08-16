@@ -1,0 +1,51 @@
+# ═══════════════════════════════════════════════════════════════
+# 🎯 META_PYRAMID_TARGET (피라미딩) - 기본 정의
+# ═══════════════════════════════════════════════════════════════
+# 대응 테이블: tv_trading_variables
+# 지표 ID: META_PYRAMID_TARGET
+# 카테고리: 동적 관리
+# ═══════════════════════════════════════════════════════════════
+
+META_PYRAMID_TARGET:
+  # 기본 식별 정보
+  variable_id: "META_PYRAMID_TARGET"
+  display_name_ko: "피라미딩"
+  display_name_en: "Pyramiding"
+
+  # 지표 분류
+  purpose_category: "dynamic_management"
+  chart_category: "overlay"
+  comparison_group: "dynamic_target"
+
+  # 상세 정보
+  description: "불타기(상향추적)/물타기(하향추적) 기능. 추적 변수가 설정 조건을 만족하면 신호 발생"
+  source: "built-in"
+  parameter_required: true
+  is_active: true
+
+  # 메타데이터
+  created_at: "2025-08-15 22:45:00"
+  updated_at: "2025-08-16 17:58:00"
+
+  # 추가 속성
+  indicator_type: "leading"        # leading, lagging, coincident
+  calculation_complexity: "complex" # simple, moderate, complex
+  market_applicability:            # 적용 가능한 시장
+    - "stocks"
+    - "crypto"
+    - "forex"
+    - "commodities"
+
+  # 관련 지표들
+  related_indicators:
+    - "META_TRAILING_STOP"
+    - "SMA"
+    - "EMA"
+    - "RSI"
+
+  # 일반적 사용 용도
+  common_uses:
+    - "position_scaling"
+    - "trend_following"
+    - "risk_management"
+    - "profit_maximization"

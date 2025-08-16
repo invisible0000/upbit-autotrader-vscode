@@ -271,6 +271,14 @@ class ConditionBuilderWidget(QWidget):
             self.external_variable_combo.clear()
 
             if variables_dto.success and variables_dto.grouped_variables:
+                # 디버깅: 받은 데이터 구조 로깅
+                self._logger.info(f"📊 받은 카테고리: {list(variables_dto.grouped_variables.keys())}")
+                for category, variables in variables_dto.grouped_variables.items():
+                    self._logger.info(f"📁 {category}: {len(variables)}개 변수")
+                    if category == "dynamic_management":
+                        for var in variables:
+                            self._logger.info(f"  🎯 메타변수: {var.get('variable_id')} - {var.get('display_name_ko')}")
+
                 # 기본 변수는 메타변수 제외하고 추가
                 for category, variables in variables_dto.grouped_variables.items():
                     for var in variables:
@@ -283,6 +291,8 @@ class ConditionBuilderWidget(QWidget):
 
                         # 외부 변수에는 모든 변수 포함 (메타변수 포함)
                         self.external_variable_combo.addItem(display_name, variable_id)
+                        if category == "dynamic_management":
+                            self._logger.info(f"🔗 외부변수에 메타변수 추가: {display_name}")
 
                 # 현재 선택된 카테고리에 따라 필터링 적용
                 current_category = self.category_combo.currentText()
@@ -465,6 +475,7 @@ class ConditionBuilderWidget(QWidget):
         }
 
         selected_category = category_mapping.get(category)
+        self._logger.info(f"🔍 외부 변수 필터링: '{category}' -> '{selected_category}'")
 
         # 외부 변수 콤보박스 클리어
         self.external_variable_combo.clear()
@@ -474,10 +485,13 @@ class ConditionBuilderWidget(QWidget):
             for cat, variables in self._current_variables_dto.grouped_variables.items():
                 # 전체 선택이거나 선택된 카테고리와 일치하는 경우
                 if selected_category is None or cat == selected_category:
+                    self._logger.info(f"📂 카테고리 '{cat}' 매칭: {len(variables)}개 변수")
                     for var in variables:
                         display_name = var.get('display_name_ko', var.get('variable_id', ''))
                         variable_id = var.get('variable_id', '')
                         self.external_variable_combo.addItem(display_name, variable_id)
+                        if cat == "dynamic_management":
+                            self._logger.info(f"  🎯 메타변수 추가: {display_name}")
 
         self._logger.info(f"외부 변수 범주 '{category}'로 필터링 완료: {self.external_variable_combo.count()}개 변수")
 

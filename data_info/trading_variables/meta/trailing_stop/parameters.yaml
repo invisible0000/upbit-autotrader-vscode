@@ -8,93 +8,166 @@
 # 매개변수 목록
 parameters:
   # ─────────────────────────────────────────────────────────────
-  # 📊 추적 기간 (Tracking Period) - 필수 매개변수
+  # 📊 계산 방식 (Calculation Method) - 필수 매개변수
   # ─────────────────────────────────────────────────────────────
-  tracking_period:
+  calculation_method:
     # 기본 정보
-    parameter_name: "tracking_period"
-    parameter_type: "integer"
-    default_value: "14"
-    is_required: true
-
-    # 제약 조건
-    min_value: "1"
-    max_value: "100"
-
-    # 표시 정보
-    display_name_ko: "추적 기간"
-    display_name_en: "Tracking Period"
-    description: "트레일링 스탑이 추적할 기간 (단기: 5-14 / 중기: 20-50 / 장기: 60-100)"
-    display_order: 1
-
-    # 추가 속성
-    validation_rules:
-      - "must_be_positive_integer"
-      - "within_range_1_to_100"
-
-    recommended_values:
-      short_term: [5, 10, 14]
-      medium_term: [20, 30, 50]
-      long_term: [60, 80, 100]
-
-  # ─────────────────────────────────────────────────────────────
-  # 📈 임계값 비율 (Threshold Ratio) - 필수 매개변수
-  # ─────────────────────────────────────────────────────────────
-  threshold_ratio:
-    # 기본 정보
-    parameter_name: "threshold_ratio"
-    parameter_type: "decimal"
-    default_value: "0.02"
-    is_required: true
-
-    # 제약 조건
-    min_value: "0.001"
-    max_value: "0.20"
-
-    # 표시 정보
-    display_name_ko: "임계값 비율"
-    display_name_en: "Threshold Ratio"
-    description: "트레일링 스탑 발동 기준 (0.01=1%, 0.02=2%, 0.05=5%)"
-    display_order: 2
-
-    # 권장값
-    recommended_values:
-      conservative: [0.01, 0.015, 0.02]
-      moderate: [0.025, 0.03, 0.04]
-      aggressive: [0.05, 0.075, 0.10]
-
-  # ─────────────────────────────────────────────────────────────
-  # ⏰ 타임프레임 (Timeframe) - 필수 매개변수
-  # ─────────────────────────────────────────────────────────────
-  timeframe:
-    # 기본 정보
-    parameter_name: "timeframe"
+    parameter_name: "calculation_method"
     parameter_type: "enum"
-    default_value: "position_follow"
+    default_value: "percentage_of_tracked"
     is_required: true
 
     # 선택 옵션
     enum_values:
-      - "position_follow"
-      - "1m"
-      - "5m"
-      - "15m"
-      - "1h"
-      - "4h"
-      - "1d"
+      - "average_price_percent"      # 평단값 퍼센트포인트 (%p) - 평단가 기준
+      - "entry_price_percent"        # 진입값 퍼센트포인트 (%p) - 진입가 기준
+      - "static_value_offset"        # 정적차이 (원화/수치) - 절대값 차이
+      - "percentage_of_tracked"      # 극값 비율퍼센트 (%) - 최고/최저점 대비
 
     # 표시 정보
-    display_name_ko: "타임프레임"
-    display_name_en: "Timeframe"
-    description: "트레일링 스탑 계산 기준 시간"
+    display_name_ko: "계산 방식"
+    display_name_en: "Calculation Method"
+    description: "트레일링 스탑 계산 방식 (평단가%p/진입가%p/정적차이/극값비율%)"
+    display_order: 1
+
+    # UI 매핑 (한국어 표시용)
+    display_mapping:
+      "average_price_percent": "평단값 퍼센트포인트 (%p)"
+      "entry_price_percent": "진입값 퍼센트포인트 (%p)"
+      "static_value_offset": "정적차이 (원화/수치)"
+      "percentage_of_tracked": "극값 비율퍼센트 (%)"
+
+    # 추가 속성
+    validation_rules:
+      - "must_be_valid_enum_value"
+
+    recommended_values:
+      conservative: ["percentage_of_tracked"]
+      aggressive: ["entry_price_percent", "average_price_percent"]
+
+  # ─────────────────────────────────────────────────────────────
+  # 💰 계산값 (Value) - 필수 매개변수
+  # ─────────────────────────────────────────────────────────────
+  value:
+    # 기본 정보
+    parameter_name: "value"
+    parameter_type: "decimal"
+    default_value: "-2.0"
+    is_required: true
+
+    # 제약 조건
+    min_value: "-50.0"
+    max_value: "50.0"
+
+    # 표시 정보
+    display_name_ko: "계산값"
+    display_name_en: "Value"
+    description: "계산에 사용될 값 (퍼센트: -2.0=-2%, 원화: 1000=1000원)"
+    display_order: 2
+
+    # 추가 속성
+    validation_rules:
+      - "must_be_decimal"
+      - "within_range_minus50_to_50"
+
+    recommended_values:
+      conservative: [-1.0, -2.0, -3.0]
+      moderate: [-3.0, -5.0, -7.0]
+      aggressive: [-7.0, -10.0, -15.0]
+
+    context_specific:
+      crypto:
+        popular: [-2.0, -3.0, -5.0]
+        scalping: [-0.5, -1.0, -1.5]
+      stocks:
+        popular: [-3.0, -5.0, -7.0]
+        swing: [-5.0, -7.0, -10.0]
+
+  # ─────────────────────────────────────────────────────────────
+  # 🎯 추적 방향 (Trail Direction) - 필수 매개변수
+  # ─────────────────────────────────────────────────────────────
+  trail_direction:
+    # 기본 정보
+    parameter_name: "trail_direction"
+    parameter_type: "enum"
+    default_value: "up"
+    is_required: true
+
+    # 선택 옵션
+    enum_values:
+      - "up"      # 상향 추적 (고점 추적, 하락 시 신호)
+      - "down"    # 하향 추적 (저점 추적, 상승 시 신호)
+
+    # 표시 정보
+    display_name_ko: "추적 방향"
+    display_name_en: "Trail Direction"
+    description: "트레일링 방향 (UP: 고점추적→하락신호, DOWN: 저점추적→상승신호)"
     display_order: 3
 
-    # UI 매핑
+    # UI 매핑 (한국어 표시용)
     display_mapping:
-      "position_follow": "포지션 설정 따름"
-      "1m": "1분"
-      "5m": "5분"
-      "15m": "15분"
-      "1h": "1시간"
-      "4h": "4시간"
-      "1d": "1일"
+      "up": "상향 추적 (고점 추적)"
+      "down": "하향 추적 (저점 추적)"
+
+    # 추가 속성
+    validation_rules:
+      - "must_be_valid_enum_value"
+
+    recommended_combinations:
+      long_position:
+        direction: ["up"]
+        description: "매수 포지션에는 상향 추적 권장"
+      short_position:
+        direction: ["down"]
+        description: "매도 포지션에는 하향 추적 권장"
+
+# ─────────────────────────────────────────────────────────────
+# 📝 매개변수 조합 규칙
+# ─────────────────────────────────────────────────────────────
+parameter_validation:
+  # 조합 규칙
+  combination_rules:
+    - name: "value_direction_consistency"
+      description: "값과 방향의 일관성 확인"
+      rule: "if trail_direction == 'up' then value should be negative for stop loss"
+
+    - name: "calculation_method_value_range"
+      description: "계산 방식에 따른 값 범위 검증"
+      rule: "if calculation_method in ['percentage_of_tracked', 'average_price_percent', 'entry_price_percent'] then abs(value) <= 50"
+
+  # 경고 조건
+  warnings:
+    - condition: "abs(value) < 0.5"
+      message: "너무 작은 값은 빈번한 신호를 발생시킬 수 있습니다"
+
+    - condition: "abs(value) > 20"
+      message: "너무 큰 값은 트레일링 효과가 제한될 수 있습니다"
+
+    - condition: "calculation_method == 'static_value_offset' and abs(value) < 100"
+      message: "정적차이 모드에서는 충분히 큰 값을 권장합니다"
+
+# ─────────────────────────────────────────────────────────────
+# 🎨 UI 표시 설정
+# ─────────────────────────────────────────────────────────────
+ui_settings:
+  parameter_layout: "vertical"  # vertical, horizontal, grid
+
+  calculation_method:
+    widget_type: "combobox"
+    group_separator: true
+    groups:
+      basic: ["percentage_of_tracked", "entry_price_percent"]
+      advanced: ["average_price_percent", "static_value_offset"]
+
+  value:
+    widget_type: "spinbox"
+    step_size: 0.1
+    decimal_places: 1
+    quick_buttons: [-1.0, -2.0, -3.0, -5.0, -10.0]
+
+  trail_direction:
+    widget_type: "radiobutton"
+    layout: "horizontal"
+    icons:
+      up: "⬆️"
+      down: "⬇️"

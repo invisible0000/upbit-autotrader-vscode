@@ -18,14 +18,14 @@ META_PYRAMID_TARGET:
   comparison_group: "dynamic_target"
 
   # 상세 정보
-  description: "불타기(상향추적)/물타기(하향추적) 기능. 추적 변수가 설정 조건을 만족하면 신호 발생"
+  description: "발동 기준점에서 설정 차이 달성시 신호 발생 후 횟수 차감, 소진시 비활성화"
   source: "built-in"
   parameter_required: true
   is_active: true
 
   # 메타데이터
-  created_at: "2025-08-15 22:45:00"
-  updated_at: "2025-08-16 17:58:00"
+  created_at: "2025-08-16 19:15:00"
+  updated_at: "2025-08-16 19:15:00"
 
   # 추가 속성
   indicator_type: "leading"        # leading, lagging, coincident
@@ -39,13 +39,90 @@ META_PYRAMID_TARGET:
   # 관련 지표들
   related_indicators:
     - "META_TRAILING_STOP"
+    - "RSI"
+    - "BOLLINGER_BAND"
     - "SMA"
     - "EMA"
-    - "RSI"
 
   # 일반적 사용 용도
   common_uses:
     - "position_scaling"
+    - "profit_maximization"
+    - "loss_recovery"
     - "trend_following"
     - "risk_management"
-    - "profit_maximization"
+
+# ─────────────────────────────────────────────────────────────
+# 🎯 메타변수 특성
+# ─────────────────────────────────────────────────────────────
+meta_variable_properties:
+  # 동작 원리
+  operation_principle:
+    tracking_mode: "reference_point_tracking"    # 기준점 추적 모드
+    signal_condition: "threshold_achievement"    # 임계값 달성시 신호
+    post_signal_behavior: "count_decrement"     # 신호 후 횟수 차감
+
+  # 상태 관리
+  state_management:
+    initialization: "external_trigger"          # 외부 트리거로 초기화
+    persistence: "count_based"                  # 횟수 기반 지속
+    reset_condition: "count_exhaustion"         # 횟수 소진시 비활성화
+
+  # 변수 의존성
+  variable_dependency:
+    base_variable_required: true                # 기본 변수 필수
+    timeframe_inheritance: true                 # 타임프레임 상속
+    real_time_monitoring: true                  # 실시간 모니터링
+
+  # 신호 특성
+  signal_characteristics:
+    signal_frequency: "multiple_per_activation" # 활성화당 다중 신호
+    signal_reliability: "high"                  # 높은 신뢰성
+    false_positive_risk: "low"                  # 낮은 거짓 신호 위험
+    latency: "real_time"                        # 실시간 반응
+
+# ─────────────────────────────────────────────────────────────
+# 🔧 기술적 사양
+# ─────────────────────────────────────────────────────────────
+technical_specifications:
+  # 계산 요구사항
+  calculation_requirements:
+    memory_usage: "minimal"                     # 최소 메모리 사용
+    cpu_intensity: "low"                        # 낮은 CPU 사용
+    data_dependency: "current_and_reference"    # 현재값과 기준값 필요
+
+  # 성능 특성
+  performance_characteristics:
+    update_frequency: "real_time"               # 실시간 업데이트
+    calculation_speed: "fast"                   # 빠른 계산
+    resource_efficiency: "high"                 # 높은 자원 효율성
+
+  # 확장성
+  scalability:
+    concurrent_instances: "unlimited"           # 무제한 동시 인스턴스
+    multi_asset_support: true                  # 다중 자산 지원
+    multi_timeframe_support: true              # 다중 타임프레임 지원
+
+# ─────────────────────────────────────────────────────────────
+# 📊 피라미딩 전용 특성
+# ─────────────────────────────────────────────────────────────
+pyramiding_properties:
+  # 포지션 관리
+  position_management:
+    scaling_direction: ["up", "down"]           # 상향(불타기)/하향(물타기)
+    maximum_count: 10                           # 최대 10회 제한
+    count_decrement: true                       # 신호시 횟수 차감
+    auto_deactivation: true                     # 횟수 소진시 자동 비활성화
+
+  # 리스크 제어
+  risk_control:
+    position_limit: "count_based"               # 횟수 기반 포지션 제한
+    interval_enforcement: true                  # 간격 강제 적용
+    opposite_direction_safety: true             # 반대 방향 안전장치
+
+  # 전략 유형
+  strategy_types:
+    profit_pyramiding: "up_direction"           # 불타기 (상향)
+    averaging_down: "down_direction"            # 물타기 (하향)
+    trend_following: "momentum_based"           # 추세 추종
+    mean_reversion: "counter_trend"             # 평균 회귀

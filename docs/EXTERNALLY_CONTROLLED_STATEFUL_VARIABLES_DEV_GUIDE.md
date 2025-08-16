@@ -51,19 +51,11 @@ class ComparisonGroup(Enum):
     DYNAMIC_TARGET = "dynamic_target"  # 동적 목표값 (불타기/물타기 목표가)
 
 class CalculationMethod(Enum):
-    """통합 파라미터 계산 방식"""
-    STATIC_VALUE_OFFSET = "static_value_offset"         # 정적 값 차이
-    PERCENTAGE_OF_TRACKED = "percentage_of_tracked"     # 추적값 대비 비율
-    ENTRY_PRICE_PERCENT = "entry_price_percent"         # 진입가 대비 퍼센트
-    AVERAGE_PRICE_PERCENT = "average_price_percent"     # 평단가 대비 퍼센트
-
-class BaseVariable(Enum):
-    """기준값 타입"""
-    ENTRY_PRICE = "entry_price"         # 최초 진입가
-    AVERAGE_PRICE = "average_price"     # 현재 평단가
-    CURRENT_PRICE = "current_price"     # 현재가
-    HIGH_PRICE = "high_price"           # 고가
-    LOW_PRICE = "low_price"             # 저가
+    """메타변수 계산 방식 (4종류)"""
+    AVERAGE_PRICE_PERCENT = "average_price_percent"     # 평단값 퍼센트포인트 (%p) - 평단가 기준
+    ENTRY_PRICE_PERCENT = "entry_price_percent"         # 진입값 퍼센트포인트 (%p) - 진입가 기준
+    STATIC_VALUE_OFFSET = "static_value_offset"         # 정적차이 (원화/수치) - 절대값 차이
+    PERCENTAGE_OF_TRACKED = "percentage_of_tracked"     # 극값 비율퍼센트 (%) - 최고/최저점 대비
 
 class TrailDirection(Enum):
     """트레일링 방향"""
@@ -81,19 +73,19 @@ class UnifiedParameter:
     """
     외부 제어형 상태 변수용 통합 파라미터
 
-    동적 관리 전략에서 사용되는 파라미터의 통합 구조:
-    - 불타기: 목표가 계산을 위한 base_variable + calculation_method
-    - 물타기: 추가 매수 기준을 위한 base_variable + calculation_method
-    - 트레일링 스탑: 추적 방향과 계산 방식 조합
+    메타변수는 기본 변수를 추적하여 동작:
+    - 트레일링 스탑: 극값(최고/최저점) 갱신 후 설정 차이만큼 반대 이동 시 신호 → 비활성화
+    - 피라미딩: 발동 기준점에서 설정 차이 달성 시 신호 → 횟수 차감, 소진 시 비활성화
     """
     name: str                                    # 파라미터 이름
-    calculation_method: CalculationMethod        # 계산 방식
-    base_variable: BaseVariable                  # 기준값 타입
+    calculation_method: CalculationMethod        # 계산 방식 (4종류)
+    tracked_variable: str                        # 추적할 기본 변수 ID (기존 시스템과 연동)
     value: Decimal                              # 계산에 사용될 값 (퍼센트, 원화 등)
-    trail_direction: Optional[TrailDirection] = None  # 트레일링 방향 (트레일링 스탑용)
+    trail_direction: TrailDirection             # 추적 방향 (상향/하향)
+    max_count: Optional[int] = None             # 최대 횟수 (피라미딩용)
 
     def calculate_target_value(self, context: dict[str, Any]) -> Decimal:
-        """컨텍스트를 기반으로 목표값 계산"""
+        """컨텍스트와 추적 변수를 기반으로 목표값 계산"""
         # 구현 세부사항...
 
     def get_description(self) -> str:
@@ -125,109 +117,96 @@ class TradingVariable:
 
 ## 🎮 사용 시나리오
 
-### 1. 불타기 (Pyramid Buying) 전략
+### 1. 트레일링 스탑 전략
 
 ```python
-# 진입가 대비 5% 수익 시 추가 매수
-pyramid_parameter = UnifiedParameter(
-    name="profit_threshold",
-    calculation_method=CalculationMethod.ENTRY_PRICE_PERCENT,
-    base_variable=BaseVariable.ENTRY_PRICE,
-    value=Decimal("5")  # 5% 수익
-)
-
-# 실행 컨텍스트
-context = {
-    "entry_price": 50000,
-    "current_price": 52500,
-    "average_price": 50000
-}
-
-target_price = pyramid_parameter.calculate_target_value(context)
-# 결과: 52500 (50000 * 1.05)
-```
-
-### 2. 물타기 (Cost-Averaging) 전략
-
-```python
-# 평단가 대비 -3% 손실 시 추가 매수
-martingale_parameter = UnifiedParameter(
-    name="loss_threshold",
-    calculation_method=CalculationMethod.AVERAGE_PRICE_PERCENT,
-    base_variable=BaseVariable.AVERAGE_PRICE,
-    value=Decimal("-3")  # -3% 손실
-)
-
-context = {
-    "entry_price": 50000,
-    "current_price": 47530,
-    "average_price": 49000
-}
-
-target_price = martingale_parameter.calculate_target_value(context)
-# 결과: 47530 (49000 * 0.97)
-```
-
-### 3. 트레일링 스탑 전략
-
-```python
-# 고점 대비 -2% 하락 시 매도
+# 극값 대비 -2% 하락 시 매도 (상향 추적)
 trailing_parameter = UnifiedParameter(
     name="trailing_stop",
     calculation_method=CalculationMethod.PERCENTAGE_OF_TRACKED,
-    base_variable=BaseVariable.HIGH_PRICE,
+    tracked_variable="CURRENT_PRICE",  # 현재가 추적
     value=Decimal("-2"),  # -2% 하락
     trail_direction=TrailDirection.DOWN
 )
 
-context = {
-    "tracked_value": 55000,  # 추적 중인 고점
-    "high_price": 55000,
-    "current_price": 52000
-}
-
-stop_price = trailing_parameter.calculate_target_value(context)
-# 결과: 53900 (55000 * 0.98)
+# 동작 원리:
+# 1. 상향 추적 시 최고가 갱신: tracked_high = max(tracked_high, current_price)
+# 2. 조건 확인: current_price <= tracked_high * 0.98
+# 3. 신호 발생 → 트레일링 스탑 비활성화
 ```
 
-## 🔄 초기화 제어 시스템
-
-### Application Layer 초기화 로직
+### 2. 피라미딩 (불타기) 전략
 
 ```python
-class StrategyExecutionService:
-    """전략 실행 서비스 - 상태 변수 초기화 제어"""
+# 진입가 대비 5% 수익 시 추가 매수 (3회 제한)
+pyramid_parameter = UnifiedParameter(
+    name="pyramid_buy",
+    calculation_method=CalculationMethod.ENTRY_PRICE_PERCENT,
+    tracked_variable="ENTRY_PRICE",  # 진입가 기준
+    value=Decimal("5"),  # 5% 수익
+    trail_direction=TrailDirection.UP,
+    max_count=3  # 최대 3회
+)
 
-    def process_trade_cycle(self, strategy_id: str) -> None:
-        strategy = self.strategy_repo.get_by_id(strategy_id)
-        position = self.position_repo.get_by_strategy(strategy_id)
-
-        # 1. EXIT 시그널 확인
-        exit_signal_fired = strategy.evaluate_for_exit_signal(market_data)
-
-        # 2. 전략 설정 기반 초기화
-        if strategy.reset_variables_on_exit and exit_signal_fired:
-            for var in strategy.get_dynamic_management_variables():
-                var.initialize(position_context)
-            self.close_position(position)
-
-        # 3. 포지션 생애주기 기반 초기화
-        if position.is_closed() and strategy.is_continuous():
-            for var in strategy.get_dynamic_management_variables():
-                var.initialize(context=None)  # 신규 포지션 전 리셋
+# 동작 원리:
+# 1. 발동 기준점 저장: last_trigger_price = entry_price
+# 2. 조건 확인: current_price >= last_trigger_price * 1.05
+# 3. 신호 발생 → 횟수 차감 → 새로운 기준점 갱신
+# 4. 횟수 소진 시 비활성화
 ```
 
-### 초기화 트리거 조건
+### 3. 물타기 전략
 
-#### 1. 포지션 생애주기 기반 (필수)
-- **시점**: 포지션 완전 청산 후 → 신규 포지션 생성 직전
-- **목적**: 거래 사이클 간 독립성 보장
-- **제어**: 시스템 레벨에서 강제 실행
+```python
+# 평단가 대비 -3% 손실 시 추가 매수
+martingale_parameter = UnifiedParameter(
+    name="martingale_buy",
+    calculation_method=CalculationMethod.AVERAGE_PRICE_PERCENT,
+    tracked_variable="AVERAGE_PRICE",  # 평단가 기준
+    value=Decimal("-3"),  # -3% 손실
+    trail_direction=TrailDirection.DOWN,
+    max_count=5  # 최대 5회
+)
 
-#### 2. 전략 설정 기반 (선택적)
-- **시점**: EXIT 타입 시그널 발생 직후
-- **조건**: `user_strategies.reset_variables_on_exit = true`
-- **목적**: 부분 익절 후 관리 로직 기준점 리셋
+# 동작 원리:
+# 1. 발동 기준점: last_trigger_price = average_price
+# 2. 조건 확인: current_price <= last_trigger_price * 0.97
+# 3. 신호 발생 → 횟수 차감 → 새로운 평단가로 기준점 갱신
+```
+
+## 🎯 메타변수 동작 원리
+
+### 트레일링 스탑 (META_TRAILING_STOP)
+**특징**: 극값 추적 후 반대 방향 임계치 도달 시 신호 발생 → 즉시 비활성화
+
+**동작 로직**:
+1. **상향 추적 (trail_direction: UP)**: 최고가 지속 갱신
+   - `tracked_high = max(tracked_high, current_price)`
+   - 조건: `current_price <= tracked_high - threshold`
+2. **하향 추적 (trail_direction: DOWN)**: 최저가 지속 갱신
+   - `tracked_low = min(tracked_low, current_price)`
+   - 조건: `current_price >= tracked_low + threshold`
+3. **신호 발생 시**: 즉시 비활성화, 재활성화는 외부 트리거 필요
+
+### 피라미딩 (META_PYRAMID_TARGET)
+**특징**: 발동 기준점에서 일정 차이 달성 시 신호 발생 → 횟수 차감
+
+**동작 로직**:
+1. **기준점 설정**: 최초 발동 시 `last_trigger_price = reference_value`
+2. **조건 감시**:
+   - 상향: `current_price >= last_trigger_price + threshold`
+   - 하향: `current_price <= last_trigger_price - threshold`
+3. **신호 발생 시**:
+   - 횟수 차감 (`remaining_count -= 1`)
+   - 새로운 기준점 갱신 (`last_trigger_price = current_price`)
+   - 횟수 소진 시 비활성화
+4. **반대 방향 움직임**: 신호 없이 대기 상태 유지 (안전 장치)
+
+### 🔄 기본 변수 연동 시스템
+메타변수는 별도 타임프레임 없이 연동된 기본 변수를 추적:
+- **현재가 추적**: API 제한 속도에 따른 실시간 갱신
+- **타임프레임 있는 변수**: 해당 봉 갱신 시점에 따라 갱신
+- **감시 속도**: 프로그램 최대 속도로 현재값 계산 및 조건 확인
 
 ## 🧪 테스트 아키텍처
 

@@ -125,7 +125,7 @@ class TradingVariableDatabaseMerger:
 
     def merge_variable_parameters(self, conn: sqlite3.Connection, data: Dict[str, Any],
                                   category: str, variable: str, dry_run: bool = False):
-        """tv_variable_parameters 테이블에 데이터 병합"""
+        """tv_variable_parameters 테이블에 데이터 병합 (기존 구조 + 리스트 구조 지원)"""
         definition = data.get('definition')
         parameters = data.get('parameters')
         if not definition or not parameters:
@@ -140,7 +140,22 @@ class TradingVariableDatabaseMerger:
                 (variable_id,)
             )
 
-        params_list = parameters.get('parameters', [])
+        # 파라미터 데이터 구조 확인 및 처리
+        params_list = []
+
+        if 'parameters' in parameters:
+            # 기존 구조: parameters.parameters가 딕셔너리인 경우
+            if isinstance(parameters['parameters'], dict):
+                for param_name, param_data in parameters['parameters'].items():
+                    normalized_param = self._normalize_parameter_dict(param_name, param_data)
+                    params_list.append(normalized_param)
+            # 새로운 구조: parameters.parameters가 리스트인 경우
+            elif isinstance(parameters['parameters'], list):
+                for param_data in parameters['parameters']:
+                    normalized_param = self._normalize_parameter_list_item(param_data)
+                    params_list.append(normalized_param)
+
+        # 파라미터 삽입
         for param in params_list:
             insert_data = {
                 'variable_id': variable_id,
@@ -168,6 +183,36 @@ class TradingVariableDatabaseMerger:
                     list(insert_data.values())
                 )
                 print(f"  ✅ tv_variable_parameters 삽입: {variable_id}.{param.get('name', '')}")
+
+    def _normalize_parameter_dict(self, param_name: str, param_data: Dict[str, Any]) -> Dict[str, Any]:
+        """기존 딕셔너리 구조 파라미터를 표준화"""
+        return {
+            'name': param_data.get('parameter_name', param_name),
+            'type': param_data.get('parameter_type', 'integer'),
+            'default_value': param_data.get('default_value', ''),
+            'min_value': param_data.get('min_value'),
+            'max_value': param_data.get('max_value'),
+            'enum_values': param_data.get('enum_values'),
+            'required': param_data.get('is_required', True),
+            'display_name': param_data.get('display_name_ko', ''),
+            'description': param_data.get('description', ''),
+            'display_order': param_data.get('display_order', 0)
+        }
+
+    def _normalize_parameter_list_item(self, param_data: Dict[str, Any]) -> Dict[str, Any]:
+        """새로운 리스트 구조 파라미터를 표준화"""
+        return {
+            'name': param_data.get('name', ''),
+            'type': param_data.get('type', 'integer'),
+            'default_value': param_data.get('default_value', ''),
+            'min_value': param_data.get('min_value'),
+            'max_value': param_data.get('max_value'),
+            'enum_values': param_data.get('enum_values'),
+            'required': param_data.get('required', True),
+            'display_name': param_data.get('display_name', ''),
+            'description': param_data.get('description', ''),
+            'display_order': param_data.get('display_order', 0)
+        }
 
     def merge_help_documents(self, conn: sqlite3.Connection, data: Dict[str, Any],
                              category: str, variable: str, dry_run: bool = False):
@@ -213,6 +258,10 @@ class TradingVariableDatabaseMerger:
     def _insert_help_document(self, conn: sqlite3.Connection, variable_id: str,
                               help_category: str, item: Dict[str, Any], dry_run: bool = False):
         """개별 도움말 문서 삽입"""
+        # item이 문자열인 경우 처리
+        if isinstance(item, str):
+            item = {'content': item, 'title': ''}
+
         insert_data = {
             'variable_id': variable_id,
             'help_category': help_category,

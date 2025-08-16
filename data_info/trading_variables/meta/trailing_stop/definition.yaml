@@ -18,14 +18,14 @@ META_TRAILING_STOP:
   comparison_group: "dynamic_target"
 
   # 상세 정보
-  description: "추적 대상의 고점/저점을 기록하고 설정된 차이만큼 벗어나면 신호 발생"
+  description: "추적 변수의 극값을 기록하고 설정 차이만큼 벗어나면 신호 발생 후 비활성화"
   source: "built-in"
   parameter_required: true
   is_active: true
 
   # 메타데이터
-  created_at: "2025-08-15 22:45:00"
-  updated_at: "2025-08-16 17:58:00"
+  created_at: "2025-08-16 18:30:00"
+  updated_at: "2025-08-16 18:30:00"
 
   # 추가 속성
   indicator_type: "leading"        # leading, lagging, coincident
@@ -39,9 +39,9 @@ META_TRAILING_STOP:
   # 관련 지표들
   related_indicators:
     - "META_PYRAMID_TARGET"
-    - "SMA"
-    - "EMA"
     - "ATR"
+    - "BOLLINGER_BAND"
+    - "RSI"
 
   # 일반적 사용 용도
   common_uses:
@@ -49,3 +49,55 @@ META_TRAILING_STOP:
     - "profit_protection"
     - "dynamic_exit"
     - "trend_following"
+    - "position_sizing"
+
+# ─────────────────────────────────────────────────────────────
+# 🎯 메타변수 특성
+# ─────────────────────────────────────────────────────────────
+meta_variable_properties:
+  # 동작 원리
+  operation_principle:
+    tracking_mode: "extreme_value_tracking"  # 극값 추적 모드
+    signal_condition: "threshold_breach"     # 임계값 이탈시 신호
+    post_signal_behavior: "immediate_deactivation"  # 신호 후 즉시 비활성화
+
+  # 상태 관리
+  state_management:
+    initialization: "external_trigger"      # 외부 트리거로 초기화
+    persistence: "session_based"            # 세션 기반 지속
+    reset_condition: "manual_restart"       # 수동 재시작 필요
+
+  # 변수 의존성
+  variable_dependency:
+    base_variable_required: true            # 기본 변수 필수
+    timeframe_inheritance: true             # 타임프레임 상속
+    real_time_monitoring: true              # 실시간 모니터링
+
+  # 신호 특성
+  signal_characteristics:
+    signal_frequency: "once_per_activation" # 활성화당 1회 신호
+    signal_reliability: "high"              # 높은 신뢰성
+    false_positive_risk: "low"              # 낮은 거짓 신호 위험
+    latency: "real_time"                    # 실시간 반응
+
+# ─────────────────────────────────────────────────────────────
+# 🔧 기술적 사양
+# ─────────────────────────────────────────────────────────────
+technical_specifications:
+  # 계산 요구사항
+  calculation_requirements:
+    memory_usage: "minimal"                 # 최소 메모리 사용
+    cpu_intensity: "low"                    # 낮은 CPU 사용
+    data_dependency: "current_and_extreme"  # 현재값과 극값 필요
+
+  # 성능 특성
+  performance_characteristics:
+    update_frequency: "real_time"           # 실시간 업데이트
+    calculation_speed: "fast"               # 빠른 계산
+    resource_efficiency: "high"             # 높은 자원 효율성
+
+  # 확장성
+  scalability:
+    concurrent_instances: "unlimited"       # 무제한 동시 인스턴스
+    multi_asset_support: true              # 다중 자산 지원
+    multi_timeframe_support: true          # 다중 타임프레임 지원
