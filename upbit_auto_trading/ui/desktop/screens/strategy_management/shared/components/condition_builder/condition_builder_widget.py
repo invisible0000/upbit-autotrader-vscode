@@ -67,9 +67,6 @@ class ConditionBuilderWidget(QWidget):
         # 5. 조건 미리보기 영역 (큰 비율)
         self._create_condition_preview_area(main_layout)
 
-        # 마지막에 스트레치 추가로 미리보기 영역이 확장되도록
-        main_layout.addStretch()
-
         self._logger.info("컨디션 빌더 UI 초기화 완료")
 
     def _create_variable_selection_area(self, parent_layout):
@@ -208,8 +205,20 @@ class ConditionBuilderWidget(QWidget):
         parent_layout.addWidget(self.external_group)
 
     def _create_condition_preview_area(self, parent_layout):
-        """조건 미리보기 영역"""
+        """조건 미리보기 영역 - 동적 크기 조정"""
+        from PyQt6.QtWidgets import QSizePolicy
+
         self.condition_preview = ConditionPreviewWidget()
+
+        # 미리보기 위젯이 남은 공간을 모두 차지하도록 설정
+        self.condition_preview.setSizePolicy(
+            QSizePolicy.Policy.Expanding,  # 가로 확장
+            QSizePolicy.Policy.Expanding   # 세로 확장
+        )
+
+        # 최소 높이 설정으로 너무 작아지는 것 방지
+        self.condition_preview.setMinimumHeight(150)
+
         parent_layout.addWidget(self.condition_preview)
 
     def _create_loading_indicator(self, parent_layout):

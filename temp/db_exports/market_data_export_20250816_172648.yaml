@@ -1,0 +1,71 @@
+candle_data:
+  data: []
+  record_count: 0
+  schema:
+  - id
+  - symbol
+  - timeframe
+  - timestamp
+  - open_price
+  - high_price
+  - low_price
+  - close_price
+  - volume
+  - quote_volume
+  - trade_count
+  - created_at
+indicator_cache:
+  data: []
+  record_count: 0
+  schema:
+  - cache_id
+  - symbol
+  - timeframe
+  - indicator_name
+  - parameters_hash
+  - start_timestamp
+  - end_timestamp
+  - values_json
+  - calculated_at
+  - expires_at
+market_events:
+  data: []
+  record_count: 0
+  schema:
+  - event_id
+  - symbol
+  - event_type
+  - event_data
+  - severity_level
+  - triggered_at
+  - created_at
+schema_version:
+  data:
+  - applied_at: '2025-08-15 15:18:30'
+    description: 마켓 데이터 DB 기본 스키마 초기화
+    version: 1.0.0
+  record_count: 1
+  schema:
+  - version
+  - applied_at
+  - description
+sqlite_sequence:
+  data: []
+  record_count: 0
+  schema:
+  - name
+  - seq
+ticker_data:
+  data: []
+  record_count: 0
+  schema:
+  - symbol
+  - current_price
+  - bid_price
+  - ask_price
+  - volume_24h
+  - change_24h_pct
+  - high_24h
+  - low_24h
+  - market_cap
+  - updated_at

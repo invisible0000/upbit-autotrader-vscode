@@ -5,7 +5,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QLabel
 )
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -33,6 +33,7 @@ class ConditionPreviewWidget(QWidget):
 
         self.preview_label = QLabel("조건을 설정하면 미리보기가 표시됩니다.")
         self.preview_label.setWordWrap(True)
+        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.preview_label)
 
         main_layout.addWidget(group)

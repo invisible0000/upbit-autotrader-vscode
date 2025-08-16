@@ -1,16 +1,51 @@
 # ═══════════════════════════════════════════════════════════════
-# 메타 트레일링 스탑 (META_TRAILING_STOP) - 정의 파일
+# 🎯 META_TRAILING_STOP (트레일링 스탑) - 기본 정의
+# ═══════════════════════════════════════════════════════════════
+# 대응 테이블: tv_trading_variables
+# 지표 ID: META_TRAILING_STOP
+# 카테고리: 동적 관리
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "META_TRAILING_STOP"
-display_name: "메타 트레일링 스탑"
-description: "모든 변수(가격, 지표 등)에 대해 트레일링 추적 가능한 메타 변수"
-purpose_category: "dynamic_management"
-chart_category: "overlay"
-comparison_group: "dynamic_target"
-ui_component_type: "input_field"
-is_customizable: true
-is_active: true
-sort_order: 100
-tooltip: "모든 변수(가격, 지표 등)에 대해 트레일링 추적 가능한 메타 변수"
-source_type: "built_in"
+META_TRAILING_STOP:
+  # 기본 식별 정보
+  variable_id: "META_TRAILING_STOP"
+  display_name_ko: "트레일링 스탑"
+  display_name_en: "Trailing Stop"
+
+  # 지표 분류
+  purpose_category: "dynamic_management"
+  chart_category: "overlay"
+  comparison_group: "dynamic_target"
+
+  # 상세 정보
+  description: "추적 대상의 고점/저점을 기록하고 설정된 차이만큼 벗어나면 신호 발생"
+  source: "built-in"
+  parameter_required: true
+  is_active: true
+
+  # 메타데이터
+  created_at: "2025-08-15 22:45:00"
+  updated_at: "2025-08-16 17:58:00"
+
+  # 추가 속성
+  indicator_type: "leading"        # leading, lagging, coincident
+  calculation_complexity: "complex" # simple, moderate, complex
+  market_applicability:            # 적용 가능한 시장
+    - "stocks"
+    - "crypto"
+    - "forex"
+    - "commodities"
+
+  # 관련 지표들
+  related_indicators:
+    - "META_PYRAMID_TARGET"
+    - "SMA"
+    - "EMA"
+    - "ATR"
+
+  # 일반적 사용 용도
+  common_uses:
+    - "risk_management"
+    - "profit_protection"
+    - "dynamic_exit"
+    - "trend_following"

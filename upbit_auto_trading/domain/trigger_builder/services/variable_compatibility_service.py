@@ -14,6 +14,11 @@ class VariableCompatibilityService:
 
     def can_compare_variables(self, var1: TradingVariable, var2: TradingVariable) -> bool:
         """두 변수가 비교 가능한지 확인"""
+        # 메타변수(dynamic_management)는 모든 변수와 호환됩니다
+        if (var1.purpose_category.value == "dynamic_management" or
+                var2.purpose_category.value == "dynamic_management"):
+            return True
+
         return var1.can_compare_with(var2)
 
     def get_compatible_comparison_groups(self, group: ComparisonGroup) -> Set[ComparisonGroup]:
@@ -33,11 +38,20 @@ class VariableCompatibilityService:
     def filter_compatible_variables(self, target_variable: TradingVariable,
                                     candidate_variables: List[TradingVariable]) -> List[TradingVariable]:
         """대상 변수와 호환 가능한 변수들만 필터링"""
+        # 메타변수는 모든 변수와 호환됩니다
+        if target_variable.purpose_category.value == "dynamic_management":
+            return [
+                var for var in candidate_variables
+                if var.variable_id != target_variable.variable_id
+            ]
+
         compatible_groups = self.get_compatible_comparison_groups(target_variable.comparison_group)
 
         return [
             var for var in candidate_variables
-            if var.comparison_group in compatible_groups and var.variable_id != target_variable.variable_id
+            if ((var.comparison_group in compatible_groups or
+                 var.purpose_category.value == "dynamic_management") and
+                var.variable_id != target_variable.variable_id)
         ]
 
     def get_recommended_variables_for_category(self, category: VariableCategory,

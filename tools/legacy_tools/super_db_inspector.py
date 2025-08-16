@@ -10,14 +10,18 @@ DB 상태 관찰 전문 도구 - 실시간 DB 분석 및 모니터링
 📋 주요 명령어 (tools 폴더에서 실행):
 1. python super_db_inspector.py --quick-status           # 3초 내 전체 DB 상태 요약 ⭐
 2. python super_db_inspector.py --tv-variables           # TV 변수 시스템 전용 분석 ⭐
-3. python super_db_inspector.py --data-flow              # YAML→DB→Code 데이터 흐름 추적
-4. python super_db_inspector.py --export-current         # 현재 DB 상태를 YAML로 추출
-5. python super_db_inspector.py --watch-changes          # 실시간 DB 변경 모니터링
-6. python super_db_inspector.py --compare-schemas        # 스키마 버전 비교
+3. python super_db_inspector.py --meta-variables         # 메타변수 상세 분석 (호환성 문제 해결) 🆕
+4. python super_db_inspector.py --view-table 테이블명    # 특정 테이블 내용 조회 🆕
+5. python super_db_inspector.py --list-tables            # 모든 테이블 목록 출력 🆕
+6. python super_db_inspector.py --export-current         # 현재 DB 상태를 YAML로 추출
+7. python super_db_inspector.py --data-flow              # YAML→DB→Code 데이터 흐름 추적
+8. python super_db_inspector.py --watch-changes          # 실시간 DB 변경 모니터링
 
 🎯 사용 시나리오:
 - ⚡ 빠른 상태 확인: --quick-status (개발 중 가장 많이 사용)
 - 🔍 변수 시스템 분석: --tv-variables (TV 관련 작업 시)
+- 🔧 메타변수 문제 해결: --meta-variables (호환성 검증 문제 시)
+- 📋 테이블 데이터 확인: --view-table tv_trading_variables
 - 📊 데이터 추적: --data-flow (마이그레이션 전후)
 - 💾 현재 상태 백업: --export-current (안전한 작업 전)
 
@@ -140,11 +144,11 @@ class SuperDBInspector:
             conn = sqlite3.connect(settings_db)
             cursor = conn.cursor()
 
-            # TV 변수 목록 조회
+            # TV 변수 목록 조회 (올바른 컬럼명 사용)
             cursor.execute("""
-                SELECT variable_id, display_name, purpose_category
+                SELECT variable_id, display_name_ko, display_name_en, purpose_category, comparison_group
                 FROM tv_trading_variables
-                ORDER BY purpose_category, display_name
+                ORDER BY purpose_category, display_name_ko
             """)
             variables = cursor.fetchall()
 
@@ -156,32 +160,62 @@ class SuperDBInspector:
             """)
             parameters = dict(cursor.fetchall())
 
+            # 헬프 문서 정보 조회
+            cursor.execute("""
+                SELECT variable_id, COUNT(*) as help_count
+                FROM tv_variable_help_documents
+                GROUP BY variable_id
+            """)
+            help_docs = dict(cursor.fetchall())
+
             # 카테고리별 분석
             category_stats = {}
             tv_vars = []
+            meta_vars = []
 
-            for var_id, name, category in variables:
+            for var_id, name_ko, name_en, category, comp_group in variables:
                 param_count = parameters.get(var_id, 0)
+                help_count = help_docs.get(var_id, 0)
+
                 tv_var = TVVariableInfo(
                     variable_id=var_id,
-                    name=name,
+                    name=name_ko or name_en or var_id,
                     category=category,
                     has_parameters=param_count > 0,
                     parameter_count=param_count
                 )
                 tv_vars.append(tv_var)
 
+                # 메타변수 별도 수집
+                if category == 'dynamic_management':
+                    meta_vars.append((var_id, name_ko, comp_group, param_count, help_count))
+
                 if category not in category_stats:
-                    category_stats[category] = {'count': 0, 'with_params': 0, 'total_params': 0}
+                    category_stats[category] = {'count': 0, 'with_params': 0, 'total_params': 0, 'with_help': 0}
                 category_stats[category]['count'] += 1
                 if param_count > 0:
                     category_stats[category]['with_params'] += 1
                     category_stats[category]['total_params'] += param_count
+                if help_count > 0:
+                    category_stats[category]['with_help'] += 1
 
             # 결과 출력
             print(f"📋 총 TV 변수: {len(variables)}개")
             print(f"⚙️ 파라미터 있는 변수: {len(parameters)}개")
-            print(f"📊 총 파라미터: {sum(parameters.values())}개\n")
+            print(f"📊 총 파라미터: {sum(parameters.values())}개")
+            print(f"📖 헬프 문서 있는 변수: {len(help_docs)}개\n")
+
+            # 메타변수 특별 분석
+            if meta_vars:
+                print("🔧 === 메타변수 (dynamic_management) 분석 ===")
+                for var_id, name_ko, comp_group, param_count, help_count in meta_vars:
+                    help_status = "✅" if help_count > 0 else "❌"
+                    param_status = f"({param_count}개)" if param_count > 0 else "(파라미터 없음)"
+                    print(f"   • {name_ko} [{var_id}]")
+                    print(f"     - 비교그룹: {comp_group}")
+                    print(f"     - 파라미터: {param_status}")
+                    print(f"     - 헬프문서: {help_status} ({help_count}개)")
+                print()
 
             # 카테고리별 상세
             for category, stats in category_stats.items():
@@ -189,20 +223,218 @@ class SuperDBInspector:
                 print(f"   📋 변수 수: {stats['count']}개")
                 print(f"   ⚙️ 파라미터 보유: {stats['with_params']}개")
                 print(f"   📊 총 파라미터: {stats['total_params']}개")
+                print(f"   📖 헬프 문서 보유: {stats['with_help']}개")
 
                 # 해당 카테고리 변수들 나열
                 category_vars = [v for v in tv_vars if v.category == category]
-                for var in category_vars[:5]:  # 상위 5개만 표시
-                    param_info = f"({var.parameter_count}개 파라미터)" if var.has_parameters else "(파라미터 없음)"
+                for var in category_vars[:3]:  # 상위 3개만 표시
+                    param_info = f"({var.parameter_count}개)" if var.has_parameters else "(없음)"
                     print(f"     • {var.name} {param_info}")
-                if len(category_vars) > 5:
-                    print(f"     ... 외 {len(category_vars) - 5}개")
+                if len(category_vars) > 3:
+                    print(f"     ... 외 {len(category_vars) - 3}개")
                 print()
 
             conn.close()
 
         except Exception as e:
             print(f"❌ TV 변수 분석 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def view_table(self, table_name: str, limit: int = 20) -> None:
+        """📋 특정 테이블 내용 조회"""
+        print(f"📋 === 테이블 뷰어: {table_name} ===\n")
+
+        # 테이블이 어느 DB에 있는지 찾기
+        found_db = None
+        for db_name, db_path in self.db_paths.items():
+            if not db_path.exists():
+                continue
+
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+                if cursor.fetchone():
+                    found_db = db_name
+                    break
+                conn.close()
+            except:
+                continue
+
+        if not found_db:
+            print(f"❌ 테이블 '{table_name}'을(를) 찾을 수 없습니다.")
+            print("\n📋 사용 가능한 테이블 목록:")
+            self._list_all_tables()
+            return
+
+        try:
+            conn = sqlite3.connect(self.db_paths[found_db])
+            cursor = conn.cursor()
+
+            # 테이블 스키마 정보
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns_info = cursor.fetchall()
+            columns = [col[1] for col in columns_info]
+
+            print(f"🗄️ 데이터베이스: {found_db}")
+            print(f"📊 컬럼 수: {len(columns)}개")
+            print(f"📋 컬럼: {', '.join(columns)}")
+
+            # 총 레코드 수
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            total_count = cursor.fetchone()[0]
+            print(f"📈 총 레코드: {total_count:,}개")
+
+            if total_count == 0:
+                print("⚠️ 데이터가 없습니다.")
+                conn.close()
+                return
+
+            # 데이터 조회
+            cursor.execute(f"SELECT * FROM {table_name} LIMIT {limit}")
+            rows = cursor.fetchall()
+
+            print(f"\n📄 데이터 (상위 {len(rows)}개):")
+            print("=" * 80)
+
+            for i, row in enumerate(rows):
+                print(f"\n레코드 #{i+1}:")
+                for col, value in zip(columns, row):
+                    # 긴 텍스트는 잘라서 표시
+                    if isinstance(value, str) and len(value) > 100:
+                        display_value = value[:100] + "..."
+                    else:
+                        display_value = value
+                    print(f"  {col}: {display_value}")
+
+            if total_count > limit:
+                print(f"\n💡 총 {total_count}개 중 {limit}개만 표시됨. --limit 옵션으로 개수 조정 가능")
+
+            conn.close()
+
+        except Exception as e:
+            print(f"❌ 테이블 조회 중 오류: {e}")
+
+    def _list_all_tables(self) -> None:
+        """모든 데이터베이스의 테이블 목록 출력"""
+        for db_name, db_path in self.db_paths.items():
+            if not db_path.exists():
+                continue
+
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                tables = [row[0] for row in cursor.fetchall()]
+
+                if tables:
+                    print(f"\n🗄️ {db_name} DB:")
+                    for table in tables:
+                        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                        count = cursor.fetchone()[0]
+                        print(f"   • {table} ({count:,}개)")
+
+                conn.close()
+            except:
+                continue
+
+    def meta_variables_detail(self) -> None:
+        """🔧 메타변수 상세 분석 (호환성 문제 해결용)"""
+        print("🔧 === 메타변수 상세 분석 ===\n")
+
+        settings_db = self.db_paths['settings']
+        if not settings_db.exists():
+            print("❌ settings.sqlite3 파일이 없습니다.")
+            return
+
+        try:
+            conn = sqlite3.connect(settings_db)
+            cursor = conn.cursor()
+
+            # 메타변수 조회
+            cursor.execute("""
+                SELECT variable_id, display_name_ko, display_name_en,
+                       comparison_group, purpose_category, description, is_active
+                FROM tv_trading_variables
+                WHERE purpose_category = 'dynamic_management'
+                ORDER BY variable_id
+            """)
+            meta_vars = cursor.fetchall()
+
+            print(f"🔧 발견된 메타변수: {len(meta_vars)}개\n")
+
+            for var_id, name_ko, name_en, comp_group, category, desc, is_active in meta_vars:
+                active_status = "✅ 활성" if is_active else "❌ 비활성"
+                print(f"📌 {name_ko} [{var_id}]")
+                print(f"   영문명: {name_en}")
+                print(f"   상태: {active_status}")
+                print(f"   비교그룹: {comp_group}")
+                print(f"   설명: {desc}")
+
+                # 파라미터 확인
+                cursor.execute("""
+                    SELECT parameter_name, default_value, parameter_type
+                    FROM tv_variable_parameters
+                    WHERE variable_id = ?
+                """, (var_id,))
+                params = cursor.fetchall()
+
+                if params:
+                    print(f"   파라미터 ({len(params)}개):")
+                    for param_name, default_val, param_type in params:
+                        print(f"     • {param_name}: {default_val} ({param_type})")
+                else:
+                    print(f"   파라미터: 없음")
+
+                # 헬프 문서 확인
+                cursor.execute("""
+                    SELECT document_type, title_ko, content_ko
+                    FROM tv_variable_help_documents
+                    WHERE variable_id = ?
+                """, (var_id,))
+                help_docs = cursor.fetchall()
+
+                if help_docs:
+                    print(f"   헬프 문서 ({len(help_docs)}개):")
+                    for doc_type, title, content in help_docs:
+                        content_preview = content[:100] + "..." if content and len(content) > 100 else content
+                        print(f"     • {doc_type}: {title}")
+                        print(f"       내용: {content_preview}")
+                else:
+                    print(f"   헬프 문서: ❌ 없음")
+
+                print()
+
+            # 호환성 분석
+            print("🔍 === 호환성 분석 ===")
+            unique_comp_groups = set(var[2] for var in meta_vars)  # comparison_group
+            print(f"메타변수 비교그룹: {', '.join(unique_comp_groups)}")
+
+            # 일반 변수들의 비교그룹 확인
+            cursor.execute("""
+                SELECT DISTINCT comparison_group, COUNT(*) as count
+                FROM tv_trading_variables
+                WHERE purpose_category != 'dynamic_management'
+                GROUP BY comparison_group
+                ORDER BY count DESC
+            """)
+            regular_groups = cursor.fetchall()
+
+            print("\n일반 변수 비교그룹:")
+            for group, count in regular_groups:
+                print(f"  • {group}: {count}개 변수")
+
+            print("\n💡 호환성 권장사항:")
+            print("   메타변수는 모든 변수와 호환되어야 하므로")
+            print("   comparison_group을 'universal' 또는 별도 호환 로직이 필요합니다.")
+
+            conn.close()
+
+        except Exception as e:
+            print(f"❌ 메타변수 분석 중 오류: {e}")
+            import traceback
+            traceback.print_exc()
 
     def data_flow_tracking(self) -> None:
         """📊 YAML→DB→Code 데이터 흐름 추적"""
@@ -500,12 +732,16 @@ def main():
     parser = argparse.ArgumentParser(description='Super DB Inspector - DB 상태 관찰 전문 도구')
     parser.add_argument('--quick-status', action='store_true', help='3초 내 전체 DB 상태 요약')
     parser.add_argument('--tv-variables', action='store_true', help='TV 변수 시스템 전용 분석')
+    parser.add_argument('--meta-variables', action='store_true', help='메타변수 상세 분석 (호환성 문제 해결용)')
+    parser.add_argument('--view-table', type=str, help='특정 테이블 내용 조회 (예: tv_trading_variables)')
+    parser.add_argument('--list-tables', action='store_true', help='모든 테이블 목록 출력')
     parser.add_argument('--data-flow', action='store_true', help='YAML→DB→Code 데이터 흐름 추적')
     parser.add_argument('--export-current', action='store_true', help='현재 DB 상태를 YAML로 추출')
     parser.add_argument('--compare-schemas', action='store_true', help='스키마 버전 비교')
     parser.add_argument('--watch-changes', action='store_true', help='실시간 DB 변경 모니터링')
     parser.add_argument('--output-dir', default='temp/db_exports', help='출력 디렉토리 (기본: temp/db_exports)')
     parser.add_argument('--interval', type=int, default=5, help='모니터링 간격 (초, 기본: 5)')
+    parser.add_argument('--limit', type=int, default=20, help='테이블 조회 시 레코드 수 제한 (기본: 20)')
 
     args = parser.parse_args()
 
@@ -521,6 +757,16 @@ def main():
 
     if args.tv_variables:
         inspector.tv_variables_analysis()
+
+    if args.meta_variables:
+        inspector.meta_variables_detail()
+
+    if args.view_table:
+        inspector.view_table(args.view_table, args.limit)
+
+    if args.list_tables:
+        print("📋 === 전체 테이블 목록 ===")
+        inspector._list_all_tables()
 
     if args.data_flow:
         inspector.data_flow_tracking()
