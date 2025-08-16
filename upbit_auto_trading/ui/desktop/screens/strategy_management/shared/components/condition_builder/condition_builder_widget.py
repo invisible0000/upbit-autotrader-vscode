@@ -81,6 +81,7 @@ class ConditionBuilderWidget(QWidget):
         # 범주
         main_row.addWidget(QLabel("범주:"))
         self.category_combo = QComboBox()
+        # 기본 변수 선택에서는 메타변수 카테고리 제외
         self.category_combo.addItems(["전체", "추세", "모멘텀", "변동성", "거래량", "가격"])
         self.category_combo.setMinimumWidth(80)
         main_row.addWidget(self.category_combo)
@@ -238,13 +239,17 @@ class ConditionBuilderWidget(QWidget):
             self.external_variable_combo.clear()
 
             if variables_dto.success and variables_dto.grouped_variables:
-                # 모든 변수를 우선 추가 (전체 카테고리 선택 상태)
+                # 기본 변수는 메타변수 제외하고 추가
                 for category, variables in variables_dto.grouped_variables.items():
                     for var in variables:
                         display_name = var.get('display_name_ko', var.get('variable_id', ''))
                         variable_id = var.get('variable_id', '')
 
-                        self.variable_combo.addItem(display_name, variable_id)
+                        # 기본 변수 선택에는 메타변수(dynamic_management) 제외
+                        if category != "dynamic_management":
+                            self.variable_combo.addItem(display_name, variable_id)
+
+                        # 외부 변수에는 모든 변수 포함 (메타변수 포함)
                         self.external_variable_combo.addItem(display_name, variable_id)
 
                 # 현재 선택된 카테고리에 따라 필터링 적용
@@ -257,7 +262,7 @@ class ConditionBuilderWidget(QWidget):
                 if current_external_category != "전체":
                     self._filter_external_variables_by_category(current_external_category)
 
-            self._logger.info(f"변수 목록 표시 완료: {variables_dto.total_count}개")
+            self._logger.info(f"변수 목록 표시 완료: {variables_dto.total_count}개 (기본 변수에서 메타변수 제외)")
 
         except Exception as e:
             self._logger.error(f"변수 목록 표시 중 오류: {e}")
@@ -359,7 +364,7 @@ class ConditionBuilderWidget(QWidget):
         self.category_changed.emit(category)
 
     def _filter_variables_by_category(self, category: str) -> None:
-        """카테고리별 변수 필터링"""
+        """카테고리별 변수 필터링 - 기본 변수 선택에서는 메타변수 제외"""
         if not hasattr(self, '_current_variables_dto') or not self._current_variables_dto:
             return
 
@@ -382,6 +387,10 @@ class ConditionBuilderWidget(QWidget):
         # 변수 필터링 및 추가
         if self._current_variables_dto.success and self._current_variables_dto.grouped_variables:
             for cat, variables in self._current_variables_dto.grouped_variables.items():
+                # 기본 변수 선택에서는 메타변수(dynamic_management) 절대 제외
+                if cat == "dynamic_management":
+                    continue
+
                 # 전체 선택이거나 선택된 카테고리와 일치하는 경우
                 if selected_category is None or cat == selected_category:
                     for var in variables:
@@ -389,7 +398,7 @@ class ConditionBuilderWidget(QWidget):
                         variable_id = var.get('variable_id', '')
                         self.variable_combo.addItem(display_name, variable_id)
 
-        self._logger.info(f"카테고리 '{category}'로 필터링 완료: {self.variable_combo.count()}개 변수")
+        self._logger.info(f"카테고리 '{category}'로 필터링 완료: {self.variable_combo.count()}개 변수 (메타변수 제외)")
 
     def _on_external_category_changed(self, category: str):
         """외부 변수 범주 변경 처리"""
