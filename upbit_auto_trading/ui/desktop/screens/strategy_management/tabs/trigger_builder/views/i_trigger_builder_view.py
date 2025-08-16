@@ -7,6 +7,9 @@ from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto imp
     TradingVariableListDTO,
     TradingVariableDetailDTO
 )
+from upbit_auto_trading.application.dto.trigger_builder.variable_compatibility_dto import (
+    VariableCompatibilityResultDTO
+)
 
 
 class ITriggerBuilderView(ABC):
@@ -28,7 +31,7 @@ class ITriggerBuilderView(ABC):
         pass
 
     @abstractmethod
-    def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
+    def update_compatibility_status(self, result_dto: VariableCompatibilityResultDTO) -> None:
         """호환성 검증 결과를 UI에 표시"""
         pass
 

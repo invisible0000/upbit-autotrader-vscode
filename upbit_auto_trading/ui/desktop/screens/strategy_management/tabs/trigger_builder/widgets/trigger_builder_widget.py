@@ -29,6 +29,7 @@ class TriggerBuilderWidget(QWidget):
     search_requested = pyqtSignal(str, str)  # 검색 요청 (검색어, 카테고리)
     simulation_start_requested = pyqtSignal()  # 시뮬레이션 시작
     simulation_stop_requested = pyqtSignal()  # 시뮬레이션 중지
+    compatibility_check_requested = pyqtSignal(str, str)  # 호환성 검토 요청
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -101,6 +102,10 @@ class TriggerBuilderWidget(QWidget):
         # 외부 변수 선택 시그널 - 별도 시그널로 처리
         self.condition_builder.external_variable_selected.connect(
             lambda var: self.external_variable_selected.emit(var)
+        )
+        # 호환성 검토 시그널 연결
+        self.condition_builder.compatibility_check_requested.connect(
+            lambda main_var, ext_var: self.compatibility_check_requested.emit(main_var, ext_var)
         )
 
         layout.addWidget(self.condition_builder)
@@ -244,10 +249,16 @@ class TriggerBuilderWidget(QWidget):
         if hasattr(self, 'condition_builder'):
             self.condition_builder.show_external_variable_details(details_dto)
 
-    def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
-        """호환성 검증 결과를 UI에 표시"""
-        self._logger.info(f"호환성 상태 업데이트: {is_compatible}, {message}")
-        # TODO: 조건 빌더 영역에 호환성 상태 표시
+    def update_compatibility_status(self, result_dto) -> None:
+        """호환성 검증 결과를 ConditionBuilder에 전달"""
+        try:
+            if hasattr(self, 'condition_builder') and self.condition_builder:
+                self.condition_builder.update_compatibility_status(result_dto)
+                self._logger.debug(f"호환성 상태 업데이트 완료: {result_dto.is_compatible}")
+            else:
+                self._logger.warning("ConditionBuilder가 없어 호환성 상태를 업데이트할 수 없습니다")
+        except Exception as e:
+            self._logger.error(f"호환성 상태 업데이트 실패: {e}")
 
     def show_error_message(self, message: str) -> None:
         """에러 메시지를 UI에 표시"""

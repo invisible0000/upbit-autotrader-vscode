@@ -7,12 +7,19 @@ from typing import Optional
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.use_cases.trigger_builder.trading_variable_use_cases import (
     ListTradingVariablesUseCase,
-    GetVariableParametersUseCase
+    GetVariableParametersUseCase,
+    SearchTradingVariablesUseCase
+)
+from upbit_auto_trading.application.use_cases.trigger_builder.variable_compatibility_use_cases import (
+    CheckVariableCompatibilityUseCase
 )
 from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto import (
     VariableSearchRequestDTO,
     TradingVariableListDTO,
     TradingVariableDetailDTO
+)
+from upbit_auto_trading.application.dto.trigger_builder.variable_compatibility_dto import (
+    VariableCompatibilityRequestDTO
 )
 from upbit_auto_trading.ui.desktop.screens.strategy_management.shared.views.i_condition_builder_view import IConditionBuilderView
 
@@ -23,10 +30,12 @@ class ConditionBuilderPresenter:
     def __init__(self,
                  view: IConditionBuilderView,
                  list_variables_usecase: ListTradingVariablesUseCase,
-                 get_variable_details_usecase: GetVariableParametersUseCase):
+                 get_variable_details_usecase: GetVariableParametersUseCase,
+                 check_compatibility_usecase: CheckVariableCompatibilityUseCase):
         self._view = view
         self._list_variables_usecase = list_variables_usecase
         self._get_variable_details_usecase = get_variable_details_usecase
+        self._check_compatibility_usecase = check_compatibility_usecase
         self._logger = create_component_logger("ConditionBuilderPresenter")
 
         self._current_variables: Optional[TradingVariableListDTO] = None
@@ -37,13 +46,8 @@ class ConditionBuilderPresenter:
             self._view.set_loading_state(True)
             self._logger.info("컨디션 빌더 초기화 시작")
 
-            # 전체 변수 목록 로드
-            search_request = VariableSearchRequestDTO(
-                category=None,  # 전체
-                language="ko"
-            )
-
-            result = await self._list_variables_usecase.execute(search_request)
+            # 전체 변수 목록 로드 (파라미터 없이 호출)
+            result = await self._list_variables_usecase.execute()
 
             if result.success:
                 self._current_variables = result
@@ -121,12 +125,11 @@ class ConditionBuilderPresenter:
             self._view.set_loading_state(True)
             self._logger.info(f"카테고리 필터링: {category}")
 
-            search_request = VariableSearchRequestDTO(
-                category=category if category != "전체" else None,
-                language="ko"
-            )
-
-            result = await self._list_variables_usecase.execute(search_request)
+            # 전체 목록을 다시 로드하고 UI에서 필터링하도록 함
+            if category == "전체":
+                result = await self._list_variables_usecase.execute()
+            else:
+                result = await self._list_variables_usecase.execute()
 
             if result.success:
                 self._current_variables = result
@@ -140,21 +143,40 @@ class ConditionBuilderPresenter:
         finally:
             self._view.set_loading_state(False)
 
-    def check_variable_compatibility(self, base_variable: str, external_variable: str) -> None:
+    async def check_variable_compatibility(self, main_variable_id: str, external_variable_id: str = "") -> None:
         """변수 호환성 검증"""
         try:
-            self._logger.info(f"호환성 검증: {base_variable} vs {external_variable}")
+            self._logger.info(f"호환성 검증: {main_variable_id} vs {external_variable_id}")
 
-            # TODO: 실제 호환성 검증 로직 구현
-            # 임시로 항상 호환으로 처리
-            is_compatible = True
-            message = "변수 호환성 검증 완료"
+            # 호환성 검증 요청 생성
+            request = VariableCompatibilityRequestDTO.create(
+                main_variable_id=main_variable_id,
+                external_variable_id=external_variable_id if external_variable_id else None
+            )
 
-            self._view.update_compatibility_status(is_compatible, message)
+            # 호환성 검증 실행
+            result = await self._check_compatibility_usecase.execute(request)
+
+            if result.success:
+                if result.is_compatible is None:
+                    # 대기 상태 (외부 변수 미선택)
+                    self._view.update_compatibility_status(True, result.message, result.detail)
+                elif result.is_compatible:
+                    # 호환
+                    self._view.update_compatibility_status(True, result.message, result.detail)
+                else:
+                    # 비호환
+                    self._view.update_compatibility_status(False, result.message, result.detail)
+
+                self._logger.info(f"호환성 검증 완료: {result.is_compatible}")
+            else:
+                # 오류 발생
+                self._view.update_compatibility_status(False, "호환성 검증 실패", result.error_message or "알 수 없는 오류")
+                self._logger.error(f"호환성 검증 실패: {result.error_message}")
 
         except Exception as e:
             self._logger.error(f"호환성 검증 중 오류: {e}")
-            self._view.update_compatibility_status(False, f"검증 오류: {e}")
+            self._view.update_compatibility_status(False, "호환성 검증 오류", f"시스템 오류: {str(e)}")
 
     def reset_view(self) -> None:
         """뷰 초기화"""

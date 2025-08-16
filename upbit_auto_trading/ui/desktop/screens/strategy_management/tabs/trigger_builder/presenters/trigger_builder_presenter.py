@@ -8,8 +8,15 @@ from upbit_auto_trading.application.use_cases.trigger_builder.trading_variable_u
     GetVariableParametersUseCase,
     SearchTradingVariablesUseCase
 )
+from upbit_auto_trading.application.use_cases.trigger_builder.variable_compatibility_use_cases import (
+    CheckVariableCompatibilityUseCase
+)
 from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto import (
     VariableSearchRequestDTO
+)
+from upbit_auto_trading.application.dto.trigger_builder.variable_compatibility_dto import (
+    VariableCompatibilityRequestDTO,
+    VariableCompatibilityResultDTO
 )
 from ..views.i_trigger_builder_view import ITriggerBuilderView
 
@@ -22,12 +29,14 @@ class TriggerBuilderPresenter:
         view: ITriggerBuilderView,
         list_variables_usecase: ListTradingVariablesUseCase,
         get_variable_details_usecase: GetVariableParametersUseCase,
-        search_variables_usecase: SearchTradingVariablesUseCase
+        search_variables_usecase: SearchTradingVariablesUseCase,
+        check_compatibility_usecase: CheckVariableCompatibilityUseCase
     ):
         self._view = view
         self._list_variables_usecase = list_variables_usecase
         self._get_variable_details_usecase = get_variable_details_usecase
         self._search_variables_usecase = search_variables_usecase
+        self._check_compatibility_usecase = check_compatibility_usecase
         self._logger = create_component_logger("TriggerBuilderPresenter")
 
     async def initialize_view(self) -> None:
@@ -139,3 +148,34 @@ class TriggerBuilderPresenter:
         except Exception as e:
             self._logger.error(f"시뮬레이션 중지 중 오류: {e}")
             self._view.show_error_message(f"시뮬레이션 중지 실패: {str(e)}")
+
+    async def handle_compatibility_check(self, main_variable_id: str, external_variable_id: str = "") -> None:
+        """변수 호환성 검증 처리"""
+        try:
+            self._logger.info(f"호환성 검증 요청 처리: {main_variable_id} vs {external_variable_id}")
+
+            # 호환성 검증 요청 생성
+            request = VariableCompatibilityRequestDTO.create(
+                main_variable_id=main_variable_id,
+                external_variable_id=external_variable_id if external_variable_id else None
+            )
+
+            # 호환성 검증 실행
+            result = await self._check_compatibility_usecase.execute(request)
+
+            if result.success:
+                # 결과를 view에 전달
+                self._view.update_compatibility_status(result)
+                self._logger.info(f"호환성 검증 완료: {result.is_compatible}")
+            else:
+                # 오류 발생 - 에러 결과 생성
+                error_result = VariableCompatibilityResultDTO.create_error(
+                    result.error_message or "알 수 없는 오류"
+                )
+                self._view.update_compatibility_status(error_result)
+                self._logger.error(f"호환성 검증 실패: {result.error_message}")
+
+        except Exception as e:
+            self._logger.error(f"호환성 검증 중 오류: {e}")
+            error_result = VariableCompatibilityResultDTO.create_error(f"시스템 오류: {str(e)}")
+            self._view.update_compatibility_status(error_result)

@@ -12,6 +12,9 @@ from upbit_auto_trading.application.use_cases.trigger_builder.trading_variable_u
     GetVariableParametersUseCase,
     SearchTradingVariablesUseCase
 )
+from upbit_auto_trading.application.use_cases.trigger_builder.variable_compatibility_use_cases import (
+    CheckVariableCompatibilityUseCase
+)
 
 from .presenters.trigger_builder_presenter import TriggerBuilderPresenter
 from .widgets.trigger_builder_widget import TriggerBuilderWidget
@@ -44,6 +47,10 @@ class TriggerBuilderTab(QWidget):
                 trading_variable_repository,
                 compatibility_service
             )
+            check_compatibility_usecase = CheckVariableCompatibilityUseCase(
+                trading_variable_repository,
+                compatibility_service
+            )
 
             # View (Widget) 생성
             self._view = TriggerBuilderWidget(self)
@@ -53,7 +60,8 @@ class TriggerBuilderTab(QWidget):
                 view=self._view,
                 list_variables_usecase=list_variables_usecase,
                 get_variable_details_usecase=get_variable_details_usecase,
-                search_variables_usecase=search_variables_usecase
+                search_variables_usecase=search_variables_usecase,
+                check_compatibility_usecase=check_compatibility_usecase
             )
 
             # 시그널 연결
@@ -100,6 +108,13 @@ class TriggerBuilderTab(QWidget):
             )
             self._view.simulation_stop_requested.connect(
                 self._presenter.handle_simulation_stop
+            )
+
+            # 호환성 검토 시그널 연결
+            self._view.compatibility_check_requested.connect(
+                lambda main_id, external_id: self._run_async(
+                    self._presenter.handle_compatibility_check(main_id, external_id)
+                )
             )
 
             self._logger.info("시그널 연결 완료")

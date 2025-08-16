@@ -53,11 +53,6 @@ class ParameterInputWidget(QWidget):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 10, 8, 8)
 
-        # 파라미터 정보 영역
-        self.parameter_info_label = QLabel("변수를 선택하면 파라미터 설정이 표시됩니다.")
-        self.parameter_info_label.setStyleSheet("color: gray; font-style: italic;")
-        layout.addWidget(self.parameter_info_label)
-
         # 스크롤 가능한 파라미터 영역
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -113,7 +108,6 @@ class ParameterInputWidget(QWidget):
         """변수 상세 정보를 파라미터 영역에 표시"""
         try:
             variable_name = details_dto.variable_id or details_dto.display_name_ko or 'Unknown'
-            self.parameter_info_label.setText(f"선택된 변수: {variable_name}")
 
             # 현재 변수 정보 저장
             self._current_variable_id = details_dto.variable_id or ""
@@ -134,7 +128,6 @@ class ParameterInputWidget(QWidget):
 
                 self._logger.info(f"변수 상세 정보 표시: {variable_name}, 파라미터 {len(details_dto.parameters)}개")
             else:
-                self.parameter_info_label.setText(f"선택된 변수: {variable_name} (파라미터 없음)")
                 self._logger.info(f"변수 선택됨 (파라미터 없음): {variable_name}")
 
         except Exception as e:
@@ -487,5 +480,3 @@ class ParameterInputWidget(QWidget):
                 widget = item.widget()
                 if widget:
                     widget.deleteLater()
-
-        self.parameter_info_label.setText("변수를 선택하면 파라미터 설정이 표시됩니다.")

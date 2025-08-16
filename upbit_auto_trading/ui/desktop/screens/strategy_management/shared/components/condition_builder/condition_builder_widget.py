@@ -20,6 +20,7 @@ from upbit_auto_trading.application.dto.trigger_builder.trading_variable_dto imp
 # 하위 위젯들 임포트
 from .parameter_input_widget import ParameterInputWidget
 from .condition_preview_widget import ConditionPreviewWidget
+from .compatibility_status_widget import CompatibilityStatusWidget
 
 
 class ConditionBuilderWidget(QWidget):
@@ -34,6 +35,7 @@ class ConditionBuilderWidget(QWidget):
     category_changed = pyqtSignal(str)   # 카테고리 변경
     condition_created = pyqtSignal(dict)  # 조건 생성
     condition_preview_requested = pyqtSignal(dict)  # 미리보기 요청
+    compatibility_check_requested = pyqtSignal(str, str)  # 호환성 검토 요청 (main_var_id, external_var_id)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -44,25 +46,29 @@ class ConditionBuilderWidget(QWidget):
         self._connect_signals()
 
     def _init_ui(self):
-        """UI 초기화 - 4개 영역 구성"""
+        """UI 초기화 - 상하단 구조로 변경"""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(8)
+        main_layout.setSpacing(6)
 
-        # 1. 변수 선택 + 파라미터 설정 통합 영역
+        # 조건 빌더 레이아웃 비율 조절은 이곳에서
+        # 1. 변수 선택 영역 (작은 비율)
         self._create_variable_selection_area(main_layout)
 
-        # 2. 조건 설정 영역
+        # 2. 조건 설정 영역 (작은 비율)
         self._create_condition_setup_area(main_layout)
 
-        # 3. 외부 변수 선택 + 파라미터 설정 영역
+        # 3. 호환성 검토 결과 영역 (작은 비율)
+        self._create_compatibility_status_area(main_layout)
+
+        # 4. 외부 변수 영역 (작은 비율)
         self._create_external_variable_area(main_layout)
 
-        # 4. 조건 미리보기 영역
+        # 5. 조건 미리보기 영역 (큰 비율)
         self._create_condition_preview_area(main_layout)
 
-        # 5. 로딩 상태 표시
-        self._create_loading_indicator(main_layout)
+        # 마지막에 스트레치 추가로 미리보기 영역이 확장되도록
+        main_layout.addStretch()
 
         self._logger.info("컨디션 빌더 UI 초기화 완료")
 
@@ -143,6 +149,23 @@ class ConditionBuilderWidget(QWidget):
         layout.addLayout(condition_layout)
 
         parent_layout.addWidget(group)
+
+    def _create_compatibility_status_area(self, parent_layout):
+        """호환성 검토 결과 영역"""
+        # 호환성 검증 그룹박스 생성
+        self.compatibility_group = QGroupBox("🔍 호환성 검증")
+        compatibility_layout = QVBoxLayout()
+        compatibility_layout.setContentsMargins(8, 8, 8, 8)
+        compatibility_layout.setSpacing(5)
+
+        # 호환성 상태 위젯 생성
+        self.compatibility_status = CompatibilityStatusWidget()
+        compatibility_layout.addWidget(self.compatibility_status)
+
+        self.compatibility_group.setLayout(compatibility_layout)
+        # 초기에는 숨김 처리
+        self.compatibility_group.setVisible(False)
+        parent_layout.addWidget(self.compatibility_group)
 
     def _create_external_variable_area(self, parent_layout):
         """외부 변수 선택 + 파라미터 설정 영역"""
@@ -293,14 +316,25 @@ class ConditionBuilderWidget(QWidget):
         except Exception as e:
             self._logger.error(f"외부 변수 상세 정보 표시 중 오류: {e}")
 
-    def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
+    def update_compatibility_status(self, result_dto) -> None:
         """변수 호환성 검증 결과 표시"""
         try:
-            # TODO: 호환성 상태 UI 업데이트 구현
+            # DTO에서 정보 추출
+            is_compatible = result_dto.is_compatible
+            message = result_dto.message
+            detail = result_dto.detail or ""
+
+            # 호환성 검증 영역 표시
+            self.compatibility_group.setVisible(True)
+
+            # 호환성 상태 위젯 업데이트
+            self.compatibility_status.update_compatibility_status(is_compatible, message, detail)
             self._logger.info(f"호환성 상태: {is_compatible} - {message}")
 
         except Exception as e:
             self._logger.error(f"호환성 상태 업데이트 중 오류: {e}")
+            # 오류 시에도 영역은 표시
+            self.compatibility_group.setVisible(True)
 
     def get_current_condition(self) -> dict:
         """현재 설정된 조건 반환"""
@@ -446,6 +480,9 @@ class ConditionBuilderWidget(QWidget):
             # DDD 준수: 시그널을 통해 Presenter에게 위임
             self.external_variable_selected.emit(variable_id)
 
+            # 호환성 검토 요청
+            self._request_compatibility_check()
+
     def _on_variable_changed(self, variable_name: str):
         """변수 변경 처리"""
         variable_id = self.variable_combo.currentData()
@@ -456,6 +493,61 @@ class ConditionBuilderWidget(QWidget):
             # 메타 변수 대상 업데이트 (외부 변수 메타 변수용)
             if hasattr(self, 'external_parameter_input'):
                 self.external_parameter_input.set_base_variable(variable_name)
+
+            # 호환성 검토 요청
+            self._request_compatibility_check()
+
+    def _request_compatibility_check(self):
+        """호환성 검토 요청"""
+        try:
+            main_var_id = self.variable_combo.currentData()
+            external_var_id = self.external_variable_combo.currentData() if self.external_group.isEnabled() else ""
+
+            # 기본값 확인
+            main_var_text = self.variable_combo.currentText()
+            external_var_text = self.external_variable_combo.currentText() if self.external_group.isEnabled() else ""
+            value_type = self.value_type_combo.currentText()
+
+            # 기본 변수가 선택되지 않은 경우 - 박스 숨김
+            if not main_var_id or main_var_text == "선택하세요":
+                self.compatibility_group.setVisible(False)
+                self.compatibility_status.clear_status()
+                return
+
+            # 기본 변수는 선택되었지만 비교값이 '직접 입력'인 경우 - 박스는 보이되 메시지 없음
+            if value_type == "직접 입력":
+                self.compatibility_group.setVisible(True)
+                self.compatibility_status.clear_status()
+                return
+
+            # 외부 변수 선택 상태이지만 외부 변수가 미선택인 경우 - 박스 숨김
+            if (value_type == "외부 변수"
+                    and (not external_var_id or external_var_text == "선택하세요")):
+                self.compatibility_group.setVisible(False)
+                self.compatibility_status.clear_status()
+                return
+
+            # 유효한 변수가 모두 선택된 경우만 호환성 검증 진행
+            if main_var_id and value_type == "외부 변수" and external_var_id:
+                # 호환성 검증 영역 표시
+                self.compatibility_group.setVisible(True)
+
+                # 호환성 검토 중 상태 표시
+                self.compatibility_status.update_checking_status()
+
+                # 시그널을 통해 Presenter에게 호환성 검토 요청
+                self.compatibility_check_requested.emit(main_var_id, external_var_id or "")
+
+                self._logger.info(f"호환성 검토 요청: main={main_var_id}, external={external_var_id}")
+            else:
+                # 조건이 충족되지 않은 경우 영역 숨김
+                self.compatibility_group.setVisible(False)
+                self.compatibility_status.clear_status()
+
+        except Exception as e:
+            self._logger.error(f"호환성 검토 요청 중 오류: {e}")
+            self.compatibility_group.setVisible(True)
+            self.compatibility_status.update_warning_status("호환성 검토 중 오류가 발생했습니다.")
 
     def _get_variable_help_info(self, variable_id: str) -> str:
         """변수 ID로 도움말 정보 제공 - Repository 패턴 사용"""
@@ -560,8 +652,12 @@ class ConditionBuilderWidget(QWidget):
         if is_external:
             self.value_input.clear()
             self.value_input.setPlaceholderText("외부 변수 선택 시 입력 불가")
+            # 외부 변수 모드로 변경 시 호환성 검토
+            self._request_compatibility_check()
         else:
             self.value_input.setPlaceholderText("비교할 값을 입력하세요")
+            # 직접 입력 모드로 변경 시 호환성 상태 초기화
+            self.compatibility_status.clear_status()
 
         # 조건 미리보기 업데이트
         self._update_condition_preview()

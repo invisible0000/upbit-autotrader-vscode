@@ -27,7 +27,7 @@ class IConditionBuilderView(ABC):
         pass
 
     @abstractmethod
-    def update_compatibility_status(self, is_compatible: bool, message: str) -> None:
+    def update_compatibility_status(self, is_compatible: bool, message: str, detail: str = "") -> None:
         """변수 호환성 검증 결과 표시"""
         pass
 
