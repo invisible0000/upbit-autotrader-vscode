@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 스토캐스틱 (STOCHASTIC) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "STOCHASTIC"
+display_name: "스토캐스틱"
+description: "특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시"
+purpose_category: "momentum"
+chart_category: "subplot"
+comparison_group: "percentage_comparable"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시"
+source_type: "built_in"

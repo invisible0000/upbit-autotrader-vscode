@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 메타 트레일링 스탑 (META_TRAILING_STOP) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "META_TRAILING_STOP"
+display_name: "메타 트레일링 스탑"
+description: "모든 변수(가격, 지표 등)에 대해 트레일링 추적 가능한 메타 변수"
+purpose_category: "dynamic_management"
+chart_category: "overlay"
+comparison_group: "dynamic_target"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "모든 변수(가격, 지표 등)에 대해 트레일링 추적 가능한 메타 변수"
+source_type: "built_in"

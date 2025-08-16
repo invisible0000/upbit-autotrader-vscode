@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 볼린저 밴드 (BOLLINGER_BAND) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "BOLLINGER_BAND"
+display_name: "볼린저 밴드"
+description: "이동평균선과 표준편차를 이용한 변동성 채널"
+purpose_category: "volatility"
+chart_category: "overlay"
+comparison_group: "price_comparable"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "이동평균선과 표준편차를 이용한 변동성 채널"
+source_type: "built_in"

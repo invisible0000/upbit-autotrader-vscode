@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 지수이동평균 (EMA) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "EMA"
+display_name: "지수이동평균"
+description: "최근 가격에 더 큰 가중치를 부여한 이동평균"
+purpose_category: "trend"
+chart_category: "overlay"
+comparison_group: "price_comparable"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "최근 가격에 더 큰 가중치를 부여한 이동평균"
+source_type: "built_in"

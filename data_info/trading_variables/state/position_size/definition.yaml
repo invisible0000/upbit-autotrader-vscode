@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 포지션 크기 (POSITION_SIZE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "POSITION_SIZE"
+display_name: "포지션 크기"
+description: "현재 포지션의 크기"
+purpose_category: "state"
+chart_category: "subplot"
+comparison_group: "quantity_comparable"
+ui_component_type: "input_field"
+is_customizable: false
+is_active: true
+sort_order: 100
+tooltip: "현재 포지션의 크기"
+source_type: "built_in"

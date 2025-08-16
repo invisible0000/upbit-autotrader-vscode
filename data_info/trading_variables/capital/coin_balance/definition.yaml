@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 코인 보유량 (COIN_BALANCE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "COIN_BALANCE"
+display_name: "코인 보유량"
+description: "현재 보유중인 코인 수량"
+purpose_category: "capital"
+chart_category: "subplot"
+comparison_group: "capital_comparable"
+ui_component_type: "input_field"
+is_customizable: false
+is_active: true
+sort_order: 100
+tooltip: "현재 보유중인 코인 수량"
+source_type: "built_in"

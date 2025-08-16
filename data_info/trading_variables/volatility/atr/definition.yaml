@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 평균실제범위 (ATR) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "ATR"
+display_name: "평균실제범위"
+description: "주가의 변동성을 측정하는 지표. 절대적인 가격 변동폭을 나타냄"
+purpose_category: "volatility"
+chart_category: "subplot"
+comparison_group: "volatility_comparable"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "주가의 변동성을 측정하는 지표. 절대적인 가격 변동폭을 나타냄"
+source_type: "built_in"

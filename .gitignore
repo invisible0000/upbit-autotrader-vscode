@@ -107,7 +107,7 @@ portfolio_data/
 personal_strategies/
 
 # 협업 DB 관리 시스템 (사용자별 커스터마이징 포함)
-data_info/
+# data_info/
 
 # 개인 백업 및 체크포인트
 backups/

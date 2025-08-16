@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 현재가 (CURRENT_PRICE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "CURRENT_PRICE"
+display_name: "현재가"
+description: "현재 시점의 거래 가격"
+purpose_category: "price"
+chart_category: "overlay"
+comparison_group: "price_comparable"
+ui_component_type: "readonly_display"
+is_customizable: false
+is_active: true
+sort_order: 1
+tooltip: "실시간으로 업데이트되는 현재 거래 가격입니다"
+source_type: "market_data"

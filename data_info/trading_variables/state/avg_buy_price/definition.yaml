@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 평균 매수가 (AVG_BUY_PRICE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "AVG_BUY_PRICE"
+display_name: "평균 매수가"
+description: "수수료 포함 평균 매수가"
+purpose_category: "state"
+chart_category: "subplot"
+comparison_group: "price_comparable"
+ui_component_type: "input_field"
+is_customizable: false
+is_active: true
+sort_order: 100
+tooltip: "수수료 포함 평균 매수가"
+source_type: "built_in"

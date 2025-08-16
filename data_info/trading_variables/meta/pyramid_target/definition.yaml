@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 불타기 목표가 (PYRAMID_TARGET) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "PYRAMID_TARGET"
+display_name: "불타기 목표가"
+description: "추적 변수의 값 변화 감지 시 추가 매수를 위한 동적 목표가"
+purpose_category: "dynamic_management"
+chart_category: "overlay"
+comparison_group: "dynamic_target"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "추적 변수의 값 변화 감지 시 추가 매수를 위한 동적 목표가"
+source_type: "built_in"

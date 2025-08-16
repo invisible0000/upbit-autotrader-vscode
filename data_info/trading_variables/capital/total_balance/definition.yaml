@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 총 자산 (TOTAL_BALANCE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "TOTAL_BALANCE"
+display_name: "총 자산"
+description: "현금과 코인을 합친 총 자산"
+purpose_category: "capital"
+chart_category: "subplot"
+comparison_group: "capital_comparable"
+ui_component_type: "input_field"
+is_customizable: false
+is_active: true
+sort_order: 100
+tooltip: "현금과 코인을 합친 총 자산"
+source_type: "built_in"

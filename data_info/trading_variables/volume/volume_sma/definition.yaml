@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 거래량 이동평균 (VOLUME_SMA) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "VOLUME_SMA"
+display_name: "거래량 이동평균"
+description: "거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교"
+purpose_category: "volume"
+chart_category: "subplot"
+comparison_group: "volume_comparable"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교"
+source_type: "built_in"

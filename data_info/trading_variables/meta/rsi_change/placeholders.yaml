@@ -1,0 +1,14 @@
+# ═══════════════════════════════════════════════════════════════
+# RSI 변화 감지 (META_RSI_CHANGE) - 플레이스홀더 텍스트
+# ═══════════════════════════════════════════════════════════════
+
+placeholders:
+  - parameter_name: "period"
+    placeholder_text: "기간을 입력하세요 (예: 14)"
+    example_value: "14"
+    tooltip: "계산 기간 (1-200)"
+
+# 메타 정보
+metadata:
+  note: "RSI 변화 감지 계산을 위한 파라미터 입력 가이드"
+  input_validation: "1 ≤ 값 ≤ 200"

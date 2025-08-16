@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# MACD 지표 (MACD) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "MACD"
+display_name: "MACD 지표"
+description: "두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표"
+purpose_category: "momentum"
+chart_category: "subplot"
+comparison_group: "signal_conditional"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표"
+source_type: "built_in"

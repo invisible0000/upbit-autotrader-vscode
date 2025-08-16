@@ -1,0 +1,16 @@
+# ═══════════════════════════════════════════════════════════════
+# 거래량 급증 감지 (META_VOLUME_SPIKE) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+variable_name: "META_VOLUME_SPIKE"
+display_name: "거래량 급증 감지"
+description: "거래량의 급격한 증가를 감지하는 메타 변수"
+purpose_category: "dynamic_management"
+chart_category: "subplot"
+comparison_group: "dynamic_target"
+ui_component_type: "input_field"
+is_customizable: true
+is_active: true
+sort_order: 100
+tooltip: "거래량의 급격한 증가를 감지하는 메타 변수"
+source_type: "built_in"

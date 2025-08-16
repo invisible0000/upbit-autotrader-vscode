@@ -1,0 +1,15 @@
+# ═══════════════════════════════════════════════════════════════
+# 총 자산 (TOTAL_BALANCE) - 파라미터 파일
+# ═══════════════════════════════════════════════════════════════
+
+# 총 자산는 파라미터가 필요 없는 변수입니다
+# 시스템에서 자동으로 계산되거나 API에서 가져오는 값입니다
+
+parameters: []
+
+# 메타 정보
+variable_info:
+  parameter_required: false
+  data_source: "system_calculated"
+  update_frequency: "realtime"
+  precision: 8

@@ -1,0 +1,22 @@
+# ═══════════════════════════════════════════════════════════════
+# 포지션 크기 (POSITION_SIZE) - 도움말 텍스트
+# ═══════════════════════════════════════════════════════════════
+
+help_texts:
+  - title: "포지션 크기란?"
+    content: "현재 포지션의 크기"
+    target_audience: "beginner"
+    priority: 10
+    tags: ["기본개념", "정의"]
+
+  - title: "포지션 크기 활용법"
+    content: "포지션 크기을(를) 활용하여 매매 조건을 설정하거나 다른 지표와 조합하여 전략을 구성할 수 있습니다."
+    target_audience: "general"
+    priority: 8
+    tags: ["활용법", "전략구성"]
+
+  - title: "포지션 크기 주의사항"
+    content: "포지션 크기 사용 시 시장 상황과 다른 지표들을 함께 고려하여 신중하게 판단하세요."
+    target_audience: "intermediate"
+    priority: 6
+    tags: ["주의사항", "리스크"]
