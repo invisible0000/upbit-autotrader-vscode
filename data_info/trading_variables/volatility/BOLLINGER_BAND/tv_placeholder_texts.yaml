@@ -1,0 +1,4 @@
+BOLLINGER_BAND:
+  period: 20 (표준값)
+  std_dev: 2.0 (표준편차)
+  timeframe: 포지션 설정 따름

@@ -1,0 +1,11 @@
+VOLUME_SMA:
+  variable_id: VOLUME_SMA
+  display_name_ko: 거래량 이동평균 (Vol SMA)
+  display_name_en: Volume Simple Moving Average
+  purpose_category: volume
+  chart_category: subplot
+  comparison_group: volume_comparable
+  is_active: 1
+  description: 거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교
+  source: built-in
+  parameter_required: 1

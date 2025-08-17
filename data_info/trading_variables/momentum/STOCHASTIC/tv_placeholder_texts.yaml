@@ -1,0 +1,4 @@
+STOCHASTIC:
+  k_period: 14 (표준값)
+  d_period: 3 (신호선)
+  timeframe: 포지션 설정 따름

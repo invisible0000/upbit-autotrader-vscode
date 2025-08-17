@@ -1,0 +1,4 @@
+META_TRAILING_STOP:
+  calculation_method: 극값 비율퍼센트 권장
+  value: '예: -2.0 (2% 하락시 신호)'
+  trail_direction: 상향 추적 (수익 보호)

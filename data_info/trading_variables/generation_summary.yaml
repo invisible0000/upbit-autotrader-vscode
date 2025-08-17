@@ -1,0 +1,41 @@
+generation_info:
+  generated_at: '2025-08-17T19:25:10.414568'
+  total_variables: 22
+  source_database: D:\projects\upbit-autotrader-vscode\data\settings.sqlite3
+  tables_processed:
+  - tv_trading_variables
+  - tv_variable_parameters
+  - tv_variable_help_documents
+  - tv_help_texts
+  - tv_placeholder_texts
+variables_by_category:
+  volatility:
+  - ATR
+  - BOLLINGER_BAND
+  state:
+  - AVG_BUY_PRICE
+  - POSITION_SIZE
+  - PROFIT_AMOUNT
+  - PROFIT_PERCENT
+  capital:
+  - CASH_BALANCE
+  - COIN_BALANCE
+  - TOTAL_BALANCE
+  price:
+  - CURRENT_PRICE
+  - HIGH_PRICE
+  - LOW_PRICE
+  - OPEN_PRICE
+  trend:
+  - EMA
+  - SMA
+  momentum:
+  - MACD
+  - RSI
+  - STOCHASTIC
+  meta:
+  - META_PYRAMID_TARGET
+  - META_TRAILING_STOP
+  volume:
+  - VOLUME
+  - VOLUME_SMA

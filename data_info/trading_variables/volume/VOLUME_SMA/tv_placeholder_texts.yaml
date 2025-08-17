@@ -1,0 +1,3 @@
+VOLUME_SMA:
+  period: 20 (평균 거래량)
+  timeframe: 포지션 설정 따름

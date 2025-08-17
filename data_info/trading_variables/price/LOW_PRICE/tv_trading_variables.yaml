@@ -1,0 +1,11 @@
+LOW_PRICE:
+  variable_id: LOW_PRICE
+  display_name_ko: 저가
+  display_name_en: Low Price
+  purpose_category: price
+  chart_category: overlay
+  comparison_group: price_comparable
+  is_active: 1
+  description: 특정 기간의 최저가
+  source: built-in
+  parameter_required: 1

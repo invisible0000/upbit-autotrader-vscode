@@ -1,0 +1,11 @@
+META_PYRAMID_TARGET:
+  variable_id: META_PYRAMID_TARGET
+  display_name_ko: 피라미딩
+  display_name_en: Pyramiding
+  purpose_category: meta
+  chart_category: adaptive
+  comparison_group: dynamic_target
+  is_active: 1
+  description: 동적 관리 변수
+  source: distributed_yaml
+  parameter_required: 1

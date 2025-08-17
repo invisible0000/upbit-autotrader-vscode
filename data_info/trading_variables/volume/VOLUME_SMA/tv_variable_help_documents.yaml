@@ -1,0 +1,219 @@
+VOLUME_SMA:
+  concept:
+    title: 거래량 이동평균의 이해
+    content: '거래량 이동평균(Volume Simple Moving Average)은 특정 기간 동안의 거래량을 산술평균한 값으로, 시장의
+      평균적인 활동 수준을 나타내는 중요한 기준선 역할을 합니다.
+
+      현재 거래량과 비교하여 시장 참여도의 상대적 변화를 측정하고, 거래량 기반 신호의 신뢰성을 향상시키는 핵심 도구입니다.
+
+
+      ## 기본 계산 공식과 의미
+
+      거래량 SMA = (최근 N일간의 거래량 합계) ÷ N
+
+
+      예를 들어, 20일 거래량 SMA는 최근 20일간의 일일 거래량을 모두 더한 후 20으로 나눈 값입니다.
+
+      이는 지난 20일간의 평균적인 시장 활동 수준을 나타내며, 현재 거래량이 이 평균보다 높은지 낮은지를 판단하는 기준이 됩니다.
+
+
+      거래량 SMA는 volume 카테고리의 volume_comparable 그룹에 속하며, 다른 거래량 관련 지표들과 직접 비교가 가능합니다.
+
+      차트상에서는 subplot 형태로 표시되어 일반적으로 거래량 막대 그래프와 함께 선 그래프로 표현됩니다.
+
+
+      ## 거래량 정규화의 역할
+
+      거래량 SMA의 가장 중요한 기능은 거래량의 정규화입니다.
+
+      암호화폐 시장에서 절대적 거래량 수치는 시간이 지나면서 변화하는 시장 구조나 참여자 증가로 인해 그 의미가 달라질 수 있습니다.
+
+
+      거래량 SMA를 기준으로 상대적 거래량(현재 거래량 / 거래량 SMA)을 계산하면 시장 상황에 관계없이 일관된 기준을 적용할 수 있습니다.
+
+      상대적 거래량이 1.5라면 평상시보다 50% 많은 거래량을, 0.7이라면 평상시보다 30% 적은 거래량을 의미합니다.
+
+
+      ## 시장 활동 수준의 베이스라인
+
+      거래량 SMA는 해당 시장의 "정상적인" 활동 수준을 나타내는 베이스라인 역할을 합니다.
+
+      이 베이스라인을 기준으로 현재 시장이 과도하게 활발한지(과열), 평소보다 조용한지(무관심), 아니면 정상 범위 내에 있는지를 판단할 수
+      있습니다.
+
+
+      특히 중요한 기술적 분석 신호(브레이크아웃, 지지/저항선 테스트 등)가 나타날 때,
+
+      거래량이 SMA보다 높은 수준에서 발생하는지 확인함으로써 신호의 신뢰성을 검증할 수 있습니다.
+
+
+      ## 추세적 특성과 해석
+
+      거래량 SMA 자체도 추세적 특성을 가집니다.
+
+      상승하는 거래량 SMA는 시장 참여도가 전반적으로 증가하고 있음을 의미하며, 이는 관심 증대나 변동성 확대의 신호일 수 있습니다.
+
+      반대로 하락하는 거래량 SMA는 시장 참여도 감소와 무관심을 나타낼 수 있습니다.
+
+
+      ## 기간별 거래량 SMA의 특성
+
+      단기 거래량 SMA(5-10일)는 최근 거래량 변화에 민감하게 반응하여 빠른 신호를 제공하지만, 일시적 스파이크에 의해 왜곡될 수 있습니다.
+
+
+      중기 거래량 SMA(20-50일)는 가장 널리 사용되는 설정으로, 안정성과 반응성의 균형을 제공합니다.
+
+      특히 20일 거래량 SMA는 약 한 달간의 거래 활동을 반영하여 실용적인 분석에 적합합니다.
+
+
+      장기 거래량 SMA(100일 이상)는 시장의 구조적 변화나 장기적인 참여도 변화를 파악하는 데 유용하지만, 단기적인 기회 포착에는 부적합할
+      수 있습니다.
+
+
+      ## 변동성과의 상관관계
+
+      일반적으로 높은 거래량은 높은 변동성과 상관관계를 가지므로, 거래량 SMA의 변화는 향후 변동성 변화를 예측하는 선행 지표로 활용될 수
+      있습니다.
+
+      거래량 SMA가 상승 추세를 보이면 향후 가격 변동성이 증가할 가능성이 높아집니다.
+
+
+      ## 시장 성숙도의 지표
+
+      거래량 SMA는 특정 암호화폐나 시장의 성숙도를 측정하는 지표로도 활용됩니다.
+
+      안정적이고 점진적으로 증가하는 거래량 SMA는 건전한 시장 성장을 의미하며,
+
+      급격한 변동이나 지속적인 감소는 시장의 불안정성이나 관심 저하를 나타낼 수 있습니다.
+
+      '
+  advanced:
+    title: 거래량 SMA 고급 활용 전략
+    content: "거래량 SMA의 고급 활용은 전통적인 평균 기반 분석을 넘어서 적응형 평균, 통계적 모델링, 그리고 기계학습 기반 예측을\
+      \ 통합한 정교한 거래량 분석 시스템을 포함합니다.\n현대 퀀트 거래의 핵심 기법들을 거래량 분석에 적용하여 시장 미시구조를 정밀하게 파악할\
+      \ 수 있습니다.\n\n## 적응형 거래량 SMA (Adaptive Volume SMA)\n```python\n# 변동성 기반 적응형 기간\
+      \ 조정\ndef adaptive_volume_sma(volume_data, base_period=20, volatility_factor=0.5):\n\
+      \    \"\"\"시장 변동성에 따라 동적으로 조정되는 거래량 SMA\"\"\"\n\n    # 거래량 변동성 계산\n    volume_volatility\
+      \ = calculate_rolling_std(volume_data, window=base_period)\n    normalized_volatility\
+      \ = volume_volatility / volume_data.rolling(base_period).mean()\n\n    # 적응형\
+      \ 기간 계산\n    adaptive_periods = []\n    for vol in normalized_volatility:\n\
+      \        if vol > 1.5:  # 고변동성\n            period = int(base_period * (1 +\
+      \ volatility_factor))\n        elif vol < 0.5:  # 저변동성\n            period =\
+      \ int(base_period * (1 - volatility_factor))\n        else:\n            period\
+      \ = base_period\n        adaptive_periods.append(max(5, min(50, period)))  #\
+      \ 5~50 범위 제한\n\n    # 적응형 SMA 계산\n    adaptive_sma = []\n    for i, period in\
+      \ enumerate(adaptive_periods):\n        if i >= period:\n            sma_value\
+      \ = volume_data[i-period+1:i+1].mean()\n            adaptive_sma.append(sma_value)\n\
+      \        else:\n            adaptive_sma.append(volume_data[:i+1].mean())\n\n\
+      \    return adaptive_sma\n\n# 적응형 거래량 SMA 적용\nadaptive_vol_sma = adaptive_volume_sma(volume_history)\n\
+      current_adaptive_ratio = current_volume / adaptive_vol_sma[-1]\n\nIF current_adaptive_ratio\
+      \ > 2.0:\n    변동성 조정 고거래량: 시장 상황 대비 비정상적 활동\n```\n\n시장 변동성에 따라 거래량 SMA의 기간을\
+      \ 동적으로 조정하여 시장 상황에 적응적인 기준선을 생성합니다.\n고변동성 구간에서는 더 긴 기간으로 안정화하고, 저변동성에서는 더 짧은\
+      \ 기간으로 민감도를 높입니다.\n\n## 가중 거래량 SMA (Weighted Volume SMA)\n```python\n# 시간 가중\
+      \ 거래량 SMA\ndef time_weighted_volume_sma(volume_data, price_data, period=20):\n\
+      \    \"\"\"가격 변동성에 따라 가중치를 부여한 거래량 SMA\"\"\"\n\n    # 가격 변동률 기반 가중치 계산\n   \
+      \ price_changes = np.abs(np.diff(price_data) / price_data[:-1])\n\n    weighted_sma\
+      \ = []\n    for i in range(period-1, len(volume_data)):\n        window_volumes\
+      \ = volume_data[i-period+1:i+1]\n        window_weights = price_changes[i-period+1:i+1]\n\
+      \n        # 가중 평균 계산\n        weighted_avg = np.average(window_volumes, weights=window_weights)\n\
+      \        weighted_sma.append(weighted_avg)\n\n    return weighted_sma\n\n# 가중\
+      \ 거래량 SMA와 비교\nweighted_vol_sma = time_weighted_volume_sma(volume_history, price_history)\n\
+      \nIF current_volume > weighted_vol_sma[-1] * 1.8:\n    가격 변동성 고려 고거래량: 진짜 시장\
+      \ 관심 증대\n```\n\n단순한 산술평균이 아닌 가격 변동성에 따른 가중평균을 사용하여 더 의미 있는 거래량 기준선을 생성합니다.\n\
+      \n## 거래량 SMA 기반 이상 탐지\n```python\n# Z-Score 기반 거래량 이상 탐지\ndef volume_anomaly_detection(volume_data,\
+      \ sma_period=20, threshold=2.5):\n    \"\"\"통계적 방법으로 거래량 이상값 탐지\"\"\"\n\n  \
+      \  volume_sma = volume_data.rolling(sma_period).mean()\n    volume_std = volume_data.rolling(sma_period).std()\n\
+      \n    # Z-Score 계산\n    z_scores = (volume_data - volume_sma) / volume_std\n\
+      \n    # 이상값 탐지\n    anomalies = []\n    for i, z_score in enumerate(z_scores):\n\
+      \        if abs(z_score) > threshold:\n            anomaly_type = 'spike' if\
+      \ z_score > 0 else 'drop'\n            confidence = min(abs(z_score) / threshold,\
+      \ 3.0)  # 최대 3배\n            anomalies.append({\n                'index': i,\n\
+      \                'type': anomaly_type,\n                'confidence': confidence,\n\
+      \                'z_score': z_score\n            })\n\n    return anomalies\n\
+      \n# 실시간 이상값 모니터링\ncurrent_z_score = (current_volume - volume_sma_20) / volume_std_20\n\
+      \nIF abs(current_z_score) > 3.0:  # 99.7% 신뢰구간 초과\n    통계적 극한 이상값: 시장 조작 또는\
+      \ 중대 이벤트 가능성\n    액션: 즉각적인 상황 분석 및 대응 필요\n```\n\n통계적 방법을 사용하여 정상적인 거래량 범위를 벗어나는\
+      \ 이상값을 객관적으로 탐지합니다.\n\n## 기계학습 기반 거래량 SMA 예측\n```python\n# LSTM을 활용한 거래량 SMA\
+      \ 예측\ndef predict_volume_sma_trend(volume_history, sma_history, market_features):\n\
+      \    \"\"\"미래 거래량 SMA 변화 방향 예측\"\"\"\n\n    # 특성 엔지니어링\n    features = {\n \
+      \       'volume_momentum': calculate_volume_momentum(volume_history, [5, 10,\
+      \ 20]),\n        'sma_slope': calculate_sma_slope(sma_history, 5),\n       \
+      \ 'volume_volatility': calculate_rolling_volatility(volume_history, 10),\n \
+      \       'price_volume_correlation': calculate_correlation(price_history, volume_history,\
+      \ 20),\n        'market_sentiment': market_features['sentiment'],\n        'time_features':\
+      \ extract_time_features()  # 요일, 시간대 등\n    }\n\n    # LSTM 모델로 예측\n    model\
+      \ = load_trained_lstm_model('volume_sma_predictor.h5')\n    prediction = model.predict(features)\n\
+      \n    return {\n        'predicted_direction': 'up' if prediction > 0.5 else\
+      \ 'down',\n        'confidence': abs(prediction - 0.5) * 2,\n        'predicted_change':\
+      \ prediction\n    }\n\n# 예측 기반 전략 조정\nvolume_sma_forecast = predict_volume_sma_trend(volume_hist,\
+      \ sma_hist, market_data)\n\nIF volume_sma_forecast['predicted_direction'] ==\
+      \ 'up' AND volume_sma_forecast['confidence'] > 0.7:\n    거래량 기저 상승 예측: 향후 변동성\
+      \ 증가 대비\n    액션: 포지션 크기 조정, 변동성 전략 준비\n```\n\n기계학습 모델을 사용하여 거래량 SMA의 미래 변화를\
+      \ 예측하고, 이를 바탕으로 선제적 전략 조정을 실행합니다.\n\n## 거래량 SMA 기반 시장 체제 분류\n```python\n# Hidden\
+      \ Markov Model을 활용한 거래량 체제 분석\ndef classify_volume_regime(volume_data, sma_data,\
+      \ price_data):\n    \"\"\"거래량 패턴을 기반으로 시장 체제 분류\"\"\"\n\n    # 거래량 특성 추출\n \
+      \   relative_volume = volume_data / sma_data\n    volume_volatility = calculate_rolling_volatility(relative_volume,\
+      \ 10)\n    volume_trend = calculate_trend_strength(sma_data, 20)\n\n    # 시장\
+      \ 체제 특성\n    regime_features = np.column_stack([\n        relative_volume,\n\
+      \        volume_volatility,\n        volume_trend\n    ])\n\n    # HMM 모델로 체제\
+      \ 분류\n    hmm_model = GaussianHMM(n_components=4)  # 4개 체제\n    regime_states\
+      \ = hmm_model.fit_predict(regime_features)\n\n    # 체제별 특성 분석\n    regime_characteristics\
+      \ = {\n        0: \"저거래량_안정\",      # Low volume, stable\n        1: \"고거래량_급변동\"\
+      ,    # High volume, volatile\n        2: \"중간거래량_상승\",    # Medium volume, trending\
+      \ up\n        3: \"중간거래량_하락\"     # Medium volume, trending down\n    }\n\n\
+      \    return regime_states, regime_characteristics\n\n# 현재 체제에 따른 전략 조정\ncurrent_regime\
+      \ = classify_current_volume_regime()\n\nIF current_regime == \"고거래량_급변동\":\n\
+      \    고변동성 체제: 단기 스칼핑 전략 활성화\nELIF current_regime == \"저거래량_안정\":\n    안정 체제:\
+      \ 장기 포지션 구축 기회\n```\n\n거래량 SMA 패턴을 기반으로 시장 체제를 자동으로 분류하고, 각 체제에 최적화된 거래 전략을\
+      \ 적용합니다.\n\n## 멀티 에셋 거래량 SMA 상관관계 분석\n```python\n# 포트폴리오 차원의 거래량 분석\ndef analyze_cross_asset_volume_correlation(asset_volumes,\
+      \ asset_smas):\n    \"\"\"여러 자산의 거래량 SMA 상관관계 분석\"\"\"\n\n    # 정규화된 거래량 계산\n\
+      \    normalized_volumes = {}\n    for asset in asset_volumes:\n        normalized_volumes[asset]\
+      \ = asset_volumes[asset] / asset_smas[asset]\n\n    # 상관관계 매트릭스 계산\n    correlation_matrix\
+      \ = calculate_correlation_matrix(normalized_volumes)\n\n    # 시장 전체 거래량 응집도\n\
+      \    market_cohesion = calculate_average_correlation(correlation_matrix)\n\n\
+      \    return {\n        'correlation_matrix': correlation_matrix,\n        'market_cohesion':\
+      \ market_cohesion,\n        'divergent_assets': identify_divergent_assets(correlation_matrix)\n\
+      \    }\n\n# 포트폴리오 수준 거래량 분석\ncross_volume_analysis = analyze_cross_asset_volume_correlation(volumes,\
+      \ smas)\n\nIF cross_volume_analysis['market_cohesion'] > 0.8:\n    높은 시장 응집도:\
+      \ 시스템적 위험 또는 기회\n```\n\n여러 자산의 거래량 SMA를 종합 분석하여 시장 전체의 유동성 패턴과 자산 간 연관성을 파악합니다.\n\
+      \n이러한 고급 기법들은 단순한 거래량 평균을 넘어서 거래량 SMA를 정교한 시장 분석 도구로 발전시켜 기관투자자 수준의 유동성 분석을\
+      \ 가능하게 합니다.\n"
+  usage:
+    title: VOLUME_SMA 활용 전략
+    content: "거래량 SMA는 트리거 빌더에서 거래량 기반 신호의 필터링과 시장 활동 수준 측정의 기준점 역할을 수행합니다.\n현재 거래량과의\
+      \ 상대적 비교를 통해 신호의 강도를 측정하고 시장 상황을 정확히 파악할 수 있습니다.\n\n## 트리거 빌더 기본 문법\n```\n조건:\
+      \ VOLUME > VOLUME_SMA_20 * 2\n액션: 평균 대비 2배 거래량 급증, 중요 이벤트 가능성\n\n조건: VOLUME\
+      \ < VOLUME_SMA_20 * 0.5\n액션: 평균 대비 거래량 급감, 시장 무관심 상태\n\n조건: BREAKOUT_SIGNAL\
+      \ AND VOLUME > VOLUME_SMA_20 * 1.5\n액션: 충분한 거래량 동반 브레이크아웃, 신뢰성 높은 신호\n```\n\n\
+      거래량 SMA와의 비율을 통해 현재 거래량의 상대적 크기를 정량화하는 것이 핵심입니다.\n절대값보다는 평균 대비 몇 배인지를 기준으로 거래량\
+      \ 이상 현상을 탐지합니다.\n\n## 거래량 정규화 지표 생성\n```\n# 상대적 거래량 지표 (RVI: Relative Volume\
+      \ Indicator)\nrelative_volume = VOLUME / VOLUME_SMA_20\n\nIF relative_volume\
+      \ > 3.0:\n    극고거래량: 주요 뉴스나 이벤트 발생 가능성\n    액션: 즉시 시장 상황 점검 및 신중한 대응\n\nIF relative_volume\
+      \ > 1.5:\n    고거래량: 시장 관심 증대\n    액션: 다른 기술적 신호와 결합하여 진입 고려\n\nIF relative_volume\
+      \ < 0.7:\n    저거래량: 시장 무관심 또는 관망\n    액션: 신규 진입 보다는 기존 포지션 유지\n```\n\n상대적 거래량\
+      \ 지표를 통해 시장 참여도를 객관적으로 측정하고, 이에 따른 차별화된 전략을 적용합니다.\n이는 시장 상황에 관계없이 일관된 기준을 제공하는\
+      \ 강력한 도구입니다.\n\n## 거래량 SMA 기울기 분석\n```\n# 거래량 SMA 추세 분석\nvolume_sma_slope =\
+      \ (VOLUME_SMA_20 - VOLUME_SMA_20[5]) / 5  # 5일간 변화율\n\nIF volume_sma_slope >\
+      \ 0.1:  # 상승 기울기\n    거래량 기저 상승: 시장 관심 증가 추세\n    액션: 향후 변동성 증가 대비, 적극적 전략 준비\n\
+      \nIF volume_sma_slope < -0.1:  # 하락 기울기\n    거래량 기저 하락: 시장 관심 감소 추세\n    액션:\
+      \ 보수적 접근, 큰 포지션 지양\n```\n\n거래량 SMA 자체의 추세를 분석하여 시장 전반의 참여도 변화 방향을 파악합니다.\n이는\
+      \ 중장기적인 시장 환경 변화를 예측하는 데 도움이 됩니다.\n\n## 다중 기간 거래량 SMA 조합\n```\n# 거래량 SMA 골든/데드\
+      \ 크로스\nIF VOLUME_SMA_5 > VOLUME_SMA_20 AND VOLUME_SMA_5[1] <= VOLUME_SMA_20[1]:\n\
+      \    거래량 골든 크로스: 단기 거래량 급증\n    액션: 시장 활성화 신호, 변동성 증가 대비\n\nIF VOLUME_SMA_5\
+      \ < VOLUME_SMA_20 AND VOLUME_SMA_5[1] >= VOLUME_SMA_20[1]:\n    거래량 데드 크로스:\
+      \ 거래량 둔화\n    액션: 시장 침체 신호, 보수적 접근\n\n# 다중 시간대 확인\nIF VOLUME > VOLUME_SMA_5\
+      \ AND VOLUME > VOLUME_SMA_20 AND VOLUME > VOLUME_SMA_50:\n    모든 기간 SMA 상회:\
+      \ 강력한 거래량 급증\n    액션: 매우 중요한 시장 변화 가능성\n```\n\n서로 다른 기간의 거래량 SMA를 조합하여 거래량 변화의\
+      \ 강도와 지속성을 측정합니다.\n여러 기간에서 동시에 나타나는 신호는 더 높은 신뢰도를 가집니다.\n\n## 가격-거래량 SMA 결합\
+      \ 분석\n```\n# 가격 SMA와 거래량 SMA 동시 분석\nprice_above_sma = CURRENT_PRICE > PRICE_SMA_20\n\
+      volume_above_sma = VOLUME > VOLUME_SMA_20\n\nIF price_above_sma AND volume_above_sma:\n\
+      \    가격+거래량 동반 상승: 건전한 상승 추세\n    액션: 추세 추종 전략 적용\n\nIF price_above_sma AND\
+      \ NOT volume_above_sma:\n    거래량 부족한 가격 상승: 추세 약화 경고\n    액션: 익절 고려, 신규 매수 자제\n\
+      \nIF NOT price_above_sma AND volume_above_sma:\n    거래량 급증하는 가격 하락: 공포 매도 가능성\n\
+      \    액션: 과매도 반등 기회 탐색\n```\n\n가격과 거래량의 SMA를 동시에 분석하여 시장 상황을 4가지 케이스로 분류하고 각각에\
+      \ 맞는 전략을 적용합니다.\n\n## 시간대별 거래량 SMA 최적화\n```\n# 시간대별 거래량 패턴 고려\nIF ASIAN_HOURS:\n\
+      \    기준 거래량 = VOLUME_SMA_20_ASIAN\nELIF EUROPEAN_HOURS:\n    기준 거래량 = VOLUME_SMA_20_EUROPEAN\n\
+      ELIF US_HOURS:\n    기준 거래량 = VOLUME_SMA_20_US\n\n# 시간대별 상대 거래량 계산\ntime_adjusted_relative_volume\
+      \ = VOLUME / 기준_거래량\n\nIF time_adjusted_relative_volume > 2.0:\n    해당 시간대 기준\
+      \ 초고거래량\n    액션: 지역 특화 이슈 가능성 점검\n```\n\n24시간 거래되는 암호화폐의 특성을 고려하여 시간대별로 차별화된\
+      \ 거래량 SMA 기준을 적용합니다.\n"

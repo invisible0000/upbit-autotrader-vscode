@@ -1,0 +1,11 @@
+CASH_BALANCE:
+  variable_id: CASH_BALANCE
+  display_name_ko: 현금 잔고
+  display_name_en: Cash Balance
+  purpose_category: capital
+  chart_category: subplot
+  comparison_group: capital_comparable
+  is_active: 1
+  description: 사용 가능한 현금 잔고
+  source: distributed_yaml
+  parameter_required: 0

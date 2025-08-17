@@ -1,0 +1,50 @@
+META_PYRAMID_TARGET:
+- parameter_id: 137
+  variable_id: META_PYRAMID_TARGET
+  parameter_name: calculation_method
+  parameter_type: enum
+  default_value: entry_price_percent
+  enum_values: '[''average_price_percent'', ''entry_price_percent'', ''static_value_offset'',
+    ''percentage_of_tracked'']'
+  is_required: 1
+  display_name_ko: 계산 방식
+  display_name_en: 계산 방식
+  description: 피라미딩 계산 방식 (평단가%p/진입가%p/정적차이/극값비율%)
+  display_order: 1
+  enum_values_ko: '["평단가 기준 %p", "진입가 기준 %p", "정적 차이값", "극값 비율 %"]'
+- parameter_id: 140
+  variable_id: META_PYRAMID_TARGET
+  parameter_name: max_count
+  parameter_type: integer
+  default_value: '3'
+  min_value: '1'
+  max_value: '10'
+  is_required: 1
+  display_name_ko: 최대 횟수
+  display_name_en: 최대 횟수
+  description: 최대 피라미딩 횟수 (1-10회, 리스크 관리)
+  display_order: 4
+- parameter_id: 139
+  variable_id: META_PYRAMID_TARGET
+  parameter_name: trail_direction
+  parameter_type: enum
+  default_value: up
+  enum_values: '[''up'', ''down'']'
+  is_required: 1
+  display_name_ko: 추적 방향
+  display_name_en: 추적 방향
+  description: '피라미딩 방향 (UP: 불타기, DOWN: 물타기)'
+  display_order: 3
+  enum_values_ko: '["상승 (불타기)", "하락 (물타기)"]'
+- parameter_id: 138
+  variable_id: META_PYRAMID_TARGET
+  parameter_name: value
+  parameter_type: decimal
+  default_value: '3.0'
+  min_value: '-50.0'
+  max_value: '50.0'
+  is_required: 1
+  display_name_ko: 계산값
+  display_name_en: 계산값
+  description: '계산에 사용될 값 (퍼센트: 3.0=3%, 원화: 1000=1000원)'
+  display_order: 2

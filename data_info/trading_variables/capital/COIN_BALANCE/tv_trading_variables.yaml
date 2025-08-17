@@ -1,0 +1,11 @@
+COIN_BALANCE:
+  variable_id: COIN_BALANCE
+  display_name_ko: 코인 잔고
+  display_name_en: Coin Balance
+  purpose_category: capital
+  chart_category: subplot
+  comparison_group: capital_comparable
+  is_active: 1
+  description: 현재 보유중인 코인 수량
+  source: distributed_yaml
+  parameter_required: 0

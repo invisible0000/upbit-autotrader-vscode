@@ -1,0 +1,5 @@
+MACD:
+  fast_period: 12 (빠른선)
+  slow_period: 26 (느린선)
+  signal_period: 9 (시그널선)
+  timeframe: 포지션 설정 따름

@@ -1,0 +1,11 @@
+POSITION_SIZE:
+  variable_id: POSITION_SIZE
+  display_name_ko: 포지션 크기
+  display_name_en: Position Size
+  purpose_category: state
+  chart_category: subplot
+  comparison_group: quantity_comparable
+  is_active: 1
+  description: 현재 포지션의 크기
+  source: built-in
+  parameter_required: 0

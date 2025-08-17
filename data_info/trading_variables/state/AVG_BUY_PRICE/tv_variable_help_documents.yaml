@@ -1,0 +1,114 @@
+AVG_BUY_PRICE:
+  concept:
+    title: AVG_BUY_PRICE (평균 매수가) 개념과 정의
+    content: '## 평균 매수가의 기본 개념
+
+
+      AVG_BUY_PRICE는 현재 보유한 코인의 평균 취득 단가를 나타내는 핵심 변수입니다.
+
+      수수료를 포함한 실제 비용 기준으로 계산되며, 손익 계산과 추가 매수 전략 수립에
+
+      필수적인 기준점 역할을 합니다.
+
+
+      ### 기술적 정의
+
+
+      평균 매수가는 가중평균 방식으로 계산됩니다:
+
+      ```
+
+      AVG_BUY_PRICE = Σ(매수금액 + 수수료) / Σ(매수수량)
+
+      ```
+
+
+      ### 변수 메타데이터
+
+
+      - **Purpose Category**: price
+
+      - **Chart Category**: overlay
+
+      - **Comparison Group**: price_comparable
+
+      - **단위**: KRW (원화 기준)
+
+      - **업데이트**: 매수 거래 발생 시 실시간 갱신
+
+
+      ### 평균 매수가의 특성
+
+
+      AVG_BUY_PRICE는 과거 모든 매수 거래의 누적 결과를 반영합니다.
+
+      새로운 매수가 발생할 때마다 수량 가중평균으로 재계산되며,
+
+      매도 시에는 변경되지 않고 보유 수량이 0이 될 때까지 유지됩니다.
+
+
+      ### 손익 계산의 기준점
+
+
+      - **미실현 손익**: (CURRENT_PRICE - AVG_BUY_PRICE) * COIN_BALANCE
+
+      - **손익률**: (CURRENT_PRICE / AVG_BUY_PRICE - 1) * 100
+
+      - **브레이크이븐**: AVG_BUY_PRICE 지점에서 손익 0
+
+
+      ### 수수료 반영의 중요성
+
+
+      업비트 거래 수수료(0.05%)가 포함된 실제 비용 기준이므로,
+
+      단순 시장가격과 달리 실질적인 손익 기준점을 제공합니다.
+
+      이는 정확한 수익률 계산과 세금 신고에 중요한 데이터입니다.
+
+      '
+  advanced:
+    title: AVG_BUY_PRICE 고급 포트폴리오 전략
+    content: "## 고급 포지션 관리 알고리즘\n\n### 동적 평균가 전략 (DCA Plus)\n\n전통적인 DCA를 넘어서는 지능형\
+      \ 평균화 전략:\n\n```\n매수 간격 = ATR * 2  # 변동성 기반 매수 간격\n매수 금액 = 기본금액 * (1 + 손실률)\
+      \  # 손실률에 비례한 증액\n\nIF CURRENT_PRICE < AVG_BUY_PRICE * (1 - ATR/AVG_BUY_PRICE\
+      \ * 3) THEN\n   매수 실행\n```\n\n### 리스크 조정 포지션 사이징\n\n**Kelly Criterion 응용:**\n\
+      ```\n최적 비중 = (승률 * 평균수익 - 패율 * 평균손실) / 평균수익\n\n실제 매수금액 = 총 자본 * 최적 비중 * (AVG_BUY_PRICE\
+      \ / CURRENT_PRICE)\n# 현재가가 평균가보다 낮을 때 비중 증가\n```\n\n**변동성 조정 사이징:**\n```\n정규화\
+      \ 변동성 = ATR / AVG_BUY_PRICE\n포지션 사이즈 = 고정 리스크 / (정규화 변동성 * 2)\n```\n\n### 다자산\
+      \ 평균가 관리\n\n**포트폴리오 레벨 관리:**\n```\n전체 평균가 = Σ(각 코인별 AVG_BUY_PRICE * 비중)\n포트폴리오\
+      \ 수익률 = (전체 현재가치 / 전체 평균가 - 1) * 100\n\n리밸런싱 조건:\n- 개별 코인 비중이 목표 ± 5% 초과시\n\
+      - 전체 수익률이 ± 20% 도달시\n```\n\n### 세금 최적화 전략\n\n**FIFO vs 평균가 선택:**\n```\n한국 세법:\
+      \ 평균가 기준 양도소득세 계산\n실현 손익 = (매도가 - AVG_BUY_PRICE) * 매도 수량\n\n세금 최적화 매도:\n- 손실\
+      \ 구간: 연말 전 실현으로 손익 통산\n- 수익 구간: 다음 해로 이연하여 세율 관리\n```\n\n### 스트레스 테스트 시나리오\n\
+      \n**극한 상황 대응:**\n```\n플래시 크래시 (AVG_BUY_PRICE 대비 -50%):\n- 추가 매수 중단\n- 손절 라인\
+      \ 재조정: AVG_BUY_PRICE * 0.30\n- 유동성 확보 우선\n\n버블 상황 (AVG_BUY_PRICE 대비 +500%):\n\
+      - 90% 이상 익절\n- 남은 10%로 추가 상승 참여\n- 재진입 기준: AVG_BUY_PRICE * 2.0 하회시\n```\n\n\
+      ### 백테스팅 검증 메트릭\n\n**평균가 전략 성능 지표:**\n```\n평균 보유 기간 = Σ(보유일수) / 거래 횟수\n평균가 회복률\
+      \ = 손실 포지션이 AVG_BUY_PRICE 회복한 비율\n최대 드로우다운 지속 기간 = AVG_BUY_PRICE 하회 최대 일수\n\
+      ```\n\n**리스크 지표:**\n```\nVaR (Value at Risk) = AVG_BUY_PRICE 기준 99% 신뢰구간 손실\n\
+      CVaR (Conditional VaR) = VaR 초과 손실의 평균\nMaximum Adverse Excursion = 포지션별 최대\
+      \ 중간 손실\n```\n\n### 주의사항\n\n- AVG_BUY_PRICE는 과거 거래의 결과이므로 미래 가격 예측 불가\n- 하락장에서\
+      \ 물타기는 자금 고갈 위험 존재\n- 거래 수수료와 세금을 고려한 실질 수익률 계산 필수\n- 심리적 앵커링 효과 주의: 평균가에 과도하게\
+      \ 의존하지 말 것\n"
+  usage:
+    title: 트리거 빌더에서 AVG_BUY_PRICE 실전 활용법
+    content: "## 트리거 빌더 조건 설정 방법\n\n### 기본 손익 기준 조건\n\n```\n조건 1: CURRENT_PRICE >\
+      \ AVG_BUY_PRICE * 1.02  # 2% 수익 조건\n조건 2: CURRENT_PRICE < AVG_BUY_PRICE * 0.95\
+      \  # 5% 손실 조건\n조건 3: PROFIT_PERCENT > 10  # AVG_BUY_PRICE 기준 10% 수익\n```\n\n\
+      ### 물타기 전략 구현\n\n**하향 평균화 전략:**\n```\n추가 매수 조건:\n- CURRENT_PRICE < AVG_BUY_PRICE\
+      \ * 0.95  # 5% 하락시\n- CASH_BALANCE > AVG_BUY_PRICE * COIN_BALANCE * 0.5  # 현재\
+      \ 포지션의 50% 이상 현금 보유\n- RSI < 30  # 과매도 상태 확인\n```\n\n**물타기 계산 예시:**\n```\n현재\
+      \ 보유: 1 BTC @ 50,000,000원 (AVG_BUY_PRICE)\n추가 매수: 0.5 BTC @ 47,500,000원\n새로운\
+      \ AVG_BUY_PRICE = (50,000,000 * 1 + 47,500,000 * 0.5) / 1.5\n              \
+      \        = 49,166,667원\n```\n\n### 익절 전략 구현\n\n**단계별 익절 전략:**\n```\n1단계 익절 (30%\
+      \ 물량):\n- CURRENT_PRICE > AVG_BUY_PRICE * 1.05  # 5% 수익\n- VOLUME > VOLUME_SMA(20)\
+      \ * 1.5  # 거래량 증가 확인\n\n2단계 익절 (50% 물량):\n- CURRENT_PRICE > AVG_BUY_PRICE *\
+      \ 1.15  # 15% 수익\n- RSI > 70  # 과매수 상태\n\n전량 익절:\n- CURRENT_PRICE < AVG_BUY_PRICE\
+      \ * 1.02  # 수익 구간에서 하락 반전\n```\n\n### 손절 전략 구현\n\n**동적 손절 시스템:**\n```\n기본 손절:\n\
+      - CURRENT_PRICE < AVG_BUY_PRICE * 0.90  # 10% 손실 한계\n\n트레일링 손절:\nIF PROFIT_PERCENT\
+      \ > 20 THEN\n   손절가 = MAX(AVG_BUY_PRICE * 1.10, CURRENT_PRICE * 0.90)\n```\n\
+      \n### 포지션 관리 조건\n\n**포지션 사이징:**\n```\n매수 금액 = CASH_BALANCE * 0.33  # 3분할 매수\n\
+      조건: CURRENT_PRICE < AVG_BUY_PRICE (기존 포지션이 있는 경우)\n```\n\n**리밸런싱 조건:**\n```\n\
+      IF (CURRENT_PRICE - AVG_BUY_PRICE) / AVG_BUY_PRICE > 0.50 THEN\n   수익 구간 50%\
+      \ 매도 + 신규 진입 대기\n```\n"

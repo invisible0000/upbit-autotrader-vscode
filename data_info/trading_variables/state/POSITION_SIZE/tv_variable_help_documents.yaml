@@ -1,0 +1,113 @@
+POSITION_SIZE:
+  concept:
+    title: 포지션 크기의 이해
+    content: '포지션 크기는 현재 보유하고 있는 암호화폐의 물리적 수량을 나타내는 핵심 상태 변수입니다.
+
+      이는 단순한 보유량을 넘어서 리스크 관리와 자금 배분의 기초가 되는 중요한 지표입니다.
+
+
+      ## 기본 정의와 특성
+
+      포지션 크기는 투자자가 특정 시점에 보유한 코인의 개수를 의미합니다.
+
+      예를 들어 1.5 BTC, 100 ETH와 같이 소수점까지 정확하게 표현됩니다.
+
+      이 값은 매수/매도 주문이 체결될 때마다 실시간으로 업데이트되며, 분할 매수나 분할 매도 전략의 핵심 기준이 됩니다.
+
+
+      포지션 크기는 quantity_comparable 그룹에 속하여 동일한 단위의 다른 수량 변수들과 직접 비교가 가능합니다.
+
+      차트상에서는 subplot 형태로 표시되어 가격 차트와 분리된 독립적인 패널에서 확인할 수 있습니다.
+
+
+      ## 포지션 크기의 전략적 의미
+
+      포지션 크기는 투자 전략의 실행 상태를 나타내는 핵심 지표입니다.
+
+      제로 포지션(0개 보유)에서 시작하여 점진적으로 포지션을 늘려가는 분할 매수 전략이나,
+
+      보유 수량을 단계적으로 줄여가는 분할 매도 전략의 기준점이 됩니다.
+
+
+      특히 DCA(Dollar Cost Averaging) 전략에서 포지션 크기는 추가 매수 시점을 결정하는 중요한 변수입니다.
+
+      현재 포지션이 목표 수량의 몇 퍼센트인지에 따라 추가 매수 여부와 매수량을 동적으로 조절할 수 있습니다.
+
+
+      ## 리스크 관리와의 연관성
+
+      포지션 크기는 투자자의 리스크 노출도를 직접적으로 나타냅니다.
+
+      보유 수량이 클수록 가격 변동에 따른 손익의 절대적 크기가 커지므로,
+
+      적절한 포지션 사이징은 리스크 관리의 핵심 요소입니다.
+
+
+      켈리 기준(Kelly Criterion)과 같은 수학적 모델을 적용할 때,
+
+      현재 포지션 크기는 다음 거래의 적정 규모를 계산하는 기초 데이터가 됩니다.
+
+      또한 Value at Risk(VaR) 계산에서도 현재 보유량은 필수적인 입력값입니다.
+
+
+      ## 시장 상황별 포지션 크기 해석
+
+      강세장에서는 포지션 크기가 증가하는 추세를 보이며, 이는 적극적인 매수 포지션을 의미합니다.
+
+      반대로 약세장에서는 포지션 크기가 감소하는 패턴을 보이며, 이는 리스크 회피를 위한 매도 포지션을 나타냅니다.
+
+
+      횡보장에서는 포지션 크기가 특정 범위 내에서 변동하며,
+
+      이는 레인지 트레이딩 전략의 실행 상태를 보여줍니다.
+
+      '
+  advanced:
+    title: 포지션 크기 고급 활용 전략
+    content: "포지션 크기를 활용한 고급 전략은 수학적 모델과 통계적 분석을 기반으로 한 정교한 포지션 관리를 포함합니다.\n기관투자자\
+      \ 수준의 포지션 사이징 기법을 개인 투자자 수준에서 구현할 수 있습니다.\n\n## 켈리 기준 기반 포지션 사이징\n```python\n\
+      kelly_fraction = (win_probability * avg_win - loss_probability * avg_loss) /\
+      \ avg_win\noptimal_position = current_capital * kelly_fraction\n\nIF POSITION_SIZE\
+      \ < optimal_position * 0.8:\n    매수 신호 생성\nELIF POSITION_SIZE > optimal_position\
+      \ * 1.2:\n    매도 신호 생성\n```\n\n켈리 기준을 적용한 포지션 사이징은 장기적으로 자본 성장률을 최대화하는 수학적으로\
+      \ 최적의 방법입니다.\n과거 거래 데이터를 바탕으로 승률과 평균 수익/손실을 계산하여 최적 포지션 크기를 동적으로 결정합니다.\n\n\
+      ## 볼라틸리티 기반 적응형 포지션 관리\n```python\nvolatility_adjusted_size = base_position_size\
+      \ / (ATR_20 / CURRENT_PRICE)\n\nIF market_volatility > threshold_high:\n   \
+      \ max_position = volatility_adjusted_size * 0.5\nELIF market_volatility < threshold_low:\n\
+      \    max_position = volatility_adjusted_size * 1.5\n```\n\nATR(Average True\
+      \ Range)을 활용하여 시장 변동성에 따라 포지션 크기를 조절합니다.\n높은 변동성 구간에서는 포지션을 줄이고, 낮은 변동성에서는 포지션을\
+      \ 늘려 리스크 조정 수익률을 향상시킵니다.\n\n## 다중 시간대 포지션 조율\n```python\n# 1분봉 기준 단기 포지션\nshort_term_signal\
+      \ = POSITION_SIZE_1m / TARGET_1m\n\n# 1시간봉 기준 중기 포지션\nmedium_term_signal = POSITION_SIZE_1h\
+      \ / TARGET_1h\n\n# 일봉 기준 장기 포지션\nlong_term_signal = POSITION_SIZE_1d / TARGET_1d\n\
+      \nfinal_position_ratio = (short_term_signal * 0.2 +\n                      \
+      \ medium_term_signal * 0.3 +\n                       long_term_signal * 0.5)\n\
+      ```\n\n다중 시간대 분석을 통해 단기, 중기, 장기 추세를 종합적으로 고려한 포지션 크기 결정을 수행합니다.\n각 시간대별 가중치를\
+      \ 조절하여 투자 성향에 맞는 포지션 전략을 구현할 수 있습니다.\n\n## 상관관계 기반 포트폴리오 포지션 최적화\n```python\n\
+      # 비트코인과 알트코인 간 상관관계 고려\nbtc_position_weight = POSITION_SIZE_BTC / TOTAL_PORTFOLIO_VALUE\n\
+      correlation_factor = calculate_correlation(BTC, ALT, period=30)\n\noptimal_alt_position\
+      \ = (1 - correlation_factor) * target_alt_weight\n\nIF current_alt_position\
+      \ > optimal_alt_position * 1.1:\n    알트코인 일부 매도\n```\n\n포트폴리오 내 다른 자산과의 상관관계를\
+      \ 고려하여 포지션 크기를 최적화합니다.\n높은 상관관계를 보이는 자산들의 포지션을 동시에 늘리는 것을 방지하여 분산 효과를 극대화합니다.\n\
+      \n## 기계학습 기반 동적 포지션 예측\n머신러닝 모델을 활용하여 최적 포지션 크기를 예측하고 실시간으로 조정하는 전략을 구현할 수 있습니다.\n\
+      과거 포지션 변화 패턴, 시장 지표, 거시경제 데이터를 종합하여 다음 기간의 최적 포지션을 예측합니다.\n\n이러한 고급 전략들은 단순한\
+      \ 기술적 분석을 넘어서 정량적 분석과 리스크 관리를 통합한 체계적인 접근법을 제공합니다.\n"
+  usage:
+    title: POSITION_SIZE 활용 전략
+    content: "포지션 크기는 트리거 빌더에서 매수/매도 조건을 설정하고 리스크를 관리하는 핵심 변수입니다.\n다양한 거래 전략에서 포지션\
+      \ 크기를 기준으로 한 조건부 로직을 구현할 수 있습니다.\n\n## 트리거 빌더 기본 문법\n```\n조건: POSITION_SIZE\
+      \ > 0.5\n액션: 추가 매수 50% 진입\n\n조건: POSITION_SIZE < 0.1\n액션: 전체 매도\n\n조건: POSITION_SIZE\
+      \ >= TARGET_POSITION * 0.8\n액션: 매수 중단, 관망 모드 전환\n```\n\n포지션 크기를 활용한 분할 거래 전략에서는\
+      \ 현재 보유량에 따라 거래량을 조절합니다.\n예를 들어, 목표 포지션의 30% 미만일 때는 적극 매수, 70% 이상일 때는 매수 중단하는\
+      \ 로직을 구현할 수 있습니다.\n\n## 분할 매수 전략 구현\n```\nIF POSITION_SIZE == 0:\n    초기 진입:\
+      \ 총 자금의 25%\nELIF POSITION_SIZE < TARGET * 0.3:\n    추가 매수: 잔여 자금의 30%\nELIF\
+      \ POSITION_SIZE < TARGET * 0.6:\n    추가 매수: 잔여 자금의 20%\nELSE:\n    매수 중단\n```\n\
+      \n이러한 전략은 급락장에서 평균 단가를 낮추면서도 과도한 노출을 방지하는 효과가 있습니다.\n포지션 크기를 기준으로 한 단계적 진입은\
+      \ 감정적 거래를 방지하고 체계적인 투자를 가능하게 합니다.\n\n## 포지션 크기 기반 리밸런싱\n```\nIF POSITION_SIZE\
+      \ > OPTIMAL_SIZE * 1.2:\n    일부 매도: 초과분의 50%\nELIF POSITION_SIZE < OPTIMAL_SIZE\
+      \ * 0.8:\n    추가 매수: 부족분의 30%\n```\n\n포트폴리오 리밸런싱에서 포지션 크기는 목표 배분비율 유지의 핵심 지표입니다.\n\
+      특정 코인의 비중이 과도하게 증가하거나 감소했을 때 자동으로 조절하는 로직을 구현할 수 있습니다.\n\n## 리스크 관리 연동\n```\n\
+      IF POSITION_SIZE * CURRENT_PRICE > TOTAL_CAPITAL * 0.3:\n    매수 금지 상태 활성화\n\n\
+      IF POSITION_SIZE > 0 AND PROFIT_PERCENT < -20:\n    손절 매도: 전체 포지션의 50%\n```\n\
+      \n포지션 크기와 현재가격을 곱한 포지션 가치가 총 자본의 일정 비율을 초과하면 추가 매수를 제한합니다.\n이는 특정 종목에 대한 과도한\
+      \ 집중을 방지하는 리스크 관리 메커니즘입니다.\n\n## 동적 손익분기점 관리\n포지션 크기에 따라 손절선과 익절선을 동적으로 조정하는\
+      \ 전략도 가능합니다.\n보유량이 많을수록 더 보수적인 손절선을 설정하여 큰 손실을 방지할 수 있습니다.\n"

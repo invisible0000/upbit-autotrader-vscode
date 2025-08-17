@@ -1,0 +1,3 @@
+VOLUME_SMA:
+  period: 거래량 이동평균 기간 (일반적으로 20일)
+  timeframe: 거래량 이동평균 계산에 사용할 봉 단위

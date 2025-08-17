@@ -52,8 +52,9 @@ TV_TABLES = [
     'tv_placeholder_texts'
 ]
 
-# 카테고리 매핑 (variable_id 패턴으로 추정)
-CATEGORY_MAPPING = {
+# 카테고리 매핑 - DB에서 실시간으로 가져오므로 더 이상 사용하지 않음
+# (하위 호환성을 위해 유지하되, get_variable_category_from_db() 함수가 우선)
+CATEGORY_MAPPING_FALLBACK = {
     'SMA': 'trend',
     'EMA': 'trend',
     'BOLLINGER_BAND': 'volatility',
@@ -72,9 +73,9 @@ CATEGORY_MAPPING = {
     'PROFIT_AMOUNT': 'state',
     'POSITION_SIZE': 'state',
     'AVG_BUY_PRICE': 'state',
-    'CASH_BALANCE': 'state',
-    'COIN_BALANCE': 'state',
-    'TOTAL_BALANCE': 'state',
+    'CASH_BALANCE': 'capital',
+    'COIN_BALANCE': 'capital',
+    'TOTAL_BALANCE': 'capital',
     'META_PYRAMID_TARGET': 'meta',
     'META_TRAILING_STOP': 'meta',
     'MACD': 'momentum',
@@ -83,12 +84,40 @@ CATEGORY_MAPPING = {
 }
 
 
-def get_variable_category(variable_id: str) -> str:
-    """변수 ID로부터 카테고리를 추정합니다."""
-    for pattern, category in CATEGORY_MAPPING.items():
+def get_variable_category_from_db(variable_id: str) -> str:
+    """DB에서 실제 purpose_category를 가져옵니다."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT purpose_category FROM tv_trading_variables WHERE variable_id = ?", (variable_id,))
+        result = cursor.fetchone()
+
+        conn.close()
+
+        if result:
+            return result[0]
+        else:
+            print(f"⚠️  {variable_id}의 purpose_category를 찾을 수 없음, fallback 사용")
+            return get_variable_category_fallback(variable_id)
+
+    except Exception as e:
+        print(f"❌ Error getting category for {variable_id}: {e}")
+        return get_variable_category_fallback(variable_id)
+
+
+def get_variable_category_fallback(variable_id: str) -> str:
+    """Fallback 카테고리 매핑을 사용합니다."""
+    for pattern, category in CATEGORY_MAPPING_FALLBACK.items():
         if pattern in variable_id.upper():
             return category
     return 'unknown'
+
+
+def get_variable_category(variable_id: str) -> str:
+    """변수 ID로부터 카테고리를 가져옵니다. (DB 우선, fallback 보조)"""
+    # DB에서 실제 purpose_category 먼저 시도
+    return get_variable_category_from_db(variable_id)
 
 
 def get_all_variable_ids() -> List[str]:

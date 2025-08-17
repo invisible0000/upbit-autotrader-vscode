@@ -1,0 +1,5 @@
+META_PYRAMID_TARGET:
+  calculation_method: 진입가 퍼센트포인트 권장
+  value: '예: 3.0 (3% 상승시 추가매수)'
+  trail_direction: 상향 추적 (불타기)
+  max_count: '예: 3 (최대 3회 추가매수)'

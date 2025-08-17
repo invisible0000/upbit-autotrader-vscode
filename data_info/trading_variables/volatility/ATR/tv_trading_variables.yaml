@@ -1,0 +1,11 @@
+ATR:
+  variable_id: ATR
+  display_name_ko: 평균실제범위 (ATR)
+  display_name_en: Average True Range
+  purpose_category: volatility
+  chart_category: subplot
+  comparison_group: volatility_comparable
+  is_active: 1
+  description: 주가의 변동성을 측정하는 지표. 절대적인 가격 변동폭을 나타냄
+  source: built-in
+  parameter_required: 1
