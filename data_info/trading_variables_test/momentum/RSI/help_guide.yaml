@@ -1,0 +1,11 @@
+RSI:
+  overview: RSI 지표 변수에 대한 상세 가이드
+  purpose: 상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표
+  usage_scenarios:
+  - 기본 사용법
+  - 고급 설정
+  - 주의사항
+  configuration_guide:
+    basic_setup: 기본 설정 방법
+    advanced_options: 고급 옵션 설정
+    troubleshooting: 문제 해결 방법

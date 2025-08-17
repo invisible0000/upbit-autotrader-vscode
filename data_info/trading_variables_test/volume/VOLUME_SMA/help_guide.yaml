@@ -1,0 +1,11 @@
+VOLUME_SMA:
+  overview: 거래량 이동평균 변수에 대한 상세 가이드
+  purpose: 거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교
+  usage_scenarios:
+  - 기본 사용법
+  - 고급 설정
+  - 주의사항
+  configuration_guide:
+    basic_setup: 기본 설정 방법
+    advanced_options: 고급 옵션 설정
+    troubleshooting: 문제 해결 방법

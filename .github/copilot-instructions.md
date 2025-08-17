@@ -108,30 +108,11 @@ $pythonScript = @"
 import sqlite3
 conn = sqlite3.connect('data/settings.sqlite3')
 cursor = conn.cursor()
-cursor.execute('SELECT * FROM tv_trading_variables WHERE display_name_ko LIKE "동적 관리 변수"')
 results = cursor.fetchall()
-for row in results:
-    print(f'Variable: {row[0]}')
 conn.close()
 "@
 
 python -c $pythonScript
-
-# 대안: 큰따옴표 이스케이프 방식 (복잡한 경우)
-python -c "
-import sqlite3
-# 한국어 포함 SQL 쿼리 시 큰따옴표 사용
-cursor.execute('UPDATE table SET description = \"동적 관리 변수\" WHERE id = ?')
-"
-```
-
-## 💡 PowerShell 한국어 처리 가이드라인
-- **Here-String 방식 (권장)**: `$var = @"...내용..."@` + `python -c $var` - 복잡한 스크립트에 최적
-- **한국어 문자열**: 반드시 큰따옴표(") 사용, 작은따옴표(') 금지
-- **Python -c 스크립트**: 전체를 큰따옴표로 감싸고, 내부 문자열은 이스케이프된 큰따옴표 사용
-- **환경변수**: 모든 값을 큰따옴표로 감싸기 (예: $env:VAR = "value")
-- **특수문자 포함**: 백슬래시(\), 공백, 한국어 등이 포함된 경우 반드시 큰따옴표 사용
-- **Here-String 장점**: 인용 충돌 없음, 여러 줄 스크립트 가독성 향상, JSON/SQL 처리 안전
 
 ---
 

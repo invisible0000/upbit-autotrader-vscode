@@ -1,16 +1,19 @@
 # ═══════════════════════════════════════════════════════════════
-# RSI 지표 (수정됨) (RSI) - 정의 파일
+# RSI 지표 (RSI) - 정의 파일
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "RSI"
-display_name: "RSI 지표 (수정됨)"
-description: "상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표 - 편집 테스트용 수정"
-purpose_category: "momentum"
-chart_category: "subplot"
-comparison_group: "percentage_comparable"
-ui_component_type: "input_field"
-is_customizable: true
+chart_category: subplot
+comparison_group: percentage_comparable
+description: 상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표
+display_name: RSI 지표
+display_name_en: Relative Strength Index
 is_active: true
+is_customizable: true
+parameter_required: true
+purpose_category: momentum
 sort_order: 100
-tooltip: "상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표 - 편집 테스트용 수정"
-source_type: "built_in"
+source_type: built-in
+tooltip: 상승압력과 하락압력 간의 상대적 강도를 나타내는 모멘텀 지표 - 편집 테스트용 수정
+ui_component_type: input_field
+variable_name: RSI
+

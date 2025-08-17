@@ -2,15 +2,18 @@
 # 현금 잔고 (CASH_BALANCE) - 정의 파일
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "CASH_BALANCE"
-display_name: "현금 잔고"
-description: "사용 가능한 현금 잔고"
-purpose_category: "capital"
-chart_category: "subplot"
-comparison_group: "capital_comparable"
-ui_component_type: "input_field"
-is_customizable: false
+chart_category: subplot
+comparison_group: capital_comparable
+description: 사용 가능한 현금 잔고
+display_name: 현금 잔고
+display_name_en: Cash Balance
 is_active: true
+is_customizable: false
+parameter_required: false
+purpose_category: capital
 sort_order: 100
-tooltip: "사용 가능한 현금 잔고"
-source_type: "built_in"
+source_type: distributed_yaml
+tooltip: 사용 가능한 현금 잔고
+ui_component_type: input_field
+variable_name: CASH_BALANCE
+

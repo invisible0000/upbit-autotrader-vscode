@@ -2,15 +2,18 @@
 # 거래량 (VOLUME) - 정의 파일
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "VOLUME"
-display_name: "거래량"
-description: "특정 기간 동안 거래된 주식의 총 수량"
-purpose_category: "volume"
-chart_category: "subplot"
-comparison_group: "volume_comparable"
-ui_component_type: "input_field"
-is_customizable: false
+chart_category: subplot
+comparison_group: volume_comparable
+description: 특정 기간 동안 거래된 주식의 총 수량
+display_name: 거래량
+display_name_en: Volume
 is_active: true
+is_customizable: false
+parameter_required: false
+purpose_category: volume
 sort_order: 100
-tooltip: "특정 기간 동안 거래된 주식의 총 수량"
-source_type: "built_in"
+source_type: built-in
+tooltip: 특정 기간 동안 거래된 주식의 총 수량
+ui_component_type: input_field
+variable_name: VOLUME
+

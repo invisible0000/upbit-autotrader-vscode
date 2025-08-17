@@ -1,0 +1,27 @@
+VOLUME_SMA:
+  variable_id: VOLUME_SMA
+  display_name_ko: 거래량 이동평균
+  display_name_en: Volume Simple Moving Average
+  purpose_category: volume
+  chart_category: subplot
+  comparison_group: volume_comparable
+  description: 거래량의 단순이동평균으로 평균 거래량 대비 현재 거래량 비교
+  source: built-in
+  parameter_required: true
+  is_active: true
+  created_at: '2025-08-14 13:09:48'
+  updated_at: '2025-08-14 13:09:48'
+technical_specifications:
+  indicator_type: leading
+  calculation_complexity: simple
+  market_applicability:
+  - stocks
+  - crypto
+  - forex
+  data_requirements:
+  - price_data
+variable_properties:
+  ui_component_type: numeric_input
+  validation_rules: []
+  display_format: decimal
+  precision: 2

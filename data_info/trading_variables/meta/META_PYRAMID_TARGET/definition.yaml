@@ -1,0 +1,93 @@
+# ═══════════════════════════════════════════════════════════════
+# 피라미딩 (META_PYRAMID_TARGET) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+META_PYRAMID_TARGET:
+  calculation_complexity: complex
+  chart_category: overlay
+  common_uses:
+  - position_scaling
+  - profit_maximization
+  - loss_recovery
+  - trend_following
+  - risk_management
+  comparison_group: dynamic_target
+  created_at: '2025-08-16 19:15:00'
+  description: 발동 기준점에서 설정 차이 달성시 신호 발생 후 횟수 차감, 소진시 비활성화
+  display_name_en: Pyramiding
+  display_name_ko: 피라미딩
+  indicator_type: leading
+  is_active: true
+  market_applicability:
+  - stocks
+  - crypto
+  - forex
+  - commodities
+  parameter_required: true
+  purpose_category: dynamic_management
+  related_indicators:
+  - META_TRAILING_STOP
+  - RSI
+  - BOLLINGER_BAND
+  - SMA
+  - EMA
+  source: built-in
+  updated_at: '2025-08-16 19:15:00'
+  variable_id: META_PYRAMID_TARGET
+chart_category: adaptive
+comparison_group: dynamic_target
+description: 동적 관리 변수
+display_name: 피라미딩
+display_name_en: Pyramiding
+meta_variable_properties:
+  operation_principle:
+    post_signal_behavior: count_decrement
+    signal_condition: threshold_achievement
+    tracking_mode: reference_point_tracking
+  signal_characteristics:
+    false_positive_risk: low
+    latency: real_time
+    signal_frequency: multiple_per_activation
+    signal_reliability: high
+  state_management:
+    initialization: external_trigger
+    persistence: count_based
+    reset_condition: count_exhaustion
+  variable_dependency:
+    base_variable_required: true
+    real_time_monitoring: true
+    timeframe_inheritance: true
+parameter_required: true
+purpose_category: dynamic_management
+pyramiding_properties:
+  position_management:
+    auto_deactivation: true
+    count_decrement: true
+    maximum_count: 10
+    scaling_direction:
+    - up
+    - down
+  risk_control:
+    interval_enforcement: true
+    opposite_direction_safety: true
+    position_limit: count_based
+  strategy_types:
+    averaging_down: down_direction
+    mean_reversion: counter_trend
+    profit_pyramiding: up_direction
+    trend_following: momentum_based
+source_type: distributed_yaml
+technical_specifications:
+  calculation_requirements:
+    cpu_intensity: low
+    data_dependency: current_and_reference
+    memory_usage: minimal
+  performance_characteristics:
+    calculation_speed: fast
+    resource_efficiency: high
+    update_frequency: real_time
+  scalability:
+    concurrent_instances: unlimited
+    multi_asset_support: true
+    multi_timeframe_support: true
+

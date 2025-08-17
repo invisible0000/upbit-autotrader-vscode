@@ -1,0 +1,27 @@
+PROFIT_AMOUNT:
+  variable_id: PROFIT_AMOUNT
+  display_name_ko: 현재 수익 금액
+  display_name_en: Current Profit Amount
+  purpose_category: state
+  chart_category: subplot
+  comparison_group: capital_comparable
+  description: 매수가 대비 현재 수익 금액
+  source: built-in
+  parameter_required: false
+  is_active: true
+  created_at: '2025-08-14 13:09:48'
+  updated_at: '2025-08-14 13:09:48'
+technical_specifications:
+  indicator_type: leading
+  calculation_complexity: simple
+  market_applicability:
+  - stocks
+  - crypto
+  - forex
+  data_requirements:
+  - price_data
+variable_properties:
+  ui_component_type: numeric_input
+  validation_rules: []
+  display_format: decimal
+  precision: 2

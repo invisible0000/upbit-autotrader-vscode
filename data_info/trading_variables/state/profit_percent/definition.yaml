@@ -2,15 +2,18 @@
 # 현재 수익률(%) (PROFIT_PERCENT) - 정의 파일
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "PROFIT_PERCENT"
-display_name: "현재 수익률(%)"
-description: "매수가 대비 현재 수익률"
-purpose_category: "state"
-chart_category: "subplot"
-comparison_group: "percentage_comparable"
-ui_component_type: "input_field"
-is_customizable: false
+chart_category: subplot
+comparison_group: percentage_comparable
+description: 매수가 대비 현재 수익률
+display_name: 현재 수익률(%)
+display_name_en: Current Profit Percentage
 is_active: true
+is_customizable: false
+parameter_required: false
+purpose_category: state
 sort_order: 100
-tooltip: "매수가 대비 현재 수익률"
-source_type: "built_in"
+source_type: built-in
+tooltip: 매수가 대비 현재 수익률
+ui_component_type: input_field
+variable_name: PROFIT_PERCENT
+

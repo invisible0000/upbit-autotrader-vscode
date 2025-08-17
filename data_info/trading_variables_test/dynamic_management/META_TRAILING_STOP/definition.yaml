@@ -1,0 +1,31 @@
+META_TRAILING_STOP:
+  variable_id: META_TRAILING_STOP
+  display_name_ko: 트레일링 스탑
+  display_name_en: Trailing Stop
+  purpose_category: dynamic_management
+  chart_category: adaptive
+  comparison_group: dynamic_target
+  description: 동적 관리 변수
+  source: distributed_yaml
+  parameter_required: true
+  is_active: true
+  created_at: '2025-08-16 10:01:38'
+  updated_at: '2025-08-16T20:11:30.488236'
+technical_specifications:
+  indicator_type: leading
+  calculation_complexity: simple
+  market_applicability:
+  - stocks
+  - crypto
+  - forex
+  data_requirements:
+  - price_data
+variable_properties:
+  ui_component_type: numeric_input
+  validation_rules: []
+  display_format: decimal
+  precision: 2
+meta_variable_properties:
+  dynamic_calculation: true
+  state_dependent: true
+  triggers_actions: true

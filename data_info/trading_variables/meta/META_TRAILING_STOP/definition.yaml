@@ -1,0 +1,75 @@
+# ═══════════════════════════════════════════════════════════════
+# 트레일링 스탑 (META_TRAILING_STOP) - 정의 파일
+# ═══════════════════════════════════════════════════════════════
+
+META_TRAILING_STOP:
+  calculation_complexity: complex
+  chart_category: overlay
+  common_uses:
+  - risk_management
+  - profit_protection
+  - dynamic_exit
+  - trend_following
+  - position_sizing
+  comparison_group: dynamic_target
+  created_at: '2025-08-16 18:30:00'
+  description: 추적 변수의 극값을 기록하고 설정 차이만큼 벗어나면 신호 발생 후 비활성화
+  display_name_en: Trailing Stop
+  display_name_ko: 트레일링 스탑
+  indicator_type: leading
+  is_active: true
+  market_applicability:
+  - stocks
+  - crypto
+  - forex
+  - commodities
+  parameter_required: true
+  purpose_category: dynamic_management
+  related_indicators:
+  - META_PYRAMID_TARGET
+  - ATR
+  - BOLLINGER_BAND
+  - RSI
+  source: built-in
+  updated_at: '2025-08-16 18:30:00'
+  variable_id: META_TRAILING_STOP
+chart_category: adaptive
+comparison_group: dynamic_target
+description: 동적 관리 변수
+display_name: 트레일링 스탑
+display_name_en: Trailing Stop
+meta_variable_properties:
+  operation_principle:
+    post_signal_behavior: immediate_deactivation
+    signal_condition: threshold_breach
+    tracking_mode: extreme_value_tracking
+  signal_characteristics:
+    false_positive_risk: low
+    latency: real_time
+    signal_frequency: once_per_activation
+    signal_reliability: high
+  state_management:
+    initialization: external_trigger
+    persistence: session_based
+    reset_condition: manual_restart
+  variable_dependency:
+    base_variable_required: true
+    real_time_monitoring: true
+    timeframe_inheritance: true
+parameter_required: true
+purpose_category: dynamic_management
+source_type: distributed_yaml
+technical_specifications:
+  calculation_requirements:
+    cpu_intensity: low
+    data_dependency: current_and_extreme
+    memory_usage: minimal
+  performance_characteristics:
+    calculation_speed: fast
+    resource_efficiency: high
+    update_frequency: real_time
+  scalability:
+    concurrent_instances: unlimited
+    multi_asset_support: true
+    multi_timeframe_support: true
+

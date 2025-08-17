@@ -1,0 +1,11 @@
+HIGH_PRICE:
+  overview: 고가 변수에 대한 상세 가이드
+  purpose: 특정 기간의 최고가
+  usage_scenarios:
+  - 기본 사용법
+  - 고급 설정
+  - 주의사항
+  configuration_guide:
+    basic_setup: 기본 설정 방법
+    advanced_options: 고급 옵션 설정
+    troubleshooting: 문제 해결 방법

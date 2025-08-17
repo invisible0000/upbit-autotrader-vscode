@@ -2,15 +2,18 @@
 # 시가 (OPEN_PRICE) - 정의 파일
 # ═══════════════════════════════════════════════════════════════
 
-variable_name: "OPEN_PRICE"
-display_name: "시가"
-description: "특정 기간의 시작 가격"
-purpose_category: "price"
-chart_category: "overlay"
-comparison_group: "price_comparable"
-ui_component_type: "input_field"
-is_customizable: false
+chart_category: overlay
+comparison_group: price_comparable
+description: 특정 기간의 시작 가격
+display_name: 시가
+display_name_en: Open Price
 is_active: true
+is_customizable: false
+parameter_required: false
+purpose_category: price
 sort_order: 100
-tooltip: "특정 기간의 시작 가격"
-source_type: "built_in"
+source_type: built-in
+tooltip: 특정 기간의 시작 가격
+ui_component_type: input_field
+variable_name: OPEN_PRICE
+
