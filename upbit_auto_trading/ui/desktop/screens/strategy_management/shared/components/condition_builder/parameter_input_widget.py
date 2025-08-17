@@ -82,18 +82,41 @@ class ParameterInputWidget(QWidget):
             if not enum_string:
                 return {}
 
-            # JSON 배열 형태의 문자열 처리
-            import json
-            if enum_string.startswith('[') and enum_string.endswith(']'):
-                enum_list = json.loads(enum_string)
+            # Python 리터럴 형태의 문자열 처리 (DB 실제 형태)
+            import ast
+            if enum_string.startswith("[") and enum_string.endswith("]"):
+                try:
+                    # Python 리터럴 파싱 시도
+                    enum_list = ast.literal_eval(enum_string)
+                except (ValueError, SyntaxError):
+                    # JSON 파싱 시도 (fallback)
+                    import json
+                    enum_list = json.loads(enum_string)
+
                 result = {}
 
+                # 메타변수 enum 값들에 대한 한국어 매핑
+                enum_display_mapping = {
+                    # calculation_method 매핑
+                    'average_price_percent': '평단가 기준 %',
+                    'entry_price_percent': '진입가 기준 %',
+                    'static_value_offset': '고정값 오프셋',
+                    'percentage_of_tracked': '추적값 기준 %',
+
+                    # trail_direction 매핑
+                    'up': '상승 추적',
+                    'down': '하락 추적',
+                    'bidirectional': '양방향 추적'
+                }
+
                 for item in enum_list:
-                    if ':' in item:
+                    if isinstance(item, str) and ':' in item:
                         value, display = item.split(':', 1)
                         result[value] = display
                     else:
-                        result[item] = item
+                        # 매핑 테이블에서 한국어 표시명 찾기
+                        display_name = enum_display_mapping.get(item, item)
+                        result[item] = display_name
 
                 return result
 

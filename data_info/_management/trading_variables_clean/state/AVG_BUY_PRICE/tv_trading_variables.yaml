@@ -1,0 +1,11 @@
+AVG_BUY_PRICE:
+  variable_id: AVG_BUY_PRICE
+  display_name_ko: 평균 매수가
+  display_name_en: Average Buy Price
+  purpose_category: state
+  chart_category: subplot
+  comparison_group: price_comparable
+  is_active: 1
+  description: 수수료 포함 평균 매수가
+  source: built-in
+  parameter_required: 0

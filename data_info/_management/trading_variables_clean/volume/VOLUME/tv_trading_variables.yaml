@@ -1,0 +1,11 @@
+VOLUME:
+  variable_id: VOLUME
+  display_name_ko: 거래량
+  display_name_en: Volume
+  purpose_category: volume
+  chart_category: subplot
+  comparison_group: volume_comparable
+  is_active: 1
+  description: 특정 기간 동안 거래된 주식의 총 수량
+  source: built-in
+  parameter_required: 1

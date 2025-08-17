@@ -1,0 +1,11 @@
+EMA:
+  variable_id: EMA
+  display_name_ko: 지수이동평균 (EMA)
+  display_name_en: Exponential Moving Average
+  purpose_category: trend
+  chart_category: overlay
+  comparison_group: price_comparable
+  is_active: 1
+  description: 최근 가격에 더 큰 가중치를 부여한 이동평균
+  source: built-in
+  parameter_required: 1

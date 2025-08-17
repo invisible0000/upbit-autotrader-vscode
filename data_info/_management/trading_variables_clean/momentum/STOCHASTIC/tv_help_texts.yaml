@@ -1,0 +1,4 @@
+STOCHASTIC:
+  k_period: 스토캐스틱 %K 계산 기간 (일반적으로 14일)
+  d_period: 스토캐스틱 %D 평활화 기간 (일반적으로 3일)
+  timeframe: 스토캐스틱 계산에 사용할 봉 단위

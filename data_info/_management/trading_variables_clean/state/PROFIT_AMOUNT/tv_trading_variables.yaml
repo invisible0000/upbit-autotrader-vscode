@@ -1,0 +1,11 @@
+PROFIT_AMOUNT:
+  variable_id: PROFIT_AMOUNT
+  display_name_ko: 현재 수익 금액
+  display_name_en: Current Profit Amount
+  purpose_category: state
+  chart_category: subplot
+  comparison_group: capital_comparable
+  is_active: 1
+  description: 매수가 대비 현재 수익 금액
+  source: built-in
+  parameter_required: 0

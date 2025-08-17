@@ -1,0 +1,11 @@
+META_TRAILING_STOP:
+  variable_id: META_TRAILING_STOP
+  display_name_ko: 트레일링 스탑
+  display_name_en: Trailing Stop
+  purpose_category: dynamic_management
+  chart_category: adaptive
+  comparison_group: dynamic_target
+  is_active: 1
+  description: 동적 관리 변수
+  source: distributed_yaml
+  parameter_required: 1

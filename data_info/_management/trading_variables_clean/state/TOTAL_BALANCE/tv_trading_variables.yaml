@@ -1,0 +1,11 @@
+TOTAL_BALANCE:
+  variable_id: TOTAL_BALANCE
+  display_name_ko: 총 잔고
+  display_name_en: Total Balance
+  purpose_category: capital
+  chart_category: subplot
+  comparison_group: capital_comparable
+  is_active: 1
+  description: 현금과 코인을 합친 총 자산
+  source: distributed_yaml
+  parameter_required: 0

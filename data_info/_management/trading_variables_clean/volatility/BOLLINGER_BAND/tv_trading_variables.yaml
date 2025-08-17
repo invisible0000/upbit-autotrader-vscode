@@ -1,0 +1,11 @@
+BOLLINGER_BAND:
+  variable_id: BOLLINGER_BAND
+  display_name_ko: 볼린저 밴드 (BB)
+  display_name_en: Bollinger Bands
+  purpose_category: volatility
+  chart_category: overlay
+  comparison_group: price_comparable
+  is_active: 1
+  description: 이동평균선과 표준편차를 이용한 변동성 채널
+  source: built-in
+  parameter_required: 1

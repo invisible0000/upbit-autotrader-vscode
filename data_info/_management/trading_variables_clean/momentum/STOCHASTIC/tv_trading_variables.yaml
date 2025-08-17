@@ -1,0 +1,11 @@
+STOCHASTIC:
+  variable_id: STOCHASTIC
+  display_name_ko: 스토캐스틱 (STOCH)
+  display_name_en: Stochastic Oscillator
+  purpose_category: momentum
+  chart_category: subplot
+  comparison_group: percentage_comparable
+  is_active: 1
+  description: 특정 기간 주가 변동 범위에서 현재 주가의 위치를 백분율로 표시
+  source: built-in
+  parameter_required: 1

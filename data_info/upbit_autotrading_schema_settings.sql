@@ -1,26 +1,16 @@
--- Upbit Auto Trading - Settings Database Schema
--- =================================================
--- DB: settings.sqlite3
--- 용도: 프로그램 전반의 기본 기능 동작을 위한 설정 및 메타데이터
--- 생성일: 2025-08-01
--- 관리 대상: 시스템 설정, 트레이딩 변수 정의, UI 설정, 백업 정보
+-- ========================================
+-- UPBIT AUTO TRADING SETTINGS DATABASE
+-- ENHANCED Schema with Multilingual Enum Support
+-- Generated: 2025-08-17
+-- Version: v3.1 (Added enum_values_ko support)
+-- ========================================
 
-PRAGMA foreign_keys = ON;
+-- ========================================
+-- CORE CONFIGURATION TABLES
+-- ========================================
 
--- =====================================
--- 시스템 설정 테이블들
--- =====================================
-
--- API 키 보안 시스템
-CREATE TABLE IF NOT EXISTS secure_keys (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    key_type TEXT NOT NULL UNIQUE,          -- 'encryption', 'api_access', 'api_secret' 등
-    key_value BLOB NOT NULL,                -- 암호화된 키 데이터 (BLOB 타입)
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 앱 전반 설정
+-- Table: cfg_app_settings
+-- Application-level configuration settings
 CREATE TABLE cfg_app_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     key TEXT UNIQUE NOT NULL,
@@ -29,7 +19,8 @@ CREATE TABLE cfg_app_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 시스템 설정
+-- Table: cfg_system_settings
+-- System-level configuration settings
 CREATE TABLE cfg_system_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     setting_name TEXT UNIQUE NOT NULL,
@@ -37,48 +28,67 @@ CREATE TABLE cfg_system_settings (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 백업 정보
-CREATE TABLE sys_backup_info (
+-- Table: secure_keys
+-- Encrypted API keys and sensitive data storage
+CREATE TABLE secure_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    backup_name TEXT NOT NULL,
-    backup_path TEXT NOT NULL,
-    backup_size INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    key_type TEXT NOT NULL UNIQUE,
+    key_value BLOB NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_secure_keys_type ON secure_keys(key_type);
+CREATE INDEX idx_secure_keys_created_at ON secure_keys(created_at);
+
+-- ========================================
+-- TRADING VARIABLES SYSTEM v3.1
+-- ========================================
+
+-- Table: tv_schema_version
+-- Database schema version tracking
+CREATE TABLE tv_schema_version (
+    version TEXT PRIMARY KEY,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
 
--- =====================================
--- 트레이딩 변수 시스템 (core tables)
--- =====================================
-
--- 트레이딩 변수 메인 정의
+-- Table: tv_trading_variables
+-- Core trading variables registry (SMA, RSI, MACD, etc.)
 CREATE TABLE tv_trading_variables (
     variable_id TEXT PRIMARY KEY,           -- 'SMA', 'RSI', 'MACD'
     display_name_ko TEXT NOT NULL,          -- '단순이동평균', 'RSI 지표'
     display_name_en TEXT,                   -- 'Simple Moving Average', 'RSI Indicator'
-    purpose_category TEXT NOT NULL,         -- 'trend', 'momentum', 'volatility', 'volume', 'price'
+    purpose_category TEXT NOT NULL,         -- 'trend', 'momentum', 'volatility', 'volume', 'price', 'capital', 'state', 'meta'
     chart_category TEXT NOT NULL,           -- 'overlay', 'subplot'
     comparison_group TEXT NOT NULL,         -- 'price_comparable', 'percentage_comparable', etc.
-    parameter_required BOOLEAN DEFAULT 0,   -- 파라미터 필요 여부 (0: 불필요, 1: 필요)
-    is_active BOOLEAN DEFAULT 1,            -- 활성화 상태
+    is_active BOOLEAN DEFAULT 1,            -- 활성화 여부
+    description TEXT,                       -- 변수 설명
+    source TEXT DEFAULT 'built-in',         -- 'built-in', 'tradingview', 'custom'
+    parameter_required BOOLEAN DEFAULT 0,   -- 파라미터 필요 여부
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    description TEXT,                       -- 지표 설명
-    source TEXT DEFAULT 'built-in'          -- 'built-in', 'tradingview', 'custom'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 변수별 파라미터 정의
+CREATE INDEX idx_tv_purpose_category ON tv_trading_variables(purpose_category);
+CREATE INDEX idx_tv_chart_category ON tv_trading_variables(chart_category);
+CREATE INDEX idx_tv_comparison_group ON tv_trading_variables(comparison_group);
+CREATE INDEX idx_tv_is_active ON tv_trading_variables(is_active);
+
+-- Table: tv_variable_parameters (ENHANCED with enum_values_ko)
+-- Trading variable parameters with multilingual enum support
 CREATE TABLE tv_variable_parameters (
     parameter_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    variable_id TEXT NOT NULL,              -- 'RSI', 'SMA' 등 지표 ID
+    variable_id TEXT NOT NULL,              -- 'RSI', 'SMA' 변수ID
     parameter_name TEXT NOT NULL,           -- 'period', 'source', 'multiplier'
-    parameter_type TEXT NOT NULL,           -- 'integer', 'float', 'string', 'boolean', 'enum'
-    default_value TEXT,                     -- 기본값 (문자열로 저장)
-    min_value TEXT,                         -- 최소값 (숫자형일 때)
-    max_value TEXT,                         -- 최대값 (숫자형일 때)
-    enum_values TEXT,                       -- enum 타입일 때 가능한 값들 (JSON 배열)
+    parameter_type TEXT NOT NULL,           -- 'integer', 'decimal', 'string', 'boolean', 'enum'
+    default_value TEXT,                     -- 기본값(문자열 저장)
+    min_value TEXT,                         -- 최소값(문자열 저장)
+    max_value TEXT,                         -- 최대값(문자열 저장)
+    enum_values TEXT,                       -- enum 영문 값들의 JSON 배열 (["upper", "middle", "lower"])
+    enum_values_ko TEXT,                    -- enum 한글 값들의 JSON 배열 (["상단", "중앙선", "하단"]) -- ✨ NEW COLUMN
     is_required BOOLEAN DEFAULT 1,          -- 필수 파라미터 여부
-    display_name_ko TEXT NOT NULL,          -- '기간', '데이터 소스'
+    display_name_ko TEXT NOT NULL,          -- '기간', '데이터소스'
     display_name_en TEXT,                   -- 'Period', 'Data Source'
     description TEXT,                       -- 파라미터 설명
     display_order INTEGER DEFAULT 0,        -- UI 표시 순서
@@ -86,7 +96,16 @@ CREATE TABLE tv_variable_parameters (
     FOREIGN KEY (variable_id) REFERENCES tv_trading_variables(variable_id) ON DELETE CASCADE
 );
 
--- 도움말 텍스트
+CREATE INDEX idx_tv_variable_parameters_variable_id ON tv_variable_parameters(variable_id);
+CREATE INDEX idx_tv_variable_parameters_display_order ON tv_variable_parameters(variable_id, display_order);
+CREATE INDEX idx_tv_parameters_variable ON tv_variable_parameters(variable_id, parameter_name);
+
+-- ========================================
+-- HELP & DOCUMENTATION SYSTEM
+-- ========================================
+
+-- Table: tv_help_texts
+-- Short help texts and tooltips for parameters
 CREATE TABLE tv_help_texts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     variable_id TEXT NOT NULL,
@@ -102,7 +121,10 @@ CREATE TABLE tv_help_texts (
     FOREIGN KEY (variable_id) REFERENCES tv_trading_variables(variable_id)
 );
 
--- 플레이스홀더 텍스트
+CREATE INDEX idx_tv_help_texts_lookup ON tv_help_texts(variable_id, parameter_name);
+
+-- Table: tv_placeholder_texts
+-- Input field placeholders and examples
 CREATE TABLE tv_placeholder_texts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     variable_id TEXT NOT NULL,
@@ -118,240 +140,75 @@ CREATE TABLE tv_placeholder_texts (
     FOREIGN KEY (variable_id) REFERENCES tv_trading_variables(variable_id)
 );
 
--- 지표 카테고리
-CREATE TABLE tv_indicator_categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category_name TEXT UNIQUE NOT NULL,
-    display_name_ko TEXT NOT NULL,
-    display_name_en TEXT,
-    description TEXT,
-    chart_position TEXT DEFAULT 'subplot',
-    color_scheme TEXT DEFAULT 'default',
-    color_theme TEXT,
-    display_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+CREATE INDEX idx_tv_placeholder_lookup ON tv_placeholder_texts(variable_id, parameter_name);
 
--- 파라미터 타입 정의
-CREATE TABLE tv_parameter_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type_name TEXT UNIQUE NOT NULL,
-    description TEXT,
-    validation_pattern TEXT,
-    validation_example TEXT,
-    ui_component TEXT DEFAULT 'input',
-    default_constraints TEXT,               -- JSON 형태의 제약 조건
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 비교 그룹 정의
-CREATE TABLE tv_comparison_groups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_name TEXT UNIQUE NOT NULL,
-    display_name_ko TEXT NOT NULL,
-    display_name_en TEXT,
-    description TEXT,
-    compatibility_rules TEXT,              -- JSON 형태의 호환성 규칙
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 지표 라이브러리
-CREATE TABLE tv_indicator_library (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    indicator_id TEXT UNIQUE NOT NULL,
-    display_name_ko TEXT NOT NULL,
-    display_name_en TEXT,
-    category TEXT NOT NULL,
-    calculation_method TEXT,
-    calculation_note TEXT,
-    description TEXT,
-    usage_examples TEXT,                   -- JSON 형태의 사용 예시
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 스키마 버전 관리
-CREATE TABLE tv_schema_version (
-    version TEXT PRIMARY KEY,
-    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    description TEXT
-);
-
--- 워크플로우 가이드
-CREATE TABLE tv_workflow_guides (
-    guide_id TEXT PRIMARY KEY,
-    guide_title TEXT NOT NULL,
-    guide_content TEXT NOT NULL,
-    step_order INTEGER DEFAULT 0,
-    target_audience TEXT DEFAULT 'general',
-    difficulty_level TEXT DEFAULT 'basic',
-    is_active BOOLEAN DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- =====================================
--- 차트 시스템 설정
--- =====================================
-
--- 차트 레이아웃 템플릿
-CREATE TABLE cfg_chart_layout_templates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    template_name TEXT NOT NULL UNIQUE,
-    description TEXT,
-    main_chart_height_ratio REAL DEFAULT 0.6,
-    subplot_configurations TEXT NOT NULL,  -- JSON
-    color_palette TEXT,                    -- JSON
-    is_default INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- 차트 변수 정의
-CREATE TABLE tv_chart_variables (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    variable_id TEXT NOT NULL UNIQUE,
-    variable_name TEXT NOT NULL,
-    description TEXT,
-    category TEXT NOT NULL,
-    display_type TEXT NOT NULL,
-    scale_min REAL,
-    scale_max REAL,
-    unit TEXT DEFAULT '',
-    default_color TEXT DEFAULT '#007bff',
-    subplot_height_ratio REAL DEFAULT 0.3,
-    is_active BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- 변수 호환성 규칙
-CREATE TABLE tv_variable_compatibility_rules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    base_variable_id TEXT NOT NULL,
-    compatible_category TEXT NOT NULL,
-    compatibility_reason TEXT,
-    min_value_constraint REAL,
-    max_value_constraint REAL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (base_variable_id) REFERENCES tv_chart_variables (variable_id)
-);
-
--- 변수 사용 로그
-CREATE TABLE tv_variable_usage_logs (
+-- Table: tv_variable_help_documents
+-- Comprehensive help documentation (concept/usage/advanced guides)
+CREATE TABLE tv_variable_help_documents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     variable_id TEXT NOT NULL,
-    condition_id INTEGER,
-    usage_context TEXT NOT NULL,
-    chart_display_info TEXT,              -- JSON
-    render_time_ms INTEGER,
-    user_feedback TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (variable_id) REFERENCES tv_chart_variables (variable_id)
-);
-
--- =====================================
--- 조건 및 전략 메타데이터 (구조만)
--- =====================================
-
--- 트레이딩 조건 메타구조
-CREATE TABLE trading_conditions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    condition_name TEXT NOT NULL,
-    condition_type TEXT NOT NULL,          -- 'entry', 'exit', 'management'
-    description TEXT,
-    variable_mappings TEXT,               -- JSON: 사용되는 변수들의 매핑
-    is_template BOOLEAN DEFAULT 0,
-    is_active BOOLEAN DEFAULT 1,
+    help_category TEXT NOT NULL,            -- 'concept', 'usage', 'advanced'
+    content_type TEXT NOT NULL,
+    title_ko TEXT,
+    title_en TEXT,
+    content_ko TEXT NOT NULL,
+    content_en TEXT,
+    display_order INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (variable_id) REFERENCES tv_trading_variables(variable_id)
 );
 
--- =====================================
--- 인덱스 생성
--- =====================================
+CREATE INDEX idx_help_docs_variable_category ON tv_variable_help_documents(variable_id, help_category);
 
--- API 키 보안 관련 인덱스
-CREATE UNIQUE INDEX IF NOT EXISTS idx_secure_keys_type ON secure_keys(key_type);
-CREATE INDEX IF NOT EXISTS idx_secure_keys_created_at ON secure_keys(created_at);
+-- ========================================
+-- SCHEMA VERSION INITIALIZATION
+-- ========================================
 
--- 트레이딩 변수 관련 인덱스
-CREATE INDEX idx_tv_chart_category ON tv_trading_variables(chart_category);
-CREATE INDEX idx_tv_comparison_group ON tv_trading_variables(comparison_group);
-CREATE INDEX idx_tv_is_active ON tv_trading_variables(is_active);
-CREATE INDEX idx_tv_purpose_category ON tv_trading_variables(purpose_category);
-CREATE INDEX idx_tv_variable_parameters_variable_id ON tv_variable_parameters(variable_id);
-CREATE INDEX idx_tv_variable_parameters_display_order ON tv_variable_parameters(variable_id, display_order);
+-- Record current schema version
+INSERT OR REPLACE INTO tv_schema_version (version, description)
+VALUES ('3.1', 'Added enum_values_ko column for multilingual enum support');
 
--- 차트 시스템 관련 인덱스
-CREATE INDEX idx_tv_chart_variables_category ON tv_chart_variables(category);
-CREATE INDEX idx_tv_chart_variables_is_active ON tv_chart_variables(is_active);
-CREATE INDEX idx_tv_variable_usage_logs_variable_id ON tv_variable_usage_logs(variable_id);
-CREATE INDEX idx_tv_variable_usage_logs_created_at ON tv_variable_usage_logs(created_at);
+-- ========================================
+-- MIGRATION SCRIPT FOR EXISTING DATABASES
+-- ========================================
 
--- 조건 관련 인덱스
-CREATE INDEX idx_trading_conditions_type ON trading_conditions(condition_type);
-CREATE INDEX idx_trading_conditions_is_active ON trading_conditions(is_active);
+-- Step 1: Add enum_values_ko column (if not exists)
+-- For existing databases, run this SQL:
 
--- =====================================
--- 기본 데이터 삽입
--- =====================================
+ALTER TABLE tv_variable_parameters
+ADD COLUMN enum_values_ko TEXT;
 
--- 스키마 버전 정보
-INSERT INTO tv_schema_version (version, description)
-VALUES ('1.0.0', 'Initial settings database schema');
+-- Step 2: Update schema version
+INSERT OR REPLACE INTO tv_schema_version (version, description)
+VALUES ('3.1', 'Added enum_values_ko column for multilingual enum support');
 
--- 기본 앱 설정
-INSERT OR IGNORE INTO cfg_app_settings (key, value) VALUES
-('app_version', '1.0.0'),
-('default_language', 'ko'),
-('theme', 'dark'),
-('auto_backup_enabled', 'true'),
-('backup_retention_days', '30');
+-- Step 3: Populate existing enum mappings
+-- MACD Type mappings
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["MACD선", "시그널선", "히스토그램"]'
+WHERE variable_id = 'MACD' AND parameter_name = 'macd_type';
 
--- 기본 시스템 설정
-INSERT OR IGNORE INTO cfg_system_settings (setting_name, setting_value) VALUES
-('max_concurrent_strategies', '10'),
-('default_timeframe', '1d'),
-('api_timeout_seconds', '30'),
-('log_level', 'INFO');
+-- Bollinger Band mappings
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["상단", "중앙선", "하단"]'
+WHERE variable_id = 'BOLLINGER_BAND' AND parameter_name = 'band_position';
 
--- =====================================
--- 뷰 생성 (필요시)
--- =====================================
+-- Timeframe mappings (for all timeframe parameters)
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["포지션 설정 따름", "1분", "3분", "5분", "10분", "15분", "30분", "1시간", "4시간", "1일", "1주", "1월"]'
+WHERE parameter_name = 'timeframe' AND parameter_type = 'enum';
 
--- 활성 트레이딩 변수 뷰
-CREATE VIEW IF NOT EXISTS active_trading_variables AS
-SELECT
-    tv.variable_id,
-    tv.display_name_ko,
-    tv.display_name_en,
-    tv.purpose_category,
-    tv.chart_category,
-    tv.comparison_group,
-    tv.description,
-    COUNT(tvp.parameter_id) as parameter_count
-FROM tv_trading_variables tv
-LEFT JOIN tv_variable_parameters tvp ON tv.variable_id = tvp.variable_id
-WHERE tv.is_active = 1
-GROUP BY tv.variable_id;
+-- META Calculation Method mappings
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["평단가 기준 %p", "진입가 기준 %p", "정적 차이값", "극값 비율 %"]'
+WHERE parameter_name = 'calculation_method' AND parameter_type = 'enum';
 
--- 완전한 변수 정보 뷰 (파라미터 포함)
-CREATE VIEW IF NOT EXISTS complete_variable_info AS
-SELECT
-    tv.variable_id,
-    tv.display_name_ko as variable_name_ko,
-    tv.display_name_en as variable_name_en,
-    tv.purpose_category,
-    tv.chart_category,
-    tv.comparison_group,
-    tvp.parameter_id,
-    tvp.parameter_name,
-    tvp.parameter_type,
-    tvp.default_value,
-    tvp.display_name_ko as param_name_ko,
-    tvp.display_name_en as param_name_en,
-    tvp.is_required,
-    tvp.display_order
-FROM tv_trading_variables tv
-LEFT JOIN tv_variable_parameters tvp ON tv.variable_id = tvp.variable_id
-WHERE tv.is_active = 1
-ORDER BY tv.variable_id, tvp.display_order;
+-- META Trail Direction mappings
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["상승 (불타기)", "하락 (물타기)"]'
+WHERE variable_id = 'META_PYRAMID_TARGET' AND parameter_name = 'trail_direction';
+
+UPDATE tv_variable_parameters
+SET enum_values_ko = '["상승 추적", "하락 추적"]'
+WHERE variable_id = 'META_TRAILING_STOP' AND parameter_name = 'trail_direction';

@@ -1,0 +1,3 @@
+EMA:
+  period: 12 (빠른 반응용)
+  timeframe: 포지션 설정 따름

@@ -1,0 +1,11 @@
+MACD:
+  variable_id: MACD
+  display_name_ko: MACD 지표
+  display_name_en: Moving Average Convergence Divergence
+  purpose_category: momentum
+  chart_category: subplot
+  comparison_group: signal_conditional
+  is_active: 1
+  description: 두 이동평균선 사이의 관계를 보여주는 모멘텀 및 추세 지표
+  source: built-in
+  parameter_required: 1

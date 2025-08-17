@@ -1,8 +1,0 @@
-parameters: {}
-parameter_validation:
-  validation_rules: 파라미터 검증 규칙
-  error_messages: 오류 메시지 정의
-ui_settings:
-  input_type: form
-  layout: vertical
-  grouping: by_category

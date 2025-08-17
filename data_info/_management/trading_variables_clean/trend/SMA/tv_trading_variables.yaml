@@ -1,0 +1,11 @@
+SMA:
+  variable_id: SMA
+  display_name_ko: 단순이동평균 (SMA)
+  display_name_en: Simple Moving Average
+  purpose_category: trend
+  chart_category: overlay
+  comparison_group: price_comparable
+  is_active: 1
+  description: 특정 기간의 가격을 산술 평균한 값
+  source: built-in
+  parameter_required: 1

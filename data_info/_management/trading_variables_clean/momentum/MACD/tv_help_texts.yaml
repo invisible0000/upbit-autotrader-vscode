@@ -1,0 +1,5 @@
+MACD:
+  fast_period: MACD 빠른선 기간 (일반적으로 12일)
+  slow_period: MACD 느린선 기간 (일반적으로 26일)
+  signal_period: MACD 시그널선 기간 (일반적으로 9일)
+  timeframe: MACD 계산에 사용할 봉 단위

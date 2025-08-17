@@ -25,6 +25,7 @@ class ChartCategory(Enum):
     """차트 표시 방식"""
     OVERLAY = "overlay"         # 주 차트에 오버레이 (SMA, EMA, 볼린저밴드 등)
     SUBPLOT = "subplot"         # 별도 서브플롯 (RSI, MACD, 거래량 등)
+    ADAPTIVE = "adaptive"       # 적응형 - 메타변수가 추적하는 기본 변수의 카테고리를 따름
 
 
 class ComparisonGroup(Enum):

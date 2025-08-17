@@ -1,0 +1,11 @@
+CURRENT_PRICE:
+  variable_id: CURRENT_PRICE
+  display_name_ko: 현재가
+  display_name_en: Current Price
+  purpose_category: price
+  chart_category: overlay
+  comparison_group: price_comparable
+  is_active: 1
+  description: 현재 시점의 가격
+  source: built-in
+  parameter_required: 0

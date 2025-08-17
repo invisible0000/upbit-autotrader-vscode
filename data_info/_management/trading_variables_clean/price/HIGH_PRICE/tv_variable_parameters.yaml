@@ -1,0 +1,13 @@
+HIGH_PRICE:
+- parameter_id: 146
+  variable_id: HIGH_PRICE
+  parameter_name: timeframe
+  parameter_type: enum
+  default_value: position_follow
+  enum_values: '["position_follow", "1m", "3m", "5m", "10m", "15m", "30m", "1h", "4h",
+    "1d", "1w", "1M"]'
+  is_required: 1
+  display_name_ko: 타임프레임
+  display_name_en: Timeframe
+  description: '데이터 수집 시간 단위 (position_follow: 포지션 진입 시점 타임프레임 추종)'
+  display_order: 1

@@ -1,0 +1,60 @@
+MACD:
+- parameter_id: 89
+  variable_id: MACD
+  parameter_name: fast_period
+  parameter_type: integer
+  default_value: '12'
+  min_value: '5'
+  max_value: '50'
+  is_required: 1
+  display_name_ko: 빠른선 기간
+  display_name_en: Fast Period
+  description: MACD 빠른 이동평균 기간
+  display_order: 1
+- parameter_id: 93
+  variable_id: MACD
+  parameter_name: macd_type
+  parameter_type: enum
+  default_value: MACD선
+  enum_values: '["MACD\uc120", "\uc2dc\uadf8\ub110\uc120", "\ud788\uc2a4\ud1a0\uadf8\ub7a8"]'
+  is_required: 1
+  display_name_ko: MACD 종류
+  display_name_en: MACD Type
+  description: 'MACD선: 빠른선-느린선, 시그널선: MACD의 이평, 히스토그램: MACD-시그널'
+  display_order: 4
+- parameter_id: 91
+  variable_id: MACD
+  parameter_name: signal_period
+  parameter_type: integer
+  default_value: '9'
+  min_value: '5'
+  max_value: '20'
+  is_required: 1
+  display_name_ko: 시그널선 기간
+  display_name_en: Signal Period
+  description: MACD 시그널선 기간
+  display_order: 3
+- parameter_id: 90
+  variable_id: MACD
+  parameter_name: slow_period
+  parameter_type: integer
+  default_value: '26'
+  min_value: '10'
+  max_value: '100'
+  is_required: 1
+  display_name_ko: 느린선 기간
+  display_name_en: Slow Period
+  description: MACD 느린 이동평균 기간
+  display_order: 2
+- parameter_id: 92
+  variable_id: MACD
+  parameter_name: timeframe
+  parameter_type: enum
+  default_value: position_follow
+  enum_values: '["position_follow", "1m", "3m", "5m", "10m", "15m", "30m", "1h", "4h",
+    "1d", "1w", "1M"]'
+  is_required: 1
+  display_name_ko: 타임프레임
+  display_name_en: Timeframe
+  description: 봉 단위 시간
+  display_order: 5
