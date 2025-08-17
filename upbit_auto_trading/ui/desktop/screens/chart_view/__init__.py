@@ -1,18 +1,57 @@
 """
-차트 뷰 패키지
+차트 뷰 화면 - DDD 재개발 중
 
-이 패키지는 캔들스틱 차트, 기술적 지표 오버레이, 거래 시점 마커를 포함하는
-차트 뷰 화면을 구현합니다.
+Legacy 시스템을 제거하고 DDD 아키텍처로 재개발 진행 중입니다.
+Modern Infrastructure와 MVP 패턴을 적용한 새로운 차트 뷰를 구현할 예정입니다.
 """
 
-from .chart_view_screen import ChartViewScreen
-from .candlestick_chart import CandlestickChart
-from .indicator_overlay import IndicatorOverlay
-from .trade_marker import TradeMarker
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 
-__all__ = [
-    'ChartViewScreen',
-    'CandlestickChart',
-    'IndicatorOverlay',
-    'TradeMarker'
-]
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+
+
+class ChartViewScreen(QWidget):
+    """차트 뷰 화면 - DDD 재개발 중"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.logger = create_component_logger("ChartViewScreen")
+        self.logger.info("🔧 차트 뷰 화면 - DDD 재개발 중 (폴백 화면)")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """개발 중 폴백 UI 설정"""
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # 제목
+        title = QLabel("📊 차트 뷰")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = QFont()
+        title_font.setPointSize(24)
+        title_font.setBold(True)
+        title.setFont(title_font)
+
+        # 상태 메시지
+        status = QLabel("🔧 DDD 아키텍처로 재개발 진행 중...")
+        status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_font = QFont()
+        status_font.setPointSize(14)
+        status.setFont(status_font)
+
+        # 설명
+        description = QLabel(
+            "Legacy 시스템을 제거하고\n"
+            "Modern Infrastructure + MVP 패턴으로\n"
+            "새로운 차트 뷰를 구현 예정입니다."
+        )
+        description.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc_font = QFont()
+        desc_font.setPointSize(12)
+        description.setFont(desc_font)
+
+        layout.addWidget(title)
+        layout.addWidget(status)
+        layout.addWidget(description)

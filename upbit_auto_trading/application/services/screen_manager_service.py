@@ -39,8 +39,7 @@ class ScreenManagerService(IScreenManagerService):
             "dashboard": "대시보드",
             "chart_view": "차트 뷰",
             "screener": "종목 스크리닝",
-            "strategy": "매매전략 관리 (신규)",
-            "strategy_backup": "매매전략 관리 (백업)",
+            "strategy": "매매전략 관리",
             "backtest": "백테스팅",
             "trading": "실시간 거래",
             "portfolio": "포트폴리오 구성",
@@ -145,15 +144,12 @@ class ScreenManagerService(IScreenManagerService):
                 from upbit_auto_trading.ui.desktop.screens.asset_screener.asset_screener_screen import AssetScreenerScreen
                 screen = AssetScreenerScreen()
 
-            elif screen_name == "매매전략 관리 (신규)":
-                # 새로운 DDD/MVP 기반 전략 관리 화면
+            elif screen_name == "매매전략 관리":
+                # DDD/MVP 기반 전략 관리 화면
                 from upbit_auto_trading.ui.desktop.screens.strategy_management.strategy_management_screen import (
                     StrategyManagementScreen
                 )
                 screen = StrategyManagementScreen()
-
-            elif screen_name == "매매전략 관리 (백업)":
-                screen = self._load_strategy_management_backup(dependencies)
 
             elif screen_name == "백테스팅":
                 from upbit_auto_trading.ui.desktop.screens.backtesting.backtesting_screen import BacktestingScreen
@@ -185,33 +181,6 @@ class ScreenManagerService(IScreenManagerService):
 
         except Exception as e:
             self._logger.error(f"{screen_name} 화면 로딩 중 오류: {e}")
-            return None
-
-    def _load_strategy_management_backup(self, dependencies: Dict[str, Any]) -> Optional[QWidget]:
-        """매매전략 관리 (백업) 화면 로딩"""
-        try:
-            from upbit_auto_trading.ui.desktop.screens.strategy_management_backup.strategy_management_screen import StrategyManagementScreen
-            screen = StrategyManagementScreen()
-
-            # MVP Container를 전략 관리 화면에 전달 (전략 메이커 탭에서 사용)
-            mvp_container = dependencies.get('mvp_container')
-            if mvp_container and hasattr(screen, 'set_mvp_container'):
-                screen.set_mvp_container(mvp_container)
-                self._logger.info("✅ 기존 탭 구조 유지하며 MVP Container 주입 완료")
-            else:
-                self._logger.info("기존 전략 관리 화면 사용 (탭 구조 유지)")
-
-            # 백테스팅 요청 시그널 연결 (시그널이 있는 경우)
-            backtest_callback = dependencies.get('backtest_callback')
-            if hasattr(screen, 'backtest_requested') and backtest_callback:
-                screen.backtest_requested.connect(backtest_callback)
-            else:
-                self._logger.warning("StrategyManagementScreen에 backtest_requested 시그널이 없습니다")
-
-            return screen
-
-        except Exception as e:
-            self._logger.error(f"매매전략 관리 (백업) 화면 로딩 실패: {e}")
             return None
 
     def _load_settings_screen(self, dependencies: Dict[str, Any]) -> Optional[QWidget]:

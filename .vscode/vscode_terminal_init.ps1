@@ -16,7 +16,7 @@ function Write-SafeHost {
 }
 
 # 가상환경 경로 설정
-$venvPath = "D:/projects/upbit-autotrader-vscode/venv/Scripts/Activate.ps1"
+$venvPath = "D:/projects/upbit-autotrader-vscode/.venv/Scripts/Activate.ps1"
 $workspaceRoot = "D:/projects/upbit-autotrader-vscode"
 
 try {

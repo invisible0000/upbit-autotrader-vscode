@@ -80,8 +80,7 @@ class NavigationBar(QWidget):
         self.btn_dashboard = NavigationButton("대시보드")
         self.btn_chart = NavigationButton("차트 뷰")
         self.btn_screener = NavigationButton("종목 스크리닝")
-        self.btn_strategy = NavigationButton("매매 전략 관리 (신규)")
-        self.btn_strategy_backup = NavigationButton("매매 전략 관리 (백업)")
+        self.btn_strategy = NavigationButton("매매 전략 관리")
         self.btn_backtest = NavigationButton("백테스팅")
         self.btn_trading = NavigationButton("실시간 거래")
         self.btn_portfolio = NavigationButton("포트폴리오 구성")
@@ -93,7 +92,6 @@ class NavigationBar(QWidget):
         self.btn_chart.clicked.connect(lambda: self.screen_changed.emit("chart_view"))
         self.btn_screener.clicked.connect(lambda: self.screen_changed.emit("screener"))
         self.btn_strategy.clicked.connect(lambda: self.screen_changed.emit("strategy"))
-        self.btn_strategy_backup.clicked.connect(lambda: self.screen_changed.emit("strategy_backup"))
         self.btn_backtest.clicked.connect(lambda: self.screen_changed.emit("backtest"))
         self.btn_trading.clicked.connect(lambda: self.screen_changed.emit("trading"))
         self.btn_portfolio.clicked.connect(lambda: self.screen_changed.emit("portfolio"))
@@ -105,7 +103,6 @@ class NavigationBar(QWidget):
         layout.addWidget(self.btn_chart)
         layout.addWidget(self.btn_screener)
         layout.addWidget(self.btn_strategy)
-        layout.addWidget(self.btn_strategy_backup)
         layout.addWidget(self.btn_backtest)
         layout.addWidget(self.btn_trading)
         layout.addWidget(self.btn_portfolio)
@@ -141,8 +138,6 @@ class NavigationBar(QWidget):
             self.btn_screener.setChecked(True)
         elif screen_name == "strategy":
             self.btn_strategy.setChecked(True)
-        elif screen_name == "strategy_backup":
-            self.btn_strategy_backup.setChecked(True)
         elif screen_name == "backtest":
             self.btn_backtest.setChecked(True)
         elif screen_name == "trading":
