@@ -1,50 +1,298 @@
 variable_id: TOTAL_BALANCE
 help_documents:
-  advanced:
-    title: 고급 활용 기법
-    content: '## 🔧 전문가 활용법
-
-
-      ### 1. 다중 시간대 분석
-
-      ```
-
-      1분봉 총 자산 vs 5분봉 총 자산
-
-      → 단기 vs 중기 신호 비교
-
-      ```
-
-
-      ### 2. 동적 임계값 설정
-
-      ```
-
-      총 자산 변화율 기반 조건
-
-      급격한 변화 감지 시 특별 대응
-
-      ```
-
-
-      ### 3. 백테스팅 검증
-
-      - 과거 데이터로 전략 성과 확인
-
-      - 다양한 시장 상황에서 테스트
-
-      - 최적 파라미터 탐색
-
-
-      💡 **팁**: 실제 거래 전 반드시 시뮬레이션으로 검증하세요.
-
-      '
   concept:
-    title: 총 자산 주의사항
-    content: 총 자산 사용 시 시장 상황과 다른 지표들을 함께 고려하여 신중하게 판단하세요.
+    title: 총 자산의 이해
+    content: |
+      총 자산(Total Balance)은 현금 잔고와 보유 암호화폐의 현재 시장가치를 합산한 전체 포트폴리오 가치를 나타내는 핵심 지표입니다.
+      이는 투자 성과를 종합적으로 평가하고 리스크 관리, 포지션 사이징, 그리고 전략적 자산 배분의 기준이 되는 최상위 메트릭입니다.
+
+      ## 기본 계산 구조와 구성 요소
+      총 자산 = 현금 잔고 + (보유 코인 수량 × 현재 시장가격)의 총합
+
+      예를 들어, 현금 1,000,000원 + 1 BTC(현재가 50,000,000원) + 10 ETH(현재가 3,000,000원씩)이 있다면,
+      총 자산은 1,000,000 + 50,000,000 + 30,000,000 = 81,000,000원이 됩니다.
+
+      총 자산은 capital_comparable 그룹에 속하여 원화 기준의 다른 자본 관련 변수들과 직접 비교가 가능합니다.
+      차트상에서는 subplot 형태로 표시되어 시간에 따른 포트폴리오 가치 변화를 추적할 수 있습니다.
+
+      ## 동적 가치 평가의 특성
+      총 자산은 보유한 모든 암호화폐의 시장가격 변동에 따라 실시간으로 변화합니다.
+      이는 포트폴리오의 실시간 손익을 반영하며, 투자 성과를 즉시 확인할 수 있는 종합적 지표입니다.
+
+      다양한 암호화폐를 보유한 경우, 각 자산의 가격 변동이 총 자산에 미치는 영향은 해당 자산의 비중에 비례합니다.
+      따라서 총 자산의 변화를 분석하면 어떤 자산이 포트폴리오 성과에 가장 큰 영향을 미치는지 파악할 수 있습니다.
+
+      ## 포트폴리오 성과 측정의 기준
+      총 자산은 절대 수익률과 상대 수익률 계산의 기초가 됩니다.
+      초기 투자 금액 대비 현재 총 자산의 비율로 전체 포트폴리오의 수익률을 계산할 수 있으며,
+      이는 개별 코인의 수익률과는 다른 종합적인 투자 성과를 보여줍니다.
+
+      총 자산의 시간별 변화 패턴을 분석하면 투자 전략의 효과성을 평가할 수 있습니다.
+      꾸준한 상승 패턴은 안정적인 투자 전략을, 급격한 변동은 고위험 고수익 전략을 의미할 수 있습니다.
+
+      ## 리스크 관리에서의 역할
+      총 자산은 포트폴리오 수준의 리스크 관리에서 핵심적인 역할을 수행합니다.
+      총 자산의 일정 비율(예: 2-5%)을 단일 거래의 최대 손실 한도로 설정하여 과도한 리스크를 방지할 수 있습니다.
+
+      또한 총 자산 대비 개별 포지션의 비중을 모니터링하여 특정 자산에 대한 과도한 집중을 방지하는 분산 투자 원칙을 실현할 수 있습니다.
+      일반적으로 단일 자산이 총 자산의 20-30%를 초과하지 않도록 관리하는 것이 권장됩니다.
+
+      ## 자금 관리와 포지션 사이징
+      총 자산은 새로운 투자 기회에 대한 포지션 크기를 결정하는 기준이 됩니다.
+      Kelly Criterion이나 Fixed Fractional Position Sizing 같은 수학적 모델을 적용할 때 총 자산이 기준 자본으로 사용됩니다.
+
+      현금 비중과 투자 비중의 균형을 관리하는 것도 중요합니다.
+      총 자산 대비 현금 비중이 너무 높으면 기회비용이, 너무 낮으면 유동성 위험이 발생할 수 있습니다.
+
+      ## 세금 및 회계적 고려사항
+      총 자산은 세무 신고를 위한 자산 평가의 기준이 될 수 있습니다.
+      특히 암호화폐 투자에 대한 세제가 변화하는 상황에서 정확한 자산 가치 파악은 중요한 의미를 가집니다.
+
   usage:
-    title: 활용 방법
-    content: '총 자산을 활용하여 매매 조건을 설정하거나 다른 지표와 조합하여 전략을 구성할 수 있습니다.
+    title: TOTAL_BALANCE 활용 전략
+    content: |
+      총 자산은 트리거 빌더에서 포트폴리오 수준의 리스크 관리와 자금 배분 전략을 구현하는 핵심 변수입니다.
+      절대적 가치 기준과 상대적 변화율 기준을 통해 체계적인 투자 관리 시스템을 구축할 수 있습니다.
 
+      ## 트리거 빌더 기본 문법
+      ```
+      조건: TOTAL_BALANCE >= 100000000
+      액션: 대형 포트폴리오 전략 활성화
 
-      전체 자산 규모에 따른 포지션 크기 조절이나 수익률 목표 설정에 활용하세요.'
+      조건: TOTAL_BALANCE < INITIAL_BALANCE * 0.8
+      액션: 20% 손실 도달, 리스크 관리 모드 진입
+
+      조건: TOTAL_BALANCE > HIGH_WATER_MARK * 1.1
+      액션: 신고점 달성, 일부 이익 실현 고려
+      ```
+
+      총 자산의 절대적 크기에 따라 서로 다른 투자 전략을 적용할 수 있습니다.
+      소액 포트폴리오에서는 공격적 성장 전략을, 대형 포트폴리오에서는 안정적 보존 전략을 사용하는 것이 일반적입니다.
+
+      ## 포트폴리오 비중 관리 전략
+      ```
+      # 현금 비중 관리
+      cash_ratio = CASH_BALANCE / TOTAL_BALANCE
+
+      IF cash_ratio > 0.3:  # 현금 비중 30% 초과
+          유동성 과다: 추가 투자 기회 탐색
+          액션: 선별적 매수 진입
+
+      IF cash_ratio < 0.1:  # 현금 비중 10% 미만
+          유동성 부족: 일부 포지션 정리
+          액션: 이익 실현을 통한 현금 확보
+
+      # 단일 자산 비중 제한
+      btc_ratio = (BTC_POSITION * BTC_PRICE) / TOTAL_BALANCE
+
+      IF btc_ratio > 0.4:  # BTC 비중 40% 초과
+          과도한 집중: 분산 필요
+          액션: BTC 일부 매도, 다른 자산 매수
+      ```
+
+      포트폴리오의 현금 비중과 개별 자산 비중을 지속적으로 모니터링하여 균형 잡힌 투자를 유지합니다.
+      이는 시장 급변 시에도 안정적인 포트폴리오 운용을 가능하게 합니다.
+
+      ## 드로다운 기반 리스크 관리
+      ```
+      # 역대 최고 자산 가치 추적
+      high_water_mark = max(TOTAL_BALANCE_HISTORY)
+      current_drawdown = (high_water_mark - TOTAL_BALANCE) / high_water_mark
+
+      IF current_drawdown > 0.15:  # 15% 이상 하락
+          중간 단계 경고: 포지션 크기 50% 축소
+
+      IF current_drawdown > 0.25:  # 25% 이상 하락
+          심각한 드로다운: 모든 신규 투자 중단
+          액션: 방어 모드 전환, 손실 최소화 집중
+
+      # 복구 단계 관리
+      IF current_drawdown < 0.05:  # 95% 수준 회복
+          드로다운 회복: 정상 투자 모드 복귀
+      ```
+
+      총 자산의 최고점 대비 하락폭을 실시간으로 모니터링하여 단계별 리스크 관리를 실행합니다.
+      이는 큰 손실을 미연에 방지하고 자본을 보존하는 핵심 메커니즘입니다.
+
+      ## 성과 기반 동적 전략 조정
+      ```
+      # 월간/연간 수익률 계산
+      monthly_return = (TOTAL_BALANCE - TOTAL_BALANCE_30D_AGO) / TOTAL_BALANCE_30D_AGO
+      yearly_return = (TOTAL_BALANCE - TOTAL_BALANCE_365D_AGO) / TOTAL_BALANCE_365D_AGO
+
+      IF yearly_return > 0.5:  # 연간 50% 이상 수익
+          고성과 달성: 일부 이익 실현 고려
+          액션: 원금 회수 + 하우스 머니 투자 전환
+
+      IF monthly_return < -0.1 FOR 3개월 연속:
+          지속적 손실: 전략 재검토 필요
+          액션: 투자 중단, 전략 분석 및 개선
+      ```
+
+      성과 기간별 수익률을 추적하여 투자 전략의 효과성을 평가하고 필요시 조정합니다.
+      지속적인 성과 모니터링은 전략의 유효성을 검증하고 개선점을 찾는 데 도움이 됩니다.
+
+      ## 계절성 및 시장 사이클 기반 배분
+      ```
+      # 시장 사이클에 따른 총 자산 활용
+      IF bull_market_detected:
+          상승장 전략: 총 자산의 80% 투자, 20% 현금
+
+      IF bear_market_detected:
+          하락장 전략: 총 자산의 30% 투자, 70% 현금
+
+      IF sideways_market_detected:
+          횡보장 전략: 총 자산의 50% 투자, 50% 현금
+      ```
+
+      시장 사이클을 고려한 동적 자산 배분을 통해 시장 상황에 적응적인 포트폴리오 관리를 실현합니다.
+
+  advanced:
+    title: 총 자산 고급 활용 전략
+    content: |
+      총 자산의 고급 활용은 현대 포트폴리오 이론과 행동재무학을 결합하여 기관투자자 수준의 정교한 자산 관리를 구현합니다.
+      확률론적 모델링, 동적 최적화, 그리고 기계학습 기반 예측을 통합한 차세대 포트폴리오 관리 시스템을 포함합니다.
+
+      ## 몬테카를로 시뮬레이션 기반 리스크 관리
+      ```python
+      # 포트폴리오 가치 경로 시뮬레이션
+      def monte_carlo_portfolio_simulation(initial_balance, num_simulations=10000):
+          scenarios = []
+          for _ in range(num_simulations):
+              portfolio_path = simulate_portfolio_path(
+                  initial_balance,
+                  days=252,  # 1년
+                  expected_returns=get_expected_returns(),
+                  volatilities=get_asset_volatilities(),
+                  correlations=get_correlation_matrix()
+              )
+              scenarios.append(portfolio_path[-1])  # 1년 후 가치
+          return scenarios
+
+      # VaR 및 CVaR 계산
+      simulated_values = monte_carlo_portfolio_simulation(TOTAL_BALANCE)
+      var_95 = calculate_var(simulated_values, confidence=0.95)
+      cvar_95 = calculate_cvar(simulated_values, confidence=0.95)
+
+      IF TOTAL_BALANCE * (1 + var_95) < minimum_acceptable_balance:
+          극한 리스크 감지: 포트폴리오 구조 재편 필요
+      ```
+
+      몬테카를로 시뮬레이션을 통해 다양한 시장 시나리오에서의 포트폴리오 가치 분포를 예측하고,
+      통계적으로 신뢰할 수 있는 리스크 측정치를 계산합니다.
+
+      ## 블랙-리터만 모델 기반 동적 배분
+      ```python
+      # 블랙-리터만 모델을 활용한 최적 포트폴리오
+      def black_litterman_optimization(total_balance, market_views):
+          # 시장 균형 수익률 계산
+          market_caps = get_market_capitalizations()
+          equilibrium_returns = calculate_equilibrium_returns(market_caps)
+
+          # 투자자 관점 통합
+          adjusted_returns = incorporate_investor_views(equilibrium_returns, market_views)
+
+          # 최적 포트폴리오 가중치 계산
+          optimal_weights = solve_optimization_problem(
+              expected_returns=adjusted_returns,
+              covariance_matrix=get_covariance_matrix(),
+              risk_aversion=risk_aversion_parameter
+          )
+
+          return {asset: total_balance * weight for asset, weight in optimal_weights.items()}
+
+      # 동적 리밸런싱 실행
+      current_allocation = get_current_allocation(TOTAL_BALANCE)
+      optimal_allocation = black_litterman_optimization(TOTAL_BALANCE, market_views)
+
+      rebalancing_trades = calculate_rebalancing_trades(current_allocation, optimal_allocation)
+      ```
+
+      블랙-리터만 모델을 활용하여 시장 균형과 투자자의 주관적 전망을 결합한 최적 포트폴리오를 구성합니다.
+      이는 이론적 최적화와 실무적 직관을 균형 있게 통합하는 정교한 접근법입니다.
+
+      ## 기계학습 기반 총 자산 예측 모델
+      ```python
+      # LSTM을 활용한 포트폴리오 가치 예측
+      def create_portfolio_features(total_balance_history, market_data, macro_data):
+          features = {
+              'portfolio_momentum': calculate_momentum(total_balance_history, [7, 14, 30]),
+              'portfolio_volatility': calculate_rolling_volatility(total_balance_history, 30),
+              'market_sentiment': extract_sentiment_indicators(market_data),
+              'macro_factors': normalize_macro_indicators(macro_data),
+              'correlation_structure': calculate_rolling_correlations(market_data),
+              'regime_indicators': detect_market_regimes(market_data)
+          }
+          return features
+
+      # 예측 모델 훈련 및 적용
+      features = create_portfolio_features(balance_history, market_data, macro_data)
+      prediction_model = train_lstm_model(features, future_balance_changes)
+
+      predicted_balance_change = prediction_model.predict(current_features)
+      confidence_interval = calculate_prediction_interval(predicted_balance_change)
+
+      IF predicted_balance_change < -0.1 AND confidence > 0.8:
+          고신뢰도 하락 예측: 방어적 포지션 전환
+      ```
+
+      기계학습 모델을 사용하여 총 자산의 미래 변화를 예측하고, 예측 결과에 따른 선제적 포트폴리오 조정을 실행합니다.
+
+      ## 동적 레버리지 최적화
+      ```python
+      # Kelly Criterion의 일반화된 형태
+      def optimize_leverage_ratio(total_balance, expected_returns, covariance_matrix):
+          """총 자산 대비 최적 레버리지 비율 계산"""
+
+          # 기하 평균 성장률 최대화
+          def objective_function(leverage_ratio):
+              portfolio_return = expected_returns * leverage_ratio
+              portfolio_variance = covariance_matrix * (leverage_ratio ** 2)
+              geometric_return = portfolio_return - 0.5 * portfolio_variance
+              return -geometric_return  # 최대화를 위해 음수 반환
+
+          optimal_leverage = minimize_scalar(objective_function, bounds=(0, 2)).x
+
+          return min(optimal_leverage, max_allowed_leverage)
+
+      # 적응형 레버리지 관리
+      current_volatility = calculate_portfolio_volatility(TOTAL_BALANCE)
+      target_volatility = 0.15  # 연간 15% 목표 변동성
+
+      leverage_adjustment = target_volatility / current_volatility
+      recommended_leverage = optimize_leverage_ratio(TOTAL_BALANCE, expected_returns, cov_matrix)
+
+      final_leverage = min(leverage_adjustment, recommended_leverage)
+      ```
+
+      켈리 기준의 일반화된 형태를 사용하여 총 자산 대비 최적 레버리지 비율을 동적으로 계산하고 적용합니다.
+
+      ## 행동재무학 기반 편향 보정
+      ```python
+      # 투자자 편향 탐지 및 보정
+      def detect_behavioral_biases(total_balance_history, trade_history):
+          biases = {
+              'loss_aversion': detect_loss_aversion_bias(trade_history),
+              'anchoring': detect_anchoring_bias(total_balance_history),
+              'overconfidence': detect_overconfidence_bias(trade_history),
+              'herding': detect_herding_bias(market_data, trade_history)
+          }
+          return biases
+
+      # 편향 보정 메커니즘
+      detected_biases = detect_behavioral_biases(balance_history, trade_history)
+
+      IF detected_biases['loss_aversion'] > threshold:
+          손실 회피 편향 감지: 손절 기준 자동 실행 강화
+
+      IF detected_biases['overconfidence'] > threshold:
+          과신 편향 감지: 포지션 크기 자동 축소
+      ```
+
+      행동재무학 원리를 적용하여 투자자의 인지적 편향을 자동으로 탐지하고 이를 보정하는 메커니즘을 구현합니다.
+
+      ## 실시간 스트레스 테스트
+      극단적 시장 상황을 가정한 실시간 스트레스 테스트를 통해 포트폴리오의 복원력을 지속적으로 평가하고,
+      잠재적 위험 요인을 사전에 식별하여 대응 방안을 마련할 수 있습니다.
+
+      이러한 고급 기법들은 총 자산을 단순한 잔고 확인 도구에서 정교한 포트폴리오 관리 시스템의 핵심으로 발전시켜 투자 성과를 획기적으로 향상시킬 수 있습니다.

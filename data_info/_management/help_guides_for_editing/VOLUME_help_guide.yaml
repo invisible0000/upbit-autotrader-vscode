@@ -1,102 +1,334 @@
 variable_id: VOLUME
 help_documents:
-  advanced:
-    title: 거래량 고급 활용 전략
-    content: '## 🎯 전략 구성 방법
-
-
-      ### 1. 조건 설정 예시
-
-      ```
-
-      거래량 > 기준값 일 때 매수
-
-      거래량 < 기준값 일 때 매도
-
-      ```
-
-
-      ### 2. 다른 지표와 조합
-
-      - **추세 확인**: SMA, EMA와 함께 사용
-
-      - **모멘텀 확인**: RSI, MACD와 조합
-
-      - **변동성 체크**: ATR, 볼린저밴드 참고
-
-
-      ### 3. 리스크 관리
-
-      - 단일 지표만으로 판단 금지
-
-      - 시장 상황 고려 필수
-
-      - 손절 조건 반드시 설정
-
-
-      ⚠️ **주의**: 과거 데이터 기반이므로 미래를 보장하지 않습니다.
-
-      '
   concept:
     title: 거래량의 이해
-    content: '## 📊 거래량란?
+    content: |
+      거래량(Volume)은 특정 기간 동안 거래된 암호화폐의 총 수량을 나타내는 핵심 지표로, 시장의 유동성과 투자자들의 관심도를 직접적으로 보여주는 중요한 정보입니다.
+      거래량은 가격 움직임의 신뢰성을 검증하고 추세의 강도를 측정하는 데 필수적인 도구로, "거래량이 가격에 선행한다"는 기본 원칙에 따라 분석됩니다.
 
+      ## 기본 정의와 측정 방식
+      거래량은 매수와 매도가 체결된 코인의 개수를 집계한 값으로, 일반적으로 해당 기간(1분, 5분, 1시간, 1일 등) 동안의 누적 거래량을 의미합니다.
+      예를 들어, 1시간 동안 100 BTC가 거래되었다면 해당 시간의 거래량은 100 BTC가 됩니다.
 
-      거래량는 **거래량 관련 정보**를 제공하는 변수입니다.
+      거래량은 volume 카테고리의 volume_comparable 그룹에 속하며, 다른 거래량 관련 지표들과 직접 비교가 가능합니다.
+      차트상에서는 subplot 형태로 표시되어 가격 차트 하단에 막대 그래프로 표현되는 것이 일반적입니다.
 
+      ## 거래량의 시장 심리학적 의미
+      높은 거래량은 많은 투자자들이 해당 가격 수준에서 거래에 참여하고 있음을 의미하며, 이는 시장의 합의가 형성되고 있다는 신호입니다.
+      반대로 낮은 거래량은 시장 참여자들의 관심이 적거나 불확실성이 높아 거래를 미루고 있음을 나타낼 수 있습니다.
 
-      ### 📋 기본 정보
+      거래량 급증은 중요한 뉴스나 이벤트에 대한 시장의 즉각적인 반응을 보여주며,
+      이때 가격 변동과 함께 나타나는 거래량 패턴은 향후 가격 방향성을 예측하는 중요한 단서를 제공합니다.
 
-      - **설명**: 특정 기간 동안 거래된 주식의 총 수량
+      ## 가격과 거래량의 상관관계
+      건전한 상승 추세에서는 가격 상승과 함께 거래량도 증가하는 패턴을 보입니다.
+      이는 많은 투자자들이 상승에 동참하고 있음을 의미하며, 추세의 지속 가능성을 높여줍니다.
 
-      - **카테고리**: 거래량
+      반대로 가격은 상승하지만 거래량이 감소하는 경우는 상승 추세의 약화를 의미할 수 있습니다.
+      이는 소수의 매수세에 의한 일시적 상승일 가능성이 높으며, 지속성에 의문을 제기하게 됩니다.
 
-      - **차트 표시**: subplot
+      ## 거래량 스파이크의 해석
+      평상시 대비 비정상적으로 높은 거래량이 나타나는 경우를 거래량 스파이크라고 합니다.
+      이는 주요 뉴스 발표, 기술적 지지/저항선 돌파, 또는 대형 투자자의 진입/청산 등에 의해 발생할 수 있습니다.
 
-      - **비교 그룹**: volume_comparable
+      거래량 스파이크가 가격 하락과 함께 나타나면 공포 매도나 손절매의 급증을 의미할 수 있으며,
+      가격 상승과 함께 나타나면 FOMO(Fear of Missing Out) 매수나 브레이크아웃 추종 매수를 의미할 수 있습니다.
 
+      ## 유동성과 슬리피지의 관계
+      높은 거래량은 시장의 유동성이 풍부함을 의미하며, 이는 대량 거래 시에도 슬리피지(가격 미끄러짐)를 최소화할 수 있게 합니다.
+      반대로 낮은 거래량 상황에서는 작은 거래량으로도 가격이 크게 움직일 수 있어 거래 비용이 증가할 수 있습니다.
 
-      ### 💡 주요 특징
+      특히 암호화폐 시장에서는 전통적인 금융시장보다 유동성이 제한적일 수 있으므로,
+      거래량 분석을 통한 적절한 진입/청산 타이밍 선택이 더욱 중요합니다.
 
-      - 실시간 업데이트되는 값
+      ## 시간대별 거래량 패턴
+      암호화폐는 24시간 거래되지만, 지역별 시간대에 따라 거래량 패턴이 다르게 나타납니다.
+      아시아, 유럽, 미국 시간대별로 거래량의 차이가 있으며, 이를 이해하면 더 효과적인 거래 전략을 수립할 수 있습니다.
 
-      - 다른 지표와 조합 가능
+      주요 경제 지표 발표나 중앙은행 정책 발표 시간에는 거래량이 급증하는 경향이 있으므로,
+      이러한 이벤트 스케줄을 고려한 거래량 분석이 필요합니다.
 
-      - 전략 조건 설정에 활용
-
-      '
   usage:
     title: VOLUME 활용 전략
-    content: '## 🎯 전략 구성 방법
+    content: |
+      거래량은 트리거 빌더에서 가격 신호의 신뢰성을 검증하고 시장 참여도를 측정하는 핵심 변수입니다.
+      단독으로 사용되기보다는 가격 지표와 조합하여 신호의 강도를 증폭시키거나 필터링하는 역할을 수행합니다.
 
+      ## 트리거 빌더 기본 문법
+      ```
+      조건: VOLUME > AVG_VOLUME_20 * 2
+      액션: 거래량 급증 감지, 주요 이벤트 발생 가능성
 
-      ### 1. 조건 설정 예시
+      조건: CURRENT_PRICE > RESISTANCE AND VOLUME > AVG_VOLUME_20 * 1.5
+      액션: 거래량을 동반한 저항선 돌파, 강력한 매수 신호
 
+      조건: CURRENT_PRICE < SUPPORT AND VOLUME > AVG_VOLUME_20 * 2
+      액션: 거래량을 동반한 지지선 이탈, 강력한 매도 신호
       ```
 
-      VOLUME > 기준값 일 때 매수
+      거래량을 과거 평균과 비교하여 상대적 크기를 측정하는 것이 일반적입니다.
+      절대적 거래량보다는 평상시 대비 몇 배인지를 확인하여 이상 거래량을 탐지합니다.
 
-      VOLUME < 기준값 일 때 매도
+      ## 가격-거래량 다이버전스 분석
+      ```
+      # 상승 다이버전스 (강세 신호)
+      IF PRICE_DECLINING AND VOLUME_INCREASING:
+          가격 하락 + 거래량 증가
+          액션: 매수 관심 영역, 반등 가능성 증대
 
+      # 하락 다이버전스 (약세 신호)
+      IF PRICE_RISING AND VOLUME_DECREASING:
+          가격 상승 + 거래량 감소
+          액션: 상승 추세 약화 경고, 익절 고려
+
+      # 확인 신호 (추세 지속)
+      IF PRICE_RISING AND VOLUME_RISING:
+          가격 상승 + 거래량 증가
+          액션: 건전한 상승, 추세 지속 가능성 높음
       ```
 
+      가격과 거래량의 방향성이 일치하지 않을 때 나타나는 다이버전스는 추세 전환의 조기 신호를 제공합니다.
+      특히 중요한 지지/저항선 근처에서 발생하는 다이버전스는 높은 신뢰도를 가집니다.
 
-      ### 2. 다른 지표와 조합
+      ## 거래량 기반 브레이크아웃 확인
+      ```
+      # 상향 브레이크아웃 확인
+      IF CURRENT_PRICE > RESISTANCE_LEVEL:
+          저항선 돌파 감지
+          IF VOLUME > AVG_VOLUME_20 * 2:
+              고거래량 동반 돌파: 진짜 브레이크아웃
+              액션: 적극적 매수 진입
+          ELSE:
+              저거래량 돌파: 가짜 브레이크아웃 가능성
+              액션: 추가 확인 대기
 
-      - **추세 확인**: SMA, EMA와 함께 사용
+      # 하향 브레이크다운 확인
+      IF CURRENT_PRICE < SUPPORT_LEVEL:
+          지지선 이탈 감지
+          IF VOLUME > AVG_VOLUME_20 * 1.5:
+              거래량 동반 이탈: 진짜 브레이크다운
+              액션: 매도 또는 숏 포지션 고려
+      ```
 
-      - **모멘텀 확인**: RSI, MACD와 조합
+      브레이크아웃의 진위 여부를 거래량으로 확인하는 것은 가장 전통적이면서도 효과적인 기법입니다.
+      높은 거래량을 동반한 브레이크아웃은 지속 가능성이 높고, 낮은 거래량의 브레이크아웃은 반전될 가능성이 큽니다.
 
-      - **변동성 체크**: ATR, 볼린저밴드 참고
+      ## 거래량 기반 진입/청산 타이밍
+      ```
+      # 거래량 기반 진입 최적화
+      IF VOLUME < AVG_VOLUME_20 * 0.5:
+          저거래량 구간: 진입 비용 최소화 기회
+          액션: 분할 매수로 서서히 포지션 구축
 
+      IF VOLUME > AVG_VOLUME_20 * 3:
+          초고거래량: 급격한 변동성 예상
+          액션: 소량 테스트 매수 후 추가 관찰
 
-      ### 3. 리스크 관리
+      # 거래량 기반 청산 타이밍
+      IF PROFIT_PERCENT > 20 AND VOLUME > AVG_VOLUME_20 * 2:
+          수익 구간 + 고거래량: 청산 타이밍
+          액션: 부분 익절 실행
+      ```
 
-      - 단일 지표만으로 판단 금지
+      거래량 수준에 따라 진입과 청산 전략을 차별화하여 실행합니다.
+      저거래량에서는 비용 효율적 진입을, 고거래량에서는 신속한 의사결정을 우선시합니다.
 
-      - 시장 상황 고려 필수
+      ## 시간대별 거래량 패턴 활용
+      ```
+      # 아시아 시간대 (한국 시간 09:00-18:00)
+      IF ASIAN_HOURS AND VOLUME > ASIAN_AVG_VOLUME * 1.5:
+          아시아 시간대 이상 거래량
+          액션: 한국/일본/중국 관련 뉴스 체크
 
-      - 손절 조건 반드시 설정
+      # 유럽/미국 시간대 (한국 시간 18:00-03:00)
+      IF WESTERN_HOURS AND VOLUME > WESTERN_AVG_VOLUME * 2:
+          서구 시간대 거래량 급증
+          액션: 글로벌 이슈 또는 기관 투자자 움직임 감지
+      ```
 
+      시간대별 거래량 패턴을 이해하고 각 지역의 특성에 맞는 대응 전략을 수립합니다.
+      특정 지역에서의 거래량 급증은 해당 지역 특유의 이슈를 반영할 수 있습니다.
 
-      ⚠️ **주의**: 과거 데이터 기반이므로 미래를 보장하지 않습니다.'
+      ## 멀티 타임프레임 거래량 분석
+      ```
+      # 상위 시간대 거래량 추세
+      daily_volume_trend = calculate_volume_trend(VOLUME_1D, period=7)
+      hourly_volume_spike = VOLUME_1H / AVG_VOLUME_1H_20
+
+      IF daily_volume_trend > 1.2 AND hourly_volume_spike > 3:
+          장기 거래량 증가 + 단기 스파이크
+          액션: 중요한 시장 변화 신호, 적극적 대응
+      ```
+
+      여러 시간대의 거래량을 종합적으로 분석하여 시장의 전반적인 활동 수준을 파악합니다.
+
+  advanced:
+    title: 거래량 고급 활용 전략
+    content: |
+      거래량의 고급 활용은 전통적인 거래량 분석을 넘어서 통계적 모델링, 기계학습 기반 패턴 인식, 그리고 시장 미시구조 분석을 통합한 정교한 유동성 분석을 포함합니다.
+      기관투자자 수준의 주문 흐름 분석과 알고리즘 거래 탐지 기법을 개인 투자자 환경에서 구현할 수 있습니다.
+
+      ## 주문 흐름 분석 (Order Flow Analysis)
+      ```python
+      # 거래량 분해를 통한 매수/매도 압력 분석
+      def analyze_order_flow(volume_data, price_data, tick_data):
+          """거래량을 매수/매도 압력으로 분해"""
+
+          buy_volume = []
+          sell_volume = []
+
+          for i in range(1, len(price_data)):
+              if price_data[i] > price_data[i-1]:
+                  # 상승 틱: 매수 주도
+                  buy_volume.append(volume_data[i] * 0.7)
+                  sell_volume.append(volume_data[i] * 0.3)
+              elif price_data[i] < price_data[i-1]:
+                  # 하락 틱: 매도 주도
+                  buy_volume.append(volume_data[i] * 0.3)
+                  sell_volume.append(volume_data[i] * 0.7)
+              else:
+                  # 무변화: 균등 분배
+                  buy_volume.append(volume_data[i] * 0.5)
+                  sell_volume.append(volume_data[i] * 0.5)
+
+          return buy_volume, sell_volume
+
+      # 매수/매도 압력 불균형 탐지
+      buy_vol, sell_vol = analyze_order_flow(volume_history, price_history, tick_data)
+      volume_imbalance = (sum(buy_vol[-20:]) - sum(sell_vol[-20:])) / sum(volume_history[-20:])
+
+      IF volume_imbalance > 0.3:  # 매수 압력 30% 우세
+          강한 매수 압력 감지: 상승 모멘텀 기대
+      ELIF volume_imbalance < -0.3:  # 매도 압력 30% 우세
+          강한 매도 압력 감지: 하락 압력 증대
+      ```
+
+      거래량을 단순한 총량이 아닌 방향성을 가진 주문 흐름으로 분해하여 시장의 실제 수급 상황을 파악합니다.
+      이는 표면적인 가격 움직임 뒤에 숨겨진 진짜 시장 심리를 읽을 수 있게 해줍니다.
+
+      ## 볼륨 프로파일 분석 (Volume Profile)
+      ```python
+      # 가격대별 거래량 분포 분석
+      def calculate_volume_profile(price_data, volume_data, num_bins=50):
+          """가격 구간별 누적 거래량 계산"""
+
+          price_min, price_max = min(price_data), max(price_data)
+          price_bins = np.linspace(price_min, price_max, num_bins)
+          volume_profile = np.zeros(num_bins-1)
+
+          for i, (price, volume) in enumerate(zip(price_data, volume_data)):
+              bin_index = np.digitize(price, price_bins) - 1
+              if 0 <= bin_index < len(volume_profile):
+                  volume_profile[bin_index] += volume
+
+          return price_bins[:-1], volume_profile
+
+      # 고거래량 가격대 식별 (Value Area)
+      price_levels, vol_profile = calculate_volume_profile(price_history, volume_history)
+      poc_index = np.argmax(vol_profile)  # Point of Control
+      poc_price = price_levels[poc_index]
+
+      # Value Area 계산 (총 거래량의 70% 포함 구간)
+      total_volume = sum(vol_profile)
+      value_area_volume = total_volume * 0.7
+      value_area_high, value_area_low = calculate_value_area(price_levels, vol_profile, value_area_volume)
+
+      IF CURRENT_PRICE near poc_price:
+          POC 근처: 강한 지지/저항 예상
+      IF CURRENT_PRICE outside (value_area_low, value_area_high):
+          Value Area 이탈: 비정상적 가격대, 반전 가능성
+      ```
+
+      볼륨 프로파일 분석을 통해 가격대별 거래량 분포를 파악하고, 시장 참여자들이 가장 활발하게 거래한 가격 구간을 식별합니다.
+      이는 미래의 지지/저항선을 예측하는 데 매우 유용한 도구입니다.
+
+      ## 거래량 기반 변동성 예측
+      ```python
+      # GARCH 모델을 활용한 거래량-변동성 관계 모델링
+      from arch import arch_model
+
+      def volume_volatility_model(returns, volumes):
+          """거래량을 외생변수로 하는 GARCH 모델"""
+
+          # 거래량 정규화
+          normalized_volumes = (volumes - volumes.mean()) / volumes.std()
+
+          # GARCH(1,1) with volume as exogenous variable
+          model = arch_model(returns, vol='GARCH', p=1, q=1,
+                           x=normalized_volumes, rescale=False)
+          fitted_model = model.fit(disp='off')
+
+          return fitted_model
+
+      # 거래량 기반 변동성 예측
+      vol_model = volume_volatility_model(return_series, volume_series)
+      forecasted_volatility = vol_model.forecast(horizon=1)
+
+      IF forecasted_volatility > historical_volatility * 1.5:
+          고변동성 예측: 포지션 크기 축소
+      ELIF forecasted_volatility < historical_volatility * 0.7:
+          저변동성 예측: 레버리지 증대 기회
+      ```
+
+      거래량과 변동성 간의 관계를 모델링하여 미래 변동성을 예측합니다.
+      일반적으로 높은 거래량은 높은 변동성과 연관되므로, 이를 이용한 리스크 관리가 가능합니다.
+
+      ## 알고리즘 거래 탐지
+      ```python
+      # 비정상적 거래량 패턴 탐지
+      def detect_algorithmic_trading(volume_data, price_data, time_data):
+          """알고리즘 거래나 대형 거래자의 움직임 탐지"""
+
+          # 시간 간격별 거래량 분석
+          time_intervals = np.diff(time_data)
+          volume_per_second = volume_data[1:] / time_intervals
+
+          # 비정상적으로 균등한 거래량 패턴 탐지
+          volume_uniformity = calculate_uniformity_score(volume_per_second)
+
+          # 거래량 클러스터링 분석
+          volume_clusters = identify_volume_clusters(volume_data, time_data)
+
+          return {
+              'algo_trading_score': volume_uniformity,
+              'large_trader_activity': len(volume_clusters),
+              'suspicious_patterns': volume_uniformity > 0.8
+          }
+
+      # 알고리즘 거래 대응 전략
+      algo_signals = detect_algorithmic_trading(volume_data, price_data, time_data)
+
+      IF algo_signals['algo_trading_score'] > 0.8:
+          알고리즘 거래 감지: 단기 노이즈 증가 예상
+          액션: 장기 시간대 신호 우선, 단기 신호 필터링 강화
+      ```
+
+      알고리즘 거래나 대형 기관투자자의 거래 패턴을 탐지하여 일반 투자자에게 불리한 환경을 사전에 인지합니다.
+
+      ## 네트워크 효과 분석
+      ```python
+      # 다중 거래소 거래량 상관관계 분석
+      def analyze_cross_exchange_volume(exchange_volumes):
+          """거래소 간 거래량 상관관계로 시장 응집도 측정"""
+
+          correlation_matrix = calculate_correlation_matrix(exchange_volumes)
+          network_density = calculate_network_density(correlation_matrix, threshold=0.7)
+
+          return network_density
+
+      # 시장 응집도 기반 신호 필터링
+      market_cohesion = analyze_cross_exchange_volume(multi_exchange_volumes)
+
+      IF market_cohesion > 0.8:
+          높은 시장 응집도: 신호 신뢰도 증가
+      ELIF market_cohesion < 0.4:
+          낮은 시장 응집도: 거래소별 차익거래 기회 또는 시장 분열
+      ```
+
+      여러 거래소의 거래량 패턴을 종합 분석하여 시장 전체의 응집성을 측정하고, 이를 통해 신호의 신뢰도를 평가합니다.
+
+      ## 기계학습 기반 거래량 이상 탐지
+      Isolation Forest나 One-Class SVM 같은 이상 탐지 알고리즘을 사용하여 정상적인 거래량 패턴에서 벗어나는 이상 거래량을 자동으로 탐지하고,
+      이를 통해 시장 조작이나 중요한 이벤트를 조기에 감지할 수 있습니다.
+
+      이러한 고급 기법들은 단순한 거래량 분석을 넘어서 시장의 미시구조를 이해하고 기관투자자 수준의 정교한 분석을 가능하게 합니다.
