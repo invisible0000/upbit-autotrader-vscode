@@ -78,6 +78,8 @@
 - **TTL**: 5분 (300초)
 - **검증**: 캐시 유효성, 키 변경 감지 (SHA256)
 - **성능**: 81% 향상 (2.23ms → 0.42ms)
+- **⚠️ 주의**: TTL 만료 시 `None` 반환 - 동시성 환경에서 `NoneType` 오류 위험
+- **권장**: 직접 사용보다는 `get_or_create_api_instance()` 사용 권장
 - **라인**: 713
 
 #### 3.2 `cache_api_instance(self) -> Optional[UpbitClient]`
@@ -96,6 +98,8 @@
 - **목적**: 캐시 확인 → 있으면 반환, 없으면 생성 (권장 메서드)
 - **편의성**: 고수준 API, 최적화된 패턴
 - **사용법**: `api = service.get_or_create_api_instance()`
+- **✅ 안전성**: TTL 만료 시 자동으로 새 인스턴스 생성 - 프로덕션 환경 권장
+- **장점**: `None` 반환 위험 최소화, 무중단 서비스 보장
 - **라인**: 890
 
 #### 3.5 `clear_cache(self) -> None`
@@ -226,8 +230,8 @@ service = ApiKeyService(secure_keys_repository)
 # 2. API 키 저장 (깔끔한 방식)
 success, message = service.save_api_keys_clean(access_key, secret_key)
 
-# 3. API 인스턴스 사용 (캐싱)
-api = service.get_or_create_api_instance()  # 권장
+# 3. API 인스턴스 사용 (캐싱) - 권장 패턴
+api = service.get_or_create_api_instance()  # ✅ 안전한 방식
 if api:
     accounts = await api.get_accounts()
 
@@ -235,16 +239,34 @@ if api:
 result = service.delete_api_keys_smart()
 ```
 
+### ⚠️ **TTL 갱신 시 주의사항 (중요!)**
+```python
+# ❌ 위험한 패턴 - TTL 갱신 시 NoneType 오류 발생 가능
+api_client = service.get_cached_api_instance()
+# TTL이 여기서 만료될 수 있음 (5분 주기)
+result = api_client.get_accounts()  # 오류 위험!
+
+# ✅ 안전한 패턴 - TTL 갱신 시에도 안전
+api_client = service.get_or_create_api_instance()  # 항상 유효한 인스턴스 보장
+if api_client:
+    result = api_client.get_accounts()  # 안전함
+```
+
 ### ⚡ **고성능 패턴 (Task 2.3)**
 ```python
-# 캐시 우선 사용
+# ⚠️ 고급 사용자용 - TTL 만료 위험 인지 후 사용
 api = service.get_cached_api_instance()
 if api is None:
+    # TTL 만료 또는 캐시 없음 - 새로 생성
     api = service.cache_api_instance()
 
 # 캐시 상태 모니터링
 status = service.get_cache_status()
 print(f"캐시 유효: {status['valid']}, 나이: {status['age_seconds']}초")
+
+# TTL 갱신 시점 감지 (5분 = 300초)
+if status['age_seconds'] > 280:  # 5분 근처
+    print("⚠️ TTL 갱신 임박 - 새 인스턴스 사용 권장")
 ```
 
 ### 🔐 **보안 패턴**
@@ -324,6 +346,13 @@ service.clear_cache()
 3. **성능 개선**: TTL Caching 섹션 참조
 4. **UI 연동**: 콜백 패턴 (`confirm_deletion_callback`) 활용
 5. **테스트**: `clear_cache()`, `get_cache_status()` 활용
+6. **⚠️ TTL 주의**: 프로덕션에서는 `get_or_create_api_instance()` 사용 필수
+
+### 🚨 **TTL 갱신 관련 주의사항**
+- **TTL 주기**: 5분(300초)마다 자동 갱신
+- **위험 시점**: `get_cached_api_instance()` 호출 시 TTL 만료되면 `None` 반환
+- **해결 방법**: `get_or_create_api_instance()` 사용으로 자동 복구
+- **테스트 검증**: 고빈도 API 호출로 TTL 갱신 시점 문제 해결 확인됨
 
 ### 🔍 **코드 위치 찾기**
 - **라인 번호**: 각 메서드의 라인 정보 제공
@@ -337,9 +366,12 @@ service.clear_cache()
 - [ ] 보안 고려 (메모리 정리, 암호화)
 - [ ] Infrastructure 로깅 시스템 사용
 - [ ] 에러 처리: 명확한 Exception 전파
+- [ ] **⚠️ TTL 안전성**: 프로덕션 코드에서 `get_or_create_api_instance()` 사용
+- [ ] **🧪 TTL 테스트**: 고빈도 호출로 TTL 갱신 시점 안정성 검증
 
 ---
 
-**📅 최종 업데이트**: 2025년 8월 7일
-**📂 관련 파일**: `api_key_service.py`, Task 문서들, 테스트 파일들
-**🎯 상태**: Task 2.3 완료, 83.7% 성능 향상 달성
+**📅 최종 업데이트**: 2025년 8월 18일 (TTL 갱신 안전성 경고 추가)
+**📂 관련 파일**: `api_key_service.py`, Task 문서들, 테스트 파일들, `tests/ttl_integration/`
+**🎯 상태**: Task 2.3 완료, 83.7% 성능 향상 달성, TTL 갱신 안전성 검증 완료
+**🔍 테스트 검증**: 0.5초 간격 고빈도 API 호출로 TTL 갱신 시점 무중단 서비스 확인

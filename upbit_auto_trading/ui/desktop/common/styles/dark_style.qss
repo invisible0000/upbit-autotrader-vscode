@@ -156,11 +156,6 @@ QStatusBar QLabel#time-display {
     font-size: 11pt;
 }
 
-QStatusBar QLabel#api-status:hover {
-    background-color: rgba(224, 224, 224, 0.1);
-    border-radius: 2px;
-}
-
 /* 그룹박스 스타일 */
 QGroupBox {
     border: 1px solid #3a3a3a;
