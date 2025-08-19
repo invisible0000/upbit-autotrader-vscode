@@ -7,7 +7,7 @@ UI와 비즈니스 로직 사이의 연결을 담당합니다.
 - UI 상태 관리
 """
 
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -44,10 +44,10 @@ class OrderbookPresenter(QObject):
         if self._event_bus:
             self._event_bus.subscribe(WebSocketOrderbookUpdateEvent, self._on_websocket_update)
 
-    async def change_symbol(self, symbol: str) -> bool:
-        """심볼 변경 요청"""
+    def change_symbol(self, symbol: str) -> bool:
+        """심볼 변경 요청 - QTimer 기반으로 안전하게"""
         try:
-            success = await self._use_case.change_symbol(symbol)
+            success = self._use_case.change_symbol(symbol)
             if not success:
                 self.error_occurred.emit(f"심볼 변경 실패: {symbol}")
             return success
@@ -55,6 +55,11 @@ class OrderbookPresenter(QObject):
             self._logger.error(f"심볼 변경 오류: {e}")
             self.error_occurred.emit(f"심볼 변경 오류: {str(e)}")
             return False
+
+    # 호환성을 위한 async 버전 (내부적으로 동기 방식 사용)
+    async def change_symbol_async(self, symbol: str) -> bool:
+        """심볼 변경 요청 (async 호환성)"""
+        return self.change_symbol(symbol)
 
     def refresh_data(self) -> None:
         """데이터 수동 갱신"""

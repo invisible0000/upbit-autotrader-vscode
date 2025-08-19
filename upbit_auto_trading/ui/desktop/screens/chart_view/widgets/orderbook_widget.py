@@ -5,9 +5,9 @@ Presentation Layer의 순수 UI 컴포넌트입니다.
 - MVP 패턴 적용 (Presenter 분리)
 - UI 로직만 담당
 - 비즈니스 로직은 Presenter에 위임
+- QTimer 기반 안정적인 처리 (asyncio 문제 해결)
 """
 
-import asyncio
 from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
@@ -145,18 +145,23 @@ class OrderbookWidget(QWidget):
         self._orderbook_table.setRowCount(60)  # 30행씩 매도/매수
         self._orderbook_table.setHorizontalHeaderLabels(["번호", "수량", "가격", "누적"])
 
-        # 헤더 설정
+        # 헤더 설정 - None 체크 추가
         header = self._orderbook_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # 번호
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 수량
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # 가격
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # 누적
-        header.resizeSection(0, 40)
+        if header:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # 번호
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 수량
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # 가격
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # 누적
+            header.resizeSection(0, 40)
 
         # 테이블 속성 설정
         self._orderbook_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._orderbook_table.setAlternatingRowColors(True)
-        self._orderbook_table.verticalHeader().hide()
+
+        # 수직 헤더 숨기기 - None 체크 추가
+        vertical_header = self._orderbook_table.verticalHeader()
+        if vertical_header:
+            vertical_header.hide()
 
         # 클릭 이벤트 연결
         self._orderbook_table.cellClicked.connect(self._on_cell_clicked)
@@ -265,7 +270,7 @@ class OrderbookWidget(QWidget):
 
     def _on_cell_clicked(self, row: int, column: int) -> None:
         """셀 클릭 이벤트 처리"""
-        if column == 2:  # 가격 컬럼
+        if column == 2 and self._orderbook_table:  # 가격 컬럼
             item = self._orderbook_table.item(row, column)
             if item:
                 try:
@@ -295,9 +300,22 @@ class OrderbookWidget(QWidget):
 
     # 공개 인터페이스 (호환성 유지)
     def set_symbol(self, symbol: str) -> None:
-        """심볼 설정 (비동기)"""
+        """심볼 설정 - QTimer 기반으로 안전하게"""
         self._should_center_on_next_update = True  # 심볼 변경시 중앙 정렬
-        asyncio.create_task(self._presenter.change_symbol(symbol))
+
+        # QTimer를 사용하여 안전하게 심볼 변경 (asyncio 사용하지 않음)
+        QTimer.singleShot(50, lambda: self._change_symbol_safe(symbol))
+
+    def _change_symbol_safe(self, symbol: str) -> None:
+        """안전한 심볼 변경 (UI 스레드에서 실행)"""
+        try:
+            success = self._presenter.change_symbol(symbol)
+            if success:
+                self._logger.info(f"✅ 심볼 변경 완료: {symbol}")
+            else:
+                self._logger.warning(f"⚠️ 심볼 변경 실패: {symbol}")
+        except Exception as e:
+            self._logger.error(f"❌ 심볼 변경 오류: {e}")
 
     def get_current_symbol(self) -> str:
         """현재 심볼 반환"""
