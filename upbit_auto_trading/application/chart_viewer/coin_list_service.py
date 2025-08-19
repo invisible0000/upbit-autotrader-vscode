@@ -24,6 +24,7 @@ class CoinInfo:
     change_price: str
     volume: str
     volume_raw: float  # 정렬용 원본 거래량
+    change_rate_raw: float  # 정렬용 원본 변화율 (음수 포함)
     is_warning: bool = False
 
 
@@ -171,13 +172,17 @@ class CoinListService:
         current_price = ticker.get('trade_price', 0)
         change_rate = ticker.get('change_rate', 0)
         change_price = ticker.get('change_price', 0)
+        change_status = ticker.get('change', 'EVEN')  # RISE, FALL, EVEN
         volume = ticker.get('acc_trade_volume_24h', 0)
 
         # 가격 포맷팅
         price_formatted = self._format_price(current_price, market_type)
-        change_rate_formatted = self._format_change_rate(change_rate)
+        change_rate_formatted = self._format_change_rate(change_rate, change_status)
         change_price_formatted = self._format_price(change_price, market_type)
         volume_formatted = self._format_volume(volume)
+
+        # 정렬용 실제 변화율 계산 (음수 포함)
+        change_rate_raw = change_rate if change_status == 'RISE' else -change_rate if change_status == 'FALL' else 0.0
 
         # 경고 마켓 여부
         is_warning = market_info.get('market_warning', 'NONE') != 'NONE'
@@ -192,6 +197,7 @@ class CoinListService:
             change_price=change_price_formatted,
             volume=volume_formatted,
             volume_raw=volume,  # 원본 거래량
+            change_rate_raw=change_rate_raw,  # 원본 변화율 (음수 포함)
             is_warning=is_warning
         )
 
@@ -222,15 +228,16 @@ class CoinListService:
         except Exception:
             return str(price)
 
-    def _format_change_rate(self, change_rate: float) -> str:
-        """변화율 포맷팅"""
+    def _format_change_rate(self, change_rate: float, change_status: str) -> str:
+        """변화율 포맷팅 (change 상태 고려)"""
         try:
             rate_percent = change_rate * 100
-            if rate_percent > 0:
+
+            if change_status == 'RISE':
                 return f"+{rate_percent:.2f}%"
-            elif rate_percent < 0:
-                return f"{rate_percent:.2f}%"
-            else:
+            elif change_status == 'FALL':
+                return f"-{rate_percent:.2f}%"
+            else:  # EVEN
                 return "0.00%"
         except Exception:
             return "0.00%"

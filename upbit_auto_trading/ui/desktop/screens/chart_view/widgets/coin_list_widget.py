@@ -15,7 +15,7 @@
 from typing import Optional, List, Set
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QComboBox,
-    QLineEdit, QPushButton, QListWidget, QListWidgetItem, QLabel, QRadioButton, QButtonGroup
+    QLineEdit, QPushButton, QListWidget, QListWidgetItem, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
@@ -97,6 +97,11 @@ class CoinListWidget(QWidget):
         self._clear_button = QPushButton("X")
         self._clear_button.setFixedWidth(30)
 
+        # 새로고침 버튼
+        self._refresh_button = QPushButton("🔄")
+        self._refresh_button.setFixedWidth(40)
+        self._refresh_button.setToolTip("데이터 새로고침")
+
         # 정렬 라디오 버튼들
         self._sort_name_radio = QRadioButton("이름순")
         self._sort_change_radio = QRadioButton("변화율순")
@@ -131,15 +136,13 @@ class CoinListWidget(QWidget):
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(8)
 
-        # 마켓 선택 + 검색 영역 (같은 줄)
+        # 마켓 선택 + 검색 영역 (마켓 라벨 제거)
         top_layout = QHBoxLayout()
-        market_label = QLabel("마켓:")
-        market_label.setFixedWidth(40)
-        top_layout.addWidget(market_label)
         top_layout.addWidget(self._market_combo)
         top_layout.addSpacing(10)
         top_layout.addWidget(self._search_input)
         top_layout.addWidget(self._clear_button)
+        top_layout.addWidget(self._refresh_button)
 
         # 정렬 영역 (라벨 제거)
         sort_layout = QHBoxLayout()
@@ -165,6 +168,9 @@ class CoinListWidget(QWidget):
 
         if self._clear_button is not None:
             self._clear_button.clicked.connect(self._clear_search)
+
+        if self._refresh_button is not None:
+            self._refresh_button.clicked.connect(self._refresh_data)
 
         # 정렬 라디오 버튼 시그널 연결
         if self._sort_button_group is not None:
@@ -199,10 +205,15 @@ class CoinListWidget(QWidget):
 
     def _load_sample_data(self) -> None:
         """샘플 데이터 로드"""
+        from upbit_auto_trading.application.chart_viewer.coin_list_service import CoinInfo
+
         sample_data = [
-            CoinInfo("KRW-BTC", "비트코인", "KRW", "45000000", "45,000,000", "+2.5%", "+1,000,000", "1.2B", 120000000.0, False),
-            CoinInfo("KRW-ETH", "이더리움", "KRW", "3200000", "3,200,000", "+1.8%", "+56,000", "800M", 80000000.0, False),
-            CoinInfo("KRW-ADA", "에이다", "KRW", "650", "650", "-0.5%", "-3", "500M", 50000000.0, False),
+            CoinInfo("KRW-BTC", "비트코인", "KRW", "45000000", "45,000,000", "+2.5%",
+                     "+1,000,000", "1.2B", 120000000.0, 2.5, False),
+            CoinInfo("KRW-ETH", "이더리움", "KRW", "3200000", "3,200,000", "+1.8%",
+                     "+56,000", "800M", 80000000.0, 1.8, False),
+            CoinInfo("KRW-ADA", "에이다", "KRW", "650", "650", "-0.5%",
+                     "-3", "500M", 50000000.0, -0.5, False),
         ]
 
         self._coin_data = sample_data
@@ -210,45 +221,50 @@ class CoinListWidget(QWidget):
         self._logger.info("✅ 샘플 데이터 로드 완료")
 
     def _load_real_data(self) -> None:
-        """실제 데이터 로드 - async 안전 처리"""
+        """실제 데이터 로드 - 완전히 격리된 async 처리"""
         import asyncio
-        from concurrent.futures import ThreadPoolExecutor
+        import threading
 
-        def load_data_sync():
-            """동기 방식으로 데이터 로드"""
+        def load_data_isolated():
+            """완전히 격리된 스레드에서 데이터 로드"""
             try:
-                # 새로운 이벤트 루프를 안전하게 생성
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # 완전히 새로운 이벤트 루프 생성 (기존 루프와 격리)
+                new_loop = asyncio.new_event_loop()
+
+                # 현재 스레드의 이벤트 루프를 새로 생성한 것으로 설정
+                asyncio.set_event_loop(new_loop)
 
                 try:
-                    coins = loop.run_until_complete(
+                    # 비동기 작업 실행
+                    coins = new_loop.run_until_complete(
                         self._coin_service.get_coins_by_market(self._current_market, self._search_filter)
                     )
 
                     if coins:
                         self._coin_data = coins
-                        # 메인 스레드에서 UI 업데이트
+                        # 메인 UI 스레드에서 업데이트 (안전한 크로스 스레드 호출)
                         QTimer.singleShot(0, self._update_ui)
                         self._logger.info(f"✅ {self._current_market} 실제 데이터 로드 완료: {len(coins)}개")
                     else:
                         self._logger.warning(f"⚠️ {self._current_market} 마켓에 데이터가 없습니다")
-                        # 빈 데이터로라도 UI 업데이트
                         self._coin_data = []
                         QTimer.singleShot(0, self._update_ui)
 
                 finally:
-                    loop.close()
+                    # 이벤트 루프 완전히 정리
+                    new_loop.close()
+                    # 현재 스레드의 이벤트 루프 해제
+                    asyncio.set_event_loop(None)
 
             except Exception as e:
                 self._logger.error(f"❌ 실제 데이터 로드 실패: {e}")
-                # 에러 발생 시 빈 리스트로 업데이트
+                # 에러 발생 시 빈 데이터로 업데이트
                 self._coin_data = []
                 QTimer.singleShot(0, self._update_ui)
 
-        # ThreadPoolExecutor를 사용하여 안전하게 실행
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            executor.submit(load_data_sync)
+        # 완전히 새로운 데몬 스레드에서 실행 (UI 스레드와 격리)
+        thread = threading.Thread(target=load_data_isolated, daemon=True)
+        thread.start()
 
     def _update_ui(self) -> None:
         """UI 업데이트"""
@@ -272,8 +288,8 @@ class CoinListWidget(QWidget):
                 if coin.price_formatted:
                     base_text += f" | {coin.price_formatted}"
 
-                # 변화율 정보 추가
-                if coin.change_rate and coin.change_rate != "0.00%":
+                # 변화율 정보 추가 (음수 포함)
+                if coin.change_rate:
                     base_text += f" | ({coin.change_rate})"
 
                 # 거래량 정보 추가 (volume_raw를 사용)
@@ -294,8 +310,8 @@ class CoinListWidget(QWidget):
                 font.setBold(True)
                 item.setFont(font)
 
-                # 변화율에 따른 색상 적용 (변화율 부분만 색상 변경하고 싶지만, QListWidget 한계로 전체 색상 조정)
-                if coin.change_rate and coin.change_rate != "0.00%":
+                # 변화율에 따른 색상 적용 (음수 포함)
+                if coin.change_rate:
                     if coin.change_rate.startswith('+'):
                         # 상승: 빨간색 (약간 어둡게 하여 읽기 좋게)
                         item.setForeground(QColor(185, 28, 28))  # 진한 빨강
@@ -375,6 +391,42 @@ class CoinListWidget(QWidget):
         self._search_filter = ""
         self._update_ui()
 
+    def _refresh_data(self) -> None:
+        """새로고침 버튼 클릭 처리 - 현재 마켓 데이터 새로고침"""
+        try:
+            self._logger.info(f"🔄 {self._current_market} 마켓 데이터 새로고침 시작")
+
+            # 서비스의 캐시 강제 새로고침
+            if self._coin_service:
+                import asyncio
+                import threading
+
+                def refresh_isolated():
+                    """격리된 스레드에서 캐시 새로고침"""
+                    try:
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+
+                        try:
+                            # 서비스 캐시 강제 새로고침
+                            new_loop.run_until_complete(self._coin_service.refresh_data())
+                            # 현재 마켓 데이터 다시 로드
+                            self._load_real_data()
+                        finally:
+                            new_loop.close()
+                            asyncio.set_event_loop(None)
+                    except Exception as e:
+                        self._logger.error(f"❌ 새로고침 실패: {e}")
+
+                thread = threading.Thread(target=refresh_isolated, daemon=True)
+                thread.start()
+            else:
+                # 서비스가 없으면 단순 재로드
+                self._load_real_data()
+
+        except Exception as e:
+            self._logger.error(f"❌ 데이터 새로고침 실패: {e}")
+
     def _on_sort_changed(self, button: QRadioButton) -> None:
         """정렬 방식 변경 핸들러"""
         try:
@@ -414,14 +466,18 @@ class CoinListWidget(QWidget):
                 favorites.sort(key=lambda x: x.name)
                 non_favorites.sort(key=lambda x: x.name)
             elif self._sort_mode == "change":
-                # 변화율 정렬 (높은 순)
+                # 변화율 정렬 (높은 순) - change_rate_raw 필드 사용
                 def change_sort_key(coin):
                     try:
-                        if coin.change_rate and coin.change_rate != "0.00%":
-                            rate_str = coin.change_rate.replace('%', '').replace('+', '')
-                            return float(rate_str)
-                        return 0.0
-                    except ValueError:
+                        if hasattr(coin, 'change_rate_raw'):
+                            return coin.change_rate_raw
+                        else:
+                            # 기존 로직 (호환성)
+                            if coin.change_rate:
+                                rate_str = coin.change_rate.replace('%', '').replace('+', '')
+                                return float(rate_str)
+                            return 0.0
+                    except (ValueError, AttributeError):
                         return 0.0
 
                 favorites.sort(key=change_sort_key, reverse=True)
@@ -489,8 +545,8 @@ class CoinListWidget(QWidget):
         return self._current_market
 
     def refresh_data(self) -> None:
-        """데이터 새로고침"""
-        self._load_real_data()
+        """데이터 새로고침 (외부 호출용)"""
+        self._refresh_data()
 
     def get_selected_symbol(self) -> Optional[str]:
         """선택된 심볼 반환"""

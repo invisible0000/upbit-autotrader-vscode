@@ -149,6 +149,7 @@ def load_config(config: dict) -> None:
 - [ ] 3-DB 경로/스키마 사용, 외부 의존은 Infrastructure 격리
 - [ ] Infrastructure 로깅 사용, print() 미사용
 - [ ] 필요한 경우 테스트 포함, UI 런 통해 7규칙 검증
+- [ ] 복잡한 시스템 테스트: `docs/COMPLEX_SYSTEM_TESTING_GUIDE.md` 참조
 
 ---
 

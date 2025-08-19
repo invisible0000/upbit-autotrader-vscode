@@ -19,6 +19,14 @@
 
 **검증 명령**: `python run_desktop_ui.py` → 전략 관리 → 트리거 빌더
 
+### 🧪 1.5단계: 복잡한 시스템 테스트 (필수)
+- [ ] **Live Testing**: `python run_desktop_ui.py`로 실제 동작 확인
+- [ ] **로그 분석**: Infrastructure 로깅으로 문제점 추적
+- [ ] **계층별 검증**: UI → Application → Domain → Infrastructure 순서
+- [ ] **점진적 개선**: 작은 단위 수정 → 즉시 검증 → 누적 개선
+
+**📖 자세한 가이드**: [COMPLEX_SYSTEM_TESTING_GUIDE.md](COMPLEX_SYSTEM_TESTING_GUIDE.md)
+
 ### 🏗️ 2단계: DDD 아키텍처 준수
 ```
 Domain Layer (핵심 비즈니스)

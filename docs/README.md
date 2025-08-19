@@ -6,20 +6,21 @@
 1. **[PROJECT_SPECIFICATIONS.md](PROJECT_SPECIFICATIONS.md)** - 프로젝트 핵심 명세
 2. **[BASIC_7_RULE_STRATEGY_GUIDE.md](BASIC_7_RULE_STRATEGY_GUIDE.md)** - 시스템 검증 기준
 3. **[DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)** - 통합 개발 가이드 (NEW!)
+4. **[COMPLEX_SYSTEM_TESTING_GUIDE.md](COMPLEX_SYSTEM_TESTING_GUIDE.md)** - 복잡한 백본 시스템 테스트 방법론 (NEW!)
 
 ### 시스템 설계
-4. **[ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md)** - DDD 아키텍처 설계 (NEW!)
-5. **[STRATEGY_GUIDE.md](STRATEGY_GUIDE.md)** - 전략 시스템 완전 가이드 (NEW!)
-6. **[UI_GUIDE.md](UI_GUIDE.md)** - UI 시스템 완전 가이드 (NEW!)
+5. **[ARCHITECTURE_GUIDE.md](ARCHITECTURE_GUIDE.md)** - DDD 아키텍처 설계 (NEW!)
+6. **[STRATEGY_GUIDE.md](STRATEGY_GUIDE.md)** - 전략 시스템 완전 가이드 (NEW!)
+7. **[UI_GUIDE.md](UI_GUIDE.md)** - UI 시스템 완전 가이드 (NEW!)
 
 ### 핵심 기능
-7. **[TRIGGER_BUILDER_GUIDE.md](TRIGGER_BUILDER_GUIDE.md)** - 트리거 빌더 시스템
-8. **[DB_SCHEMA.md](DB_SCHEMA.md)** - 데이터베이스 스키마
-9. **[UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md](UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md)** - 통합 설정 관리
+8. **[TRIGGER_BUILDER_GUIDE.md](TRIGGER_BUILDER_GUIDE.md)** - 트리거 빌더 시스템
+9. **[DB_SCHEMA.md](DB_SCHEMA.md)** - 데이터베이스 스키마
+10. **[UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md](UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md)** - 통합 설정 관리
 
 ### 기여 가이드
-10. **[CONTRIBUTING.md](CONTRIBUTING.md)** - 기여 방법 및 규칙
-11. **api_key_secure/** - API 키 보안 관리
+11. **[CONTRIBUTING.md](CONTRIBUTING.md)** - 기여 방법 및 규칙
+12. **api_key_secure/** - API 키 보안 관리
 
 ## 🚀 빠른 시작
 

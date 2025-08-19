@@ -86,9 +86,31 @@ class BaseApiClient(ABC):
             self._session = None
 
     async def _ensure_session(self) -> None:
-        """HTTP 세션 확보 - 기존 _create_session 로직 기반"""
-        if self._session is None or self._session.closed:
-            # 기존 재시도 전략을 aiohttp에 맞게 적용
+        """HTTP 세션 확보 - 이벤트 루프별 세션 관리"""
+        # 현재 이벤트 루프 확인
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 실행 중인 루프가 없는 경우
+            current_loop = None
+
+        # 세션이 없거나, 닫혔거나, 다른 루프에서 생성된 경우 새로 생성
+        session_invalid = (
+            self._session is None
+            or self._session.closed
+            or (current_loop and getattr(self._session, '_loop', None) != current_loop)
+        )
+
+        if session_invalid:
+
+            # 기존 세션이 있고 닫히지 않았다면 정리
+            if self._session and not self._session.closed:
+                try:
+                    await self._session.close()
+                except Exception:
+                    pass  # 정리 중 에러는 무시
+
+            # 새로운 세션 생성
             connector = aiohttp.TCPConnector(
                 limit=100,  # 최대 연결 수
                 limit_per_host=30,  # 호스트당 최대 연결 수
