@@ -271,15 +271,26 @@ class ChartViewScreen(QWidget):
 
     def _create_orderbook_panel(self) -> OrderbookWidget:
         """호가창 패널 생성 (우측 - 2 비율) - 실제 매매 지원"""
-        # 이벤트 버스 생성 (WebSocket 연결을 위해 필요)
+        # 이벤트 버스 생성 및 시작 (WebSocket 연결을 위해 필요)
         from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InMemoryEventBus
         event_bus = InMemoryEventBus()
 
+        # 이벤트 버스 시작 (비동기로 실행)
+        import asyncio
+
+        async def start_event_bus():
+            try:
+                await event_bus.start()
+                self._logger.info("✅ 차트뷰 이벤트 버스 시작 완료")
+            except Exception as e:
+                self._logger.error(f"❌ 이벤트 버스 시작 실패: {e}")
+
+        # QAsync를 통해 안전하게 이벤트 버스 시작
+        asyncio.create_task(start_event_bus())
+
         # 실제 호가창 위젯 사용 (이벤트 버스 전달)
         orderbook_widget = OrderbookWidget(event_bus=event_bus)
-        orderbook_widget.setMinimumWidth(200)
-
-        # 호가창 고급 기능 시그널 연결
+        orderbook_widget.setMinimumWidth(200)        # 호가창 고급 기능 시그널 연결
         orderbook_widget.price_clicked.connect(self._on_orderbook_price_clicked)
         orderbook_widget.orderbook_updated.connect(self._on_orderbook_updated)
         orderbook_widget.market_impact_analyzed.connect(self._on_market_impact_analyzed)
