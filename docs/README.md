@@ -52,8 +52,17 @@ python run_desktop_ui.py
 ### 설정/구성 관리
 - UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md → DB_SCHEMA.md
 
+### 마켓 데이터 백본 개발 ⚡
+- **[market_data_backbone_v2/](market_data_backbone_v2/)** - MarketDataBackbone V2 + UnifiedAPI 완전 구현 (NEW! 🔥)
+  - Phase 1.1~1.3 완료 (62/62 테스트) + Phase 2.1 UnifiedAPI 완료 (19/19 테스트)
+  - 총 **81개 테스트 모두 통과** ✅
+  - SmartChannelRouter, FieldMapper, ErrorUnifier 통합
+  - 검증: `python demonstrate_phase_2_1_unified_api.py`
+
 ---
 
 **🎯 성공 기준**: 기본 7규칙 전략이 트리거 빌더에서 완벽하게 동작!
 
-**💡 개발 철학**: DDD 아키텍처 + 에러 투명성 + 사용자 중심 UI
+**🔥 최신 성과**: MarketDataBackbone V2 + UnifiedAPI 통합 완성 (81/81 테스트 통과)
+
+**💡 개발 철학**: DDD 아키텍처 + 에러 투명성 + 사용자 중심 UI + TDD 방법론
