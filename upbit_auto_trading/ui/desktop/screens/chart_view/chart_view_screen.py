@@ -14,6 +14,7 @@ from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.dynamic_splitter i
 from upbit_auto_trading.ui.desktop.screens.chart_view.presenters.window_lifecycle_presenter import WindowLifecyclePresenter
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.coin_list_widget import CoinListWidget
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.orderbook_widget import OrderbookWidget
+from upbit_auto_trading.domain.events.chart_viewer_events import ChartSubscriptionEvent, ChartViewerPriority
 
 
 class ChartViewScreen(QWidget):
@@ -124,13 +125,46 @@ class ChartViewScreen(QWidget):
         self._logger.debug(f"💡 리소스 절약: {saving_rate:.1%}")
 
     def _on_coin_selected(self, symbol: str) -> None:
-        """코인 선택 처리"""
+        """코인 선택 처리 - 호가창 연동 강화"""
         self._logger.info(f"💰 코인 선택: {symbol}")
         self.coin_selected.emit(symbol)
 
-        # 호가창 심벌 업데이트 (호가창이 OrderbookWidget인 경우)
+        # 호가창 심벌 업데이트 (고급 기능 포함)
         if hasattr(self._orderbook_panel, 'set_symbol'):
             self._orderbook_panel.set_symbol(symbol)
+
+            # 호가창 정보 로깅 (실제 매매 지원 확인)
+            if hasattr(self._orderbook_panel, 'get_widget_info'):
+                widget_info = self._orderbook_panel.get_widget_info()
+                self._logger.debug(
+                    f"호가창 정보: 마켓={widget_info.get('current_market')}, "
+                    f"틱사이즈={widget_info.get('tick_size')}, "
+                    f"모아보기지원={widget_info.get('grouping_support')}"
+                )
+
+        # DDD Infrastructure 레이어로 실제 데이터 요청 이벤트 발행
+        self._request_orderbook_data(symbol)
+
+    def _request_orderbook_data(self, symbol: str) -> None:
+        """DDD 아키텍처 기반 실제 호가 데이터 요청 (Infrastructure 레이어 연동)"""
+        try:
+            # Phase 2에서는 샘플 데이터가 이미 로드되었으므로 로깅만 수행
+            # Phase 3에서 실제 Infrastructure 이벤트 버스 연동 예정
+            self._logger.info(f"🔄 호가 데이터 요청 준비: {symbol} (Phase 3에서 실제 API 연동 예정)")
+
+            # 향후 Infrastructure 레이어 이벤트 발행 예정:
+            # subscription_event = ChartSubscriptionEvent(
+            #     chart_id=f"orderbook_{symbol}",
+            #     symbol=symbol,
+            #     data_type="orderbook",
+            #     timeframe="realtime",
+            #     action="subscribe",
+            #     priority_level=ChartViewerPriority.ORDERBOOK_HIGH
+            # )
+            # await self._event_bus.publish(subscription_event)
+
+        except Exception as e:
+            self._logger.error(f"호가 데이터 요청 실패: {symbol} - {e}")
 
     def _on_market_changed(self, market: str) -> None:
         """마켓 변경 처리"""
@@ -236,16 +270,44 @@ class ChartViewScreen(QWidget):
         return panel
 
     def _create_orderbook_panel(self) -> OrderbookWidget:
-        """호가창 패널 생성 (우측 - 2 비율)"""
+        """호가창 패널 생성 (우측 - 2 비율) - 실제 매매 지원"""
         # 실제 호가창 위젯 사용
         orderbook_widget = OrderbookWidget()
         orderbook_widget.setMinimumWidth(200)
 
+        # 호가창 고급 기능 시그널 연결
+        orderbook_widget.price_clicked.connect(self._on_orderbook_price_clicked)
+        orderbook_widget.orderbook_updated.connect(self._on_orderbook_updated)
+        orderbook_widget.market_impact_analyzed.connect(self._on_market_impact_analyzed)
+        orderbook_widget.optimal_price_suggested.connect(self._on_optimal_price_suggested)
+
         # 기본 심벌 설정 (KRW-BTC)
         orderbook_widget.set_symbol("KRW-BTC")
 
-        self._logger.debug("실제 호가창 위젯 생성 완료")
+        self._logger.info("호가창 위젯 생성 완료 (실제 매매 지원)")
         return orderbook_widget
+
+    def _on_orderbook_price_clicked(self, order_type: str, price: float) -> None:
+        """호가창 가격 클릭 처리 (실제 매매 지원)"""
+        self._logger.info(f"💰 호가창 가격 클릭: {order_type} {price:,.0f}원")
+        # TODO: Phase 4에서 실제 주문 인터페이스 연동
+
+    def _on_orderbook_updated(self, orderbook_data: dict) -> None:
+        """호가창 업데이트 처리"""
+        symbol = orderbook_data.get('symbol', 'Unknown')
+        ask_count = len(orderbook_data.get('asks', []))
+        bid_count = len(orderbook_data.get('bids', []))
+        self._logger.debug(f"호가창 업데이트: {symbol} (매도 {ask_count}, 매수 {bid_count})")
+
+    def _on_market_impact_analyzed(self, impact_data: dict) -> None:
+        """시장 임팩트 분석 결과 처리"""
+        self._logger.debug(f"시장 임팩트 분석 완료: {len(impact_data)}개 볼륨")
+        # TODO: Phase 4에서 리스크 관리 시스템 연동
+
+    def _on_optimal_price_suggested(self, order_type: str, optimal_price: float) -> None:
+        """최적 주문가 제안 처리"""
+        self._logger.info(f"💡 최적가 제안: {order_type} {optimal_price:,.0f}원")
+        # TODO: Phase 4에서 스마트 주문 시스템 연동
 
     def _post_init_setup(self) -> None:
         """지연 초기화 설정"""

@@ -152,6 +152,8 @@ class ChartViewerPriority:
 
     기존 시스템의 우선순위 범위(1-3: 매매 관련)와 격리하여
     차트뷰어 전용 우선순위(5,8,10)를 사용합니다.
+
+    태스크 2.4: 호가창 우선 구현을 위한 ORDERBOOK_HIGH 추가
     """
 
     # 기존 시스템 우선순위 (건드리지 않음)
@@ -160,6 +162,7 @@ class ChartViewerPriority:
     TRADING_NORMAL = 3      # 포지션 관리 (기존 시스템)
 
     # 차트뷰어 전용 우선순위 (기존 시스템과 격리)
+    ORDERBOOK_HIGH = 5      # 호가창 우선 구현 (실제 매매 지원)
     CHART_HIGH = 5          # 차트뷰어 활성화 상태
     CHART_BACKGROUND = 8    # 차트뷰어 비활성화 상태
     CHART_LOW = 10          # 차트뷰어 최소화 상태
@@ -178,8 +181,13 @@ class ChartViewerPriority:
 
     @classmethod
     def is_chart_viewer_priority(cls, priority: int) -> bool:
-        """차트뷰어 우선순위인지 확인"""
-        return priority in [cls.CHART_HIGH, cls.CHART_BACKGROUND, cls.CHART_LOW]
+        """차트뷰어 우선순위인지 확인 (호가창 포함)"""
+        return priority in [cls.ORDERBOOK_HIGH, cls.CHART_HIGH, cls.CHART_BACKGROUND, cls.CHART_LOW]
+
+    @classmethod
+    def is_orderbook_priority(cls, priority: int) -> bool:
+        """호가창 전용 우선순위인지 확인"""
+        return priority == cls.ORDERBOOK_HIGH
 
     @classmethod
     def is_trading_priority(cls, priority: int) -> bool:
@@ -238,3 +246,45 @@ class TimeframeSupport:
     def get_all_supported_timeframes(cls) -> List[str]:
         """지원하는 모든 타임프레임 목록"""
         return list(cls.SUPPORTED_TIMEFRAMES.keys())
+
+
+# WebSocket 실시간 데이터 이벤트 (새로 추가)
+@dataclass(frozen=True)
+class WebSocketOrderbookUpdateEvent(ChartViewerEvent):
+    """WebSocket 호가창 실시간 업데이트 이벤트"""
+    orderbook_data: Dict[str, Any] = field(default_factory=dict)
+    spread_percent: float = 0.0
+    total_ask_size: float = 0.0
+    total_bid_size: float = 0.0
+    market_impact_analysis: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def event_type(self) -> str:
+        return "websocket_orderbook_update"
+
+    def __post_init__(self):
+        super().__post_init__()
+        object.__setattr__(self, 'data_type', 'orderbook')
+        object.__setattr__(self, 'priority_level', ChartViewerPriority.ORDERBOOK_HIGH)
+        object.__setattr__(self, 'timeframe', 'realtime')
+
+
+@dataclass(frozen=True)
+class WebSocketTickerUpdateEvent(ChartViewerEvent):
+    """WebSocket 현재가 실시간 업데이트 이벤트"""
+    current_price: float = 0.0
+    change_rate: float = 0.0
+    volume_24h: float = 0.0
+    high_price: float = 0.0
+    low_price: float = 0.0
+    prev_closing_price: float = 0.0
+
+    @property
+    def event_type(self) -> str:
+        return "websocket_ticker_update"
+
+    def __post_init__(self):
+        super().__post_init__()
+        object.__setattr__(self, 'data_type', 'ticker')
+        object.__setattr__(self, 'priority_level', ChartViewerPriority.CHART_HIGH)
+        object.__setattr__(self, 'timeframe', 'realtime')

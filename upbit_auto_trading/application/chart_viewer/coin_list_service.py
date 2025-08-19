@@ -173,7 +173,7 @@ class CoinListService:
         change_rate = ticker.get('change_rate', 0)
         change_price = ticker.get('change_price', 0)
         change_status = ticker.get('change', 'EVEN')  # RISE, FALL, EVEN
-        volume = ticker.get('acc_trade_volume_24h', 0)
+        volume = ticker.get('acc_trade_price_24h', 0)  # 거래대금 (실제 업비트 정렬 기준)
 
         # 가격 포맷팅
         price_formatted = self._format_price(current_price, market_type)

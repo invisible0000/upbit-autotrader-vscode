@@ -3,6 +3,8 @@
 
 차트뷰어 창의 활성화/비활성화 상태를 관리하고
 리소스 사용량을 최적화하는 프레젠터입니다.
+
+태스크 2.4: 호가창과 차트뷰의 독립적 리소스 관리 지원
 """
 
 from typing import Optional, Dict, Any
@@ -11,6 +13,7 @@ from PyQt6.QtWidgets import QWidget
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.chart_viewer.chart_viewer_resource_manager import ChartViewerResourceManager
+from upbit_auto_trading.domain.events.chart_viewer_events import ChartViewerPriority
 
 
 class WindowLifecyclePresenter(QObject):
@@ -118,7 +121,7 @@ class WindowLifecyclePresenter(QObject):
         self._logger.info(f"🔄 창 상태 변경: {self._previous_state} → {new_state}")
 
     def _adjust_resource_priority(self) -> None:
-        """상태에 따른 리소스 우선순위 조정"""
+        """상태에 따른 리소스 우선순위 조정 - 호가창 독립 지원"""
         # 상태 매핑 (ChartViewerResourceManager의 window_state와 일치)
         state_map = {
             "active": "active",
@@ -135,15 +138,27 @@ class WindowLifecyclePresenter(QObject):
             "hidden": 0.95
         }
 
+        # 호가창 전용 우선순위 매핑 (태스크 2.4)
+        orderbook_priority_map = {
+            "active": 5,     # ChartViewerPriority.ORDERBOOK_HIGH
+            "inactive": 8,   # ChartViewerPriority.CHART_BACKGROUND
+            "minimized": 10, # ChartViewerPriority.CHART_LOW
+            "hidden": 10
+        }
+
         resource_state = state_map.get(self._current_state, "background")
         saving_rate = saving_map.get(self._current_state, 0.5)
+        orderbook_priority = orderbook_priority_map.get(self._current_state, 8)
 
         # 리소스 관리자에 창 상태 업데이트
         try:
             resource_info = self._resource_manager.update_window_state(self._chart_id, resource_state)
             if resource_info:
                 priority = resource_info.priority_level
-                self._logger.debug(f"리소스 우선순위 조정: {priority}, 절약률: {saving_rate:.1%}")
+                self._logger.debug(
+                    f"리소스 우선순위 조정: 차트={priority}, 호가창={orderbook_priority}, "
+                    f"절약률={saving_rate:.1%}"
+                )
             else:
                 self._logger.warning(f"리소스 정보 업데이트 실패: {self._chart_id}")
         except Exception as e:
@@ -229,6 +244,72 @@ class WindowLifecyclePresenter(QObject):
         if self._state_monitor.isActive():
             self._state_monitor.stop()
             self._logger.info("창 상태 모니터링 중지")
+
+    # 태스크 2.4: 호가창 전용 우선순위 관리 메서드들
+
+    def get_orderbook_priority_info(self) -> Dict[str, Any]:
+        """호가창 우선순위 정보 반환 (태스크 2.4 전용)"""
+        state_priority_map = {
+            "active": {
+                "orderbook_priority": 5,  # ORDERBOOK_HIGH
+                "chart_priority": 5,      # CHART_HIGH
+                "memory_allocation": "256MB",
+                "update_frequency": "실시간",
+                "description": "호가창 실시간 업데이트, 최고 우선순위"
+            },
+            "inactive": {
+                "orderbook_priority": 8,  # CHART_BACKGROUND
+                "chart_priority": 8,
+                "memory_allocation": "128MB",
+                "update_frequency": "저빈도",
+                "description": "호가창 백그라운드 모드, 중간 우선순위"
+            },
+            "minimized": {
+                "orderbook_priority": 10,  # CHART_LOW
+                "chart_priority": 10,
+                "memory_allocation": "64MB",
+                "update_frequency": "최소",
+                "description": "호가창 최소 리소스, 최저 우선순위"
+            }
+        }
+
+        current_info = state_priority_map.get(self._current_state, state_priority_map["minimized"])
+        current_info["current_state"] = self._current_state
+        current_info["chart_id"] = self._chart_id
+
+        return current_info
+
+    def is_orderbook_priority_high(self) -> bool:
+        """호가창이 고우선순위 상태인지 확인"""
+        return self._current_state == "active"
+
+    def get_orderbook_resource_allocation(self) -> Dict[str, Any]:
+        """호가창 리소스 할당 정보 반환"""
+        allocation_map = {
+            "active": {
+                "cpu_priority": "high",
+                "memory_mb": 256,
+                "network_priority": "high",
+                "update_interval_ms": 100,  # 100ms 실시간
+                "websocket_priority": 5
+            },
+            "inactive": {
+                "cpu_priority": "normal",
+                "memory_mb": 128,
+                "network_priority": "normal",
+                "update_interval_ms": 1000,  # 1초
+                "websocket_priority": 8
+            },
+            "minimized": {
+                "cpu_priority": "low",
+                "memory_mb": 64,
+                "network_priority": "low",
+                "update_interval_ms": 5000,  # 5초
+                "websocket_priority": 10
+            }
+        }
+
+        return allocation_map.get(self._current_state, allocation_map["minimized"])
 
     def cleanup(self) -> None:
         """리소스 정리"""
