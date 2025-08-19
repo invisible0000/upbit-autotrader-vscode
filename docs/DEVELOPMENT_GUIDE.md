@@ -317,6 +317,23 @@ def closeEvent(self, event):
     super().closeEvent(event)
 ```
 
+## ⚠️ PyQt6 개발 주의사항
+
+### 빈 위젯 Bool 평가 이슈
+```python
+# ❌ 위험한 패턴
+list_widget = QListWidget()
+if not list_widget:  # False! (빈 위젯)
+    raise Error("생성 실패")
+
+# ✅ 안전한 패턴
+if list_widget is None:
+    raise Error("생성 실패")
+```
+
+**영향받는 위젯**: `QListWidget`, `QComboBox`, `QTableWidget`, `QTreeWidget`
+**상세 가이드**: [PyQt6 빈 위젯 Bool 이슈](PyQt6_Empty_Widget_Bool_Issue.md)
+
 ## 📚 참고 문서
 
 - **[기본 7규칙 전략 가이드](BASIC_7_RULE_STRATEGY_GUIDE.md)**: 시스템 검증 기준

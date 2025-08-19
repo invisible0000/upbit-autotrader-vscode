@@ -8,6 +8,7 @@
 from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QFont
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.dynamic_splitter import DynamicSplitter
@@ -44,9 +45,9 @@ class ChartViewScreen(QWidget):
 
         # UI 컴포넌트
         self._splitter: Optional[DynamicSplitter] = None
-        self._coin_list_panel: Optional[CoinListWidget] = None
+        self._coin_list_panel: Optional[QWidget] = None
         self._chart_area_panel: Optional[QWidget] = None
-        self._orderbook_panel: Optional[OrderbookWidget] = None
+        self._orderbook_panel: Optional[QWidget] = None
 
         # 프레젠터
         self._window_lifecycle_presenter: Optional[WindowLifecyclePresenter] = None
@@ -127,7 +128,7 @@ class ChartViewScreen(QWidget):
         """코인 선택 처리"""
         self._logger.info(f"💰 코인 선택: {symbol}")
         self.coin_selected.emit(symbol)
-
+        
         # 호가창 심벌 업데이트 (호가창이 OrderbookWidget인 경우)
         if hasattr(self._orderbook_panel, 'set_symbol'):
             self._orderbook_panel.set_symbol(symbol)
@@ -141,19 +142,39 @@ class ChartViewScreen(QWidget):
         action = "추가" if is_favorite else "제거"
         self._logger.debug(f"⭐ 즐겨찾기 {action}: {symbol}")
 
-    def _create_coin_list_panel(self) -> CoinListWidget:
+    def _create_coin_list_panel(self) -> QWidget:
         """코인 리스트 패널 생성 (좌측 - 1 비율)"""
-        # 실제 코인 리스트 위젯 사용
-        coin_list_widget = CoinListWidget()
-        coin_list_widget.setMinimumWidth(200)
+        panel = QWidget()
+        panel.setMinimumWidth(200)
 
-        # 시그널 연결
-        coin_list_widget.coin_selected.connect(self._on_coin_selected)
-        coin_list_widget.market_changed.connect(self._on_market_changed)
-        coin_list_widget.favorite_toggled.connect(self._on_favorite_toggled)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(5, 5, 5, 5)
 
-        self._logger.debug("실제 코인 리스트 위젯 생성 완료")
-        return coin_list_widget
+        # 임시 제목
+        title = QLabel("� 코인 리스트")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = QFont()
+        title_font.setPointSize(12)
+        title_font.setBold(True)
+        title.setFont(title_font)
+
+        # 임시 내용
+        content = QLabel(
+            "• KRW/BTC/USDT 마켓\n"
+            "• 검색 필터\n"
+            "• 즐겨찾기 ⭐\n"
+            "• 심벌 + 코인명\n"
+            "\n"
+            "Phase 2.3에서 구현 예정"
+        )
+        content.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        layout.addWidget(title)
+        layout.addWidget(content)
+        layout.addStretch()
+
+        self._logger.debug("코인 리스트 패널 생성 완료")
+        return panel
 
     def _create_chart_area_panel(self) -> QWidget:
         """차트 영역 패널 생성 (중앙 - 4 비율)"""
@@ -180,7 +201,7 @@ class ChartViewScreen(QWidget):
         main_plot.setMinimumHeight(300)
 
         main_plot_layout = QVBoxLayout(main_plot)
-        main_plot_title = QLabel("캔들스틱 차트 (메인 플롯)")
+        main_plot_title = QLabel("� 캔들스틱 차트 (메인 플롯)")
         main_plot_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         main_plot_content = QLabel("Phase 3에서 PyQtGraph 구현 예정")
         main_plot_content.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -235,17 +256,40 @@ class ChartViewScreen(QWidget):
 
         return panel
 
-    def _create_orderbook_panel(self) -> OrderbookWidget:
+    def _create_orderbook_panel(self) -> QWidget:
         """호가창 패널 생성 (우측 - 2 비율)"""
-        # 실제 호가창 위젯 사용
-        orderbook_widget = OrderbookWidget()
-        orderbook_widget.setMinimumWidth(200)
+        panel = QWidget()
+        panel.setMinimumWidth(200)
 
-        # 기본 심벌 설정 (KRW-BTC)
-        orderbook_widget.set_symbol("KRW-BTC")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(5, 5, 5, 5)
 
-        self._logger.debug("실제 호가창 위젯 생성 완료")
-        return orderbook_widget
+        # 임시 제목
+        title = QLabel("💰 호가창")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_font = QFont()
+        title_font.setPointSize(12)
+        title_font.setBold(True)
+        title.setFont(title_font)
+
+        # 임시 내용
+        content = QLabel(
+            "• 실시간 호가 데이터\n"
+            "• 매수/매도 구분\n"
+            "• 호가량 시각화\n"
+            "• 가격 클릭 이벤트\n"
+            "• 누적 수량 표시\n"
+            "\n"
+            "Phase 2.4에서 구현 예정"
+        )
+        content.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        layout.addWidget(title)
+        layout.addWidget(content)
+        layout.addStretch()
+
+        self._logger.debug("호가창 패널 생성 완료")
+        return panel
 
     def _post_init_setup(self) -> None:
         """지연 초기화 설정"""

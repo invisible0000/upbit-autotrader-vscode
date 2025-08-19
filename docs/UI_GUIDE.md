@@ -12,6 +12,11 @@
 - **일관성**: 전체 애플리케이션 통일된 스타일
 - **7규칙 중심**: 기본 7규칙 전략 워크플로 최적화
 
+### ⚠️ PyQt6 개발 주의사항
+- **위젯 검증**: `if widget is None:` 사용 (❌ `if not widget:`)
+- **빈 컨테이너**: `QListWidget`, `QComboBox` 등은 빈 상태에서 `bool() = False`
+- **상세 가이드**: [PyQt6 빈 위젯 Bool 이슈](PyQt6_Empty_Widget_Bool_Issue.md)
+
 ## 📐 레이아웃 시스템
 
 ### 메인 윈도우 크기 및 구조
