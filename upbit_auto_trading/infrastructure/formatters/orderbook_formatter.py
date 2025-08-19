@@ -33,22 +33,22 @@ class OrderbookFormatter:
         # 테이블 데이터 생성 (60행: 매도 30행 + 매수 30행)
         table_data = []
 
-        # 매도 호가 (역순으로 표시 - 가격이 높은 것부터)
+        # 매도 호가 (역순으로 표시 - 가격이 높은 것부터, 30부터 1까지)
         for i in range(min(30, len(asks))):
             ask = asks[-(i+1)]  # 뒤에서부터 (가격 높은 순)
             row = [
-                str(30 - i),  # 번호
+                str(30 - i),  # 번호 (30부터 1까지)
                 self._format_quantity(ask["quantity"]),
                 self._format_price(ask["price"], market),
                 self._format_quantity(ask["total"])
             ]
             table_data.append(row)
 
-        # 매수 호가
+        # 매수 호가 (1부터 30까지)
         for i in range(min(30, len(bids))):
             bid = bids[i]
             row = [
-                str(31 + i),  # 번호
+                str(i + 1),  # 번호 (1부터 30까지)
                 self._format_quantity(bid["quantity"]),
                 self._format_price(bid["price"], market),
                 self._format_quantity(bid["total"])

@@ -2,7 +2,7 @@
 호가창 데이터 서비스 - Infrastructure Layer
 
 WebSocket과 REST API를 통합하여 호가창 데이터를 제공합니다.
-- WebSocket 우선 정책
+- WebSocket 우선 정책 (QAsync 기반)
 - REST API 백업
 - 실시간 데이터 통합
 """
@@ -11,6 +11,8 @@ import asyncio
 import requests
 from typing import Optional, Dict, Any
 from datetime import datetime
+from PyQt6.QtCore import QObject, pyqtSignal
+from qasync import asyncSlot
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InMemoryEventBus
@@ -18,11 +20,16 @@ from upbit_auto_trading.infrastructure.services.websocket_market_data_service im
 from upbit_auto_trading.application.use_cases.chart_viewer_websocket_use_case import ChartViewerWebSocketUseCase
 
 
-class OrderbookDataService:
-    """호가창 데이터 서비스 - 실시간 WebSocket + REST 백업"""
+class OrderbookDataService(QObject):
+    """호가창 데이터 서비스 - QAsync 기반 실시간 WebSocket + REST 백업"""
+
+    # QAsync 시그널 정의
+    subscription_completed = pyqtSignal(str, bool)  # symbol, success
+    unsubscription_completed = pyqtSignal(str)      # symbol
 
     def __init__(self, event_bus: Optional[InMemoryEventBus] = None):
         """서비스 초기화"""
+        super().__init__()
         self._logger = create_component_logger("OrderbookDataService")
         self._event_bus = event_bus
 
@@ -54,119 +61,62 @@ class OrderbookDataService:
         except Exception as e:
             self._logger.error(f"WebSocket 초기화 실패: {e}")
 
-    def subscribe_symbol_threaded(self, symbol: str, callback=None) -> None:
-        """심볼 WebSocket 구독 - 격리된 스레드에서 실행"""
-        if not self._websocket_use_case:
-            if callback:
-                callback(False)
-            return
-
-        import threading
-
-        def subscribe_isolated():
-            """완전히 격리된 스레드에서 WebSocket 구독"""
-            try:
-                # 완전히 새로운 이벤트 루프 생성 (기존 루프와 격리)
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-
-                try:
-                    # 비동기 작업 실행
-                    success = new_loop.run_until_complete(
-                        self._websocket_use_case.request_orderbook_subscription(symbol)
-                    )
-
-                    if success:
-                        self._websocket_connected = True
-                        self._current_symbol = symbol
-                        self._logger.info(f"✅ WebSocket 구독 성공: {symbol}")
-                    else:
-                        self._logger.warning(f"⚠️ WebSocket 구독 실패: {symbol}")
-
-                    if callback:
-                        callback(success)
-
-                finally:
-                    # 이벤트 루프 완전히 정리
-                    new_loop.close()
-                    asyncio.set_event_loop(None)
-
-            except Exception as e:
-                self._logger.error(f"❌ WebSocket 구독 오류 - {symbol}: {e}")
-                if callback:
-                    callback(False)
-
-        # 완전히 새로운 데몬 스레드에서 실행 (UI 스레드와 격리)
-        thread = threading.Thread(target=subscribe_isolated, daemon=True)
-        thread.start()
-
-    def unsubscribe_symbol_threaded(self, symbol: str, callback=None) -> None:
-        """심볼 WebSocket 구독 해제 - 격리된 스레드에서 실행"""
-        if not self._websocket_use_case:
-            if callback:
-                callback()
-            return
-
-        import threading
-
-        def unsubscribe_isolated():
-            """완전히 격리된 스레드에서 WebSocket 구독 해제"""
-            try:
-                # 완전히 새로운 이벤트 루프 생성 (기존 루프와 격리)
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-
-                try:
-                    # 비동기 작업 실행
-                    new_loop.run_until_complete(
-                        self._websocket_use_case.cancel_symbol_subscription(symbol)
-                    )
-
-                    self._websocket_connected = False
-                    self._logger.info(f"✅ WebSocket 구독 해제: {symbol}")
-
-                    if callback:
-                        callback()
-
-                finally:
-                    # 이벤트 루프 완전히 정리
-                    new_loop.close()
-                    asyncio.set_event_loop(None)
-
-            except Exception as e:
-                self._logger.error(f"❌ WebSocket 구독 해제 오류 - {symbol}: {e}")
-                if callback:
-                    callback()
-
-        # 완전히 새로운 데몬 스레드에서 실행 (UI 스레드와 격리)
-        thread = threading.Thread(target=unsubscribe_isolated, daemon=True)
-        thread.start()
-
-    # 기존 async 메서드는 호환성을 위해 유지하되 내부에서 스레드 방식 사용
+    @asyncSlot(str)
     async def subscribe_symbol(self, symbol: str) -> bool:
-        """심볼 WebSocket 구독 (호환성 유지)"""
-        import threading
-        result_container = {'success': False}
-        done_event = threading.Event()
+        """심볼 WebSocket 구독 - QAsync 기반"""
+        if not self._websocket_use_case:
+            self._logger.warning("WebSocket UseCase가 초기화되지 않음")
+            self.subscription_completed.emit(symbol, False)
+            return False
 
-        def callback(success):
-            result_container['success'] = success
-            done_event.set()
+        try:
+            # QAsync를 통해 안전하게 비동기 작업 실행
+            success = await self._websocket_use_case.request_orderbook_subscription(symbol)
 
-        self.subscribe_symbol_threaded(symbol, callback)
-        done_event.wait(timeout=10)  # 최대 10초 대기
-        return result_container['success']
+            if success:
+                self._websocket_connected = True
+                self._current_symbol = symbol
+                self._logger.info(f"✅ WebSocket 구독 성공: {symbol}")
+            else:
+                self._logger.warning(f"⚠️ WebSocket 구독 실패: {symbol}")
 
+            # 시그널 발생
+            self.subscription_completed.emit(symbol, success)
+            return success
+
+        except asyncio.CancelledError:
+            self._logger.info(f"WebSocket 구독 취소됨: {symbol}")
+            self.subscription_completed.emit(symbol, False)
+            return False
+        except Exception as e:
+            self._logger.error(f"❌ WebSocket 구독 오류 - {symbol}: {e}")
+            self.subscription_completed.emit(symbol, False)
+            return False
+
+    @asyncSlot(str)
     async def unsubscribe_symbol(self, symbol: str) -> None:
-        """심볼 WebSocket 구독 해제 (호환성 유지)"""
-        import threading
-        done_event = threading.Event()
+        """심볼 WebSocket 구독 해제 - QAsync 기반"""
+        if not self._websocket_use_case:
+            self._logger.warning("WebSocket UseCase가 초기화되지 않음")
+            self.unsubscription_completed.emit(symbol)
+            return
 
-        def callback():
-            done_event.set()
+        try:
+            # QAsync를 통해 안전하게 비동기 작업 실행
+            await self._websocket_use_case.cancel_symbol_subscription(symbol)
 
-        self.unsubscribe_symbol_threaded(symbol, callback)
-        done_event.wait(timeout=5)  # 최대 5초 대기
+            self._websocket_connected = False
+            self._logger.info(f"✅ WebSocket 구독 해제: {symbol}")
+
+            # 시그널 발생
+            self.unsubscription_completed.emit(symbol)
+
+        except asyncio.CancelledError:
+            self._logger.info(f"WebSocket 구독 해제 취소됨: {symbol}")
+            self.unsubscription_completed.emit(symbol)
+        except Exception as e:
+            self._logger.error(f"❌ WebSocket 구독 해제 오류 - {symbol}: {e}")
+            self.unsubscription_completed.emit(symbol)
 
     def load_rest_orderbook(self, symbol: str) -> Optional[Dict[str, Any]]:
         """REST API로 호가 데이터 로드"""

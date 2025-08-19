@@ -1,11 +1,13 @@
 """
-데스크톱 UI 실행 스크립트 - Infrastructure Layer 통합 버전
+데스크톱 UI 실행 스크립트 - Infrastructure Layer 통합 버전 (QAsync 기반)
 """
 import sys
 import os
 import traceback
+import asyncio
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from qasync import QEventLoop
 from upbit_auto_trading.infrastructure.dependency_injection.app_context import ApplicationContext, ApplicationContextError
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -227,80 +229,70 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
         raise
 
 
-def setup_application() -> tuple[QApplication, ApplicationContext]:
-    """애플리케이션 및 ApplicationContext 설정"""
-    # QApplication 생성
-    app = QApplication(sys.argv)
-
-    # 1. ApplicationContext 초기화
-    app_context = create_application_context()
-
-    # 2. Domain Events Subscriber 초기화 (DDD Architecture Phase 2)
-    try:
-        from upbit_auto_trading.infrastructure.logging.domain_event_subscriber import initialize_domain_logging_subscriber
-        initialize_domain_logging_subscriber()
-        logger.info("✅ Domain Events 로깅 구독자 초기화 완료")
-    except Exception as e:
-        logger.warning(f"⚠️ Domain Events 구독자 초기화 실패: {e}")
-
-    # 3. Repository Container 초기화 (DDD Infrastructure Layer)
-    try:
-        from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
-        repository_container = RepositoryContainer()
-        logger.info("✅ Repository Container 초기화 완료")
-    except Exception as e:
-        logger.warning(f"⚠️ Repository Container 초기화 실패: {e}")
-        repository_container = None
-
-    # 3. UI 서비스 등록 (Repository Container 전달)
-    register_ui_services(app_context, repository_container)
-
-    # 4. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
-    try:
-        from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
-
-        # Application Service Container 생성 (이미 생성된 Repository Container 사용)
-        if repository_container:
-            app_service_container = ApplicationServiceContainer(repository_container)
-        else:
-            # 폴백: 새로운 Repository Container 생성
-            from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
-            repository_container = RepositoryContainer()
-            app_service_container = ApplicationServiceContainer(repository_container)
-
-        # 전역 Application Container 설정
-        set_application_container(app_service_container)
-
-        logger.info("✅ Application Service Container 초기화 완료")
-    except Exception as e:
-        logger.warning(f"⚠️ Application Service Container 초기화 실패: {e}")
-        logger.warning(f"   상세: {type(e).__name__}: {str(e)}")
-        # Mock Container로 폴백 (나중에 구현 가능)
-
-    return app, app_context
-
-
-def run_application() -> int:
-    """메인 애플리케이션 실행"""
-    app = None
+async def run_application_async(app: QApplication) -> int:
+    """메인 애플리케이션 실행 (QAsync 기반)"""
     app_context = None
     main_window = None
 
     try:
-        # 애플리케이션 설정
-        app, app_context = setup_application()
+        # ApplicationContext 초기화
+        app_context = create_application_context()
 
-        # 3. 메인 윈도우 생성 (DI Container 주입)
+        # 2. Domain Events Subscriber 초기화 (DDD Architecture Phase 2)
+        try:
+            from upbit_auto_trading.infrastructure.logging.domain_event_subscriber import initialize_domain_logging_subscriber
+            initialize_domain_logging_subscriber()
+            logger.info("✅ Domain Events 로깅 구독자 초기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Domain Events 구독자 초기화 실패: {e}")
+
+        # 3. Repository Container 초기화 (DDD Infrastructure Layer)
+        try:
+            from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+            repository_container = RepositoryContainer()
+            logger.info("✅ Repository Container 초기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Repository Container 초기화 실패: {e}")
+            repository_container = None
+
+        # 3. UI 서비스 등록 (Repository Container 전달)
+        register_ui_services(app_context, repository_container)
+
+        # 4. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
+        try:
+            from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
+
+            # Application Service Container 생성 (이미 생성된 Repository Container 사용)
+            if repository_container:
+                app_service_container = ApplicationServiceContainer(repository_container)
+            else:
+                # 폴백: 새로운 Repository Container 생성
+                from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+                repository_container = RepositoryContainer()
+                app_service_container = ApplicationServiceContainer(repository_container)
+
+            # 전역 Application Container 설정
+            set_application_container(app_service_container)
+
+            logger.info("✅ Application Service Container 초기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Application Service Container 초기화 실패: {e}")
+            logger.warning(f"   상세: {type(e).__name__}: {str(e)}")
+
+        # 안전한 종료를 위한 이벤트 설정
+        app_close_event = asyncio.Event()
+        app.aboutToQuit.connect(app_close_event.set)
+
+        # 5. 메인 윈도우 생성 (DI Container 주입)
         from upbit_auto_trading.ui.desktop.main_window import MainWindow
         main_window = MainWindow(app_context.container)
         main_window.show()
 
-        logger.info("✅ 애플리케이션 시작됨 (Infrastructure Layer 기반)")
+        logger.info("✅ 애플리케이션 시작됨 (QAsync 기반 Infrastructure Layer)")
 
-        # 애플리케이션 이벤트 루프 시작
-        exit_code = app.exec()
-
-        return exit_code
+        # QAsync 이벤트 루프 실행 (안전한 종료 대기)
+        await app_close_event.wait()
+        return 0
 
     except ApplicationContextError as e:
         logger.error(f"❌ Infrastructure Layer 초기화 실패: {e}")
@@ -324,17 +316,12 @@ def run_application() -> int:
                 app_context.dispose()
                 logger.info("✅ ApplicationContext 정리 완료")
 
-            if app:
-                app.quit()
-                logger.info("✅ 애플리케이션 정상 종료")
-
         except Exception as cleanup_error:
             logger.warning(f"⚠️ 정리 작업 중 오류: {cleanup_error}")
 
         # DB 연결 강제 정리
         try:
             import gc
-            import sqlite3
 
             # 가비지 컬렉션 강제 실행
             gc.collect()
@@ -344,6 +331,29 @@ def run_application() -> int:
 
         except Exception:
             pass
+
+
+def run_application() -> int:
+    """QAsync 애플리케이션 실행 래퍼"""
+    try:
+        # QApplication 먼저 생성
+        app = QApplication(sys.argv)
+
+        # QAsync 이벤트 루프 실행
+        loop = QEventLoop(app)
+        asyncio.set_event_loop(loop)
+
+        # 안전한 종료를 위한 이벤트 설정
+        app_close_event = asyncio.Event()
+        app.aboutToQuit.connect(app_close_event.set)
+
+        # 비동기 애플리케이션 실행
+        return loop.run_until_complete(run_application_async(app))
+
+    except Exception as e:
+        logger.error(f"❌ QAsync 실행 실패: {e}")
+        traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":

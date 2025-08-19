@@ -2,14 +2,15 @@
 호가창 관리 UseCase - Application Layer
 
 호가창 관련 비즈니스 로직을 담당합니다.
-- 심볼 변경 관리
+- 심볼 변경 관리 (QAsync 기반)
 - 데이터 소스 선택 (WebSocket vs REST)
 - 실시간 업데이트 제어
-- QTimer 기반 안정적인 갱신 (asyncio 문제 해결)
+- 안전한 비동기 처리
 """
 
 from typing import Optional, Dict, Any, Callable
-from PyQt6.QtCore import QTimer, QObject
+from PyQt6.QtCore import QTimer, QObject, pyqtSignal
+from qasync import asyncSlot
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.services.orderbook_data_service import OrderbookDataService
@@ -17,7 +18,12 @@ from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InM
 
 
 class OrderbookManagementUseCase(QObject):
-    """호가창 관리 UseCase - QTimer 기반 안정화"""
+    """호가창 관리 UseCase - QAsync 기반 안정화"""
+
+    # 시그널 정의
+    symbol_changed = pyqtSignal(str, str)    # old_symbol, new_symbol
+    data_loaded = pyqtSignal(dict)           # orderbook_data
+    status_updated = pyqtSignal(dict)        # status_info
 
     def __init__(self, event_bus: Optional[InMemoryEventBus] = None):
         """UseCase 초기화"""
@@ -34,7 +40,11 @@ class OrderbookManagementUseCase(QObject):
         self._update_callback: Optional[Callable[[Dict[str, Any]], None]] = None
         self._status_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 
-        # 심볼 변경 지연 타이머 (asyncio 대신 QTimer 사용)
+        # QAsync 시그널 연결
+        self._data_service.subscription_completed.connect(self._on_subscription_completed)
+        self._data_service.unsubscription_completed.connect(self._on_unsubscription_completed)
+
+        # 심볼 변경 지연 타이머
         self._symbol_change_timer = QTimer(self)
         self._symbol_change_timer.setSingleShot(True)
         self._symbol_change_timer.timeout.connect(self._complete_symbol_change)
@@ -50,59 +60,63 @@ class OrderbookManagementUseCase(QObject):
         """상태 업데이트 콜백 설정"""
         self._status_callback = callback
 
-    def change_symbol(self, symbol: str) -> bool:
-        """심볼 변경 - QTimer 기반으로 안전하게 처리"""
+    @asyncSlot(str)
+    async def change_symbol(self, symbol: str) -> bool:
+        """심볼 변경 - QAsync 기반으로 안전하게 처리"""
         if symbol == self._current_symbol:
             return True
 
         try:
             self._logger.info(f"🔄 심볼 변경 시작: {self._current_symbol} → {symbol}")
+            old_symbol = self._current_symbol
 
-            # 기존 구독 해제 (스레드 방식)
+            # 기존 구독 해제 (QAsync)
             if self._current_symbol:
-                self._data_service.unsubscribe_symbol_threaded(self._current_symbol)
+                await self._data_service.unsubscribe_symbol(self._current_symbol)
 
             # 새 심볼 설정
-            old_symbol = self._current_symbol
             self._current_symbol = symbol
-            self._pending_symbol = symbol
 
             # 즉시 REST 데이터 로드 (논블로킹)
             rest_data = self._data_service.load_rest_orderbook(symbol)
             if rest_data and self._update_callback:
                 self._update_callback(rest_data)
 
-            # WebSocket 구독을 지연 처리 (500ms 후)
-            self._symbol_change_timer.start(500)
+            # WebSocket 구독 (QAsync)
+            success = await self._data_service.subscribe_symbol(symbol)
 
             # 상태 업데이트
             self._notify_status_change()
 
-            self._logger.info(f"✅ 심볼 변경 완료: {old_symbol} → {symbol}")
+            # 시그널 발생
+            self.symbol_changed.emit(old_symbol, symbol)
+
+            self._logger.info(f"✅ 심볼 변경 완료: {old_symbol} → {symbol} (WebSocket: {success})")
             return True
 
         except Exception as e:
             self._logger.error(f"❌ 심볼 변경 실패: {symbol} - {e}")
             return False
 
+    def _on_subscription_completed(self, symbol: str, success: bool) -> None:
+        """WebSocket 구독 완료 시그널 핸들러"""
+        self._logger.info(f"📡 구독 완료: {symbol} ({'성공' if success else '실패'})")
+        self._notify_status_change()
+
+    def _on_unsubscription_completed(self, symbol: str) -> None:
+        """WebSocket 구독 해제 완료 시그널 핸들러"""
+        self._logger.info(f"📡 구독 해제 완료: {symbol}")
+        self._notify_status_change()
+
     def _complete_symbol_change(self) -> None:
-        """심볼 변경 완료 처리 (WebSocket 구독)"""
-        if not self._pending_symbol:
-            return
-
-        def on_websocket_subscribed(success: bool):
-            """WebSocket 구독 완료 콜백"""
-            if success:
-                self._logger.info(f"✅ WebSocket 구독 완료: {self._pending_symbol}")
-            else:
-                self._logger.warning(f"⚠️ WebSocket 구독 실패: {self._pending_symbol}")
-
-            # 상태 업데이트
-            self._notify_status_change()
+        """지연된 심볼 변경 완료 처리 - QAsync 안전 호출"""
+        if self._pending_symbol:
+            symbol = self._pending_symbol
             self._pending_symbol = None
 
-        # WebSocket 구독 시도 (스레드 방식)
-        self._data_service.subscribe_symbol_threaded(self._pending_symbol, on_websocket_subscribed)
+            # QAsync 메타객체를 통한 안전한 비동기 호출
+            # @asyncSlot 데코레이터가 있는 메서드는 자동으로 QAsync 이벤트 루프에서 처리됨
+            _ = self.change_symbol(symbol)  # 의도적으로 결과 무시
 
     def load_current_data(self) -> Optional[Dict[str, Any]]:
         """현재 심볼의 데이터 로드 (REST)"""
@@ -150,10 +164,26 @@ class OrderbookManagementUseCase(QObject):
         if self._current_symbol:
             self.load_current_data()
 
-    # 호환성을 위한 async 메서드 (내부적으로 동기 방식 사용)
+    # 호환성을 위한 동기 래퍼 메서드들
+    def change_symbol_sync(self, symbol: str) -> bool:
+        """심볼 변경 (동기 호출용) - QTimer 기반 안전 지연"""
+        try:
+            if symbol == self._current_symbol:
+                return True
+
+            # QTimer 기반 지연 호출로 이벤트 루프 충돌 방지
+            self._pending_symbol = symbol
+            self._symbol_change_timer.start(50)  # 50ms 후 안전하게 실행
+            self._logger.info(f"🕒 심볼 변경 예약: {self._current_symbol} → {symbol} (QTimer)")
+            return True
+
+        except Exception as e:
+            self._logger.error(f"동기 심볼 변경 실패: {e}")
+            return False
+
     async def change_symbol_async(self, symbol: str) -> bool:
         """심볼 변경 (async 호환성)"""
-        return self.change_symbol(symbol)
+        return await self.change_symbol(symbol)
 
     async def refresh_data_async(self) -> None:
         """데이터 갱신 (async 호환성)"""

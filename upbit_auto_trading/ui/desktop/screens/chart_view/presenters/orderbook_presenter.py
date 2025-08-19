@@ -2,13 +2,14 @@
 호가창 프레젠터 - Presentation Layer
 
 UI와 비즈니스 로직 사이의 연결을 담당합니다.
-- 이벤트 처리
+- 이벤트 처리 (QAsync 기반)
 - 데이터 변환
 - UI 상태 관리
 """
 
 from typing import Optional, Dict, Any
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+from qasync import asyncSlot
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.use_cases.orderbook_management_use_case import OrderbookManagementUseCase
@@ -40,14 +41,20 @@ class OrderbookPresenter(QObject):
         self._backup_timer.timeout.connect(self._backup_refresh)
         self._backup_timer.start(15000)  # 15초마다 백업 갱신
 
+        # UseCase 시그널 연결 (QAsync 기반)
+        self._use_case.symbol_changed.connect(self._on_symbol_changed)
+        self._use_case.data_loaded.connect(self._on_data_updated)
+        self._use_case.status_updated.connect(self._on_status_changed)
+
         # WebSocket 이벤트 구독
         if self._event_bus:
             self._event_bus.subscribe(WebSocketOrderbookUpdateEvent, self._on_websocket_update)
 
-    def change_symbol(self, symbol: str) -> bool:
-        """심볼 변경 요청 - QTimer 기반으로 안전하게"""
+    @asyncSlot(str)
+    async def change_symbol(self, symbol: str) -> bool:
+        """심볼 변경 요청 - QAsync 기반으로 안전하게"""
         try:
-            success = self._use_case.change_symbol(symbol)
+            success = await self._use_case.change_symbol(symbol)
             if not success:
                 self.error_occurred.emit(f"심볼 변경 실패: {symbol}")
             return success
@@ -56,10 +63,19 @@ class OrderbookPresenter(QObject):
             self.error_occurred.emit(f"심볼 변경 오류: {str(e)}")
             return False
 
-    # 호환성을 위한 async 버전 (내부적으로 동기 방식 사용)
+    def change_symbol_sync(self, symbol: str) -> bool:
+        """심볼 변경 요청 (동기 호출용)"""
+        try:
+            return self._use_case.change_symbol_sync(symbol)
+        except Exception as e:
+            self._logger.error(f"동기 심볼 변경 오류: {e}")
+            self.error_occurred.emit(f"심볼 변경 오류: {str(e)}")
+            return False
+
+    # 호환성을 위한 async 버전 제거하고 동기 래퍼만 유지
     async def change_symbol_async(self, symbol: str) -> bool:
         """심볼 변경 요청 (async 호환성)"""
-        return self.change_symbol(symbol)
+        return await self.change_symbol(symbol)
 
     def refresh_data(self) -> None:
         """데이터 수동 갱신"""
@@ -85,6 +101,10 @@ class OrderbookPresenter(QObject):
             self._backup_timer.start(15000)
         else:
             self._backup_timer.stop()
+
+    def _on_symbol_changed(self, old_symbol: str, new_symbol: str) -> None:
+        """심볼 변경 완료 시그널 핸들러"""
+        self._logger.info(f"📈 심볼 변경 완료: {old_symbol} → {new_symbol}")
 
     def _on_data_updated(self, data: Dict[str, Any]) -> None:
         """데이터 업데이트 콜백"""
