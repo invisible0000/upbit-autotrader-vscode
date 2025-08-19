@@ -14,6 +14,7 @@ from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.dynamic_splitter i
 from upbit_auto_trading.ui.desktop.screens.chart_view.presenters.window_lifecycle_presenter import WindowLifecyclePresenter
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.coin_list_widget import CoinListWidget
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.orderbook_widget import OrderbookWidget
+from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.finplot_candlestick_widget import FinplotCandlestickWidget
 from upbit_auto_trading.domain.events.chart_viewer_events import ChartSubscriptionEvent, ChartViewerPriority
 
 
@@ -37,7 +38,7 @@ class ChartViewScreen(QWidget):
         super().__init__(parent)
 
         self._logger = create_component_logger("ChartViewScreen")
-        self._logger.info("� Phase 2 차트 뷰 화면 초기화 시작")
+        self._logger.info("✅ Phase 2 차트 뷰 화면 초기화 시작")
 
         # 상태 관리
         self._layout_state: Dict[str, Any] = {}
@@ -48,6 +49,7 @@ class ChartViewScreen(QWidget):
         self._coin_list_panel: Optional[CoinListWidget] = None
         self._chart_area_panel: Optional[QWidget] = None
         self._orderbook_panel: Optional[OrderbookWidget] = None
+        self._candlestick_widget: Optional[FinplotCandlestickWidget] = None
 
         # 프레젠터
         self._window_lifecycle_presenter: Optional[WindowLifecyclePresenter] = None
@@ -190,58 +192,22 @@ class ChartViewScreen(QWidget):
         return coin_list_widget
 
     def _create_chart_area_panel(self) -> QWidget:
-        """차트 영역 패널 생성 (중앙 - 4 비율)"""
+        """차트 영역 패널 생성 (중앙 - 4 비율) - Phase 3.1 Finplot 구조 적용"""
         panel = QWidget()
         panel.setMinimumWidth(400)
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(5, 5, 5, 5)
 
-        # 컨트롤 패널 (상단)
-        control_panel = self._create_control_panel()
-        layout.addWidget(control_panel)
+        # Finplot 기반 캔들스틱 차트 위젯
+        self._candlestick_widget = FinplotCandlestickWidget()
+        layout.addWidget(self._candlestick_widget, 1)
 
-        # 차트 영역 (메인)
-        chart_area = QWidget()
-        chart_area.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        # 차트 준비 완료 시그널 연결
+        self._candlestick_widget.chart_ready.connect(self._on_chart_ready)
+        self._candlestick_widget.candle_clicked.connect(self._on_candle_clicked)
 
-        chart_layout = QVBoxLayout(chart_area)
-        chart_layout.setContentsMargins(10, 10, 10, 10)
-
-        # 메인 플롯 영역 (3/4)
-        main_plot = QWidget()
-        main_plot.setStyleSheet("background-color: white; border: 1px solid #ddd;")
-        main_plot.setMinimumHeight(300)
-
-        main_plot_layout = QVBoxLayout(main_plot)
-        main_plot_title = QLabel("캔들스틱 차트 (메인 플롯)")
-        main_plot_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_plot_content = QLabel("Phase 3에서 PyQtGraph 구현 예정")
-        main_plot_content.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_plot_layout.addWidget(main_plot_title)
-        main_plot_layout.addWidget(main_plot_content)
-        main_plot_layout.addStretch()
-
-        # 서브 플롯 영역 (1/4)
-        sub_plot = QWidget()
-        sub_plot.setStyleSheet("background-color: white; border: 1px solid #ddd;")
-        sub_plot.setMinimumHeight(100)
-        sub_plot.setMaximumHeight(150)
-
-        sub_plot_layout = QVBoxLayout(sub_plot)
-        sub_plot_title = QLabel("📊 거래량 (서브 플롯)")
-        sub_plot_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub_plot_content = QLabel("MACD, RSI, ATR, STOCH 선택 가능")
-        sub_plot_content.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub_plot_layout.addWidget(sub_plot_title)
-        sub_plot_layout.addWidget(sub_plot_content)
-
-        chart_layout.addWidget(main_plot, 3)  # 3/4 비율
-        chart_layout.addWidget(sub_plot, 1)   # 1/4 비율
-
-        layout.addWidget(chart_area, 1)
-
-        self._logger.debug("차트 영역 패널 생성 완료")
+        self._logger.info("✅ Phase 3.1 Finplot 캔들스틱 차트 위젯 적용")
         return panel
 
     def _create_control_panel(self) -> QWidget:
@@ -384,3 +350,28 @@ class ChartViewScreen(QWidget):
             info['current_sizes'] = self._splitter.sizes()
 
         return info
+
+    # Finplot 차트 이벤트 핸들러들
+    def _on_chart_ready(self) -> None:
+        """Finplot 차트 준비 완료 시 처리"""
+        self._logger.info("✅ Finplot 차트 준비 완료")
+        # 초기 데이터 로드나 추가 설정이 필요한 경우 여기서 처리
+
+    def _on_candle_clicked(self, index: int, candle_data: dict) -> None:
+        """캔들 클릭 시 처리"""
+        self._logger.debug(f"캔들 클릭됨 - 인덱스: {index}, 데이터: {candle_data}")
+        # 캔들 상세 정보 표시나 추가 액션 처리
+
+    # 외부 인터페이스 메서드들
+    def get_candlestick_widget(self) -> Optional[FinplotCandlestickWidget]:
+        """캔들스틱 위젯 인스턴스 반환"""
+        return self._candlestick_widget
+
+    def update_chart_data(self, symbol: str, timeframe: str = "1m") -> None:
+        """차트 데이터 업데이트"""
+        if self._candlestick_widget:
+            # 캔들스틱 위젯의 데이터 업데이트 메서드 호출
+            # 실제 구현에서는 마켓 데이터 백본과 연동
+            self._logger.debug(f"차트 데이터 업데이트 요청: {symbol} {timeframe}")
+        else:
+            self._logger.warning("캔들스틱 위젯이 아직 초기화되지 않음")
