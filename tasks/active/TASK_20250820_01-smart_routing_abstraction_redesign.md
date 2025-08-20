@@ -14,8 +14,9 @@
 ### ⚠️ **개선 필요한 부분 (집중 개발)**
 1. **실시간 데이터 통합**: WebSocket → RealtimeDataCache → 매매변수 계산
 2. **자율적 최적화 완성**: FrequencyAnalyzer, ChannelSelector 완료
-3. **3-Layer 통합**: Coordinator, Storage와의 연결 구현
-4. **실거래 우선순위**: Critical Path 성능 보장
+3. **WebSocket 장애 복구**: 다층 Fallback 전략 구현 (즉시 대응 → 배치 모사 → 시스템 모드 전환)
+4. **3-Layer 통합**: Coordinator, Storage와의 연결 구현
+5. **실거래 우선순위**: Critical Path 성능 보장
 
 ### 📊 **재사용 가능한 리소스**
 - **현재 구현체**: `smart_routing/` 폴더 (Phase 1-2 완료 상태)
@@ -28,14 +29,16 @@
 ### 🎯 핵심 문제점 식별
 1. **실시간 처리 방식 모호**: `subscribe_realtime()` vs `get_candle_data(streaming=True)` 선택 필요
 2. **Smart Router 자율성 강화**: 내부 빈도 분석으로 최적 채널 자동 선택
-3. **인터페이스 통합**: 단일 API로 일회성/실시간 모두 처리
-4. **역할 분리 강화**: 각 레이어의 책임 명확화
+3. **WebSocket 장애 복구**: `realtime_only/snapshot_only` 요청 시 WebSocket 장애 대응 전략
+4. **인터페이스 통합**: 단일 API로 일회성/실시간 모두 처리
+5. **역할 분리 강화**: 각 레이어의 책임 명확화
 
 ### 🎯 명확한 역할 분리 정책 (3-Layer 아키텍처)
 
 #### Layer 1: Smart Routing (가장 하위 - API 추상화)
 - **API 추상화**: URL 구조 완전 은닉, 도메인 모델만 노출
 - **자율적 채널 선택**: 내부 빈도 분석으로 REST ↔ WebSocket 자동 전환
+- **WebSocket 장애 복구**: 3단계 Fallback (즉시 대응 → 배치 모사 → 시스템 모드 전환)
 - **다중 데이터 타입**: get_candle_data(), get_ticker_data(), get_orderbook_data(), get_trade_data()
 - **제한 준수**: 업비트 API 제한 내에서만 동작 (캔들 200개, 티커 100개 등)
 - **WebSocket 관리**: 구독 생명주기, 재연결, 빈도 저조 시 자동 해제
@@ -55,9 +58,9 @@
 - **사용 패턴 최적화**: 사용 사례별 요청 빈도 최적화 (실시간 차트=고빈도, 백테스트=저빈도)
 
 ### Phase 1: 기존 코드 검증 및 정리 🔄 **새로운 접근**
-- [ ] 1.1 현재 smart_routing/ 폴더 코드 품질 검증
-- [ ] 1.2 기존 도메인 모델과 실거래 데이터 요구사항 매핑
-- [ ] 1.3 WebSocket 통합 지점 설계 (BatchWebSocketManager 연동)
+- [x] 1.1 현재 smart_routing/ 폴더 코드 품질 검증 ✅ **완료 (양호한 코드 품질 확인)**
+- [x] 1.2 기존 도메인 모델과 실거래 데이터 요구사항 매핑 ✅ **완료 (스냅샷/실시간 구분 추가)**
+- [x] 1.3 WebSocket 통합 지점 설계 (BatchWebSocketManager 연동) ✅ **완료 (Fallback 시스템 통합)**
 - [ ] 1.4 실거래 우선순위 처리 설계 (Critical Path)
 
 ### Phase 2: 실시간 데이터 아키텍처 통합 🎯 **핵심**
@@ -69,8 +72,9 @@
 ### Phase 3: 자율적 최적화 완성 🚧 **기존 미완성 완료**
 - [ ] 3.1 FrequencyAnalyzer 구현 (요청 패턴 분석)
 - [ ] 3.2 ChannelSelector 완성 (REST ↔ WebSocket 자동 전환)
-- [ ] 3.3 실거래 우선순위 처리 (Critical/High/Normal/Low)
-- [ ] 3.4 시스템 부하 기반 적응적 라우팅
+- [ ] 3.3 WebSocket 장애 복구 시스템 (3단계 Fallback 전략)
+- [ ] 3.4 실거래 우선순위 처리 (Critical/High/Normal/Low)
+- [ ] 3.5 시스템 부하 기반 적응적 라우팅
 
 ### Phase 4: 3-Layer 통합 및 검증 🔗 **통합**
 - [ ] 4.1 Coordinator와의 연동 인터페이스 구현
@@ -128,6 +132,8 @@ smart_routing/
 - ✅ **호환성 우선**: 기존 `IDataRouter` 인터페이스 그대로 구현하되, 내부에서 스마트 라우팅
 - ✅ **완전한 추상화**: URL 구조 완전 은닉, 도메인 모델만 노출
 - ✅ **자율적 최적화**: 내부 빈도 분석으로 REST ↔ WebSocket 자동 전환
+- ✅ **WebSocket 장애 복구**: 3단계 Fallback으로 서비스 중단 없는 투명한 복구
+- ✅ **스냅샷/실시간 구분**: `realtime_only/snapshot_only` 옵션으로 명확한 데이터 타입 요청
 - ✅ **API 제한 준수**: 업비트 API 제한 내에서만 동작 (200개 초과 시 에러)
 
 ## 💡 작업 시 주의사항

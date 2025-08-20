@@ -13,6 +13,7 @@ import logging
 
 from ..interfaces.data_router import IDataRouter, IChannelSelector, IFrequencyAnalyzer
 from ..interfaces.data_provider import IDataProvider
+from ..strategies.websocket_fallback import WebSocketFallbackManager
 from ..models import (
     TradingSymbol,
     Timeframe,
@@ -33,7 +34,8 @@ from ..utils.exceptions import (
     DataRangeExceedsLimitException,
     InvalidRequestException,
     SymbolNotSupportedException,
-    DataRouterException
+    DataRouterException,
+    WebSocketException
 )
 
 
@@ -59,11 +61,15 @@ class SmartDataRouter(IDataRouter):
         self.channel_selector = channel_selector or BasicChannelSelector()
         self.frequency_analyzer = frequency_analyzer or BasicFrequencyAnalyzer()
 
+        # WebSocket 장애 복구 시스템
+        self.fallback_manager = WebSocketFallbackManager(rest_provider, self.logger)
+
         # 통계 추적
         self.stats = {
             "total_requests": 0,
             "websocket_requests": 0,
             "rest_requests": 0,
+            "fallback_requests": 0,  # 새로 추가
             "error_count": 0,
             "response_times": []
         }
@@ -105,8 +111,24 @@ class SmartDataRouter(IDataRouter):
 
             # 데이터 조회
             if use_websocket and self.websocket_provider:
-                response = await self._get_candle_data_via_websocket(request)
-                self.stats["websocket_requests"] += 1
+                try:
+                    response = await self._get_candle_data_via_websocket(request)
+                    self.stats["websocket_requests"] += 1
+                except Exception as e:
+                    # WebSocket 오류 시 자동 Fallback
+                    self.logger.warning(f"WebSocket 캔들 요청 실패, Fallback 처리: {e}")
+                    response = await self.fallback_manager.handle_websocket_error(
+                        error=e,
+                        operation="get_candle_data",
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        count=count,
+                        start_time=start_time,
+                        end_time=end_time,
+                        realtime_only=realtime_only,
+                        snapshot_only=snapshot_only
+                    )
+                    self.stats["fallback_requests"] += 1
             else:
                 response = await self._get_candle_data_via_rest(request)
                 self.stats["rest_requests"] += 1
@@ -148,8 +170,18 @@ class SmartDataRouter(IDataRouter):
 
             # 데이터 조회
             if use_websocket and self.websocket_provider:
-                response = await self._get_ticker_data_via_websocket(request)
-                self.stats["websocket_requests"] += 1
+                try:
+                    response = await self._get_ticker_data_via_websocket(request)
+                    self.stats["websocket_requests"] += 1
+                except Exception as e:
+                    # WebSocket 오류 시 자동 Fallback
+                    self.logger.warning(f"WebSocket 티커 요청 실패, Fallback 처리: {e}")
+                    response = await self.fallback_manager.handle_websocket_error(
+                        error=e,
+                        operation="get_ticker_data",
+                        symbol=symbol
+                    )
+                    self.stats["fallback_requests"] += 1
             else:
                 response = await self.rest_provider.get_ticker_data(request)
                 self.stats["rest_requests"] += 1
@@ -307,9 +339,11 @@ class SmartDataRouter(IDataRouter):
             total_requests=total_requests,
             websocket_requests=self.stats["websocket_requests"],
             rest_requests=self.stats["rest_requests"],
+            fallback_requests=self.stats["fallback_requests"],
             avg_response_time_ms=avg_response_time,
             error_rate=error_rate,
             cache_hit_rate=0.0,  # 캐시 미구현
+            fallback_status=self.fallback_manager.get_fallback_status(),
             metadata=ResponseFactory.create_metadata(
                 request_time=datetime.now(),
                 data_source="stats"

@@ -179,6 +179,10 @@
   },
   "active": "653c0d7ff342fa88",
   "lastOpenFiles": [
+    "tasks/active/TASK_20250820_02-market_data_storage_development.md",
+    "tasks/active/TASK_20250820_03-market_data_coordinator_development.md",
+    "tasks/active/TASK_20250820_0-market_data_coordinator_development.md",
+    "upbit_auto_trading/infrastructure/market_data_backbone/smart_routing/strategies/websocket_fallback.py",
     "upbit_auto_trading/infrastructure/market_data_backbone/smart_routing/strategies/subscription_bundling.py",
     "docs/market_data_backbone/README.md",
     "docs/market_data_backbone/smart_routing/API_REFERENCE.md",
@@ -193,8 +197,6 @@
     "legacy/test_websocket_resource_basic.py",
     "legacy/test_websocket_message_debug.py",
     "legacy/test_websocket_manager_debug.py",
-    "legacy/test_websocket_integration_diagnosis.py",
-    "legacy/test_websocket_basic_validation.py",
     "legacy/smart_router_optimization_strategy.md",
     "REALTIME_DATA_ARCHITECTURE_PLAN.md",
     "tasks/planned/TASK_20250815_01_Trigger_Builder_Functional_Implementation.md",
@@ -222,8 +224,6 @@
     "venv/Lib/site-packages/pyqtgraph/icons/lock.png",
     "venv/Lib/site-packages/pyqtgraph/icons/invisibleEye.svg",
     "tasks/active/TASK_20250814_09_Phase4_Trigger_Builder_UI_Legacy_Migration.md",
-    "tasks/active/트리거 빌더 리펙토링 ui이식 방법.md",
-    "tools/maintenance_complexity_report.md",
-    "tests/ui/settings/api_settings/README.md"
+    "tasks/active/트리거 빌더 리펙토링 ui이식 방법.md"
   ]
 }

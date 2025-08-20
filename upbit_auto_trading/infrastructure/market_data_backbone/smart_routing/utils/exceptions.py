@@ -130,6 +130,16 @@ class WebSocketDataException(SmartRoutingException):
         )
 
 
+class WebSocketException(SmartRoutingException):
+    """일반 WebSocket 예외 (Fallback 트리거용)"""
+
+    def __init__(self, message: str = "WebSocket 오류가 발생했습니다"):
+        super().__init__(
+            message=message,
+            error_code="WEBSOCKET_ERROR"
+        )
+
+
 class RestApiException(SmartRoutingException):
     """REST API 예외"""
 
