@@ -58,17 +58,13 @@
 - [ ] 3.1 비동기 병렬 요청 처리기 구현
 - [ ] 3.2 레이트 제한 준수 로직 (업비트 API 제한)
 - [ ] 3.3 오류 복구 및 재시도 로직
-- [ ] 3.4 요청 우선순위 관리### Phase 4: 결과 통합 및 검증
+- [ ] 3.4 요청 우선순위 관리 (시스템 부하 고려)
+
+### Phase 4: 결과 통합 및 검증
 - [ ] 4.1 데이터 통합기 구현 (DataAggregator - 타입별)
 - [ ] 4.2 데이터 정합성 검증 로직 (타입별 검증 규칙)
 - [ ] 4.3 중복 제거 및 정렬 로직 (타입별 정렬 기준)
 - [ ] 4.4 메타데이터 관리 (요청 통계, 성능 지표)
-
-### Phase 5: 사용 사례별 최적화
-- [ ] 5.1 스크리닝 최적화기 (ScreeningOptimizer - 최신 데이터 우선)
-- [ ] 5.2 백테스트 최적화기 (BacktestOptimizer - 과거 데이터 청크)
-- [ ] 5.3 차트 뷰어 최적화기 (ChartOptimizer - 증분 업데이트)
-- [ ] 5.4 다중 심볼 배치 처리기 (MultisymbolBatchProcessor)
 
 ## 🛠️ 폴더 구조 및 파일 설계
 
@@ -80,8 +76,7 @@ market_data_coordinator/
 │   ├── __init__.py
 │   ├── coordinator.py            # IMarketDataCoordinator
 │   ├── splitter.py               # ISplitStrategy
-│   ├── aggregator.py             # IDataAggregator
-│   └── optimizer.py              # IOptimizer
+│   └── aggregator.py             # IDataAggregator
 ├── implementations/               # 핵심 구현체
 │   ├── __init__.py
 │   ├── market_data_coordinator.py # 메인 조율자
@@ -95,12 +90,6 @@ market_data_coordinator/
 │   ├── orderbook_splitter.py     # 호가창 데이터 심볼 기반 분할
 │   ├── trade_splitter.py         # 체결 데이터 시간/카운트 기반 분할
 │   └── strategy_factory.py       # 데이터 타입별 전략 팩토리
-├── optimizers/                    # 사용 사례별 최적화
-│   ├── __init__.py
-│   ├── screening_optimizer.py    # 스크리닝 최적화
-│   ├── backtest_optimizer.py     # 백테스트 최적화
-│   ├── realtime_optimizer.py     # 실시간 최적화
-│   └── multisymbol_processor.py  # 다중 심볼 처리
 ├── models/                        # 데이터 모델
 │   ├── __init__.py
 │   ├── requests.py               # 대용량 요청 모델
@@ -118,103 +107,53 @@ market_data_coordinator/
 ## 🎯 핵심 구현 목표
 
 ### 1. 지능적 분할 전략
-```python
-# 예시: 1000개 캔들 요청을 5번의 200개 요청으로 분할 → DB 저장
-class CandleSplitter:
-    def split_request(self, request: LargeCandleRequest) -> List[SmallCandleRequest]:
-        """
-        대용량 캔들 요청을 Smart Routing이 처리할 수 있는 크기로 분할
-        - 시간 범위 기반 분할
-        - 최대 200개 제한 준수
-        - 겹치지 않는 시간 구간 생성
-        - 결과는 DB에 저장됨
-        """
-
-# 예시: 100개 티커 요청을 여러 번으로 분할 → 메모리 캐시만
-class TickerSplitter:
-    def split_request(self, request: LargeTickerRequest) -> List[SmallTickerRequest]:
-        """
-        다중 심볼 티커 요청을 분할
-        - 심볼 기반 분할 (100개씩)
-        - 결과는 메모리 캐시에만 저장
-        - DB 저장 없음 (실시간 데이터)
-        """
-```
+- **캔들 데이터**: 시간 범위 기반 분할 (1000개 → 5번의 200개 요청)
+- **티커 데이터**: 심볼 기반 분할 (100개씩 그룹화)
+- **호가창 데이터**: 심볼 기반 분할 (5-10개씩 처리)
+- **체결 데이터**: 시간/카운트 기반 하이브리드 분할
 
 ### 2. 병렬 처리 최적화
-```python
-# 예시: 5개 요청을 동시에 처리하되 레이트 제한 준수
-class ParallelRequestProcessor:
-    async def process_requests(
-        self,
-        split_requests: List[SmallDataRequest]
-    ) -> List[SmallDataResponse]:
-        """
-        - 동시 요청 수 제어 (예: 3개씩)
-        - 업비트 API 레이트 제한 준수
-        - 실패한 요청 재시도
-        - 진행률 추적
-        """
-```
+- **동시 요청 제어**: 시스템 리소스에 따른 적응적 조절
+- **레이트 제한 준수**: 업비트 API 제한 내에서 안전한 처리
+- **실패 복구**: 개별 요청 실패 시 자동 재시도
+- **진행률 추적**: 대용량 처리 상황 모니터링
 
 ### 3. 데이터 통합 및 검증
-```python
-# 예시: 분할된 응답들을 하나의 완전한 데이터셋으로 통합
-class DataAggregator:
-    def aggregate_candle_responses(
-        self,
-        responses: List[SmallCandleResponse]
-    ) -> LargeCandleResponse:
-        """
-        캔들 데이터 통합 (DB 저장 대상)
-        - 시간순 정렬
-        - 중복 데이터 제거
-        - 데이터 연속성 검증
-        - 메타데이터 생성 (총 개수, 시간 범위 등)
-        """
-
-    def aggregate_ticker_responses(
-        self,
-        responses: List[SmallTickerResponse]
-    ) -> LargeTickerResponse:
-        """
-        티커 데이터 통합 (메모리 캐시만)
-        - 심볼별 최신 데이터만 유지
-        - DB 저장 없음
-        - 메모리 효율성 우선
-        """
-```
+- **캔들 데이터 통합**: 시간순 정렬, 중복 제거, 연속성 검증
+- **실시간 데이터 통합**: 최신 데이터 우선, 메모리 효율성 고려
+- **메타데이터 생성**: 요청 통계, 성능 지표, 품질 정보
+- **정합성 보장**: 타입별 검증 규칙 적용
 
 ## 🔗 다른 레이어와의 협력
 
 ### Smart Routing (Layer 1) 협력
-- **의존성**: Smart Router의 다중 API 인터페이스 사용 (get_candle_data, get_ticker_data 등)
-- **호출 방식**: 분할된 소규모 요청들을 순차/병렬 호출 (데이터 타입별)
+- **인터페이스 사용**: Smart Router의 다중 API 활용 (get_candle_data, get_ticker_data 등)
+- **분할 요청**: 소규모 요청들을 순차/병렬 호출 (데이터 타입별 최적화)
 - **에러 처리**: Smart Routing 에러를 상위로 전파하거나 재시도
-- **빈도 조절**: Smart Router의 빈도 분석을 위해 적절한 간격으로 요청
+- **자율성 존중**: Smart Router의 독립적 채널 선택 방해 없이 협력
 
 ### Market Data Storage (Layer 3) 협력
-- **캔들 데이터**: 통합된 대용량 캔들 데이터를 Storage DB에 저장
-- **실시간 데이터**: 티커/호가창/체결은 Storage의 메모리 캐시에만 저장
-- **캐시 활용**: Storage의 기존 캔들 데이터 활용하여 증분 요청만 수행
-- **메타데이터**: 요청 통계, 성능 지표를 Storage에 저장
+- **캔들 데이터**: 통합된 대용량 캔들 데이터를 Storage DB에 전달
+- **실시간 데이터**: 티커/호가창/체결은 Storage의 메모리 캐시에만 전달
+- **증분 최적화**: Storage의 기존 데이터 정보 활용하여 중복 요청 방지
+- **성능 피드백**: 요청 통계, 성능 지표를 Storage 메타데이터로 제공
 
 ## 💡 성능 최적화 전략
 
-### 1. 스크리닝 최적화
+### 1. 분할 처리 최적화
 - **최신 우선**: 현재 시간부터 역순으로 데이터 수집
-- **조기 종료**: 필요한 데이터만 수집 후 중단
-- **캐시 활용**: 최근 데이터는 캐시에서 우선 조회
+- **조기 완료**: 요청된 데이터량 달성 시 즉시 종료
+- **캐시 확인**: 기존 데이터 존재 여부 확인 후 증분 요청
 
-### 2. 백테스트 최적화
-- **청크 단위**: 월/주 단위로 데이터 분할 수집
-- **병렬 처리**: 여러 시간 구간을 동시에 수집
-- **진행률 추적**: 대용량 백테스트 진행 상황 모니터링
+### 2. 병렬 처리 최적화
+- **청크 단위**: 시간/심볼 단위로 데이터 분할 수집
+- **동시 처리**: 여러 요청을 안전한 범위 내에서 병렬 실행
+- **진행률 추적**: 대용량 처리 진행 상황 모니터링
 
-### 3. 실시간 업데이트
-- **증분 수집**: 마지막 업데이트 이후 데이터만 요청
-- **효율적 통합**: 기존 데이터에 새 데이터 병합
-- **중복 방지**: 타임스탬프 기반 중복 검사
+### 3. 통합 처리 최적화
+- **증분 통합**: 완료된 청크부터 순차적으로 통합
+- **효율적 병합**: 기존 데이터에 새 데이터 효율적 추가
+- **중복 방지**: 타임스탬프 기반 중복 검사 및 제거
 
 ## 🎯 성공 기준
 - ✅ **다중 타입 분할 처리**: 캔들 1000개+, 티커 100개+, 호가창 다중 심볼 등을 자동 분할
@@ -224,11 +163,10 @@ class DataAggregator:
 - ✅ **레이트 제한 준수**: 업비트 API 제한 내에서 안정적 동작 (타입별 제한)
 
 ## 🚀 개발 우선순위
-1. **Phase 1**: 핵심 인터페이스 (IMarketDataCoordinator)
-2. **Phase 2**: 기본 분할 전략 (TimeBasedSplitter)
-3. **Phase 3**: 병렬 처리 (ParallelRequestProcessor)
-4. **Phase 4**: 데이터 통합 (DataAggregator)
-5. **Phase 5**: 사용 사례별 최적화
+1. **Phase 1**: 핵심 인터페이스 설계 (IMarketDataCoordinator)
+2. **Phase 2**: 데이터 타입별 분할 전략 구현
+3. **Phase 3**: 병렬 처리 및 최적화
+4. **Phase 4**: 결과 통합 및 검증
 
 ---
 **의존성**: TASK_20250820_01 Smart Routing 완료 후 시작
