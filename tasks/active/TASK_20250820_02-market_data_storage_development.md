@@ -125,7 +125,8 @@ class IndexOptimizer:
 - [ ] 2.1 IMarketDataStorage 인터페이스 정의 (캔들 DB + 실시간 캐시)
 - [ ] 2.2 SQLite 기반 CandleRepository 구현 (DB 저장)
 - [ ] 2.3 메모리 기반 RealtimeDataCache 구현 (티커/호가창/체결)
-- [ ] 2.4 트랜잭션 관리 및 롤백 처리 (캔들 데이터만)
+- [ ] 2.4 Smart Router 메모리 캐시 연동 인터페이스 구현 ✅ **추가**
+- [ ] 2.5 트랜잭션 관리 및 롤백 처리 (캔들 데이터만)
 
 ### Phase 3: 캐싱 시스템 구현
 - [ ] 3.1 IDataCache 인터페이스 정의
@@ -207,10 +208,11 @@ market_data_storage/
 - **압축 저장**: 필요시 오래된 데이터 압축 관리
 
 ### 2. 지능적 캐싱 시스템
-- **계층적 캐시**: 메모리 캐시 → 디스크 캐시 → SQLite DB 순차 조회
+- **4단계 계층적 캐시**: Storage 메모리 → Smart Router 메모리 → 디스크 캐시 → SQLite DB ✅ **확정**
 - **자동 최적화**: 파편화율 15% 초과 시 incremental_vacuum 실행
 - **인덱스 관리**: 통계 업데이트, 사용하지 않는 인덱스 정리
 - **쿼리 최적화**: 느린 쿼리 감지 시 인덱스 추천
+- **Smart Router 연동**: Smart Router의 실시간 메모리 캐시 우선 활용 ✅ **확정**
 
 ### 3. 단순한 데이터 인터페이스
 - **기본 CRUD**: 캔들/티커/호가창/체결 데이터의 저장/조회만 제공
