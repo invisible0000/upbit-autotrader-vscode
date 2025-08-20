@@ -9,11 +9,18 @@
 """
 
 import re
-from typing import Dict, Any, Optional, Tuple
+import asyncio
+from typing import Dict, Any, Optional, Tuple, Callable
 from urllib.parse import urlparse, parse_qs
+from datetime import datetime
 
 from .pattern_analyzer import RequestPatternTracker
 from .rate_limiter import RateLimitGuard
+from .subscription_manager import WebSocketSubscriptionManager, create_subscription_manager
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
+    WebSocketDataType
+)
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 
@@ -75,26 +82,26 @@ class FieldMapper:
 
 
 class SmartChannelRouter:
-    """스마트 채널 라우터"""
+    """스마트 채널 라우터 - 통합 데이터 API"""
 
     # URL 패턴별 채널 분류
     CHANNEL_PATTERNS = {
         "websocket": [
-            r"/ticker",
-            r"/trade",
-            r"/orderbook",
-            r"/candles/minutes/1(\?|$)",  # 1분봉만 WebSocket (쿼리 있거나 끝)
+            r"/ticker",     # 실시간 호가
+            r"/trade",      # 실시간 체결
+            r"/orderbook",  # 실시간 호가창
         ],
         "rest": [
-            r"/candles/minutes/[35]$",  # 3분, 5분봉
-            r"/candles/minutes/1[05]$",  # 10분, 15분봉
-            r"/candles/minutes/[346]0$",  # 30분, 60분봉
-            r"/candles/days",
-            r"/candles/weeks",
-            r"/candles/months",
+            r"/candles/minutes/1(\?|$)",      # 1분봉 (과거 데이터)
+            r"/candles/minutes/[35](\?|$)",   # 3분, 5분봉
+            r"/candles/minutes/1[05](\?|$)",  # 10분, 15분봉
+            r"/candles/minutes/[346]0(\?|$)",  # 30분, 60분봉
+            r"/candles/minutes/240(\?|$)",    # 240분(4시간)봉
+            r"/candles/days",      # 일봉
+            r"/candles/weeks",     # 주봉
+            r"/candles/months",    # 월봉
             r"/market/all",
-            r"/accounts",
-            r"/orders",
+            # 주문 관련은 Market Data Backbone 범위 외
         ]
     }
 
@@ -108,6 +115,10 @@ class SmartChannelRouter:
             channel: [re.compile(pattern) for pattern in patterns]
             for channel, patterns in self.CHANNEL_PATTERNS.items()
         }
+
+        # 통합 클라이언트들
+        self._ws_manager: Optional[WebSocketSubscriptionManager] = None
+        self._rest_client: Optional[UpbitPublicClient] = None
 
     def extract_symbol_from_url(self, url: str) -> Optional[str]:
         """URL에서 심볼 추출"""
@@ -217,6 +228,164 @@ class SmartChannelRouter:
     def cleanup_inactive_patterns(self, hours: int = 1) -> int:
         """비활성 패턴 정리"""
         return self.pattern_tracker.cleanup_inactive(hours)
+
+    # === 통합 데이터 API ===
+
+    async def get_data(self, url: str, **kwargs) -> Dict[str, Any]:
+        """
+        통합 데이터 요청 API
+
+        Args:
+            url: 요청 URL (예: "/ticker?market=KRW-BTC")
+            **kwargs: 추가 파라미터
+
+        Returns:
+            데이터 (REST/WebSocket 자동 선택)
+        """
+        # 라우팅 결정
+        channel, routing_info = self.route_request(url)
+
+        if channel == "blocked":
+            raise Exception(f"Rate limit: {routing_info}")
+
+        symbol = routing_info.get("symbol")
+        if not symbol:
+            raise ValueError("심볼을 추출할 수 없습니다")
+
+        # 채널별 데이터 요청
+        if channel == "websocket":
+            return await self._get_websocket_data(url, symbol, **kwargs)
+        else:
+            return await self._get_rest_data(url, symbol, **kwargs)
+
+    async def _get_websocket_data(self, url: str, symbol: str, **kwargs) -> Dict[str, Any]:
+        """WebSocket을 통한 데이터 요청"""
+        # WebSocket 관리자 초기화
+        if not self._ws_manager:
+            self._ws_manager = create_subscription_manager()
+
+        # URL에서 데이터 타입 추론
+        data_type = self._infer_websocket_data_type(url)
+
+        # 실시간 구독 (캐시된 데이터 반환)
+        await self._ws_manager.subscribe(symbol, data_type)
+
+        # 최신 데이터 조회 (최대 5초 대기)
+        for _ in range(50):  # 0.1초 * 50 = 5초
+            data = await self._ws_manager.get_latest_data(symbol)
+            if data:
+                self._logger.info(f"WebSocket 데이터 수신: {symbol} ({data_type.value})")
+                return self._format_websocket_response(data, data_type)
+
+            await asyncio.sleep(0.1)
+
+        raise TimeoutError(f"WebSocket 데이터 수신 타임아웃: {symbol}")
+
+    async def _get_rest_data(self, url: str, symbol: str, **kwargs) -> Dict[str, Any]:
+        """REST API를 통한 데이터 요청"""
+        # REST 클라이언트 초기화
+        if not self._rest_client:
+            self._rest_client = UpbitPublicClient()
+
+        # URL 패턴 매칭으로 적절한 API 호출
+        if "/ticker" in url:
+            # 현재가 정보
+            markets = await self._rest_client.get_tickers([symbol])
+            return markets[0] if markets else {}
+
+        elif "/candles/minutes" in url:
+            # 분봉 데이터
+            unit = self._extract_timeframe_from_url(url)
+            candles = await self._rest_client.get_candles_minutes(symbol, unit=unit, count=1)
+            return candles[0] if candles else {}
+
+        elif "/market/all" in url:
+            # 마켓 목록
+            markets = await self._rest_client.get_markets(is_details=True)
+            return {"markets": markets}  # Dict로 래핑
+
+        else:
+            raise ValueError(f"지원하지 않는 REST API: {url}")
+
+    def _infer_websocket_data_type(self, url: str) -> WebSocketDataType:
+        """URL에서 WebSocket 데이터 타입 추론"""
+        if "/ticker" in url:
+            return WebSocketDataType.TICKER
+        elif "/trade" in url:
+            return WebSocketDataType.TRADE
+        elif "/orderbook" in url:
+            return WebSocketDataType.ORDERBOOK
+        else:
+            return WebSocketDataType.TICKER  # 기본값
+
+    def _extract_timeframe_from_url(self, url: str) -> int:
+        """URL에서 타임프레임 추출"""
+        if "/minutes/1" in url:
+            return 1
+        elif "/minutes/3" in url:
+            return 3
+        elif "/minutes/5" in url:
+            return 5
+        elif "/minutes/15" in url:
+            return 15
+        elif "/minutes/30" in url:
+            return 30
+        elif "/minutes/60" in url:
+            return 60
+        else:
+            return 1  # 기본값
+
+    def _format_websocket_response(self, data: Dict[str, Any], data_type: WebSocketDataType) -> Dict[str, Any]:
+        """WebSocket 응답 포맷팅"""
+        # 필드 매핑 적용
+        mapped_data = FieldMapper.map_fields(data, from_rest=False)
+
+        # 응답 메타데이터 추가
+        mapped_data["_source"] = "websocket"
+        mapped_data["_data_type"] = data_type.value
+        mapped_data["_timestamp"] = datetime.now().isoformat()
+
+        return mapped_data
+
+    async def subscribe_realtime(self, symbol: str, data_type: str,
+                                 callback: Callable[[Dict[str, Any]], None]) -> str:
+        """
+        실시간 데이터 구독
+
+        Args:
+            symbol: 심볼 (예: KRW-BTC)
+            data_type: 데이터 타입 (ticker, trade, orderbook)
+            callback: 데이터 수신 콜백
+
+        Returns:
+            subscription_id: 구독 ID
+        """
+        # WebSocket 관리자 초기화
+        if not self._ws_manager:
+            self._ws_manager = create_subscription_manager()
+
+        # 문자열을 Enum으로 변환
+        ws_data_type = WebSocketDataType(data_type)
+
+        return await self._ws_manager.subscribe(symbol, ws_data_type, callback)
+
+    async def unsubscribe_realtime(self, subscription_id: str) -> bool:
+        """실시간 구독 해지"""
+        if not self._ws_manager:
+            return False
+
+        return await self._ws_manager.unsubscribe(subscription_id)
+
+    async def disconnect_all(self) -> None:
+        """모든 연결 해제"""
+        if self._ws_manager:
+            await self._ws_manager.disconnect()
+            self._ws_manager = None
+
+        # REST 클라이언트는 상태가 없으므로 None으로 설정만
+        self._rest_client = None
+
+        self._logger.info("모든 연결 해제 완료")
 
 
 def create_smart_router() -> SmartChannelRouter:
