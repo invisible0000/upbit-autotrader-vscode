@@ -60,6 +60,11 @@ class UpbitWebSocketQuotationClient:
         self.ping_interval = 30.0  # 30초마다 PING
         self.message_timeout = 10.0  # 메시지 타임아웃 10초
 
+        # 🔧 메시지 수신 루프 제어
+        self.message_loop_task: Optional[asyncio.Task] = None
+        self.auto_start_message_loop = True  # 구독 시 자동으로 메시지 수신 시작
+        self._message_loop_running = False  # 중복 실행 방지
+
     async def connect(self) -> bool:
         """WebSocket 연결 (API 키 불필요)"""
         try:
@@ -91,6 +96,16 @@ class UpbitWebSocketQuotationClient:
         """WebSocket 연결 해제"""
         try:
             self.auto_reconnect = False
+
+            # 🔧 메시지 수신 루프 중지
+            if self.message_loop_task and not self.message_loop_task.done():
+                self.message_loop_task.cancel()
+                try:
+                    await self.message_loop_task
+                except asyncio.CancelledError:
+                    pass
+                self.message_loop_task = None
+
             if self.websocket:
                 try:
                     # WebSocket 상태 확인 후 닫기
@@ -154,6 +169,11 @@ class UpbitWebSocketQuotationClient:
             if data_type.value not in self.subscriptions:
                 self.subscriptions[data_type.value] = []
             self.subscriptions[data_type.value].extend(markets)
+
+            # 🔧 첫 구독 시 자동으로 메시지 수신 루프 시작
+            if self.auto_start_message_loop and not self.message_loop_task and not self._message_loop_running:
+                self.message_loop_task = asyncio.create_task(self._message_receiver_loop())
+                self.logger.debug("🚀 메시지 수신 루프 자동 시작")
 
             self.logger.info(f"✅ {data_type.value} 구독 완료: {markets}")
             return True
@@ -250,6 +270,26 @@ class UpbitWebSocketQuotationClient:
                 await handler(message) if asyncio.iscoroutinefunction(handler) else handler(message)
             except Exception as e:
                 self.logger.error(f"메시지 핸들러 실행 오류: {e}")
+
+    async def _message_receiver_loop(self) -> None:
+        """🔧 자동 메시지 수신 루프"""
+        if self._message_loop_running:
+            self.logger.debug("메시지 수신 루프 이미 실행 중")
+            return
+
+        self._message_loop_running = True
+        self.logger.debug("메시지 수신 루프 시작")
+
+        try:
+            async for message in self.listen():
+                # listen() 제너레이터가 메시지 처리를 담당
+                pass
+        except Exception as e:
+            self.logger.error(f"메시지 수신 루프 오류: {e}")
+        finally:
+            self._message_loop_running = False
+            self.message_loop_task = None
+            self.logger.debug("메시지 수신 루프 종료")
 
     async def _keep_alive(self) -> None:
         """연결 유지 (PING 메시지)"""

@@ -21,6 +21,11 @@ class CandleDataRequest:
     1. start_time이 주어지면 시작점으로 사용
     2. 업비트 API 최대 200개 제한 준수
     3. 200개 초과 예상 시 에러 반환 → Coordinator가 분할 처리
+
+    스냅샷/실시간 구분:
+    - realtime_only: 실시간 업데이트만 (stream_type: REALTIME)
+    - snapshot_only: 스냅샷 데이터만 (stream_type: SNAPSHOT)
+    - 둘 다 False: 스냅샷 + 실시간 모두 (기본값)
     """
 
     symbol: TradingSymbol
@@ -28,6 +33,8 @@ class CandleDataRequest:
     count: Optional[int] = None      # 조회할 개수 (기본: 200)
     start_time: Optional[datetime] = None  # 시작 시간
     end_time: Optional[datetime] = None    # 종료 시간
+    realtime_only: bool = False      # 실시간 데이터만 요청
+    snapshot_only: bool = False      # 스냅샷 데이터만 요청
 
     def __post_init__(self):
         """요청 파라미터 검증"""
@@ -42,6 +49,10 @@ class CandleDataRequest:
 
         if self.start_time and self.end_time and self.start_time >= self.end_time:
             raise ValueError("start_time은 end_time보다 이전이어야 합니다")
+
+        # 상호배타적 옵션 검증
+        if self.realtime_only and self.snapshot_only:
+            raise ValueError("realtime_only와 snapshot_only는 동시에 설정할 수 없습니다")
 
     @property
     def has_time_range(self) -> bool:
@@ -142,7 +153,35 @@ class RequestFactory:
             symbol=symbol,
             timeframe=timeframe,
             start_time=start_time,
-            end_time=end_time
+            end_time=end_time,
+            snapshot_only=True  # 과거 데이터는 스냅샷만
+        )
+
+    @staticmethod
+    def realtime_candles(
+        symbol: TradingSymbol,
+        timeframe: Timeframe
+    ) -> CandleDataRequest:
+        """실시간 캔들 데이터 요청 (트레이딩용)"""
+        return CandleDataRequest(
+            symbol=symbol,
+            timeframe=timeframe,
+            count=1,  # 현재 캔들만
+            realtime_only=True
+        )
+
+    @staticmethod
+    def hybrid_candles(
+        symbol: TradingSymbol,
+        timeframe: Timeframe,
+        count: int = 200
+    ) -> CandleDataRequest:
+        """하이브리드 캔들 요청 (스냅샷 + 실시간)"""
+        return CandleDataRequest(
+            symbol=symbol,
+            timeframe=timeframe,
+            count=count
+            # realtime_only=False, snapshot_only=False (기본값)
         )
 
     @staticmethod

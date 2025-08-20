@@ -79,15 +79,18 @@ class SmartDataRouter(IDataRouter):
         timeframe: Timeframe,
         count: Optional[int] = None,
         start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None
+        end_time: Optional[datetime] = None,
+        realtime_only: bool = False,
+        snapshot_only: bool = False
     ) -> CandleDataResponse:
-        """캔들 데이터 조회 (API 제한 준수)"""
+        """캔들 데이터 조회 (API 제한 준수 + 스냅샷/실시간 구분)"""
         start_time_req = datetime.now()
 
         try:
-            # 요청 검증 및 변환
+            # 요청 검증 및 변환 (스냅샷/실시간 옵션 포함)
             request = self._create_candle_request(
-                symbol, timeframe, count, start_time, end_time
+                symbol, timeframe, count, start_time, end_time,
+                realtime_only, snapshot_only
             )
 
             # 자율적 채널 선택
@@ -229,27 +232,46 @@ class SmartDataRouter(IDataRouter):
         self,
         symbol: TradingSymbol,
         data_types: List[str],
-        callback: Callable[[Dict[str, Any]], None]
+        callback: Callable[[Dict[str, Any]], None],
+        purpose: str = "general"
     ) -> str:
-        """실시간 데이터 구독 (기본 구현)
+        """실시간 데이터 구독 (기능별 묶음 관리)
+
+        Args:
+            symbol: 대상 심볼
+            data_types: 구독할 데이터 타입 ["ticker", "orderbook", "trade"]
+            callback: 데이터 수신 콜백
+            purpose: 구독 목적 ("trading", "monitoring", "analysis", "alert")
 
         Note: Layer 1에서는 기본 구현만 제공
-        실제 실시간 처리는 상위 Layer에서 구현 권장
+        실제 구독 묶음 최적화는 상위 Layer에서 구현 권장
         """
         if not self.websocket_provider:
             raise DataRouterException("WebSocket 제공자가 설정되지 않았습니다")
 
-        # 기본적인 구독 관리
-        subscription_id = f"{symbol}_{datetime.now().timestamp()}"
+        # 기본적인 구독 관리 (구독 묶음 전략 적용)
+        subscription_id = f"{purpose}_{symbol}_{datetime.now().timestamp()}"
+
+        # 구독 묶음 최적화 힌트 제공
+        subscription_hint = {
+            "purpose": purpose,
+            "recommended_bundling": self._get_bundling_recommendation(purpose, data_types),
+            "priority": self._get_priority_by_purpose(purpose)
+        }
 
         self.subscriptions[subscription_id] = {
             "symbol": symbol,
             "data_types": data_types,
             "callback": callback,
+            "purpose": purpose,
+            "bundling_hint": subscription_hint,
             "created_at": datetime.now()
         }
 
-        self.logger.info(f"실시간 구독 등록: {subscription_id}")
+        self.logger.info(
+            f"실시간 구독 등록: {subscription_id} "
+            f"(목적: {purpose}, 우선순위: {subscription_hint['priority']})"
+        )
 
         return subscription_id
 
@@ -351,9 +373,17 @@ class SmartDataRouter(IDataRouter):
         timeframe: Timeframe,
         count: Optional[int],
         start_time: Optional[datetime],
-        end_time: Optional[datetime]
+        end_time: Optional[datetime],
+        realtime_only: bool = False,
+        snapshot_only: bool = False
     ) -> CandleDataRequest:
-        """캔들 요청 생성 및 검증"""
+        """캔들 요청 생성 및 검증 (스냅샷/실시간 옵션 지원)"""
+
+        # 상호배타적 옵션 검증
+        if realtime_only and snapshot_only:
+            raise InvalidRequestException(
+                "realtime_only와 snapshot_only는 동시에 설정할 수 없습니다"
+            )
 
         # API 제한 검증
         effective_count = count if count is not None else 200
@@ -376,7 +406,9 @@ class SmartDataRouter(IDataRouter):
             timeframe=timeframe,
             count=effective_count,
             start_time=start_time,
-            end_time=end_time
+            end_time=end_time,
+            realtime_only=realtime_only,
+            snapshot_only=snapshot_only
         )
 
     def _should_use_websocket_for_candles(
@@ -446,6 +478,28 @@ class SmartDataRouter(IDataRouter):
         # 최근 100개 응답 시간만 유지
         if len(self.stats["response_times"]) > 100:
             self.stats["response_times"] = self.stats["response_times"][-100:]
+
+    def _get_bundling_recommendation(self, purpose: str, data_types: List[str]) -> str:
+        """구독 목적에 따른 묶음 권장사항"""
+        recommendations = {
+            "trading": "high_priority_bundle",      # 실시간 트레이딩은 고우선순위 묶음
+            "monitoring": "low_latency_bundle",     # 모니터링은 저지연 묶음
+            "analysis": "batch_bundle",             # 분석은 배치 묶음
+            "alert": "immediate_bundle",            # 알림은 즉시 처리 묶음
+            "backtesting": "historical_bundle"      # 백테스팅은 과거 데이터 묶음
+        }
+        return recommendations.get(purpose, "general_bundle")
+
+    def _get_priority_by_purpose(self, purpose: str) -> int:
+        """구독 목적에 따른 우선순위 (1: 최고, 10: 최저)"""
+        priorities = {
+            "trading": 1,       # 실시간 트레이딩 최우선
+            "alert": 2,         # 급변 감지 높음
+            "monitoring": 3,    # 포트폴리오 모니터링 중간
+            "analysis": 4,      # 차트 분석 중간
+            "backtesting": 5    # 백테스팅 낮음
+        }
+        return priorities.get(purpose, 5)
 
 
 class BasicChannelSelector(IChannelSelector):

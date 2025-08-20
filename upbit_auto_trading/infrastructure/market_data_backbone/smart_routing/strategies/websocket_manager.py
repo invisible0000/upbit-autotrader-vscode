@@ -15,6 +15,12 @@ from enum import Enum
 import logging
 
 from ..models import TradingSymbol
+from .rate_limit_mapper import IntegratedRateLimiter, RateLimitType
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
+    UpbitWebSocketQuotationClient,
+    WebSocketDataType,
+    WebSocketMessage
+)
 
 
 class SubscriptionState(Enum):
@@ -117,12 +123,15 @@ class WebSocketSubscriptionManager:
         self.reconnect_max_attempts = reconnect_max_attempts
         self.reconnect_base_delay = reconnect_base_delay
 
+        # Rate Limiting 통합
+        self.rate_limiter = IntegratedRateLimiter()
+
         # 구독 관리
         self.subscriptions: Dict[str, SubscriptionInfo] = {}
         self.symbol_to_subscriptions: Dict[str, Set[str]] = {}
 
         # 연결 관리
-        self.connections: Dict[str, Any] = {}  # connection_id -> websocket
+        self.connections: Dict[str, UpbitWebSocketQuotationClient] = {}  # connection_id -> websocket_client
         self.connection_states: Dict[str, ConnectionState] = {}
         self.connection_metrics: Dict[str, ConnectionMetrics] = {}
         self.connection_subscriptions: Dict[str, Set[str]] = {}  # connection_id -> subscription_ids
@@ -184,10 +193,15 @@ class WebSocketSubscriptionManager:
         data_types: List[str],
         callback: Callable[[Dict[str, Any]], None]
     ) -> str:
-        """데이터 구독"""
+        """데이터 구독 (Rate Limiting 적용)"""
 
         if not self.is_running:
             await self.start()
+
+        # WebSocket 연결/메시지 전송에 대한 Rate Limiting 확인
+        if not await self.rate_limiter.wait_for_availability(RateLimitType.WEBSOCKET, timeout_seconds=5.0):
+            self.logger.warning(f"WebSocket rate limit으로 구독 실패: {symbol}")
+            raise Exception(f"WebSocket rate limit exceeded for subscription: {symbol}")
 
         subscription_id = str(uuid.uuid4())
 
@@ -202,11 +216,13 @@ class WebSocketSubscriptionManager:
 
         self.subscriptions[subscription_id] = subscription
 
-        # 심볼별 인덱스 업데이트
-        symbol_key = str(symbol)
+        # 심볼별 인덱스 업데이트 - 업비트 형식으로 통일
+        symbol_key = symbol.to_upbit_symbol()  # KRW-BTC 형식
         if symbol_key not in self.symbol_to_subscriptions:
             self.symbol_to_subscriptions[symbol_key] = set()
         self.symbol_to_subscriptions[symbol_key].add(subscription_id)
+
+        self.logger.debug(f"🔗 심볼 매핑 생성: {symbol_key} -> {subscription_id}")
 
         # 적절한 연결에 할당
         connection_id = await self._assign_to_connection(subscription_id)
@@ -241,8 +257,8 @@ class WebSocketSubscriptionManager:
         subscription.state = SubscriptionState.CANCELLED
         del self.subscriptions[subscription_id]
 
-        # 심볼별 인덱스 업데이트
-        symbol_key = str(subscription.symbol)
+        # 심볼별 인덱스 업데이트 - 업비트 형식으로 통일
+        symbol_key = subscription.symbol.to_upbit_symbol()  # KRW-BTC 형식
         if symbol_key in self.symbol_to_subscriptions:
             self.symbol_to_subscriptions[symbol_key].discard(subscription_id)
             if not self.symbol_to_subscriptions[symbol_key]:
@@ -341,31 +357,103 @@ class WebSocketSubscriptionManager:
         return None
 
     async def _create_new_connection(self) -> Optional[str]:
-        """새 WebSocket 연결 생성"""
+        """새 WebSocket 연결 생성 (Rate Limiting 적용)"""
+
+        # WebSocket 연결 요청에 대한 Rate Limiting 확인
+        if not await self.rate_limiter.wait_for_availability(RateLimitType.WEBSOCKET, timeout_seconds=3.0):
+            self.logger.warning("WebSocket rate limit으로 연결 생성 실패")
+            return None
 
         connection_id = str(uuid.uuid4())
 
         try:
-            # 실제 WebSocket 연결은 구현체에서 처리
-            # 여기서는 연결 관리 구조만 생성
+            # 실제 WebSocket 클라이언트 생성
+            client = UpbitWebSocketQuotationClient()
+
+            # 메시지 핸들러 등록
+            client.add_message_handler(WebSocketDataType.TICKER, self._handle_websocket_message)
+            client.add_message_handler(WebSocketDataType.ORDERBOOK, self._handle_websocket_message)
+            client.add_message_handler(WebSocketDataType.TRADE, self._handle_websocket_message)
 
             self.connection_states[connection_id] = ConnectionState.CONNECTING
             self.connection_metrics[connection_id] = ConnectionMetrics()
             self.connection_subscriptions[connection_id] = set()
 
-            # 실제 연결 로직은 구현체에서...
-            # 여기서는 성공한 것으로 가정
+            # 실제 연결 수행
+            await client.connect()
+
+            # 연결 성공
+            self.connections[connection_id] = client
             self.connection_states[connection_id] = ConnectionState.CONNECTED
             self.connection_metrics[connection_id].successful_connections += 1
             self.connection_metrics[connection_id].last_connection_time = datetime.now()
 
-            self.logger.info(f"새 WebSocket 연결 생성: {connection_id}")
+            # 메시지 리스너 시작 (백그라운드)
+            asyncio.create_task(self._message_listener(connection_id, client))
+
+            self.logger.info(f"✅ 실제 WebSocket 연결 생성: {connection_id}")
             return connection_id
 
         except Exception as e:
-            self.logger.error(f"WebSocket 연결 실패: {e}")
-            self.connection_states[connection_id] = ConnectionState.FAILED
+            self.logger.error(f"❌ WebSocket 연결 실패: {e}")
+            if connection_id in self.connection_states:
+                self.connection_states[connection_id] = ConnectionState.FAILED
             return None
+
+    async def _message_listener(self, connection_id: str, client: UpbitWebSocketQuotationClient):
+        """WebSocket 메시지 리스너"""
+        try:
+            async for message in client.listen():
+                # 메시지는 핸들러에서 이미 처리됨
+                if connection_id in self.connection_metrics:
+                    self.connection_metrics[connection_id].total_messages_received += 1
+        except Exception as e:
+            self.logger.error(f"❌ 메시지 리스너 오류 ({connection_id}): {e}")
+            if connection_id in self.connection_states:
+                self.connection_states[connection_id] = ConnectionState.FAILED
+
+    def _handle_websocket_message(self, message: WebSocketMessage):
+        """WebSocket 메시지 처리"""
+        try:
+            # 해당 심볼의 구독들을 찾아서 콜백 호출
+            symbol_key = message.market  # KRW-BTC 형식
+
+            if symbol_key in self.symbol_to_subscriptions:
+                # 활성 구독이 있는 경우에만 처리
+                active_subscriptions = []
+                for sub_id in list(self.symbol_to_subscriptions[symbol_key]):
+                    if sub_id in self.subscriptions:
+                        subscription = self.subscriptions[sub_id]
+                        if subscription.state == SubscriptionState.ACTIVE:
+                            active_subscriptions.append(subscription)
+                        else:
+                            # 비활성 구독은 심볼 매핑에서 제거
+                            self.symbol_to_subscriptions[symbol_key].discard(sub_id)
+
+                # 활성 구독이 없으면 심볼 매핑 정리
+                if not active_subscriptions:
+                    if symbol_key in self.symbol_to_subscriptions:
+                        del self.symbol_to_subscriptions[symbol_key]
+                    self.logger.debug(f"🔍 비활성 심볼 매핑 정리: {symbol_key}")
+                    return
+
+                # 활성 구독들에게 데이터 전달
+                for subscription in active_subscriptions:
+                    subscription.last_data_time = datetime.now()
+                    subscription.total_messages += 1
+
+                    try:
+                        subscription.callback(message.data)
+                        self.logger.debug(f"📊 데이터 전달: {symbol_key} -> {subscription.subscription_id}")
+                    except Exception as e:
+                        self.logger.error(f"❌ 콜백 오류: {e}")
+                        subscription.error_count += 1
+            else:
+                # 구독이 없는 경우 디버그 레벨로만 로그 (경고 수준 낮춤)
+                self.logger.debug(f"🔍 미구독 심볼 메시지: {symbol_key}")
+
+        except Exception as e:
+            self.logger.error(f"❌ 메시지 처리 오류: {e}")
 
     async def _send_subscribe_message(
         self,
@@ -374,17 +462,31 @@ class WebSocketSubscriptionManager:
     ) -> None:
         """구독 메시지 전송"""
 
-        # 업비트 WebSocket 구독 메시지 형식
-        subscribe_message = [
-            {"ticket": subscription.subscription_id},
-            {
-                "type": "ticker",  # 실제로는 data_types에 따라 다름
-                "codes": [subscription.symbol.to_upbit_symbol()]
-            }
-        ]
+        if connection_id not in self.connections:
+            self.logger.error(f"❌ 연결을 찾을 수 없음: {connection_id}")
+            return
 
-        # 실제 WebSocket 전송은 구현체에서...
-        self.logger.debug(f"구독 메시지 전송: {connection_id} -> {subscribe_message}")
+        client = self.connections[connection_id]
+        symbol_code = subscription.symbol.to_upbit_symbol()
+
+        try:
+            # 데이터 타입에 따라 구독
+            success = False
+            for data_type in subscription.data_types:
+                if data_type == "ticker":
+                    success = await client.subscribe_ticker([symbol_code])
+                elif data_type == "orderbook":
+                    success = await client.subscribe_orderbook([symbol_code])
+                elif data_type == "trade":
+                    success = await client.subscribe_trade([symbol_code])
+
+                if success:
+                    self.logger.info(f"✅ 실제 구독 성공: {symbol_code} ({data_type})")
+                else:
+                    self.logger.error(f"❌ 구독 실패: {symbol_code} ({data_type})")
+
+        except Exception as e:
+            self.logger.error(f"❌ 구독 메시지 전송 실패: {e}")
 
     async def _send_unsubscribe_message(
         self,
@@ -409,8 +511,15 @@ class WebSocketSubscriptionManager:
         """연결 종료"""
 
         if connection_id in self.connections:
-            # 실제 WebSocket 종료는 구현체에서...
-            del self.connections[connection_id]
+            try:
+                # 실제 WebSocket 연결 해제
+                client = self.connections[connection_id]
+                await client.disconnect()
+                self.logger.info(f"✅ WebSocket 연결 해제: {connection_id}")
+            except Exception as e:
+                self.logger.error(f"❌ 연결 해제 오류: {e}")
+            finally:
+                del self.connections[connection_id]
 
         if connection_id in self.connection_states:
             self.connection_states[connection_id] = ConnectionState.DISCONNECTED
@@ -422,7 +531,7 @@ class WebSocketSubscriptionManager:
                     self.subscriptions[sub_id].state = SubscriptionState.ERROR
             del self.connection_subscriptions[connection_id]
 
-        self.logger.info(f"연결 종료: {connection_id}")
+        self.logger.info(f"연결 종료 완료: {connection_id}")
 
     async def _cleanup_task(self) -> None:
         """유휴 구독 정리 태스크"""

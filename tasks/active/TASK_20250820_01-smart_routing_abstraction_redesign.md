@@ -1,22 +1,27 @@
 # 📋 TASK_20250820_01: Smart Routing 완전 추상화 재설계
 
 ## 🎯 태스크 목표
-- **주요 목표**: URL 기반에서 도메인 모델 기반으로 Smart Router 완전 재설계
-- **완료 기준**: 내부 시스템이 업비트 API 구조를 몰라도 되는 완전한 추상화 구현
+- **주요 목표**: 기존 Smart Router 코드를 **점진적 개선**하여 실거래 데이터 아키텍처 완성
+- **완료 기준**: 실시간 데이터 캐시 + 자율적 최적화 + 3-Layer 통합으로 실거래 성능 보장
 
-## 📊 현재 상황 분석
-### 문제점
-1. **API 종속적 인터페이스**: `get_data("/v1/candles/minutes/15?market=KRW-BTC")` 형태로 호출
-2. **추상화 부족**: 내부 시스템이 여전히 업비트 API URL 구조를 알아야 함
-3. **도메인 모델 부재**: 비즈니스 개념(심볼, 타임프레임)이 URL에 숨어있음
-4. **확장성 제약**: 다른 거래소 추가 시 모든 호출 코드 수정 필요
+## 📊 현재 상황 분석 (재평가)
+### ✅ **이미 완성된 부분 (재사용)**
+1. **도메인 모델**: TradingSymbol, Timeframe 등 훌륭하게 설계됨
+2. **인터페이스**: IDataRouter, IDataProvider 완전 추상화 달성
+3. **기본 구현체**: SmartDataRouter 550라인, 상당한 완성도
+4. **유틸리티**: FieldMapper, RateLimiter, 예외 처리 체계
 
-### 사용 가능한 리소스
-- 기존 구현체: `smart_routing_backup/` 폴더 (패턴 분석, 레이트 제한 등 로직 재활용 가능)
-- WebSocket 구독 관리: subscription_manager.py 로직
-- 필드 매핑: FieldMapper 클래스 로직
-- **중요**: 아직 이 기능이 실제 사용되지 않음 → 즉시 마이그레이션 가능
-- 교체 대상: market_data_backbone 기존 기능, 차트뷰어 호출 코드
+### ⚠️ **개선 필요한 부분 (집중 개발)**
+1. **실시간 데이터 통합**: WebSocket → RealtimeDataCache → 매매변수 계산
+2. **자율적 최적화 완성**: FrequencyAnalyzer, ChannelSelector 완료
+3. **3-Layer 통합**: Coordinator, Storage와의 연결 구현
+4. **실거래 우선순위**: Critical Path 성능 보장
+
+### 📊 **재사용 가능한 리소스**
+- **현재 구현체**: `smart_routing/` 폴더 (Phase 1-2 완료 상태)
+- **레거시 백업**: `smart_routing_backup/` 폴더 (참고용 로직)
+- **WebSocket 시스템**: BatchWebSocketManager, UIAwareManager 활용
+- **테이블 설계**: 심볼별×타임프레임별 개별 테이블 확정
 
 ## 🔄 체계적 작업 절차
 
@@ -49,29 +54,29 @@
 - **다중 API 인터페이스**: get_candle_data(), get_ticker_data(), get_orderbook_data(), get_trade_data()
 - **사용 패턴 최적화**: 사용 사례별 요청 빈도 최적화 (실시간 차트=고빈도, 백테스트=저빈도)
 
-### Phase 1: 핵심 인터페이스 설계 ✅ **완료**
-- [x] 1.1 기존 IDataRouter 인터페이스 분석 및 호환 구조 설계
-- [x] 1.2 도메인 모델 정의 (TradingSymbol, Timeframe, 데이터 타입들)
-- [x] 1.3 시간 범위 요청 파라미터 명확화 (start_time, end_time, count 우선순위)
-- [x] 1.4 기본 예외 처리 체계 설계
+### Phase 1: 기존 코드 검증 및 정리 🔄 **새로운 접근**
+- [ ] 1.1 현재 smart_routing/ 폴더 코드 품질 검증
+- [ ] 1.2 기존 도메인 모델과 실거래 데이터 요구사항 매핑
+- [ ] 1.3 WebSocket 통합 지점 설계 (BatchWebSocketManager 연동)
+- [ ] 1.4 실거래 우선순위 처리 설계 (Critical Path)
 
-### Phase 2: 최소 동작 가능한 구현 ✅ **완료**
-- [x] 2.1 SmartDataRouter 기본 구현 (기존 인터페이스 유지)
-- [x] 2.2 UpbitProvider REST 구현 (최소 캔들 데이터)
-- [x] 2.3 Request/Response 모델 변환 로직
-- [x] 2.4 기본 채널 선택 로직 (REST 우선)
+### Phase 2: 실시간 데이터 아키텍처 통합 🎯 **핵심**
+- [ ] 2.1 RealtimeDataCache 통합 (WebSocket → 메모리 → 매매변수)
+- [ ] 2.2 캔들 완성 감지 및 DB 저장 로직
+- [ ] 2.3 하이브리드 데이터 제공 (메모리 우선, DB 보조)
+- [ ] 2.4 실거래 성능 최적화 (< 1ms 메모리 접근)
 
-### Phase 3: 자율적 최적화 기능 🚧 **진행중**
-- [ ] 3.1 요청 빈도 분석기 구현
-- [ ] 3.2 자율적 채널 선택 로직
-- [ ] 3.3 WebSocket 구독 관리 시스템
-- [ ] 3.4 레이트 제한 및 필드 매핑 통합
+### Phase 3: 자율적 최적화 완성 🚧 **기존 미완성 완료**
+- [ ] 3.1 FrequencyAnalyzer 구현 (요청 패턴 분석)
+- [ ] 3.2 ChannelSelector 완성 (REST ↔ WebSocket 자동 전환)
+- [ ] 3.3 실거래 우선순위 처리 (Critical/High/Normal/Low)
+- [ ] 3.4 시스템 부하 기반 적응적 라우팅
 
-### Phase 4: 테스트 및 검증
-- [ ] 4.1 기본 동작 테스트 (캔들 데이터 조회)
-- [ ] 4.2 시간 범위 요청 테스트 (start_time, end_time, count)
-- [ ] 4.3 자율적 채널 선택 테스트
-- [ ] 4.4 기존 호출 코드와의 호환성 테스트
+### Phase 4: 3-Layer 통합 및 검증 🔗 **통합**
+- [ ] 4.1 Coordinator와의 연동 인터페이스 구현
+- [ ] 4.2 Storage Layer 데이터 제공 인터페이스
+- [ ] 4.3 실거래 시나리오 통합 테스트
+- [ ] 4.4 테이블 구조 검증 (심볼별×타임프레임별 개별 저장)
 
 ### 확인된 교체 대상
 - `unified_market_data_api.py`: 기존 SmartChannelRouter 사용 중
@@ -154,22 +159,41 @@ def handle_candle_request(start_time, end_time, count, timeframe):
     return process_within_api_limits(start_time, end_time, count)
 ```
 
-## 🚀 개발 계획
+## 🚀 개발 계획 (점진적 개선)
 
-### 백업 및 초기화
-1. **현재 구현 백업**: smart_routing → smart_routing_backup02
-2. **새로운 구조로 재구현**: Layer 1 책임만 집중
-3. **인터페이스 호환성 보장**: 기존 호출 코드 수정 없이 교체
+### 코드 재사용 전략
+1. **기존 코드 보존**: smart_routing/ 폴더 그대로 활용
+2. **점진적 개선**: 실거래 데이터 아키텍처만 추가/개선
+3. **하위 호환성**: 기존 인터페이스 완전 보장
 
-### 구현 목표
+### 구현 목표 (개선된)
 ```python
-# 핵심 구현 목표: 자율적 채널 선택
+# 기존 SmartDataRouter 확장
 class SmartDataRouter(IDataRouter):
+    def __init__(self):
+        # 기존 코드 유지
+        self.rest_provider = rest_provider
+
+        # 새로 추가: 실시간 데이터 아키텍처
+        self.realtime_cache = RealtimeDataCache()
+        self.batch_websocket = BatchWebSocketManager()
+
     async def get_candle_data(self, symbol, timeframe, count=None, start_time=None, end_time=None):
-        # 내부 빈도 분석으로 REST ↔ WebSocket 자동 선택
-        # 업비트 API 제한 (200개) 준수
-        # 도메인 모델 기반 완전 추상화
+        # 기존 로직 + 실시간 캐시 우선 조회
+        # 하이브리드: 메모리 → DB → API 순서
         pass
+```
+
+### 테이블 구조 확정
+```sql
+-- 심볼별 × 타임프레임별 개별 테이블
+candles_KRW_BTC_1m   (timestamp, ohlcv)
+candles_KRW_BTC_5m   (timestamp, ohlcv)
+candles_KRW_ETH_1m   (timestamp, ohlcv)
+candles_KRW_ETH_1d   (timestamp, ohlcv)
+
+-- 장점: 독립적 파편화 관리, 개별 최적화
+-- 인덱스: (timestamp) 단일 인덱스로 충분
 ```
 
 ### 3-Layer 아키텍처 통합 구조
@@ -185,10 +209,11 @@ market_data_backbone/
 ```
 
 ---
-**상태**: 완전 재개발 예정 - 모든 단계 미완료로 초기화
-**백업 계획**: smart_routing → smart_routing_backup02
-**다음 작업**: 3-Layer 아키텍처로 새로운 구조 설계
+**전략**: 점진적 개선 - 기존 코드 재사용 + 실거래 아키텍처 통합
+**백업 불필요**: 현재 코드 상당한 품질, 그대로 활용
+**다음 작업**: Phase 1 - 기존 코드 검증 및 실시간 데이터 통합 설계
 **연관 태스크**:
-- TASK_20250820_02 Market Data Coordinator 개발
-- TASK_20250820_03 Market Data Storage 개발
+- TASK_20250820_02 Market Data Coordinator 개발 (Layer 2)
+- TASK_20250820_03 Market Data Storage 개발 (Layer 3)
 - TASK_20250820_04 Market Data Backbone API 개발 (통합 API)
+- 실시간 데이터 아키텍처 계획 (REALTIME_DATA_ARCHITECTURE_PLAN.md)

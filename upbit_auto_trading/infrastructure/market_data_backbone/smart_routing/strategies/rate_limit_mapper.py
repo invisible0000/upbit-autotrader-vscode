@@ -58,8 +58,8 @@ class RateLimitState:
     def is_rate_limited(self, current_time: float) -> bool:
         """현재 레이트 제한 상태인지 확인"""
 
-        # 1초당 제한 체크
-        if current_time - self.last_request_time < self.config.min_interval:
+        # 1초당 제한 체크 - 더 관대한 검사
+        if current_time - self.last_request_time < self.config.min_interval * 0.8:  # 20% 여유
             return True
 
         # 1분당 제한 체크
@@ -95,31 +95,31 @@ class IntegratedRateLimiter:
     """
 
     def __init__(self):
-        # 기본 레이트 제한 설정 (업비트 API 기준)
+        # 업비트 공식 API 제한사항 기준 (전문가 의견 반영)
         self.rate_limit_configs = {
             RateLimitType.REST_API: RateLimitConfig(
-                requests_per_second=10.0,
-                requests_per_minute=600,
-                burst_capacity=20
+                requests_per_second=8.0,  # REST API: 일반적으로 8-30/s, 안전 마진
+                requests_per_minute=400,
+                burst_capacity=15
             ),
             RateLimitType.WEBSOCKET: RateLimitConfig(
-                requests_per_second=1.0,
-                requests_per_minute=30,
+                requests_per_second=4.0,  # WebSocket 연결/메시지: 5/s 제한, 안전 마진
+                requests_per_minute=100,  # 분당 100회 제한
                 burst_capacity=5
             ),
             RateLimitType.CANDLE_DATA: RateLimitConfig(
-                requests_per_second=5.0,
+                requests_per_second=5.0,  # 캔들 데이터는 REST 기반
                 requests_per_minute=200,
                 burst_capacity=10
             ),
             RateLimitType.TICKER_DATA: RateLimitConfig(
-                requests_per_second=8.0,
-                requests_per_minute=300,
-                burst_capacity=15
+                requests_per_second=4.0,  # WebSocket 기반, 연결 제한 준수
+                requests_per_minute=100,
+                burst_capacity=8
             ),
             RateLimitType.ORDERBOOK_DATA: RateLimitConfig(
-                requests_per_second=3.0,
-                requests_per_minute=150,
+                requests_per_second=4.0,  # WebSocket 기반, 연결 제한 준수
+                requests_per_minute=100,
                 burst_capacity=8
             )
         }
