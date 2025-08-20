@@ -1,9 +1,9 @@
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q --tb=short"
-testpaths = [
-    "tests",
-]
+# testpaths = [
+#     "tests",
+# ]
 python_files = [
     "test_*.py",
     "*_test.py",
