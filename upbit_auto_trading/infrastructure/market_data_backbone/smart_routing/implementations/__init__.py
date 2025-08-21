@@ -1,17 +1,11 @@
 """
-Smart Routing 구현체
+Smart Routing System - 구현체
 
-완전 추상화된 Smart Routing의 구현체들을 제공합니다.
+실제 업비트 API와 연결되는 구현체들을 제공합니다.
 """
 
-from .upbit_rest_provider import UpbitRestProvider
-from .upbit_websocket_provider import UpbitWebSocketProvider
-from .smart_data_router import SmartDataRouter, BasicChannelSelector, BasicFrequencyAnalyzer
+from .upbit_data_provider import UpbitDataProvider
 
 __all__ = [
-    "UpbitRestProvider",
-    "UpbitWebSocketProvider",
-    "SmartDataRouter",
-    "BasicChannelSelector",
-    "BasicFrequencyAnalyzer"
+    'UpbitDataProvider'
 ]
