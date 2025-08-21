@@ -5,22 +5,24 @@
 Facade 패턴을 사용하여 여러 서비스 컴포넌트를 조율합니다.
 """
 
+import asyncio
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
 
+from .market_data_cache import MarketDataCache
 from .data_converter import DataConverter
 from .cache_manager import CacheManager
 from .websocket_manager import WebSocketManager
 from .rest_api_manager import RestApiManager
 from .metrics_collector import MetricsCollector
 
-logger = create_component_logger("UpbitDataProvider")
+logger = create_component_logger("UpbitDataProviderV2")
 
 
-class UpbitDataProvider:
+class UpbitDataProviderV2:
     """
     업비트 데이터 제공자 서비스 (리팩터링 버전)
 
@@ -34,83 +36,55 @@ class UpbitDataProvider:
 
     def __init__(self):
         """데이터 제공자 초기화"""
-        logger.info("UpbitDataProvider 초기화 시작")
+        logger.info("UpbitDataProviderV2 초기화 시작")
 
         # 핵심 API 클라이언트
         self.upbit_client = UpbitClient()
 
+        # 캐시 시스템
+        self.cache = MarketDataCache(max_size=10000, cleanup_interval=60.0)
+
         # 서비스 컴포넌트들 초기화
         self.data_converter = DataConverter()
-        self.cache_manager = CacheManager(max_size=10000, cleanup_interval=60.0)
+        self.cache_manager = CacheManager(self.cache)
         self.websocket_manager = WebSocketManager()
         self.rest_api_manager = RestApiManager(self.upbit_client)
         self.metrics_collector = MetricsCollector()
 
-        # 캐시 시스템 (CacheManager에서 관리)
-        self.cache = self.cache_manager.cache
-
         # 연결 상태
         self.is_initialized = False
 
-        logger.info("UpbitDataProvider 초기화 완료")
+        logger.info("UpbitDataProviderV2 초기화 완료")
 
-    async def start(self) -> None:
-        """데이터 제공자 시작"""
+    async def initialize(self) -> bool:
+        """데이터 제공자 초기화
+
+        Returns:
+            초기화 성공 여부
+        """
         if self.is_initialized:
-            logger.debug("이미 시작됨")
-            return
+            logger.debug("이미 초기화됨")
+            return True
 
         try:
-            logger.info("데이터 제공자 시작 중...")
-
-            # 캐시 시스템 시작
-            await self.cache_manager.start()
+            logger.info("데이터 제공자 초기화 진행...")
 
             # WebSocket 연결 초기화 (선택적)
             # await self.websocket_manager.connect()
 
             self.is_initialized = True
-            logger.info("✅ 데이터 제공자 시작 완료")
+            logger.info("✅ 데이터 제공자 초기화 완료")
+            return True
 
         except Exception as e:
-            logger.error(f"❌ 데이터 제공자 시작 실패: {e}")
-            raise
-
-    async def stop(self) -> None:
-        """데이터 제공자 정지"""
-        if not self.is_initialized:
-            logger.debug("이미 정지됨")
-            return
-
-        try:
-            logger.info("데이터 제공자 정지 중...")
-
-            # WebSocket 연결 해제
-            await self.websocket_manager.disconnect()
-
-            # 캐시 시스템 정지
-            await self.cache_manager.stop()
-
-            self.is_initialized = False
-            logger.info("✅ 데이터 제공자 정지 완료")
-
-        except Exception as e:
-            logger.warning(f"정지 중 오류: {e}")
-
-    async def initialize(self) -> bool:
-        """데이터 제공자 초기화 (호환성 유지)
-
-        Returns:
-            초기화 성공 여부
-        """
-        await self.start()
-        return self.is_initialized
+            logger.error(f"❌ 데이터 제공자 초기화 실패: {e}")
+            return False
 
     async def get_ticker_data(
         self,
         symbols: List[str],
         tier: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """티커 데이터 조회 (통합 인터페이스)
 
@@ -181,7 +155,7 @@ class UpbitDataProvider:
         logger.debug(f"HOT_CACHE 조회: {len(symbols)}개 심볼")
 
         # 캐시에서 데이터 조회
-        result = self.cache_manager.get_ticker_data(symbols)
+        result = await self.cache_manager.get_ticker_data(symbols)
 
         if result['success'] and result['hit_rate'] > 0.8:  # 80% 이상 히트
             # 캐시 히트 기록
@@ -224,7 +198,7 @@ class UpbitDataProvider:
                 )
 
             # 캐시에 저장
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data)
 
             return {
                 'success': True,
@@ -257,7 +231,7 @@ class UpbitDataProvider:
                 )
 
             # 캐시에 저장
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data)
 
             return {
                 'success': True,
@@ -290,7 +264,7 @@ class UpbitDataProvider:
                 )
 
             # 캐시에 저장 (Warm 전략)
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data, tier='warm')
 
             return {
                 'success': True,
@@ -323,7 +297,7 @@ class UpbitDataProvider:
                 )
 
             # 캐시에 저장 (Cold 전략)
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data, tier='cold')
 
             return {
                 'success': True,
@@ -339,104 +313,22 @@ class UpbitDataProvider:
                 'response_time_ms': result.get('response_time_ms', 0.0)
             }
 
-    async def get_candle_data(
-        self,
-        symbols: List[str],
-        interval: str = "1m",
-        count: int = 100,
-        tier: str = "COLD_REST"
-    ) -> Dict[str, Any]:
-        """캔들 데이터 조회"""
+    async def cleanup(self) -> None:
+        """리소스 정리"""
+        logger.info("UpbitDataProviderV2 정리 시작")
+
         try:
-            result = await self.rest_api_manager.get_candle_data(symbols, interval, count)
+            # WebSocket 연결 해제
+            await self.websocket_manager.disconnect()
 
-            # 데이터 변환 및 캐시 저장
-            if result.get('success'):
-                converted_data = {}
-                for symbol, raw_data in result['collected_data'].items():
-                    converted_data[symbol] = self.data_converter.convert_candle_response(
-                        raw_data['data']
-                    )
+            # 캐시 정리
+            await self.cache.cleanup()
 
-                # 캐시에 저장
-                for symbol, data in converted_data.items():
-                    cache_key = f"candle:{symbol}:{interval}"
-                    self.cache_manager.set_cache(cache_key, data)
-
-                return {
-                    'success': True,
-                    'data': converted_data,
-                    'source': 'rest_api'
-                }
-            else:
-                return result
+            self.is_initialized = False
+            logger.info("✅ UpbitDataProviderV2 정리 완료")
 
         except Exception as e:
-            logger.error(f"캔들 데이터 조회 실패: {e}")
-            return {'success': False, 'error': str(e)}
-
-    async def get_orderbook_data(self, symbols: List[str], tier: str = "COLD_REST") -> Dict[str, Any]:
-        """호가 데이터 조회"""
-        try:
-            result = await self.rest_api_manager.get_orderbook_data(symbols)
-
-            # 데이터 변환 및 캐시 저장
-            if result.get('success'):
-                converted_data = {}
-                for symbol, raw_data in result['collected_data'].items():
-                    converted_data[symbol] = self.data_converter.convert_orderbook_response(
-                        raw_data['data']
-                    )
-
-                # 캐시에 저장
-                for symbol, data in converted_data.items():
-                    self.cache_manager.set_cache(f"orderbook:{symbol}", data)
-
-                return {
-                    'success': True,
-                    'data': converted_data,
-                    'source': 'rest_api'
-                }
-            else:
-                return result
-
-        except Exception as e:
-            logger.error(f"호가 데이터 조회 실패: {e}")
-            return {'success': False, 'error': str(e)}
-
-    async def get_trade_data(
-        self,
-        symbols: List[str],
-        count: int = 100,
-        tier: str = "COLD_REST"
-    ) -> Dict[str, Any]:
-        """체결 데이터 조회"""
-        try:
-            result = await self.rest_api_manager.get_trade_data(symbols, count)
-
-            # 데이터 변환 및 캐시 저장
-            if result.get('success'):
-                converted_data = {}
-                for symbol, raw_data in result['collected_data'].items():
-                    converted_data[symbol] = self.data_converter.convert_trade_response(
-                        raw_data['data']
-                    )
-
-                # 캐시에 저장
-                for symbol, data in converted_data.items():
-                    self.cache_manager.set_cache(f"trade:{symbol}", data)
-
-                return {
-                    'success': True,
-                    'data': converted_data,
-                    'source': 'rest_api'
-                }
-            else:
-                return result
-
-        except Exception as e:
-            logger.error(f"체결 데이터 조회 실패: {e}")
-            return {'success': False, 'error': str(e)}
+            logger.warning(f"정리 중 오류: {e}")
 
     def get_performance_summary(self) -> Dict[str, Any]:
         """성능 요약 조회

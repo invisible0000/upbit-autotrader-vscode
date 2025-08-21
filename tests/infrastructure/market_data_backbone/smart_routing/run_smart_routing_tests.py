@@ -11,14 +11,18 @@ Test 04 표준에 따른 포괄적 검증 실행
 import asyncio
 import sys
 import traceback
+import os
 
-# 테스트 모듈 import
+# 현재 디렉토리를 Python 경로에 추가
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+
+# 테스트 모듈 import (절대 경로 추가 후)
 from basic.test_01_basic_functionality import Test01BasicFunctionality
 from performance.test_02_performance_validation import Test02PerformanceValidation
 from stress.test_03_stress_validation import Test03StressValidation
 from scenarios.test_04_scenario_validation import Test04ScenarioValidation
-
-from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 
 class SmartRoutingTestSuite:

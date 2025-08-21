@@ -21,7 +21,7 @@ from ..interfaces.market_data_router import IMarketDataRouter, Priority
 from ..models.routing_response import RoutingTier
 from ..models import (
     RoutingRequest, RoutingResponse, RoutingContext,
-    UsageContext, NetworkPolicy, ResponseStatus, PerformanceMetrics, TimeFrame
+    UsageContext, NetworkPolicy, ResponseStatus, PerformanceMetrics, TimeFrame, DataType
 )
 from ..implementations.upbit_data_provider import UpbitDataProvider
 
@@ -324,13 +324,13 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
             data_result = None
 
             # 데이터 타입에 따른 적절한 메서드 호출
-            if request.data_type == "ticker":
+            if request.data_type == DataType.TICKER:
                 data_result = await self._execute_ticker_routing(request, tier)
-            elif request.data_type == "candle":
+            elif request.data_type == DataType.CANDLE:
                 data_result = await self._execute_candle_routing(request, tier)
-            elif request.data_type == "orderbook":
+            elif request.data_type == DataType.ORDERBOOK:
                 data_result = await self._execute_orderbook_routing(request, tier)
-            elif request.data_type == "trade":
+            elif request.data_type == DataType.TRADE:
                 data_result = await self._execute_trade_routing(request, tier)
             else:
                 raise ValueError(f"지원하지 않는 데이터 타입: {request.data_type}")
@@ -365,40 +365,51 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
 
     async def _execute_ticker_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
         """Ticker 데이터 Tier별 라우팅"""
-        if tier == RoutingTier.HOT_CACHE:
-            return await self.data_provider._get_ticker_from_cache(request.symbols)
-        elif tier == RoutingTier.LIVE_SUBSCRIPTION:
-            return await self.data_provider._get_ticker_from_websocket_live(request.symbols)
-        elif tier == RoutingTier.BATCH_SNAPSHOT:
-            return await self.data_provider._get_ticker_from_websocket_batch(request.symbols)
-        elif tier == RoutingTier.WARM_CACHE_REST:
-            return await self.data_provider._get_ticker_from_cache(request.symbols)
-        elif tier == RoutingTier.COLD_REST:
-            return await self.data_provider._get_ticker_from_rest(request.symbols)
-        else:
-            raise ValueError(f"지원하지 않는 Ticker Tier: {tier}")
+        return await self.data_provider.get_ticker_data(
+            symbols=request.symbols,
+            tier=tier.value  # Enum 값을 문자열로 변환
+        )
 
     async def _execute_candle_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
         """Candle 데이터 Tier별 라우팅"""
-        # 기본적으로 get_candle_data 사용 (Tier에 따른 캐싱 전략은 UpbitDataProvider 내부에서 처리)
+        # TimeFrame을 interval 문자열로 변환
+        timeframe = request.timeframe or TimeFrame.MINUTES_1
+        interval = self._timeframe_to_interval(timeframe)
+
         return await self.data_provider.get_candle_data(
             symbols=request.symbols,
-            timeframe=request.timeframe or TimeFrame.MINUTES_1,
+            interval=interval,
             count=request.count or 100,
-            tier=tier
+            tier=tier.value
         )
 
     async def _execute_orderbook_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
         """Orderbook 데이터 Tier별 라우팅"""
-        return await self.data_provider.get_orderbook_data(request.symbols, tier=tier)
+        return await self.data_provider.get_orderbook_data(request.symbols, tier=tier.value)
 
     async def _execute_trade_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
         """Trade 데이터 Tier별 라우팅"""
         return await self.data_provider.get_trade_data(
             symbols=request.symbols,
-            tier=tier,
+            tier=tier.value,
             count=request.count or 100
         )
+
+    def _timeframe_to_interval(self, timeframe: TimeFrame) -> str:
+        """TimeFrame을 API interval 문자열로 변환"""
+        mapping = {
+            TimeFrame.MINUTES_1: "1m",
+            TimeFrame.MINUTES_3: "3m",
+            TimeFrame.MINUTES_5: "5m",
+            TimeFrame.MINUTES_15: "15m",
+            TimeFrame.MINUTES_30: "30m",
+            TimeFrame.HOURS_1: "1h",
+            TimeFrame.HOURS_4: "4h",
+            TimeFrame.DAYS_1: "1d",
+            TimeFrame.WEEKS_1: "1w",
+            TimeFrame.MONTHS_1: "1M"
+        }
+        return mapping.get(timeframe, "1m")
 
     def _create_error_response(self, request: RoutingRequest, error: Exception, start_time: float) -> RoutingResponse:
         """오류 응답 생성"""
