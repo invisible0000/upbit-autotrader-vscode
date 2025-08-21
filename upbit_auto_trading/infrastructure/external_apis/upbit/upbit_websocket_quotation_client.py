@@ -17,13 +17,11 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 
 class WebSocketDataType(Enum):
-    """WebSocket 데이터 타입"""
+    """WebSocket 데이터 타입 (공개 API 전용)"""
     TICKER = "ticker"
     TRADE = "trade"
     ORDERBOOK = "orderbook"
-    CANDLE_1M = "candle.1"
-    CANDLE_5M = "candle.5"
-    CANDLE_15M = "candle.15"
+    CANDLE = "candle"  # 모든 캔들 타입 통합
 
 
 @dataclass
@@ -60,10 +58,17 @@ class UpbitWebSocketQuotationClient:
         self.ping_interval = 30.0  # 30초마다 PING
         self.message_timeout = 10.0  # 메시지 타임아웃 10초
 
-        # 🔧 메시지 수신 루프 제어
+        # 🔧 메시지 수신 루프 제어 (단일 수신 아키텍처)
         self.message_loop_task: Optional[asyncio.Task] = None
         self.auto_start_message_loop = True  # 구독 시 자동으로 메시지 수신 시작
         self._message_loop_running = False  # 중복 실행 방지
+
+        # 🆕 외부 제너레이터 요청 지원 (큐 기반)
+        self._external_listeners: List[asyncio.Queue] = []  # 외부에서 listen() 호출 시 사용할 큐들
+        self._enable_external_listen = False  # listen() 제너레이터 활성화 여부
+
+        # 🔧 백그라운드 태스크 추적
+        self._background_tasks: set = set()  # 백그라운드 태스크 추적
 
     async def connect(self) -> bool:
         """WebSocket 연결 (API 키 불필요)"""
@@ -83,7 +88,9 @@ class UpbitWebSocketQuotationClient:
             self.logger.info("✅ WebSocket 연결 성공 (API 키 불필요)")
 
             # PING 메시지로 연결 유지
-            asyncio.create_task(self._keep_alive())
+            keep_alive_task = asyncio.create_task(self._keep_alive())
+            self._background_tasks.add(keep_alive_task)
+            keep_alive_task.add_done_callback(self._background_tasks.discard)
 
             return True
 
@@ -93,7 +100,7 @@ class UpbitWebSocketQuotationClient:
             return False
 
     async def disconnect(self) -> None:
-        """WebSocket 연결 해제"""
+        """WebSocket 연결 해제 (모든 태스크 정리)"""
         try:
             self.auto_reconnect = False
 
@@ -105,6 +112,19 @@ class UpbitWebSocketQuotationClient:
                 except asyncio.CancelledError:
                     pass
                 self.message_loop_task = None
+
+            # 🔧 모든 백그라운드 태스크 정리
+            if self._background_tasks:
+                self.logger.debug(f"백그라운드 태스크 {len(self._background_tasks)}개 정리 중...")
+                for task in list(self._background_tasks):
+                    if not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                self._background_tasks.clear()
+                self.logger.debug("백그라운드 태스크 정리 완료")
 
             if self.websocket:
                 try:
@@ -119,6 +139,7 @@ class UpbitWebSocketQuotationClient:
         finally:
             self.is_connected = False
             self.websocket = None
+            self._message_loop_running = False
 
     async def subscribe_ticker(self, markets: List[str]) -> bool:
         """현재가 정보 구독 (스크리너 핵심)"""
@@ -132,21 +153,11 @@ class UpbitWebSocketQuotationClient:
         """호가 정보 구독"""
         return await self._subscribe(WebSocketDataType.ORDERBOOK, markets)
 
-    async def subscribe_candle(self, markets: List[str], unit: int = 5) -> bool:
-        """캔들 정보 구독 (백테스팅 핵심)"""
-        candle_type_map = {
-            1: WebSocketDataType.CANDLE_1M,
-            5: WebSocketDataType.CANDLE_5M,
-            15: WebSocketDataType.CANDLE_15M
-        }
+    async def subscribe_candle(self, markets: List[str], unit: int = 1) -> bool:
+        """캔들 정보 구독 (단위는 smart_routing에서 처리)"""
+        return await self._subscribe(WebSocketDataType.CANDLE, markets, unit)
 
-        if unit not in candle_type_map:
-            self.logger.error(f"지원하지 않는 캔들 단위: {unit}분")
-            return False
-
-        return await self._subscribe(candle_type_map[unit], markets)
-
-    async def _subscribe(self, data_type: WebSocketDataType, markets: List[str]) -> bool:
+    async def _subscribe(self, data_type: WebSocketDataType, markets: List[str], candle_unit: Optional[int] = None) -> bool:
         """내부 구독 메서드"""
         if not self.is_connected or not self.websocket:
             self.logger.error("WebSocket이 연결되지 않음")
@@ -163,12 +174,35 @@ class UpbitWebSocketQuotationClient:
                 {"format": "DEFAULT"}  # 압축하지 않은 기본 형식
             ]
 
+            # 캔들 타입인 경우 단위 지정
+            if data_type == WebSocketDataType.CANDLE and candle_unit:
+                # 캔들 단위별 타입 지정 (업비트 공식 API 형식)
+                candle_type_map = {
+                    # 초봉
+                    0: "candle.1s",      # 1초봉 (특별값 0으로 구분)
+                    # 분봉 (분 단위 그대로 사용)
+                    1: "candle.1m",      # 1분봉
+                    3: "candle.3m",      # 3분봉
+                    5: "candle.5m",      # 5분봉
+                    10: "candle.10m",    # 10분봉
+                    15: "candle.15m",    # 15분봉
+                    30: "candle.30m",    # 30분봉
+                    60: "candle.60m",    # 60분봉 (1시간)
+                    240: "candle.240m"   # 240분봉 (4시간)
+                }
+                actual_type = candle_type_map.get(candle_unit, "candle.5m")
+                subscribe_msg[1]["type"] = actual_type
+
             await self.websocket.send(json.dumps(subscribe_msg))
 
-            # 구독 정보 저장
+            # 구독 정보 저장 (중복 방지)
             if data_type.value not in self.subscriptions:
                 self.subscriptions[data_type.value] = []
-            self.subscriptions[data_type.value].extend(markets)
+
+            # 중복 제거하면서 추가
+            for market in markets:
+                if market not in self.subscriptions[data_type.value]:
+                    self.subscriptions[data_type.value].append(market)
 
             # 🔧 첫 구독 시 자동으로 메시지 수신 루프 시작
             if self.auto_start_message_loop and not self.message_loop_task and not self._message_loop_running:
@@ -190,11 +224,110 @@ class UpbitWebSocketQuotationClient:
         self.logger.debug(f"메시지 핸들러 등록: {data_type.value}")
 
     async def listen(self) -> AsyncGenerator[WebSocketMessage, None]:
-        """실시간 메시지 수신 제너레이터"""
+        """실시간 메시지 수신 제너레이터 (큐 기반으로 단일 수신 루프와 연동)"""
         if not self.is_connected or not self.websocket:
             raise RuntimeError("WebSocket이 연결되지 않음")
 
+        # 외부 listen 모드 활성화
+        self._enable_external_listen = True
+
+        # 이 제너레이터 전용 큐 생성
+        message_queue = asyncio.Queue()
+        self._external_listeners.append(message_queue)
+
+        # 메시지 루프가 없으면 시작
+        if not self.message_loop_task and not self._message_loop_running:
+            self.message_loop_task = asyncio.create_task(self._message_receiver_loop())
+            self.logger.debug("🚀 메시지 수신 루프 시작 (listen() 요청)")
+
         try:
+            while self.is_connected:
+                try:
+                    # 큐에서 메시지 대기 (타임아웃 적용)
+                    message = await asyncio.wait_for(message_queue.get(), timeout=self.message_timeout)
+                    yield message
+                except asyncio.TimeoutError:
+                    # 타임아웃은 정상적인 상황 (메시지가 없을 때)
+                    continue
+                except Exception as e:
+                    self.logger.error(f"메시지 큐 처리 오류: {e}")
+                    break
+        finally:
+            # 정리: 큐 제거
+            if message_queue in self._external_listeners:
+                self._external_listeners.remove(message_queue)
+
+            if self.auto_reconnect:
+                await self._attempt_reconnect()
+
+    def _infer_message_type(self, data: Dict[str, Any]) -> Optional[WebSocketDataType]:
+        """메시지 타입 추론 (단순화된 로직)"""
+        # 에러 메시지 체크
+        if 'error' in data:
+            self.logger.warning(f"WebSocket 에러 수신: {data.get('error')}")
+            return None
+
+        # 상태 메시지 체크 (UP 메시지 등)
+        if 'status' in data:
+            self.logger.debug(f"상태 메시지: {data.get('status')}")
+            return None
+
+        # 업비트 공식 type 필드 직접 사용
+        if 'type' in data:
+            msg_type = data['type']
+
+            # 캔들 타입들을 통합 처리
+            if msg_type.startswith('candle.'):
+                return WebSocketDataType.CANDLE
+
+            # 기본 타입 매핑
+            type_mapping = {
+                'ticker': WebSocketDataType.TICKER,
+                'trade': WebSocketDataType.TRADE,
+                'orderbook': WebSocketDataType.ORDERBOOK
+            }
+
+            return type_mapping.get(msg_type)
+
+        # 필드 기반 추론 (fallback)
+        if 'trade_price' in data and 'change_rate' in data and 'signed_change_rate' in data:
+            return WebSocketDataType.TICKER
+        elif 'trade_price' in data and 'trade_volume' in data and 'ask_bid' in data:
+            return WebSocketDataType.TRADE
+        elif 'orderbook_units' in data:
+            return WebSocketDataType.ORDERBOOK
+        elif 'opening_price' in data and 'trade_price' in data and 'candle_date_time_utc' in data:
+            return WebSocketDataType.CANDLE
+        else:
+            # 디버그를 위해 알 수 없는 타입의 필드들 로깅
+            field_list = list(data.keys())[:10]  # 처음 10개 필드만
+            self.logger.debug(f"알 수 없는 메시지 타입: {field_list}")
+            return None
+
+    async def _handle_message(self, message: WebSocketMessage) -> None:
+        """메시지 핸들러 실행"""
+        handlers = self.message_handlers.get(message.type, [])
+        for handler in handlers:
+            try:
+                await handler(message) if asyncio.iscoroutinefunction(handler) else handler(message)
+            except Exception as e:
+                self.logger.error(f"메시지 핸들러 실행 오류: {e}")
+
+    async def _message_receiver_loop(self) -> None:
+        """🔧 단일 메시지 수신 루프 - 모든 WebSocket recv를 여기서 처리"""
+        if self._message_loop_running:
+            self.logger.debug("메시지 수신 루프 이미 실행 중")
+            return
+
+        if not self.is_connected or not self.websocket:
+            self.logger.error("WebSocket이 연결되지 않음")
+            return
+
+        self._message_loop_running = True
+        self.logger.debug("메시지 수신 루프 시작")
+
+        try:
+            # 🆕 단일 recv 루프로 모든 메시지 처리
             async for raw_message in self.websocket:
                 try:
                     # JSON 파싱
@@ -217,10 +350,18 @@ class UpbitWebSocketQuotationClient:
                         raw_data=raw_message
                     )
 
-                    # 등록된 핸들러 실행
+                    # 1. 등록된 핸들러 실행
                     await self._handle_message(message)
 
-                    yield message
+                    # 2. 외부 listen() 제너레이터들에게 메시지 전달
+                    if self._enable_external_listen and self._external_listeners:
+                        for queue in self._external_listeners.copy():  # copy()로 안전한 순회
+                            try:
+                                queue.put_nowait(message)
+                            except asyncio.QueueFull:
+                                self.logger.warning("외부 listen 큐가 가득참")
+                            except Exception as e:
+                                self.logger.error(f"외부 listen 큐 오류: {e}")
 
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"JSON 파싱 실패: {e}")
@@ -230,60 +371,6 @@ class UpbitWebSocketQuotationClient:
         except websockets.exceptions.ConnectionClosed:
             self.logger.warning("WebSocket 연결이 닫혔습니다")
             self.is_connected = False
-
-            if self.auto_reconnect:
-                await self._attempt_reconnect()
-
-    def _infer_message_type(self, data: Dict[str, Any]) -> Optional[WebSocketDataType]:
-        """메시지 타입 추론 (개선된 로직)"""
-        # 에러 메시지 체크
-        if 'error' in data:
-            self.logger.warning(f"WebSocket 에러 수신: {data.get('error')}")
-            return None
-
-        # 상태 메시지 체크 (UP 메시지 등)
-        if 'status' in data:
-            self.logger.debug(f"상태 메시지: {data.get('status')}")
-            return None
-
-        # 데이터 타입별 구분 (더 정확한 조건)
-        if 'trade_price' in data and 'change_rate' in data and 'signed_change_rate' in data:
-            return WebSocketDataType.TICKER
-        elif 'trade_price' in data and 'trade_volume' in data and 'ask_bid' in data:
-            return WebSocketDataType.TRADE
-        elif 'orderbook_units' in data:
-            return WebSocketDataType.ORDERBOOK
-        elif 'opening_price' in data and 'closing_price' in data and 'high_price' in data:
-            # 캔들 데이터 - 정확한 타입은 추가 로직 필요
-            return WebSocketDataType.CANDLE_5M  # 기본값
-        else:
-            # 디버그를 위해 알 수 없는 타입의 필드들 로깅
-            field_list = list(data.keys())[:10]  # 처음 10개 필드만
-            self.logger.debug(f"알 수 없는 메시지 타입: {field_list}")
-            return None
-
-    async def _handle_message(self, message: WebSocketMessage) -> None:
-        """메시지 핸들러 실행"""
-        handlers = self.message_handlers.get(message.type, [])
-        for handler in handlers:
-            try:
-                await handler(message) if asyncio.iscoroutinefunction(handler) else handler(message)
-            except Exception as e:
-                self.logger.error(f"메시지 핸들러 실행 오류: {e}")
-
-    async def _message_receiver_loop(self) -> None:
-        """🔧 자동 메시지 수신 루프"""
-        if self._message_loop_running:
-            self.logger.debug("메시지 수신 루프 이미 실행 중")
-            return
-
-        self._message_loop_running = True
-        self.logger.debug("메시지 수신 루프 시작")
-
-        try:
-            async for message in self.listen():
-                # listen() 제너레이터가 메시지 처리를 담당
-                pass
         except Exception as e:
             self.logger.error(f"메시지 수신 루프 오류: {e}")
         finally:

@@ -508,12 +508,13 @@ class WebSocketSubscriptionManager:
         return None
 
     async def _close_connection(self, connection_id: str) -> None:
-        """연결 종료"""
+        """연결 종료 (자동 재연결 비활성화)"""
 
         if connection_id in self.connections:
             try:
-                # 실제 WebSocket 연결 해제
+                # 실제 WebSocket 연결 해제 (자동 재연결 비활성화)
                 client = self.connections[connection_id]
+                client.auto_reconnect = False  # 자동 재연결 비활성화
                 await client.disconnect()
                 self.logger.info(f"✅ WebSocket 연결 해제: {connection_id}")
             except Exception as e:

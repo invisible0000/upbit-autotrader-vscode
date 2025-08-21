@@ -61,6 +61,9 @@ class SmartDataRouter(IDataRouter):
         self.channel_selector = channel_selector or BasicChannelSelector()
         self.frequency_analyzer = frequency_analyzer or BasicFrequencyAnalyzer()
 
+        # 로거 먼저 초기화
+        self.logger = logging.getLogger(self.__class__.__name__)
+
         # WebSocket 장애 복구 시스템
         self.fallback_manager = WebSocketFallbackManager(rest_provider, self.logger)
 
@@ -73,8 +76,6 @@ class SmartDataRouter(IDataRouter):
             "error_count": 0,
             "response_times": []
         }
-
-        self.logger = logging.getLogger(self.__class__.__name__)
 
         # 실시간 구독 관리 (기본 구현)
         self.subscriptions: Dict[str, Dict[str, Any]] = {}
@@ -339,11 +340,9 @@ class SmartDataRouter(IDataRouter):
             total_requests=total_requests,
             websocket_requests=self.stats["websocket_requests"],
             rest_requests=self.stats["rest_requests"],
-            fallback_requests=self.stats["fallback_requests"],
             avg_response_time_ms=avg_response_time,
             error_rate=error_rate,
             cache_hit_rate=0.0,  # 캐시 미구현
-            fallback_status=self.fallback_manager.get_fallback_status(),
             metadata=ResponseFactory.create_metadata(
                 request_time=datetime.now(),
                 data_source="stats"
@@ -478,11 +477,19 @@ class SmartDataRouter(IDataRouter):
         self,
         request: CandleDataRequest
     ) -> CandleDataResponse:
-        """WebSocket을 통한 캔들 데이터 조회 (기본 구현)"""
-        # WebSocket으로 캔들 데이터를 받는 것은 복잡하므로
-        # 일단 REST API로 fallback
-        self.logger.warning("WebSocket 캔들 데이터는 미구현, REST API로 fallback")
-        return await self._get_candle_data_via_rest(request)
+        """WebSocket을 통한 캔들 데이터 조회"""
+        if not self.websocket_provider:
+            self.logger.warning("WebSocket Provider가 없음, REST API로 fallback")
+            return await self._get_candle_data_via_rest(request)
+
+        try:
+            # 실제 WebSocket Provider 호출
+            response = await self.websocket_provider.get_candle_data(request)
+            self.logger.debug(f"WebSocket 캔들 데이터 수신 성공: {request.symbol}")
+            return response
+        except Exception as e:
+            self.logger.warning(f"WebSocket 캔들 데이터 실패, REST로 fallback: {e}")
+            return await self._get_candle_data_via_rest(request)
 
     async def _get_ticker_data_via_websocket(
         self,
@@ -555,10 +562,10 @@ class BasicChannelSelector(IChannelSelector):
             # 즉시 WebSocket 사용 (구독 관리 방식)
             return True
 
-        # 캔들 데이터는 여전히 REST 우선 (과거 데이터가 많음)
+        # 캔들 데이터도 WebSocket 우선으로 변경 (WebSocket 캔들 구현 완료)
         if data_type == "candle":
-            # 높은 빈도에서만 WebSocket 사용
-            return recent_request_count >= 8
+            # 낮은 빈도에서도 WebSocket 사용 (구현 완료로 인한 정책 변경)
+            return recent_request_count >= 2
 
         # 기본: WebSocket 사용
         return True

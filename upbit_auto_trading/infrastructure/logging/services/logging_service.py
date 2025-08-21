@@ -269,36 +269,38 @@ class LoggingService(ILoggingService):
     def _setup_domain_log_handler(self) -> None:
         """Domain Layer 로그 이벤트 핸들러 설정"""
         try:
-            from upbit_auto_trading.domain.logging import DomainLogEvent
-            from upbit_auto_trading.domain.events import get_domain_event_publisher
+            # Domain Logger와 Infrastructure Logger 연결
+            from upbit_auto_trading.domain.logging import set_domain_logger, DomainLogger
+            from typing import Optional, Dict, Any
 
-            def handle_domain_log_event(event: DomainLogEvent):
-                """Domain 로그 이벤트를 Infrastructure 로깅 시스템으로 전달"""
-                try:
-                    logger = self.get_logger(event.component_name)
+            class InfrastructureDomainLogger(DomainLogger):
+                """Infrastructure 로깅 시스템과 연결된 Domain Logger 구현체"""
 
-                    # LogLevel enum을 logging 레벨로 변환
-                    level_mapping = {
-                        'DEBUG': 10,    # logging.DEBUG
-                        'INFO': 20,     # logging.INFO
-                        'WARNING': 30,  # logging.WARNING
-                        'ERROR': 40,    # logging.ERROR
-                        'CRITICAL': 50  # logging.CRITICAL
-                    }
+                def __init__(self, logging_service):
+                    self.logging_service = logging_service
+                    self.component_logger = logging_service.get_logger("Domain")
 
-                    level = level_mapping.get(event.log_level.value, 20)
-                    logger.log(level, event.message)
+                def debug(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+                    self.component_logger.debug(message)
 
-                except Exception as e:
-                    # 로깅 시스템 오류가 발생해도 Domain 이벤트 처리는 계속 진행
-                    print(f"Domain log handler error: {e}")
+                def info(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+                    self.component_logger.info(message)
 
-            # 이벤트 핸들러 등록
-            publisher = get_domain_event_publisher()
-            publisher.subscribe(DomainLogEvent, handle_domain_log_event)
+                def warning(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+                    self.component_logger.warning(message)
+
+                def error(self, message: str, context: Optional[Dict[str, Any]] = None,
+                          exception_info: Optional[str] = None) -> None:
+                    self.component_logger.error(message)
+
+                def critical(self, message: str, context: Optional[Dict[str, Any]] = None,
+                             exception_info: Optional[str] = None) -> None:
+                    self.component_logger.critical(message)            # Domain Logger에 Infrastructure 구현체 주입
+            domain_logger = InfrastructureDomainLogger(self)
+            set_domain_logger(domain_logger)
 
         except Exception as e:
-            # Domain Events 시스템이 없어도 기본 로깅은 계속 동작
+            # Domain Logger 연결 실패 시에도 기본 로깅은 계속 동작
             print(f"Domain log handler setup failed: {e}")
 
     def _initialize_core_service(self) -> None:

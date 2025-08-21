@@ -123,8 +123,22 @@ class AdvancedFrequencyAnalyzer(IFrequencyAnalyzer):
         cutoff_time = datetime.now() - timedelta(minutes=time_window_minutes)
         recent_events = [e for e in events if e.timestamp >= cutoff_time]
 
-        # 기본 빈도 계산
-        requests_per_minute = len(recent_events) / time_window_minutes
+        # 기본 빈도 계산 - 실제 데이터 시간 범위 기반
+        if not recent_events:
+            requests_per_minute = 0.0
+        else:
+            # 실제 데이터의 시간 범위 계산
+            timestamps = [e.timestamp for e in recent_events]
+            actual_time_span_minutes = (max(timestamps) - min(timestamps)).total_seconds() / 60.0
+
+            # 최소/최대 윈도우 제한 적용 (30초~10분)
+            actual_time_span_minutes = max(0.5, min(actual_time_span_minutes, 10.0))
+
+            # 단일 요청인 경우 기본 1분 윈도우 사용
+            if len(recent_events) == 1:
+                actual_time_span_minutes = 1.0
+
+            requests_per_minute = len(recent_events) / actual_time_span_minutes
 
         # 피크 빈도 계산 (1분 단위 최대값)
         peak_requests_per_minute = self._calculate_peak_frequency(
