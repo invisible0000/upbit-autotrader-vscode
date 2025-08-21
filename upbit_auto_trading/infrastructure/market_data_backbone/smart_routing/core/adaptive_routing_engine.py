@@ -11,17 +11,17 @@ Usage Context와 네트워크 상황을 종합적으로 분석하여 최적의 �
 - 0.1ms ~ 500ms 응답 시간 보장
 """
 
-import asyncio
+import time
 from typing import Dict, List, Any
 from datetime import datetime
 from dataclasses import dataclass
-import time
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from ..interfaces.market_data_router import IMarketDataRouter, RoutingTier, Priority
+from ..interfaces.market_data_router import IMarketDataRouter, Priority
+from ..models.routing_response import RoutingTier
 from ..models import (
     RoutingRequest, RoutingResponse, RoutingContext,
-    UsageContext, NetworkPolicy, ResponseStatus, PerformanceMetrics
+    UsageContext, NetworkPolicy, ResponseStatus, PerformanceMetrics, TimeFrame
 )
 from ..implementations.upbit_data_provider import UpbitDataProvider
 
@@ -106,6 +106,20 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
 
         logger.info("AdaptiveRoutingEngine 초기화 완료")
 
+    async def start(self) -> None:
+        """AdaptiveRoutingEngine 시작 (데이터 제공자 시작)"""
+        if not self._provider_started:
+            await self.data_provider.start()
+            self._provider_started = True
+            logger.info("✅ AdaptiveRoutingEngine 시작 완료 - 데이터 제공자 준비됨")
+
+    async def stop(self) -> None:
+        """AdaptiveRoutingEngine 정지 (데이터 제공자 정지)"""
+        if self._provider_started:
+            await self.data_provider.stop()
+            self._provider_started = False
+            logger.info("✅ AdaptiveRoutingEngine 정지 완료")
+
     async def route_data_request(
         self,
         request: RoutingRequest,
@@ -162,7 +176,7 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
             logger.debug(f"{tier.value}: {score:.3f}")
 
         # 최고 점수 Tier 선택
-        optimal_tier = max(tier_scores, key=tier_scores.get)
+        optimal_tier = max(tier_scores.keys(), key=lambda tier: tier_scores[tier])
         logger.info(f"선택된 Tier: {optimal_tier.value} (점수: {tier_scores[optimal_tier]:.3f})")
 
         return optimal_tier
@@ -302,37 +316,88 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
         tier: RoutingTier,
         start_time: float
     ) -> RoutingResponse:
-        """Tier별 라우팅 실행"""
-        logger.info(f"Tier {tier.value} 라우팅 실행")
+        """Tier별 라우팅 실행 - 실제 UpbitDataProvider 연동"""
+        logger.info(f"Tier {tier.value} 라우팅 실행 - {request.data_type} 데이터 요청")
 
-        # 실제 구현에서는 각 Tier별 구체적인 데이터 소스 연결
-        # 현재는 Mock 응답 생성
-        processing_time = self._tier_specs[tier].typical_response_time_ms / 1000.0
-        await asyncio.sleep(processing_time)  # 실제 처리 시간 시뮬레이션
+        try:
+            # 실제 UpbitDataProvider를 통한 데이터 조회
+            data_result = None
 
-        processed_at = datetime.now()
-        responded_at = datetime.now()
+            # 데이터 타입에 따른 적절한 메서드 호출
+            if request.data_type == "ticker":
+                data_result = await self._execute_ticker_routing(request, tier)
+            elif request.data_type == "candle":
+                data_result = await self._execute_candle_routing(request, tier)
+            elif request.data_type == "orderbook":
+                data_result = await self._execute_orderbook_routing(request, tier)
+            elif request.data_type == "trade":
+                data_result = await self._execute_trade_routing(request, tier)
+            else:
+                raise ValueError(f"지원하지 않는 데이터 타입: {request.data_type}")
 
-        # Mock 데이터 생성
-        mock_data = {symbol: {"price": 50000 + hash(symbol) % 10000} for symbol in request.symbols}
+            processed_at = datetime.now()
+            responded_at = datetime.now()
 
-        # 성능 메트릭 생성
-        response_time_ms = (time.time() - start_time) * 1000
-        performance = PerformanceMetrics(
-            response_time_ms=response_time_ms,
-            data_freshness_ms=self._tier_specs[tier].data_freshness_guarantee_ms,
-            cache_hit_ratio=0.85 if tier in [RoutingTier.HOT_CACHE, RoutingTier.WARM_CACHE_REST] else 0.0,
-            network_bytes=int(request.estimated_response_size_kb * 1024),
-            symbols_per_second=len(request.symbols) / (response_time_ms / 1000.0) if response_time_ms > 0 else 0.0
+            # 성능 메트릭 생성
+            response_time_ms = (time.time() - start_time) * 1000
+            performance = PerformanceMetrics(
+                response_time_ms=response_time_ms,
+                data_freshness_ms=self._tier_specs[tier].data_freshness_guarantee_ms,
+                cache_hit_ratio=0.85 if tier in [RoutingTier.HOT_CACHE, RoutingTier.WARM_CACHE_REST] else 0.0,
+                network_bytes=int(request.estimated_response_size_kb * 1024),
+                symbols_per_second=len(request.symbols) / (response_time_ms / 1000.0) if response_time_ms > 0 else 0.0
+            )
+
+            logger.info(f"✅ Tier {tier.value} 응답 완료 - {len(request.symbols)}개 심볼, {response_time_ms:.2f}ms")
+
+            return RoutingResponse.create_success_response(
+                request=request,
+                tier_used=tier,
+                data=data_result,
+                performance=performance,
+                processed_at=processed_at,
+                responded_at=responded_at
+            )
+
+        except Exception as e:
+            logger.error(f"❌ Tier {tier.value} 라우팅 실패: {e}")
+            return self._create_error_response(request, e, start_time)
+
+    async def _execute_ticker_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
+        """Ticker 데이터 Tier별 라우팅"""
+        if tier == RoutingTier.HOT_CACHE:
+            return await self.data_provider._get_ticker_from_cache(request.symbols)
+        elif tier == RoutingTier.LIVE_SUBSCRIPTION:
+            return await self.data_provider._get_ticker_from_websocket_live(request.symbols)
+        elif tier == RoutingTier.BATCH_SNAPSHOT:
+            return await self.data_provider._get_ticker_from_websocket_batch(request.symbols)
+        elif tier == RoutingTier.WARM_CACHE_REST:
+            return await self.data_provider._get_ticker_from_cache(request.symbols)
+        elif tier == RoutingTier.COLD_REST:
+            return await self.data_provider._get_ticker_from_rest(request.symbols)
+        else:
+            raise ValueError(f"지원하지 않는 Ticker Tier: {tier}")
+
+    async def _execute_candle_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
+        """Candle 데이터 Tier별 라우팅"""
+        # 기본적으로 get_candle_data 사용 (Tier에 따른 캐싱 전략은 UpbitDataProvider 내부에서 처리)
+        return await self.data_provider.get_candle_data(
+            symbols=request.symbols,
+            timeframe=request.timeframe or TimeFrame.MINUTES_1,
+            count=request.count or 100,
+            tier=tier
         )
 
-        return RoutingResponse.create_success_response(
-            request=request,
-            tier_used=tier,
-            data=mock_data,
-            performance=performance,
-            processed_at=processed_at,
-            responded_at=responded_at
+    async def _execute_orderbook_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
+        """Orderbook 데이터 Tier별 라우팅"""
+        return await self.data_provider.get_orderbook_data(request.symbols, tier=tier)
+
+    async def _execute_trade_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
+        """Trade 데이터 Tier별 라우팅"""
+        return await self.data_provider.get_trade_data(
+            symbols=request.symbols,
+            tier=tier,
+            count=request.count or 100
         )
 
     def _create_error_response(self, request: RoutingRequest, error: Exception, start_time: float) -> RoutingResponse:

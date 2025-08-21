@@ -24,7 +24,7 @@ from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quota
 )
 
 from ..models import TimeFrame
-from ..interfaces.market_data_router import RoutingTier
+from ..models.routing_response import RoutingTier
 from ..cache import MarketDataCache
 
 logger = create_component_logger("UpbitDataProvider")
@@ -453,10 +453,11 @@ class UpbitDataProvider:
         return {}
 
     async def _get_ticker_from_cache(self, symbols: List[str]) -> Dict[str, Any]:
-        """캐시에서 티커 데이터 조회"""
+        """캐시에서 티커 데이터 조회 (캐시 미스 시 REST API fallback)"""
         logger.debug(f"캐시에서 티커 조회 시도: {len(symbols)}개 심볼")
 
         ticker_data = {}
+        cache_miss_symbols = []
 
         # 각 심볼별로 캐시 확인
         for symbol in symbols:
@@ -467,7 +468,18 @@ class UpbitDataProvider:
                 ticker_data[symbol] = cached_data
                 logger.debug(f"캐시 히트: {symbol}")
             else:
+                cache_miss_symbols.append(symbol)
                 logger.debug(f"캐시 미스: {symbol}")
+
+        # 캐시 미스된 심볼은 REST API로 조회
+        if cache_miss_symbols:
+            logger.debug(f"캐시 미스 심볼 {len(cache_miss_symbols)}개, REST API fallback 실행")
+            try:
+                rest_data = await self._get_ticker_from_rest(cache_miss_symbols)
+                ticker_data.update(rest_data)
+                self.metrics['rest_calls'] += 1
+            except Exception as e:
+                logger.warning(f"REST fallback 실패: {e}")
 
         return ticker_data
 

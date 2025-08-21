@@ -18,16 +18,7 @@ from enum import Enum
 
 from ..models.routing_context import RoutingContext, UsageContext, NetworkPolicy
 from ..models.routing_request import RoutingRequest
-from ..models.routing_response import RoutingResponse
-
-
-class RoutingTier(Enum):
-    """라우팅 계층"""
-    HOT_CACHE = "hot_cache"           # Tier 1: 0.1ms (메모리 직접)
-    LIVE_SUBSCRIPTION = "live_sub"    # Tier 2: 0.2ms (개별 구독)
-    BATCH_SNAPSHOT = "batch_snap"     # Tier 3: 11.20ms (배치 구독)
-    WARM_CACHE_REST = "warm_rest"     # Tier 4: 200ms (캐시+REST)
-    COLD_REST = "cold_rest"           # Tier 5: 500ms (순수 REST)
+from ..models.routing_response import RoutingResponse, RoutingTier
 
 
 class DataType(Enum):
