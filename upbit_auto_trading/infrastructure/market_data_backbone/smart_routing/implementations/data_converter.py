@@ -4,7 +4,7 @@
 업비트 API 응답을 스마트 라우팅 시스템의 표준 형식으로 변환하는 서비스입니다.
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -96,7 +96,7 @@ class DataConverter:
     def convert_candle_response(
         self,
         raw_data: List[Dict[str, Any]],
-        timeframe: TimeFrame
+        timeframe: Optional[TimeFrame] = None
     ) -> List[Dict[str, Any]]:
         """업비트 캔들 응답을 표준 형식으로 변환
 
@@ -111,7 +111,7 @@ class DataConverter:
 
         for item in raw_data:
             candle = {
-                'timeframe': timeframe.value,
+                'timeframe': timeframe.value if timeframe else 'unknown',
                 'timestamp': item.get('candle_date_time_kst', ''),
                 'open': float(item.get('opening_price', 0)),
                 'high': float(item.get('high_price', 0)),
@@ -124,7 +124,8 @@ class DataConverter:
             }
             candles.append(candle)
 
-        logger.debug(f"캔들 응답 변환 완료: {len(candles)}개 캔들, TF: {timeframe.value}")
+        timeframe_str = timeframe.value if timeframe else 'unknown'
+        logger.debug(f"캔들 응답 변환 완료: {len(candles)}개 캔들, TF: {timeframe_str}")
         return candles
 
     def convert_orderbook_response(self, raw_data: List[Dict[str, Any]]) -> Dict[str, Any]:

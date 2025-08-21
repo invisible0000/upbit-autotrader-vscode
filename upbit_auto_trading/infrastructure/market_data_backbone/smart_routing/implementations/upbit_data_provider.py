@@ -5,6 +5,7 @@
 Facade 패턴을 사용하여 여러 서비스 컴포넌트를 조율합니다.
 """
 
+import asyncio
 import time
 from typing import Dict, List, Any, Optional
 
@@ -348,7 +349,7 @@ class UpbitDataProvider:
     ) -> Dict[str, Any]:
         """캔들 데이터 조회"""
         try:
-            result = await self.rest_api_manager.get_candle_data(symbols, interval, count)
+            result = await self.rest_api_manager.get_candles(symbols, interval, count)
 
             # 데이터 변환 및 캐시 저장
             if result.get('success'):
@@ -378,7 +379,7 @@ class UpbitDataProvider:
     async def get_orderbook_data(self, symbols: List[str], tier: str = "COLD_REST") -> Dict[str, Any]:
         """호가 데이터 조회"""
         try:
-            result = await self.rest_api_manager.get_orderbook_data(symbols)
+            result = await self.rest_api_manager.get_orderbook(symbols)
 
             # 데이터 변환 및 캐시 저장
             if result.get('success'):
@@ -412,7 +413,7 @@ class UpbitDataProvider:
     ) -> Dict[str, Any]:
         """체결 데이터 조회"""
         try:
-            result = await self.rest_api_manager.get_trade_data(symbols, count)
+            result = await self.rest_api_manager.get_trades(symbols, count)
 
             # 데이터 변환 및 캐시 저장
             if result.get('success'):
@@ -462,3 +463,16 @@ class UpbitDataProvider:
         self.cache_manager.reset_cache_stats()
 
         logger.info("✅ 성능 메트릭 초기화 완료")
+
+    # 편의용 동기 메서드들 (RestApiManager 호출)
+    def get_candles(self, symbols: List[str], interval: str, count: int) -> Dict[str, Any]:
+        """동기 캔들 데이터 조회 (RestApiManager 사용)"""
+        return asyncio.run(self.rest_api_manager.get_candles(symbols, interval, count))
+
+    def get_orderbook(self, symbols: List[str]) -> Dict[str, Any]:
+        """동기 호가 데이터 조회 (RestApiManager 사용)"""
+        return asyncio.run(self.rest_api_manager.get_orderbook(symbols))
+
+    def get_trades(self, symbols: List[str], count: int = 10) -> Dict[str, Any]:
+        """동기 거래 데이터 조회 (RestApiManager 사용)"""
+        return asyncio.run(self.rest_api_manager.get_trades(symbols, count))

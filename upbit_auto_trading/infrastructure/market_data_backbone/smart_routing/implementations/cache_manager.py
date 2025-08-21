@@ -328,3 +328,41 @@ class CacheManager:
         }
 
         logger.info("캐시 통계 초기화 완료")
+
+    def set_cache(self, key: str, data: Any, ttl: Optional[float] = None) -> None:
+        """캐시에 데이터 저장 (호환성 메서드)
+
+        Args:
+            key: 캐시 키
+            data: 저장할 데이터
+            ttl: TTL (Time To Live) 초 단위
+        """
+        # 기본 TTL 설정
+        if ttl is None:
+            ttl = 30.0  # 기본 30초
+
+        # 캐시에 저장
+        self.cache.set(
+            key=key,
+            data=data,
+            ttl=ttl
+        )
+
+        logger.debug(f"캐시 저장: {key} (TTL: {ttl}초)")
+
+    def get_cache(self, key: str) -> Any:
+        """캐시에서 데이터 조회 (호환성 메서드)
+
+        Args:
+            key: 캐시 키
+
+        Returns:
+            캐시된 데이터 또는 None
+        """
+        result = self.cache.get(key)
+        if result:
+            logger.debug(f"캐시 조회 성공: {key}")
+            return result
+        else:
+            logger.debug(f"캐시 조회 실패: {key}")
+            return None

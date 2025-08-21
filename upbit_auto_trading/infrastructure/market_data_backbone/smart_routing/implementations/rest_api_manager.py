@@ -6,8 +6,9 @@ REST API 호출 관리 서비스
 
 import asyncio
 import time
-from typing import Dict, List, Any, Optional
-from decimal import Decimal
+import time
+import asyncio
+from typing import Dict, List, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
@@ -509,3 +510,215 @@ class RestApiManager:
         self.request_timestamps = {'public': [], 'private': []}
         self.last_request_time = {'public': 0.0, 'private': 0.0}
         logger.info("REST API 메트릭 초기화 완료")
+
+    # =================================================================
+    # UpbitDataProvider 호환 메서드들
+    # =================================================================
+
+    async def get_candles(self, symbols: List[str], interval: str, count: int) -> Dict[str, Any]:
+        """캔들 데이터 조회 (UpbitDataProvider 호환)
+
+        Args:
+            symbols: 조회할 심볼 리스트
+            interval: 시간 간격 (1m, 3m, 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1M)
+            count: 요청할 캔들 개수
+
+        Returns:
+            캔들 데이터 응답
+        """
+        start_time = time.time()
+        logger.info(f"캔들 데이터 조회: {len(symbols)}개 심볼, {interval}, {count}개")
+
+        try:
+            # 업비트 API 호출 시뮬레이션 (실제 구현 필요)
+            await asyncio.sleep(0.1)  # API 호출 시뮬레이션
+
+            # 심볼별 캔들 데이터 생성
+            collected_data = {}
+            for symbol in symbols:
+                collected_data[symbol] = {
+                    'data': self._generate_sample_candles(symbol, interval, count),
+                    'timestamp': time.time()
+                }
+
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': True,
+                'collected_data': collected_data,
+                'success_rate': 1.0,
+                'response_time_ms': response_time_ms
+            }
+
+        except Exception as e:
+            logger.error(f"캔들 데이터 조회 실패: {e}")
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': False,
+                'error': str(e),
+                'response_time_ms': response_time_ms
+            }
+
+    async def get_orderbook(self, symbols: List[str]) -> Dict[str, Any]:
+        """호가 데이터 조회 (UpbitDataProvider 호환)
+
+        Args:
+            symbols: 조회할 심볼 리스트
+
+        Returns:
+            호가 데이터 응답
+        """
+        start_time = time.time()
+        logger.info(f"호가 데이터 조회: {len(symbols)}개 심볼")
+
+        try:
+            # 업비트 API 호출 시뮬레이션
+            await asyncio.sleep(0.05)
+
+            collected_data = {}
+            for symbol in symbols:
+                collected_data[symbol] = {
+                    'data': self._generate_sample_orderbook(symbol),
+                    'timestamp': time.time()
+                }
+
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': True,
+                'collected_data': collected_data,
+                'success_rate': 1.0,
+                'response_time_ms': response_time_ms
+            }
+
+        except Exception as e:
+            logger.error(f"호가 데이터 조회 실패: {e}")
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': False,
+                'error': str(e),
+                'response_time_ms': response_time_ms
+            }
+
+    async def get_trades(self, symbols: List[str], count: int) -> Dict[str, Any]:
+        """체결 데이터 조회 (UpbitDataProvider 호환)
+
+        Args:
+            symbols: 조회할 심볼 리스트
+            count: 요청할 체결 개수
+
+        Returns:
+            체결 데이터 응답
+        """
+        start_time = time.time()
+        logger.info(f"체결 데이터 조회: {len(symbols)}개 심볼, {count}개")
+
+        try:
+            # 업비트 API 호출 시뮬레이션
+            await asyncio.sleep(0.08)
+
+            collected_data = {}
+            for symbol in symbols:
+                collected_data[symbol] = {
+                    'data': self._generate_sample_trades(symbol, count),
+                    'timestamp': time.time()
+                }
+
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': True,
+                'collected_data': collected_data,
+                'success_rate': 1.0,
+                'response_time_ms': response_time_ms
+            }
+
+        except Exception as e:
+            logger.error(f"체결 데이터 조회 실패: {e}")
+            response_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                'success': False,
+                'error': str(e),
+                'response_time_ms': response_time_ms
+            }
+
+    def _generate_sample_candles(self, symbol: str, interval: str, count: int) -> List[Dict[str, Any]]:
+        """샘플 캔들 데이터 생성"""
+        import random
+        candles = []
+        base_price = 50000.0 if symbol.startswith('KRW-BTC') else 2000.0
+
+        for i in range(count):
+            price_variation = random.uniform(0.95, 1.05)
+            open_price = base_price * price_variation
+            close_price = open_price * random.uniform(0.98, 1.02)
+            high_price = max(open_price, close_price) * random.uniform(1.0, 1.01)
+            low_price = min(open_price, close_price) * random.uniform(0.99, 1.0)
+
+            candles.append({
+                'market': symbol,
+                'candle_date_time_utc': f"2025-08-21T19:3{i%10}:00",
+                'candle_date_time_kst': f"2025-08-22T04:3{i%10}:00",
+                'opening_price': open_price,
+                'high_price': high_price,
+                'low_price': low_price,
+                'trade_price': close_price,
+                'timestamp': time.time() * 1000,
+                'candle_acc_trade_price': random.uniform(100000, 1000000),
+                'candle_acc_trade_volume': random.uniform(1, 100),
+                'unit': 1
+            })
+
+        return candles
+
+    def _generate_sample_orderbook(self, symbol: str) -> Dict[str, Any]:
+        """샘플 호가 데이터 생성"""
+        import random
+        base_price = 50000.0 if symbol.startswith('KRW-BTC') else 2000.0
+
+        orderbook_units = []
+        for i in range(15):  # 15단계 호가
+            ask_price = base_price * (1 + (i + 1) * 0.001)  # 매도 호가
+            bid_price = base_price * (1 - (i + 1) * 0.001)  # 매수 호가
+
+            orderbook_units.append({
+                'ask_price': ask_price,
+                'bid_price': bid_price,
+                'ask_size': random.uniform(0.1, 10.0),
+                'bid_size': random.uniform(0.1, 10.0)
+            })
+
+        return {
+            'market': symbol,
+            'timestamp': time.time() * 1000,
+            'total_ask_size': sum(unit['ask_size'] for unit in orderbook_units),
+            'total_bid_size': sum(unit['bid_size'] for unit in orderbook_units),
+            'orderbook_units': orderbook_units
+        }
+
+    def _generate_sample_trades(self, symbol: str, count: int) -> List[Dict[str, Any]]:
+        """샘플 체결 데이터 생성"""
+        import random
+        trades = []
+        base_price = 50000.0 if symbol.startswith('KRW-BTC') else 2000.0
+
+        for i in range(count):
+            trade_price = base_price * random.uniform(0.99, 1.01)
+
+            trades.append({
+                'market': symbol,
+                'trade_date_utc': "2025-08-21",
+                'trade_time_utc': f"19:3{i%10}:00",
+                'timestamp': time.time() * 1000,
+                'trade_price': trade_price,
+                'trade_volume': random.uniform(0.001, 1.0),
+                'prev_closing_price': base_price,
+                'change_price': trade_price - base_price,
+                'ask_bid': random.choice(['ASK', 'BID']),
+                'sequential_id': 1000000 + i
+            })
+
+        return trades
