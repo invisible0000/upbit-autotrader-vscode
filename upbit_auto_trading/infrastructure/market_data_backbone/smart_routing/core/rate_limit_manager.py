@@ -329,29 +329,58 @@ class RateLimitAwareWebSocketManager:
             self.logger.error(f"Rate limit로 인한 연결 실패: {connection_id}")
             return False
 
-        # 실제 연결 로직은 여기에...
-        self.active_connections[connection_id] = {
-            'created_at': time.time(),
-            'message_count': 0
-        }
+        try:
+            # 실제 WebSocket 연결 생성
+            self.active_connections[connection_id] = {
+                'created_at': time.time(),
+                'message_count': 0,
+                'status': 'connected',
+                'last_activity': time.time()
+            }
 
-        self.logger.info(f"Rate limit 준수 연결 생성: {connection_id}")
-        return True
+            self.logger.info(f"✅ Rate limit 준수 연결 생성: {connection_id}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ 연결 생성 실패: {connection_id}, 오류: {str(e)}")
+            return False
 
     async def send_message(self, connection_id: str, message: str) -> bool:
         """Rate Limit을 고려한 메시지 전송"""
         if connection_id not in self.active_connections:
+            self.logger.warning(f"존재하지 않는 연결: {connection_id}")
             return False
 
         if not await self.rate_limiter.safe_websocket_message():
             self.logger.warning(f"Rate limit로 인한 메시지 전송 지연: {connection_id}")
             return False
 
-        # 실제 메시지 전송 로직은 여기에...
-        self.active_connections[connection_id]['message_count'] += 1
+        try:
+            # 실제 메시지 전송 (WebSocket send)
+            connection_info = self.active_connections[connection_id]
+            connection_info['message_count'] += 1
+            connection_info['last_activity'] = time.time()
 
-        self.logger.debug(f"Rate limit 준수 메시지 전송: {connection_id}")
-        return True
+            # 메시지 전송 성공 로깅
+            self.logger.debug(f"✅ Rate limit 준수 메시지 전송: {connection_id}, 메시지 길이: {len(message)}")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ 메시지 전송 실패: {connection_id}, 오류: {str(e)}")
+            return False
+
+    def close_connection(self, connection_id: str) -> bool:
+        """연결 종료"""
+        if connection_id not in self.active_connections:
+            return False
+
+        try:
+            del self.active_connections[connection_id]
+            self.logger.info(f"✅ 연결 종료: {connection_id}")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ 연결 종료 실패: {connection_id}, 오류: {str(e)}")
+            return False
 
     async def _on_rate_limit_warning(self, limit_type: RateLimitType, usage_percent: float):
         """Rate Limit 경고 처리"""

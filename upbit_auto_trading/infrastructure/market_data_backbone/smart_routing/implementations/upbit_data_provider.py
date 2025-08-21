@@ -128,25 +128,37 @@ class UpbitDataProvider:
         try:
             logger.info(f"티커 데이터 조회 시작: {tier} - {len(symbols)}개 심볼")
 
+            # Tier 문자열 정규화 (enum value -> constant)
+            tier_mapping = {
+                "hot_cache": "HOT_CACHE",
+                "live_sub": "LIVE_SUBSCRIPTION",
+                "batch_snap": "BATCH_SNAPSHOT",
+                "warm_rest": "WARM_CACHE_REST",
+                "cold_rest": "COLD_REST"
+            }
+
+            normalized_tier = tier_mapping.get(tier, tier.upper())
+            logger.debug(f"Tier 정규화: {tier} -> {normalized_tier}")
+
             # Tier별 데이터 조회 라우팅
-            if tier == "HOT_CACHE":
+            if normalized_tier == "HOT_CACHE":
                 result = await self._get_ticker_hot_cache(symbols)
-            elif tier == "LIVE_SUBSCRIPTION":
+            elif normalized_tier == "LIVE_SUBSCRIPTION":
                 result = await self._get_ticker_live_subscription(symbols)
-            elif tier == "BATCH_SNAPSHOT":
+            elif normalized_tier == "BATCH_SNAPSHOT":
                 result = await self._get_ticker_batch_snapshot(symbols)
-            elif tier == "WARM_CACHE_REST":
+            elif normalized_tier == "WARM_CACHE_REST":
                 result = await self._get_ticker_warm_cache_rest(symbols)
-            elif tier == "COLD_REST":
+            elif normalized_tier == "COLD_REST":
                 result = await self._get_ticker_cold_rest(symbols)
             else:
-                raise ValueError(f"지원하지 않는 Tier: {tier}")
+                raise ValueError(f"지원하지 않는 Tier: {tier} (정규화: {normalized_tier})")
 
             # 메트릭 기록
             response_time_ms = (time.time() - start_time) * 1000
             success = result.get('success', False)
             self.metrics_collector.record_request(
-                tier=tier,
+                tier=normalized_tier,
                 response_time_ms=response_time_ms,
                 success=success,
                 symbols_count=len(symbols)
@@ -159,9 +171,19 @@ class UpbitDataProvider:
             response_time_ms = (time.time() - start_time) * 1000
             logger.error(f"티커 데이터 조회 실패: {tier} - {e}")
 
+            # Tier 정규화 (실패 시에도 동일 로직 적용)
+            tier_mapping = {
+                "hot_cache": "HOT_CACHE",
+                "live_sub": "LIVE_SUBSCRIPTION",
+                "batch_snap": "BATCH_SNAPSHOT",
+                "warm_rest": "WARM_CACHE_REST",
+                "cold_rest": "COLD_REST"
+            }
+            normalized_tier = tier_mapping.get(tier, tier.upper())
+
             # 메트릭 기록 (실패)
             self.metrics_collector.record_request(
-                tier=tier,
+                tier=normalized_tier,
                 response_time_ms=response_time_ms,
                 success=False,
                 symbols_count=len(symbols),
@@ -184,28 +206,31 @@ class UpbitDataProvider:
         # 캐시에서 데이터 조회
         result = self.cache_manager.get_ticker_data(symbols)
 
-        if result['success'] and result['hit_rate'] > 0.8:  # 80% 이상 히트
+        # 캐시 히트률이 80% 이상이면 성공으로 처리
+        if result['hit_ratio'] > 0.8:  # 80% 이상 히트
             # 캐시 히트 기록
-            for symbol in result['data']:
+            for symbol in result['cached_data']:
                 self.metrics_collector.record_cache_hit("HOT_CACHE")
 
             return {
                 'success': True,
-                'data': result['data'],
+                'data': result['cached_data'],
                 'source': 'hot_cache',
-                'hit_rate': result['hit_rate'],
-                'response_time_ms': result.get('response_time_ms', 0.0)
+                'hit_rate': result['hit_ratio'],
+                'response_time_ms': result.get('response_time_ms', 0.0),
+                'cache_hits': result['cache_hits']
             }
         else:
             # 캐시 미스 기록
-            for symbol in symbols:
-                if symbol not in result.get('data', {}):
-                    self.metrics_collector.record_cache_miss("HOT_CACHE")
+            for symbol in result['cache_miss_symbols']:
+                self.metrics_collector.record_cache_miss("HOT_CACHE")
 
             return {
                 'success': False,
                 'error': 'cache_miss',
-                'hit_rate': result.get('hit_rate', 0.0)
+                'hit_rate': result['hit_ratio'],
+                'cache_misses': len(result['cache_miss_symbols']),
+                'missing_symbols': result['cache_miss_symbols']
             }
 
     async def _get_ticker_live_subscription(self, symbols: List[str]) -> Dict[str, Any]:
@@ -286,9 +311,15 @@ class UpbitDataProvider:
             # 데이터 변환
             converted_data = {}
             for symbol, raw_data in result['collected_data'].items():
-                converted_data[symbol] = self.data_converter.convert_ticker_response(
-                    raw_data['data']
-                )
+                # convert_ticker_response는 List[Dict]을 받으므로 단일 딕셔너리를 리스트로 감싸서 전달
+                ticker_list = self.data_converter.convert_ticker_response([raw_data['data']])
+                # 변환된 결과에서 해당 심볼의 데이터를 가져옴 (ticker_list는 Dict[str, Any]임)
+                if symbol in ticker_list:
+                    converted_data[symbol] = ticker_list[symbol]
+                else:
+                    # 심볼을 찾지 못한 경우 raw_data의 market 필드로 재시도
+                    market_symbol = raw_data['data'].get('market', symbol)
+                    converted_data[symbol] = ticker_list.get(market_symbol, {})
 
             # 캐시에 저장 (Warm 전략)
             self.cache_manager.store_ticker_data(converted_data)
@@ -319,9 +350,15 @@ class UpbitDataProvider:
             # 데이터 변환
             converted_data = {}
             for symbol, raw_data in result['collected_data'].items():
-                converted_data[symbol] = self.data_converter.convert_ticker_response(
-                    raw_data['data']
-                )
+                # convert_ticker_response는 List[Dict]을 받으므로 단일 딕셔너리를 리스트로 감싸서 전달
+                ticker_list = self.data_converter.convert_ticker_response([raw_data['data']])
+                # 변환된 결과에서 해당 심볼의 데이터를 가져옴 (ticker_list는 Dict[str, Any]임)
+                if symbol in ticker_list:
+                    converted_data[symbol] = ticker_list[symbol]
+                else:
+                    # 심볼을 찾지 못한 경우 raw_data의 market 필드로 재시도
+                    market_symbol = raw_data['data'].get('market', symbol)
+                    converted_data[symbol] = ticker_list.get(market_symbol, {})
 
             # 캐시에 저장 (Cold 전략)
             self.cache_manager.store_ticker_data(converted_data)

@@ -75,20 +75,63 @@ class DataConverter:
         Returns:
             표준화된 티커 데이터
         """
-        converted_data = {
-            'symbol': ws_data.get('code', ws_data.get('market', '')),
-            'price': float(ws_data.get('trade_price', ws_data.get('tp', 0))),
-            'change': float(ws_data.get('change_price', ws_data.get('cp', 0))),
-            'change_rate': float(ws_data.get('change_rate', ws_data.get('cr', 0))),
-            'volume': float(ws_data.get('acc_trade_volume_24h', ws_data.get('atv24h', 0))),
-            'value': float(ws_data.get('acc_trade_price_24h', ws_data.get('atp24h', 0))),
-            'high': float(ws_data.get('high_price', ws_data.get('hp', 0))),
-            'low': float(ws_data.get('low_price', ws_data.get('lp', 0))),
-            'opening': float(ws_data.get('opening_price', ws_data.get('op', 0))),
-            'timestamp': datetime.now().isoformat(),
-            'source': source,
-            'raw_data': ws_data
-        }
+        try:
+            # 필수 필드 검증
+            if not ws_data:
+                raise ValueError("WebSocket 데이터가 비어있습니다")
+
+            # 심볼 추출 및 검증
+            symbol = ws_data.get('code', ws_data.get('market', ''))
+            if not symbol or not self.validate_symbol_format(symbol):
+                raise ValueError(f"유효하지 않은 심볼: {symbol}")
+
+            # 가격 데이터 안전한 변환
+            def safe_float(value, default=0.0):
+                try:
+                    return float(value) if value is not None else default
+                except (ValueError, TypeError):
+                    return default
+
+            converted_data = {
+                'symbol': self.normalize_symbol(symbol),
+                'price': safe_float(ws_data.get('trade_price', ws_data.get('tp', 0))),
+                'change': safe_float(ws_data.get('change_price', ws_data.get('cp', 0))),
+                'change_rate': safe_float(ws_data.get('change_rate', ws_data.get('cr', 0))),
+                'volume': safe_float(ws_data.get('acc_trade_volume_24h', ws_data.get('atv24h', 0))),
+                'value': safe_float(ws_data.get('acc_trade_price_24h', ws_data.get('atp24h', 0))),
+                'high': safe_float(ws_data.get('high_price', ws_data.get('hp', 0))),
+                'low': safe_float(ws_data.get('low_price', ws_data.get('lp', 0))),
+                'opening': safe_float(ws_data.get('opening_price', ws_data.get('op', 0))),
+                'timestamp': datetime.now().isoformat(),
+                'source': source,
+                'raw_data': ws_data
+            }
+
+            # 데이터 무결성 검증
+            if converted_data['price'] <= 0:
+                logger.warning(f"비정상적인 가격 데이터: {symbol}, price: {converted_data['price']}")
+
+            logger.debug(f"WebSocket 티커 변환 완료: {symbol}")
+            return converted_data
+
+        except Exception as e:
+            logger.error(f"WebSocket 티커 데이터 변환 실패: {str(e)}")
+            # 기본값으로 빈 데이터 반환
+            return {
+                'symbol': ws_data.get('code', ws_data.get('market', 'UNKNOWN')),
+                'price': 0.0,
+                'change': 0.0,
+                'change_rate': 0.0,
+                'volume': 0.0,
+                'value': 0.0,
+                'high': 0.0,
+                'low': 0.0,
+                'opening': 0.0,
+                'timestamp': datetime.now().isoformat(),
+                'source': source,
+                'error': str(e),
+                'raw_data': ws_data
+            }
 
         logger.debug(f"WebSocket 티커 데이터 변환: {converted_data['symbol']}")
         return converted_data

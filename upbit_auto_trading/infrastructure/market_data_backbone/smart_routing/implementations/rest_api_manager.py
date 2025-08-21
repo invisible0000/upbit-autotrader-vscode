@@ -190,9 +190,9 @@ class RestApiManager:
         logger.debug(f"업비트 티커 API 호출: {len(symbols)}개 심볼")
 
         try:
-            # 업비트 클라이언트를 통한 API 호출
+            # 업비트 클라이언트를 통한 API 호출 (get_tickers 메서드 사용)
             response = await asyncio.wait_for(
-                self.upbit_client.get_ticker(symbols),
+                self.upbit_client.get_tickers(symbols),
                 timeout=timeout
             )
 
