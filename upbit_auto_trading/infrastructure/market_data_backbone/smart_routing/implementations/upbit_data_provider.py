@@ -127,7 +127,7 @@ class UpbitDataProvider:
 
         Args:
             symbols: 조회할 심볼 리스트
-            tier: 요청된 Tier (HOT_CACHE, LIVE_SUBSCRIPTION, etc.)
+            tier: 요청된 Tier (표준화된 이름 사용)
             context: 요청 컨텍스트
 
         Returns:
@@ -138,31 +138,36 @@ class UpbitDataProvider:
         try:
             logger.info(f"티커 데이터 조회 시작: {tier} - {len(symbols)}개 심볼")
 
-            # Tier 문자열 정규화 (enum value -> constant)
-            tier_mapping = {
-                "hot_cache": "HOT_CACHE",
-                "live_sub": "LIVE_SUBSCRIPTION",
-                "batch_snap": "BATCH_SNAPSHOT",
-                "warm_rest": "WARM_CACHE_REST",
-                "cold_rest": "COLD_REST"
-            }
+            # Tier 표준화 - RoutingTier enum 값 직접 사용
+            from ..models.routing_response import RoutingTier
 
-            normalized_tier = tier_mapping.get(tier, tier.upper())
-            logger.debug(f"Tier 정규화: {tier} -> {normalized_tier}")
+            # 레거시 이름 변환 지원
+            if tier in ["hot_cache", "live_sub", "batch_snap", "warm_rest", "cold_rest"]:
+                tier_enum = RoutingTier.from_legacy_name(tier)
+            else:
+                # 표준 이름으로 직접 매핑
+                try:
+                    tier_enum = RoutingTier(tier)
+                except ValueError:
+                    logger.warning(f"알 수 없는 Tier: {tier}, COLD_REST로 폴백")
+                    tier_enum = RoutingTier.COLD_REST
+
+            normalized_tier = tier_enum.value
+            logger.debug(f"Tier 표준화: {tier} -> {normalized_tier}")
 
             # Tier별 데이터 조회 라우팅
-            if normalized_tier == "HOT_CACHE":
+            if tier_enum == RoutingTier.HOT_CACHE:
                 result = await self._get_ticker_hot_cache(symbols)
-            elif normalized_tier == "LIVE_SUBSCRIPTION":
+            elif tier_enum == RoutingTier.LIVE_SUBSCRIPTION:
                 result = await self._get_ticker_live_subscription(symbols)
-            elif normalized_tier == "BATCH_SNAPSHOT":
+            elif tier_enum == RoutingTier.BATCH_SNAPSHOT:
                 result = await self._get_ticker_batch_snapshot(symbols)
-            elif normalized_tier == "WARM_CACHE_REST":
+            elif tier_enum == RoutingTier.WARM_CACHE_REST:
                 result = await self._get_ticker_warm_cache_rest(symbols)
-            elif normalized_tier == "COLD_REST":
+            elif tier_enum == RoutingTier.COLD_REST:
                 result = await self._get_ticker_cold_rest(symbols)
             else:
-                raise ValueError(f"지원하지 않는 Tier: {tier} (정규화: {normalized_tier})")
+                raise ValueError(f"지원하지 않는 Tier: {tier_enum}")
 
             # 메트릭 기록
             response_time_ms = (time.time() - start_time) * 1000
@@ -181,19 +186,9 @@ class UpbitDataProvider:
             response_time_ms = (time.time() - start_time) * 1000
             logger.error(f"티커 데이터 조회 실패: {tier} - {e}")
 
-            # Tier 정규화 (실패 시에도 동일 로직 적용)
-            tier_mapping = {
-                "hot_cache": "HOT_CACHE",
-                "live_sub": "LIVE_SUBSCRIPTION",
-                "batch_snap": "BATCH_SNAPSHOT",
-                "warm_rest": "WARM_CACHE_REST",
-                "cold_rest": "COLD_REST"
-            }
-            normalized_tier = tier_mapping.get(tier, tier.upper())
-
-            # 메트릭 기록 (실패)
+            # 에러 메트릭 기록 (기본값 사용)
             self.metrics_collector.record_request(
-                tier=normalized_tier,
+                tier=tier,  # 원본 tier 사용
                 response_time_ms=response_time_ms,
                 success=False,
                 symbols_count=len(symbols),
@@ -214,7 +209,7 @@ class UpbitDataProvider:
         logger.debug(f"HOT_CACHE 조회: {len(symbols)}개 심볼")
 
         # 캐시에서 데이터 조회
-        result = self.cache_manager.get_ticker_data(symbols)
+        result = await self.cache_manager.get_ticker_data(symbols)
 
         # 캐시 히트률이 80% 이상이면 성공으로 처리
         if result['hit_ratio'] > 0.8:  # 80% 이상 히트
@@ -292,7 +287,7 @@ class UpbitDataProvider:
 
             if success_rate >= 0.8:  # 80% 이상 성공
                 # 캐시에 저장
-                self.cache_manager.store_ticker_data(collected_data)
+                await self.cache_manager.store_ticker_data(collected_data)
 
                 return {
                     'success': True,
@@ -333,7 +328,7 @@ class UpbitDataProvider:
                 )
 
             # 캐시에 저장
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data)
 
             return {
                 'success': True,
@@ -372,7 +367,7 @@ class UpbitDataProvider:
                     converted_data[symbol] = ticker_list.get(market_symbol, {})
 
             # 캐시에 저장 (Warm 전략)
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data)
 
             return {
                 'success': True,
@@ -411,7 +406,7 @@ class UpbitDataProvider:
                     converted_data[symbol] = ticker_list.get(market_symbol, {})
 
             # 캐시에 저장 (Cold 전략)
-            self.cache_manager.store_ticker_data(converted_data)
+            await self.cache_manager.store_ticker_data(converted_data)
 
             return {
                 'success': True,
@@ -449,7 +444,7 @@ class UpbitDataProvider:
                 # 캐시에 저장
                 for symbol, data in converted_data.items():
                     cache_key = f"candle:{symbol}:{interval}"
-                    self.cache_manager.set_cache(cache_key, data)
+                    await self.cache_manager.set_cache(cache_key, data)
 
                 return {
                     'success': True,
@@ -478,7 +473,7 @@ class UpbitDataProvider:
 
                 # 캐시에 저장
                 for symbol, data in converted_data.items():
-                    self.cache_manager.set_cache(f"orderbook:{symbol}", data)
+                    await self.cache_manager.set_cache(f"orderbook:{symbol}", data)
 
                 return {
                     'success': True,
@@ -512,7 +507,7 @@ class UpbitDataProvider:
 
                 # 캐시에 저장
                 for symbol, data in converted_data.items():
-                    self.cache_manager.set_cache(f"trade:{symbol}", data)
+                    await self.cache_manager.set_cache(f"trade:{symbol}", data)
 
                 return {
                     'success': True,

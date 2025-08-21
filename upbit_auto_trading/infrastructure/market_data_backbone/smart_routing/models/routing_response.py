@@ -14,11 +14,28 @@ from .routing_request import RoutingRequest
 
 class RoutingTier(Enum):
     """라우팅 계층"""
-    HOT_CACHE = "hot_cache"           # Tier 1: 0.1ms (메모리 직접)
-    LIVE_SUBSCRIPTION = "live_sub"    # Tier 2: 0.2ms (개별 구독)
-    BATCH_SNAPSHOT = "batch_snap"     # Tier 3: 11.20ms (배치 구독)
-    WARM_CACHE_REST = "warm_rest"     # Tier 4: 200ms (캐시+REST)
-    COLD_REST = "cold_rest"           # Tier 5: 500ms (순수 REST)
+    HOT_CACHE = "HOT_CACHE"           # Tier 1: 0.1ms (메모리 직접)
+    LIVE_SUBSCRIPTION = "LIVE_SUBSCRIPTION"    # Tier 2: 0.2ms (개별 구독)
+    BATCH_SNAPSHOT = "BATCH_SNAPSHOT"     # Tier 3: 11.20ms (배치 구독)
+    WARM_CACHE_REST = "WARM_CACHE_REST"     # Tier 4: 200ms (캐시+REST)
+    COLD_REST = "COLD_REST"           # Tier 5: 500ms (순수 REST)
+
+    @property
+    def normalized_name(self) -> str:
+        """정규화된 이름 반환 (하위 호환성)"""
+        return self.value
+
+    @classmethod
+    def from_legacy_name(cls, legacy_name: str) -> 'RoutingTier':
+        """레거시 이름에서 변환"""
+        legacy_mapping = {
+            "hot_cache": cls.HOT_CACHE,
+            "live_sub": cls.LIVE_SUBSCRIPTION,
+            "batch_snap": cls.BATCH_SNAPSHOT,
+            "warm_rest": cls.WARM_CACHE_REST,
+            "cold_rest": cls.COLD_REST
+        }
+        return legacy_mapping.get(legacy_name, cls.COLD_REST)
 
 
 class ResponseStatus(Enum):

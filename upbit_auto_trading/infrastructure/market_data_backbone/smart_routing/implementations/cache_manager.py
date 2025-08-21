@@ -64,7 +64,7 @@ class CacheManager:
         await self.cache.stop()
         logger.info("CacheManager 정지 완료")
 
-    def get_ticker_data(self, symbols: List[str]) -> Dict[str, Any]:
+    async def get_ticker_data(self, symbols: List[str]) -> Dict[str, Any]:
         """캐시에서 티커 데이터 조회
 
         Args:
@@ -82,7 +82,7 @@ class CacheManager:
 
         for symbol in symbols:
             cache_key = f"ticker:{symbol}"
-            data = self.cache.get(cache_key)
+            data = await self.cache.get(cache_key)
 
             if data:
                 cached_data[symbol] = data
@@ -106,7 +106,7 @@ class CacheManager:
             'cache_misses': len(cache_miss_symbols)
         }
 
-    def store_ticker_data(self, ticker_data: Dict[str, Any], source: str = 'unknown') -> None:
+    async def store_ticker_data(self, ticker_data: Dict[str, Any], source: str = 'unknown') -> None:
         """티커 데이터를 캐시에 저장
 
         Args:
@@ -127,7 +127,7 @@ class CacheManager:
                 'cache_ttl': policy['ttl_seconds']
             }
 
-            self.cache.set(
+            await self.cache.set(
                 key=cache_key,
                 data=enhanced_data,
                 ttl=policy['ttl_seconds'],
@@ -329,7 +329,7 @@ class CacheManager:
 
         logger.info("캐시 통계 초기화 완료")
 
-    def set_cache(self, key: str, data: Any, ttl: Optional[float] = None) -> None:
+    async def set_cache(self, key: str, data: Any, ttl: Optional[float] = None) -> None:
         """캐시에 데이터 저장 (호환성 메서드)
 
         Args:
@@ -342,7 +342,7 @@ class CacheManager:
             ttl = 30.0  # 기본 30초
 
         # 캐시에 저장
-        self.cache.set(
+        await self.cache.set(
             key=key,
             data=data,
             ttl=ttl

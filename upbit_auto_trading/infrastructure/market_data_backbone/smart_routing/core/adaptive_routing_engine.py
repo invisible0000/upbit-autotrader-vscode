@@ -436,13 +436,35 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
         successful_symbols = []
         failed_symbols = []
 
+        # API 응답 구조 확인 및 실제 데이터 추출
+        actual_data = data_result
+
+        # 중첩 구조인 경우 (예: {'success': True, 'data': {...}})
+        if 'data' in data_result and isinstance(data_result['data'], dict):
+            actual_data = data_result['data']
+
+        # 각 심볼별 데이터 검증
         for symbol in requested_symbols:
-            if symbol in data_result and data_result[symbol] is not None:
-                # None이 아닌 유효한 데이터가 있음
-                if isinstance(data_result[symbol], dict) and data_result[symbol]:
-                    successful_symbols.append(symbol)
+            if symbol in actual_data and actual_data[symbol] is not None:
+                symbol_data = actual_data[symbol]
+
+                # 데이터 타입별 유효성 검사
+                if isinstance(symbol_data, dict):
+                    # 딕셔너리: 빈 것이 아니거나 유효한 필드가 있는지 확인
+                    valid_fields = ['trade_price', 'opening_price', 'market', 'korean_name', 'timestamp']
+                    if symbol_data or any(key in symbol_data for key in valid_fields):
+                        successful_symbols.append(symbol)
+                    else:
+                        failed_symbols.append(symbol)
+                elif isinstance(symbol_data, list):
+                    # 리스트(캔들 데이터): 빈 리스트가 아니면 성공
+                    if len(symbol_data) > 0:
+                        successful_symbols.append(symbol)
+                    else:
+                        failed_symbols.append(symbol)
                 else:
-                    failed_symbols.append(symbol)
+                    # 기타 타입: None이 아니면 성공
+                    successful_symbols.append(symbol)
             else:
                 failed_symbols.append(symbol)
 
