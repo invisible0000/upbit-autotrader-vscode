@@ -17,6 +17,7 @@ from .cache_manager import CacheManager
 from .websocket_manager import WebSocketManager
 from .rest_api_manager import RestApiManager
 from .metrics_collector import MetricsCollector
+from ..improvements.realtime_subscription_manager import RealtimeSubscriptionManager, SubscriptionConfig
 
 logger = create_component_logger("UpbitDataProvider")
 
@@ -47,6 +48,9 @@ class UpbitDataProvider:
         self.rest_api_manager = RestApiManager(self.upbit_client)
         self.metrics_collector = MetricsCollector()
 
+        # 새로운 리얼타임 구독 매니저 초기화
+        self.realtime_subscription_manager = RealtimeSubscriptionManager()
+
         # 캐시 시스템 (CacheManager에서 관리)
         self.cache = self.cache_manager.cache
 
@@ -66,6 +70,9 @@ class UpbitDataProvider:
 
             # 캐시 시스템 시작
             await self.cache_manager.start()
+
+            # 리얼타임 구독 매니저 시작
+            await self.realtime_subscription_manager.start()
 
             # WebSocket 연결 초기화 (선택적)
             # await self.websocket_manager.connect()
@@ -88,6 +95,9 @@ class UpbitDataProvider:
 
             # WebSocket 연결 해제
             await self.websocket_manager.disconnect()
+
+            # 리얼타임 구독 매니저 정지
+            await self.realtime_subscription_manager.stop()
 
             # 캐시 시스템 정지
             await self.cache_manager.stop()
@@ -234,36 +244,76 @@ class UpbitDataProvider:
             }
 
     async def _get_ticker_live_subscription(self, symbols: List[str]) -> Dict[str, Any]:
-        """LIVE_SUBSCRIPTION Tier 데이터 조회"""
+        """LIVE_SUBSCRIPTION Tier 데이터 조회 (새로운 RealtimeSubscriptionManager 사용)"""
         logger.debug(f"LIVE_SUBSCRIPTION 조회: {len(symbols)}개 심볼")
 
-        # WebSocket 실시간 구독
-        result = await self.websocket_manager.subscribe_ticker_live(symbols, timeout=1.0)
-        self.metrics_collector.record_websocket_connection()
+        try:
+            # 새로운 리얼타임 구독 시스템 사용
+            config = SubscriptionConfig(
+                symbols=symbols,
+                data_types=["ticker"],
+                buffer_size=100,
+                timeout_seconds=2.0
+            )
 
-        if result['success_rate'] >= 0.8:  # 80% 이상 성공
-            # 데이터 변환
-            converted_data = {}
-            for symbol, raw_data in result['collected_data'].items():
-                converted_data[symbol] = self.data_converter.convert_websocket_ticker_data(
-                    raw_data['data']
-                )
+            subscription_id = await self.realtime_subscription_manager.create_subscription(config)
+            subscription_queue = self.realtime_subscription_manager.get_subscription_queue(subscription_id)
 
-            # 캐시에 저장
-            self.cache_manager.store_ticker_data(converted_data)
+            if not subscription_queue:
+                return {
+                    'success': False,
+                    'error': 'subscription_queue_not_found'
+                }
 
-            return {
-                'success': True,
-                'data': converted_data,
-                'source': 'websocket_live',
-                'success_rate': result['success_rate'],
-                'collection_time_ms': result['collection_time_ms']
-            }
-        else:
+            # 짧은 시간 동안 데이터 수집 (1초)
+            collected_data = {}
+            start_time = time.time()
+            timeout = 1.0
+
+            while time.time() - start_time < timeout and len(collected_data) < len(symbols):
+                try:
+                    message = await subscription_queue.get(timeout=0.2)
+                    if message and message.symbol not in collected_data:
+                        # 데이터 변환
+                        converted_data = self.data_converter.convert_websocket_ticker_data(
+                            message.data
+                        )
+                        collected_data[message.symbol] = converted_data
+
+                except asyncio.TimeoutError:
+                    continue  # 더 기다려 보기
+
+            # 구독 정리
+            await self.realtime_subscription_manager.close_subscription(subscription_id)
+
+            # 성공률 계산
+            success_rate = len(collected_data) / len(symbols) if symbols else 0.0
+            self.metrics_collector.record_websocket_connection()
+
+            if success_rate >= 0.8:  # 80% 이상 성공
+                # 캐시에 저장
+                self.cache_manager.store_ticker_data(collected_data)
+
+                return {
+                    'success': True,
+                    'data': collected_data,
+                    'source': 'realtime_subscription',
+                    'success_rate': success_rate,
+                    'collection_time_ms': (time.time() - start_time) * 1000
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'realtime_subscription_low_success_rate',
+                    'success_rate': success_rate
+                }
+
+        except Exception as e:
+            logger.error(f"리얼타임 구독 오류: {e}")
             return {
                 'success': False,
-                'error': 'websocket_subscription_failed',
-                'success_rate': result['success_rate']
+                'error': 'realtime_subscription_failed',
+                'exception': str(e)
             }
 
     async def _get_ticker_batch_snapshot(self, symbols: List[str]) -> Dict[str, Any]:

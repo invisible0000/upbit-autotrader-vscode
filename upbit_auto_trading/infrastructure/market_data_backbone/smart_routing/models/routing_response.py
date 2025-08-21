@@ -123,6 +123,13 @@ class RoutingResponse:
         return (self.errors is not None) and len(self.errors) > 0
 
     @property
+    def error_message(self) -> str:
+        """주요 오류 메시지 (첫 번째 오류 또는 종합 메시지)"""
+        if self.has_errors and self.errors:
+            return self.errors[0]
+        return ""
+
+    @property
     def used_fallback(self) -> bool:
         """폴백 사용 여부"""
         return (self.fallback_tiers_used is not None) and len(self.fallback_tiers_used) > 0

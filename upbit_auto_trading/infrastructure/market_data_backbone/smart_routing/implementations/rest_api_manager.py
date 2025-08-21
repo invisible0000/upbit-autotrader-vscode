@@ -6,12 +6,11 @@ REST API 호출 관리 서비스
 
 import asyncio
 import time
-import time
-import asyncio
 from typing import Dict, List, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
+from ..core.rate_limit_manager import get_global_rate_limiter, RateLimitType
 
 logger = create_component_logger("RestApiManager")
 
@@ -32,6 +31,9 @@ class RestApiManager:
 
         self.upbit_client = upbit_client
 
+        # 중앙 Rate Limit Manager 사용
+        self.rate_limiter = get_global_rate_limiter()
+
         # 재시도 설정
         self.retry_config = {
             'max_retries': 3,
@@ -41,25 +43,7 @@ class RestApiManager:
             'jitter_range': 0.1  # 지터 범위 (0.1 = ±10%)
         }
 
-        # Rate Limiting (업비트 REST API 제한)
-        self.rate_limit_config = {
-            'public_per_second': 10,  # 공개 API: 초당 10회
-            'private_per_second': 8,  # 개인 API: 초당 8회
-            'public_per_minute': 600,  # 공개 API: 분당 600회
-            'private_per_minute': 200  # 개인 API: 분당 200회
-        }
-
-        # Rate Limit 추적
-        self.request_timestamps = {
-            'public': [],
-            'private': []
-        }
-        self.last_request_time = {
-            'public': 0.0,
-            'private': 0.0
-        }
-
-        # 성능 메트릭
+        # 성능 메트릭 (Rate Limit 추적 제거, 중앙 RateLimitManager 사용)
         self.metrics = {
             'total_requests': 0,
             'successful_requests': 0,
@@ -139,8 +123,8 @@ class RestApiManager:
         start_time = time.time()
 
         try:
-            # Rate Limit 체크
-            await self._wait_for_rate_limit('public', tier_type)
+            # 중앙 Rate Limit Manager 사용
+            await self.rate_limiter.wait_for_slot(RateLimitType.QUOTATION_TICKER)
 
             # 실제 API 호출
             if enable_retry:
@@ -156,6 +140,9 @@ class RestApiManager:
             processed_response = await self._process_ticker_response(
                 response, symbols, tier_type, start_time
             )
+
+            # 중앙 Rate Limit Manager에 요청 기록
+            await self.rate_limiter.record_request(RateLimitType.QUOTATION_TICKER)
 
             # 메트릭 업데이트
             self.metrics['successful_requests'] += 1
@@ -330,53 +317,6 @@ class RestApiManager:
         # 기본적으로 재시도 허용 (보수적 접근)
         return True
 
-    async def _wait_for_rate_limit(self, api_type: str, tier_type: str) -> None:
-        """Rate Limit 대기
-
-        Args:
-            api_type: API 타입 ('public' 또는 'private')
-            tier_type: Tier 타입 ('warm' 또는 'cold')
-        """
-        current_time = time.time()
-
-        # Tier별 Rate Limit 조정
-        if tier_type == 'warm':
-            # Warm Tier는 더 빠른 응답을 위해 더 여유롭게
-            rate_factor = 0.8  # 80% 사용률로 제한
-        else:  # cold
-            # Cold Tier는 안정성 우선
-            rate_factor = 0.6  # 60% 사용률로 제한
-
-        # 초당 제한
-        per_second_limit = self.rate_limit_config[f'{api_type}_per_second']
-        safe_interval = (1.0 / per_second_limit) * rate_factor
-
-        # 마지막 요청 이후 경과 시간
-        time_elapsed = current_time - self.last_request_time[api_type]
-
-        if time_elapsed < safe_interval:
-            wait_time = safe_interval - time_elapsed
-            logger.debug(f"Rate Limit 대기 ({api_type}): {wait_time:.3f}초")
-            await asyncio.sleep(wait_time)
-
-        self.last_request_time[api_type] = time.time()
-        self.request_timestamps[api_type].append(self.last_request_time[api_type])
-
-        # 1분 이상 된 타임스탬프 제거
-        cutoff_time = current_time - 60.0
-        self.request_timestamps[api_type] = [
-            t for t in self.request_timestamps[api_type] if t > cutoff_time
-        ]
-
-        # 분당 제한 체크
-        requests_per_minute = len(self.request_timestamps[api_type])
-        minute_limit = self.rate_limit_config[f'{api_type}_per_minute']
-
-        if requests_per_minute >= minute_limit * rate_factor:
-            self.metrics['rate_limit_hits'] += 1
-            logger.warning(f"분당 Rate Limit 임계점 도달 ({api_type}): "
-                          f"{requests_per_minute}/{minute_limit}")
-
     async def _process_ticker_response(
         self,
         response: List[Dict],
@@ -461,11 +401,12 @@ class RestApiManager:
         """
         current_time = time.time()
 
-        # 최근 1분간 요청 수
-        recent_public = len([t for t in self.request_timestamps['public']
-                           if current_time - t < 60.0])
-        recent_private = len([t for t in self.request_timestamps['private']
-                            if current_time - t < 60.0])
+        # 중앙 RateLimitManager에서 정보 가져오기
+        rate_limit_stats = self.rate_limiter.get_status()
+
+        # 최근 1분간 요청 수는 중앙 RateLimitManager에서 관리하므로 추정값 사용
+        recent_public = 0  # 실제 구현에서는 rate_limiter에서 가져올 수 있음
+        recent_private = 0
 
         # 성공률 계산
         total_requests = self.metrics['total_requests']
@@ -489,10 +430,10 @@ class RestApiManager:
             'rate_limit_status': {
                 'public_requests_last_minute': recent_public,
                 'private_requests_last_minute': recent_private,
-                'public_limit_per_minute': self.rate_limit_config['public_per_minute'],
-                'private_limit_per_minute': self.rate_limit_config['private_per_minute'],
-                'public_usage_percentage': (recent_public / self.rate_limit_config['public_per_minute']) * 100,
-                'private_usage_percentage': (recent_private / self.rate_limit_config['private_per_minute']) * 100
+                'quotation_ticker_limit_per_second': 10,  # 업비트 공식 제한
+                'exchange_default_limit_per_second': 30,  # 업비트 공식 제한
+                'public_usage_percentage': min(100, (recent_public / 600) * 100),  # 10req/s * 60s = 600req/min
+                'private_usage_percentage': min(100, (recent_private / 1800) * 100)  # 30req/s * 60s = 1800req/min
             }
         }
 
@@ -507,8 +448,6 @@ class RestApiManager:
             'avg_retry_delay_ms': 0.0,
             'rate_limit_hits': 0
         }
-        self.request_timestamps = {'public': [], 'private': []}
-        self.last_request_time = {'public': 0.0, 'private': 0.0}
         logger.info("REST API 메트릭 초기화 완료")
 
     # =================================================================

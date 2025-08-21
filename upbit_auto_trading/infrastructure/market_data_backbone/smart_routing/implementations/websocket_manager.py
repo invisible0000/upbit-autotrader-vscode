@@ -12,6 +12,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
     UpbitWebSocketQuotationClient, WebSocketDataType
 )
+from ..core.rate_limit_manager import get_global_rate_limiter, RateLimitType
 
 logger = create_component_logger("WebSocketManager")
 
@@ -34,18 +35,10 @@ class WebSocketManager:
         self.active_subscriptions: Set[str] = set()
         self.subscription_callbacks: Dict[str, List] = {}
 
-        # Rate Limiting (업비트 WebSocket 제한)
-        self.rate_limit_config = {
-            'connect_per_second': 5,  # 초당 최대 5회 연결
-            'message_per_second': 5,  # 초당 최대 5회 메시지
-            'message_per_minute': 100  # 분당 최대 100회 메시지
-        }
+        # 중앙 Rate Limit Manager 사용
+        self.rate_limiter = get_global_rate_limiter()
 
-        # Rate Limit 추적
-        self.request_timestamps = []
-        self.last_request_time = 0.0
-
-        # 성능 메트릭
+        # 성능 메트릭 (Rate Limit 추적 제거)
         self.metrics = {
             'connection_count': 0,
             'reconnection_count': 0,
@@ -71,8 +64,8 @@ class WebSocketManager:
             try:
                 logger.info("WebSocket 연결 시도...")
 
-                # Rate Limit 체크
-                await self._wait_for_rate_limit('connect')
+                # Rate Limit 체크 (중앙 RateLimitManager 사용)
+                await self.rate_limiter.wait_for_slot(RateLimitType.WEBSOCKET_CONNECT)
 
                 # 실제 연결
                 success = await self.ws_client.connect()
@@ -80,6 +73,8 @@ class WebSocketManager:
                 if success:
                     self.is_connected = True
                     self.metrics['connection_count'] += 1
+                    # 중앙 Rate Limit Manager에 연결 요청 기록
+                    await self.rate_limiter.record_request(RateLimitType.WEBSOCKET_CONNECT)
                     logger.info("✅ WebSocket 연결 성공")
                 else:
                     logger.error("❌ WebSocket 연결 실패")
@@ -131,8 +126,8 @@ class WebSocketManager:
             raise Exception("WebSocket 연결 실패")
 
         try:
-            # Rate Limit 체크
-            await self._wait_for_rate_limit('message')
+            # Rate Limit 체크 (중앙 RateLimitManager 사용)
+            await self.rate_limiter.wait_for_slot(RateLimitType.WEBSOCKET_MESSAGE)
 
             # 구독 요청
             success = await self.ws_client.subscribe_ticker(symbols)
@@ -142,6 +137,9 @@ class WebSocketManager:
             # 구독 정보 업데이트
             self.active_subscriptions.update(symbols)
             self.metrics['subscription_count'] += len(symbols)
+
+            # 중앙 Rate Limit Manager에 메시지 요청 기록
+            await self.rate_limiter.record_request(RateLimitType.WEBSOCKET_MESSAGE)
 
             # 실시간 데이터 수집
             return await self._collect_ticker_data(symbols, timeout, 'live')
@@ -167,8 +165,8 @@ class WebSocketManager:
             raise Exception("WebSocket 연결 실패")
 
         try:
-            # Rate Limit 체크 (배치는 더 관대한 제한)
-            await self._wait_for_rate_limit('message', margin_factor=0.5)
+            # Rate Limit 체크 (중앙 RateLimitManager 사용)
+            await self.rate_limiter.wait_for_slot(RateLimitType.WEBSOCKET_MESSAGE)
 
             # 구독 요청
             success = await self.ws_client.subscribe_ticker(symbols)
@@ -192,38 +190,6 @@ class WebSocketManager:
         if not self.is_connected:
             return await self.connect()
         return True
-
-    async def _wait_for_rate_limit(self, limit_type: str, margin_factor: float = 1.0) -> None:
-        """Rate Limit 대기
-
-        Args:
-            limit_type: 제한 타입 ('connect' 또는 'message')
-            margin_factor: 안전 마진 계수 (1.0 = 100% 제한, 0.5 = 50% 제한)
-        """
-        current_time = time.time()
-
-        if limit_type == 'connect':
-            base_interval = 1.0 / self.rate_limit_config['connect_per_second']
-        else:  # message
-            base_interval = 1.0 / self.rate_limit_config['message_per_second']
-
-        # 안전 마진 적용
-        safe_interval = base_interval * margin_factor
-
-        # 마지막 요청 이후 경과 시간
-        time_elapsed = current_time - self.last_request_time
-
-        if time_elapsed < safe_interval:
-            wait_time = safe_interval - time_elapsed
-            logger.debug(f"Rate Limit 대기: {wait_time:.3f}초")
-            await asyncio.sleep(wait_time)
-
-        self.last_request_time = time.time()
-        self.request_timestamps.append(self.last_request_time)
-
-        # 1분 이상 된 타임스탬프 제거
-        cutoff_time = current_time - 60.0
-        self.request_timestamps = [t for t in self.request_timestamps if t > cutoff_time]
 
     async def _collect_ticker_data(
         self,
@@ -313,8 +279,8 @@ class WebSocketManager:
         Returns:
             상세한 연결 상태 정보
         """
-        current_time = time.time()
-        recent_requests = len([t for t in self.request_timestamps if current_time - t < 60.0])
+        # 중앙 RateLimitManager에서 정보 가져오기
+        rate_limit_stats = self.rate_limiter.get_status()
 
         return {
             'is_connected': self.is_connected,
@@ -322,9 +288,10 @@ class WebSocketManager:
             'subscribed_symbols': list(self.active_subscriptions),
             'metrics': self.metrics.copy(),
             'rate_limit_status': {
-                'requests_last_minute': recent_requests,
-                'requests_per_minute_limit': self.rate_limit_config['message_per_minute'],
-                'usage_percentage': (recent_requests / self.rate_limit_config['message_per_minute']) * 100
+                'websocket_message_limit_per_second': 5,  # 업비트 공식 제한
+                'websocket_connect_limit_per_second': 5,  # 업비트 공식 제한
+                'websocket_message_limit_per_minute': 100,  # 업비트 공식 제한
+                'central_rate_limiter_status': 'active'  # 중앙 관리 중
             },
             'performance': {
                 'avg_latency_ms': self.metrics['avg_latency_ms'],
@@ -343,5 +310,4 @@ class WebSocketManager:
             'error_count': 0,
             'avg_latency_ms': 0.0
         }
-        self.request_timestamps.clear()
         logger.info("WebSocket 메트릭 초기화 완료")

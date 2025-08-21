@@ -15,7 +15,6 @@ import asyncio
 import time
 from typing import Dict, Any, Optional, Set
 from dataclasses import dataclass, field
-from threading import RLock
 import sys
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -62,7 +61,7 @@ class MarketDataCache:
 
         # 캐시 저장소
         self._cache: Dict[str, CacheEntry] = {}
-        self._lock = RLock()  # 스레드 안전성
+        self._lock = asyncio.Lock()  # asyncio 호환 락
 
         # 설정
         self.max_size = max_size
@@ -113,7 +112,7 @@ class MarketDataCache:
                 pass
             logger.info("캐시 정리 작업 정지")
 
-    def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Optional[Any]:
         """캐시에서 데이터 조회
 
         Args:
@@ -124,7 +123,7 @@ class MarketDataCache:
         """
         start_time = time.time()
 
-        with self._lock:
+        async with self._lock:
             entry = self._cache.get(key)
 
             if entry is None:
@@ -150,7 +149,7 @@ class MarketDataCache:
             logger.debug(f"캐시 히트: {key} (접근 {entry.access_count}회)")
             return entry.data
 
-    def set(self, key: str, data: Any, ttl: Optional[float] = None, data_type: str = 'default') -> None:
+    async def set(self, key: str, data: Any, ttl: Optional[float] = None, data_type: str = 'default') -> None:
         """캐시에 데이터 저장
 
         Args:
@@ -164,7 +163,7 @@ class MarketDataCache:
 
         start_time = time.time()
 
-        with self._lock:
+        async with self._lock:
             # 크기 제한 확인
             if len(self._cache) >= self.max_size and key not in self._cache:
                 self._evict_lru()
@@ -183,7 +182,7 @@ class MarketDataCache:
 
         self._update_response_time(start_time)
 
-    def delete(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """캐시에서 데이터 삭제
 
         Args:
@@ -192,7 +191,7 @@ class MarketDataCache:
         Returns:
             삭제 성공 여부
         """
-        with self._lock:
+        async with self._lock:
             if key in self._cache:
                 del self._cache[key]
                 self.metrics['deletes'] += 1
@@ -200,15 +199,15 @@ class MarketDataCache:
                 return True
             return False
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """모든 캐시 데이터 삭제"""
-        with self._lock:
+        async with self._lock:
             count = len(self._cache)
             self._cache.clear()
             self.metrics['deletes'] += count
             logger.info(f"캐시 전체 삭제: {count}개 엔트리")
 
-    def get_keys(self, pattern: Optional[str] = None) -> Set[str]:
+    async def get_keys(self, pattern: Optional[str] = None) -> Set[str]:
         """캐시 키 목록 조회
 
         Args:
@@ -217,7 +216,7 @@ class MarketDataCache:
         Returns:
             키 집합
         """
-        with self._lock:
+        async with self._lock:
             if pattern is None:
                 return set(self._cache.keys())
             else:
@@ -227,9 +226,9 @@ class MarketDataCache:
         """현재 캐시 크기"""
         return len(self._cache)
 
-    def get_memory_usage(self) -> Dict[str, Any]:
+    async def get_memory_usage(self) -> Dict[str, Any]:
         """메모리 사용량 정보"""
-        with self._lock:
+        async with self._lock:
             total_size = sum(sys.getsizeof(entry.data) for entry in self._cache.values())
             return {
                 'entry_count': len(self._cache),
@@ -315,7 +314,7 @@ class MarketDataCache:
         """만료된 엔트리 정리"""
         expired_keys = []
 
-        with self._lock:
+        async with self._lock:
             for key, entry in self._cache.items():
                 if entry.is_expired:
                     expired_keys.append(key)

@@ -126,26 +126,57 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
         context: RoutingContext,
         priority: Priority = Priority.NORMAL
     ) -> RoutingResponse:
-        """데이터 요청 라우팅"""
+        """데이터 요청 라우팅 (Tier Fallback 지원)"""
         start_time = time.time()
         logger.info(f"라우팅 요청 처리 시작 - Request: {request.request_id}, Symbols: {len(request.symbols)}")
 
         try:
-            # 1. 최적 Tier 결정
-            optimal_tier = await self.get_optimal_tier(request, context, self._current_network_usage)
-            logger.info(f"최적 Tier 선택: {optimal_tier.value}")
+            # 1. Tier 우선순위 목록 생성 (점수순 정렬)
+            ranked_tiers = await self.get_ranked_tiers(request, context, self._current_network_usage)
+            logger.info(f"Tier 우선순위: {[tier.value for tier in ranked_tiers]}")
 
-            # 2. Tier별 라우팅 실행
-            response = await self._execute_tier_routing(request, context, optimal_tier, start_time)
+            # 2. Tier Fallback 실행
+            last_error = None
+            for i, tier in enumerate(ranked_tiers):
+                try:
+                    logger.info(f"[{i + 1}/{len(ranked_tiers)}] {tier.value} Tier 시도")
 
-            # 3. 통계 업데이트
-            await self._update_routing_stats(optimal_tier, response)
+                    # Tier별 라우팅 실행
+                    response = await self._execute_tier_routing(request, context, tier, start_time)
 
-            logger.info(f"라우팅 완료 - {response.performance.response_time_ms:.2f}ms, 성공률: {response.success_rate:.2%}")
-            return response
+                    # 성공 시 즉시 반환
+                    if response.status == ResponseStatus.SUCCESS:
+                        await self._update_routing_stats(tier, response)
+                        logger.info(
+                            f"✅ {tier.value} Tier 성공 - "
+                            f"{response.performance.response_time_ms:.2f}ms, "
+                            f"성공률: {response.success_rate:.2%}"
+                        )
+                        return response
+
+                    # 부분 실패도 기록
+                    last_error = response.errors[0] if response.errors else f"{tier.value} Tier 실패"
+                    logger.warning(f"⚠️ {tier.value} Tier 실패: {last_error}")
+
+                    # 통계는 실패도 기록
+                    await self._update_routing_stats(tier, response)
+
+                except Exception as tier_error:
+                    last_error = str(tier_error)
+                    logger.warning(f"❌ {tier.value} Tier 예외 발생: {last_error}")
+
+                # 다음 Tier로 Fallback
+                if i < len(ranked_tiers) - 1:
+                    next_tier = ranked_tiers[i + 1]
+                    logger.info(f"🔄 {next_tier.value} Tier로 Fallback...")
+
+            # 모든 Tier가 실패한 경우
+            final_error = last_error or "알 수 없는 오류"
+            logger.error(f"❌ 모든 Tier에서 데이터 조회 실패. 마지막 오류: {final_error}")
+            return self._create_fallback_failure_response(request, final_error, ranked_tiers, start_time)
 
         except Exception as e:
-            logger.error(f"라우팅 실패: {str(e)}")
+            logger.error(f"라우팅 엔진 치명적 오류: {str(e)}")
             return self._create_error_response(request, e, start_time)
 
     async def get_optimal_tier(
@@ -154,8 +185,20 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
         context: RoutingContext,
         current_network_usage: float
     ) -> RoutingTier:
-        """최적 라우팅 Tier 결정"""
-        logger.debug(f"Tier 선택 분석 - Context: {context.usage_context.value}, Network: {current_network_usage:.2%}")
+        """최적 라우팅 Tier 결정 (단일 Tier 선택용 - 호환성 유지)"""
+        ranked_tiers = await self.get_ranked_tiers(request, context, current_network_usage)
+        optimal_tier = ranked_tiers[0] if ranked_tiers else RoutingTier.COLD_REST
+        logger.info(f"선택된 최적 Tier: {optimal_tier.value}")
+        return optimal_tier
+
+    async def get_ranked_tiers(
+        self,
+        request: RoutingRequest,
+        context: RoutingContext,
+        current_network_usage: float
+    ) -> List[RoutingTier]:
+        """Tier를 점수순으로 정렬하여 반환 (Fallback 우선순위)"""
+        logger.debug(f"Tier 우선순위 계산 - Context: {context.usage_context.value}")
 
         # Usage Context별 Tier 우선순위 매트릭스
         context_tier_preferences = self._get_context_tier_preferences(context.usage_context)
@@ -166,7 +209,7 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
         # 네트워크 제약 확인
         network_constraints = self._evaluate_network_constraints(context.network_policy, current_network_usage)
 
-        # 가중치 기반 Tier 점수 계산
+        # 모든 Tier의 점수 계산
         tier_scores = {}
         for tier in RoutingTier:
             score = self._calculate_tier_score(
@@ -175,11 +218,12 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
             tier_scores[tier] = score
             logger.debug(f"{tier.value}: {score:.3f}")
 
-        # 최고 점수 Tier 선택
-        optimal_tier = max(tier_scores.keys(), key=lambda tier: tier_scores[tier])
-        logger.info(f"선택된 Tier: {optimal_tier.value} (점수: {tier_scores[optimal_tier]:.3f})")
+        # 점수순으로 정렬 (높은 점수부터)
+        ranked_tiers = sorted(tier_scores.keys(), key=lambda tier: tier_scores[tier], reverse=True)
 
-        return optimal_tier
+        logger.info(f"Tier 우선순위 결정: {[(tier.value, f'{tier_scores[tier]:.3f}') for tier in ranked_tiers]}")
+
+        return ranked_tiers
 
     def _get_context_tier_preferences(self, usage_context: UsageContext) -> Dict[RoutingTier, float]:
         """Usage Context별 Tier 선호도"""
@@ -338,6 +382,9 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
             processed_at = datetime.now()
             responded_at = datetime.now()
 
+            # 데이터 유효성 검사
+            is_complete_success, successful_symbols, failed_symbols = self._validate_data_result(data_result, request.symbols)
+
             # 성능 메트릭 생성
             response_time_ms = (time.time() - start_time) * 1000
             performance = PerformanceMetrics(
@@ -348,20 +395,59 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
                 symbols_per_second=len(request.symbols) / (response_time_ms / 1000.0) if response_time_ms > 0 else 0.0
             )
 
-            logger.info(f"✅ Tier {tier.value} 응답 완료 - {len(request.symbols)}개 심볼, {response_time_ms:.2f}ms")
+            logger.info(f"✅ Tier {tier.value} 응답 완료 - {len(successful_symbols)}개 심볼 성공, {response_time_ms:.2f}ms")
 
-            return RoutingResponse.create_success_response(
-                request=request,
-                tier_used=tier,
-                data=data_result,
-                performance=performance,
-                processed_at=processed_at,
-                responded_at=responded_at
-            )
+            # 완전 성공 vs 부분 성공 판단
+            if is_complete_success:
+                return RoutingResponse.create_success_response(
+                    request=request,
+                    tier_used=tier,
+                    data=data_result,
+                    performance=performance,
+                    processed_at=processed_at,
+                    responded_at=responded_at
+                )
+            else:
+                # 부분 성공 - Fallback 유도
+                failed_preview = ', '.join(failed_symbols[:3])
+                if len(failed_symbols) > 3:
+                    failed_preview += '...'
+                errors = [f"부분 실패: {len(failed_symbols)}개 심볼 누락 ({failed_preview})"]
+                logger.warning(f"⚠️ Tier {tier.value} 부분 성공 - {len(failed_symbols)}개 심볼 누락")
+                raise Exception(f"부분 실패: {errors[0]}")
 
         except Exception as e:
             logger.error(f"❌ Tier {tier.value} 라우팅 실패: {e}")
             return self._create_error_response(request, e, start_time)
+
+    def _validate_data_result(
+        self,
+        data_result: Dict[str, Any],
+        requested_symbols: List[str]
+    ) -> tuple[bool, List[str], List[str]]:
+        """데이터 결과 유효성 검사
+
+        Returns:
+            (완전_성공_여부, 성공한_심볼들, 실패한_심볼들)
+        """
+        if not isinstance(data_result, dict):
+            return False, [], requested_symbols
+
+        successful_symbols = []
+        failed_symbols = []
+
+        for symbol in requested_symbols:
+            if symbol in data_result and data_result[symbol] is not None:
+                # None이 아닌 유효한 데이터가 있음
+                if isinstance(data_result[symbol], dict) and data_result[symbol]:
+                    successful_symbols.append(symbol)
+                else:
+                    failed_symbols.append(symbol)
+            else:
+                failed_symbols.append(symbol)
+
+        is_complete_success = len(failed_symbols) == 0
+        return is_complete_success, successful_symbols, failed_symbols
 
     async def _execute_ticker_routing(self, request: RoutingRequest, tier: RoutingTier) -> Dict[str, Any]:
         """Ticker 데이터 Tier별 라우팅"""
@@ -420,6 +506,35 @@ class AdaptiveRoutingEngine(IMarketDataRouter):
             request=request,
             tier_used=RoutingTier.COLD_REST,  # 기본 Tier
             error_message=str(error),
+            processed_at=processed_at,
+            responded_at=responded_at
+        )
+
+    def _create_fallback_failure_response(
+        self,
+        request: RoutingRequest,
+        last_error: str,
+        attempted_tiers: List[RoutingTier],
+        start_time: float
+    ) -> RoutingResponse:
+        """모든 Tier Fallback 실패시 종합 오류 응답 생성"""
+        processed_at = datetime.now()
+        responded_at = datetime.now()
+
+        # 종합 오류 메시지 생성
+        attempted_tier_names = [tier.value for tier in attempted_tiers]
+        comprehensive_error = (
+            f"모든 Tier에서 데이터 조회 실패. "
+            f"시도된 Tier: {attempted_tier_names}. "
+            f"마지막 오류: {last_error}"
+        )
+
+        logger.error(f"Tier Fallback 완전 실패: {comprehensive_error}")
+
+        return RoutingResponse.create_error_response(
+            request=request,
+            tier_used=attempted_tiers[0] if attempted_tiers else RoutingTier.COLD_REST,  # 첫 번째 시도 Tier
+            error_message=comprehensive_error,
             processed_at=processed_at,
             responded_at=responded_at
         )

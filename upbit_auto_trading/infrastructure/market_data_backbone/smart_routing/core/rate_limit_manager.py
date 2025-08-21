@@ -21,16 +21,29 @@ logger = create_component_logger("RateLimitManager")
 
 
 class RateLimitType(Enum):
-    """Rate Limit 타입"""
+    """Rate Limit 타입 (업비트 2025년 최신 정책)"""
+    # WebSocket 관련
     WEBSOCKET_CONNECT = "websocket_connect"  # 초당 5회
     WEBSOCKET_MESSAGE = "websocket_message"  # 초당 5회, 분당 100회
+
+    # REST API - Quotation (시세 조회, IP 단위)
+    QUOTATION_MARKET = "quotation_market"      # 초당 10회 - 페어 목록
+    QUOTATION_CANDLE = "quotation_candle"      # 초당 10회 - 캔들 데이터
+    QUOTATION_TRADE = "quotation_trade"        # 초당 10회 - 체결 이력
+    QUOTATION_TICKER = "quotation_ticker"      # 초당 10회 - 현재가
+    QUOTATION_ORDERBOOK = "quotation_orderbook" # 초당 10회 - 호가
+
+    # REST API - Exchange (거래/자산, 계정 단위)
+    EXCHANGE_DEFAULT = "exchange_default"      # 초당 30회 - 잔고, 주문조회 등
+    EXCHANGE_ORDER = "exchange_order"          # 초당 8회 - 주문 생성
+    EXCHANGE_ORDER_CANCEL_ALL = "exchange_order_cancel_all"  # 2초당 1회
 
 
 @dataclass
 class RateLimitRule:
     """Rate Limit 규칙"""
     limit_type: RateLimitType
-    max_requests_per_second: int
+    max_requests_per_second: float  # float로 변경 (2초당 1회 = 0.5초당 1회 지원)
     max_requests_per_minute: Optional[int] = None
     max_requests_per_hour: Optional[int] = None
 
@@ -59,8 +72,9 @@ class RateLimitBucket:
 class UpbitRateLimitManager:
     """업비트 Rate Limit 관리자"""
 
-    # 업비트 공식 Rate Limit 규칙
+    # 업비트 공식 Rate Limit 규칙 (2025년 최신 정책)
     UPBIT_RATE_LIMITS = {
+        # WebSocket 관련
         RateLimitType.WEBSOCKET_CONNECT: RateLimitRule(
             limit_type=RateLimitType.WEBSOCKET_CONNECT,
             max_requests_per_second=5,
@@ -73,6 +87,58 @@ class UpbitRateLimitManager:
             max_requests_per_minute=100,
             adaptive_mode=True,
             min_interval_ms=200.0
+        ),
+
+        # REST API - Quotation (시세 조회, IP 단위, 초당 10회)
+        RateLimitType.QUOTATION_MARKET: RateLimitRule(
+            limit_type=RateLimitType.QUOTATION_MARKET,
+            max_requests_per_second=10,
+            adaptive_mode=True,
+            min_interval_ms=100.0
+        ),
+        RateLimitType.QUOTATION_CANDLE: RateLimitRule(
+            limit_type=RateLimitType.QUOTATION_CANDLE,
+            max_requests_per_second=10,
+            adaptive_mode=True,
+            min_interval_ms=100.0
+        ),
+        RateLimitType.QUOTATION_TRADE: RateLimitRule(
+            limit_type=RateLimitType.QUOTATION_TRADE,
+            max_requests_per_second=10,
+            adaptive_mode=True,
+            min_interval_ms=100.0
+        ),
+        RateLimitType.QUOTATION_TICKER: RateLimitRule(
+            limit_type=RateLimitType.QUOTATION_TICKER,
+            max_requests_per_second=10,
+            adaptive_mode=True,
+            min_interval_ms=100.0
+        ),
+        RateLimitType.QUOTATION_ORDERBOOK: RateLimitRule(
+            limit_type=RateLimitType.QUOTATION_ORDERBOOK,
+            max_requests_per_second=10,
+            adaptive_mode=True,
+            min_interval_ms=100.0
+        ),
+
+        # REST API - Exchange (거래/자산, 계정 단위)
+        RateLimitType.EXCHANGE_DEFAULT: RateLimitRule(
+            limit_type=RateLimitType.EXCHANGE_DEFAULT,
+            max_requests_per_second=30,
+            adaptive_mode=True,
+            min_interval_ms=34.0  # 1000ms / 30 ≈ 33.3ms
+        ),
+        RateLimitType.EXCHANGE_ORDER: RateLimitRule(
+            limit_type=RateLimitType.EXCHANGE_ORDER,
+            max_requests_per_second=8,
+            adaptive_mode=True,
+            min_interval_ms=125.0  # 1000ms / 8 = 125ms
+        ),
+        RateLimitType.EXCHANGE_ORDER_CANCEL_ALL: RateLimitRule(
+            limit_type=RateLimitType.EXCHANGE_ORDER_CANCEL_ALL,
+            max_requests_per_second=0.5,  # 2초당 1회 = 0.5초당 1회
+            adaptive_mode=True,
+            min_interval_ms=2000.0  # 2초
         )
     }
 
