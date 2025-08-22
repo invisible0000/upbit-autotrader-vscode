@@ -144,6 +144,47 @@ class SmartRouterMainAdapter:
         # 폴백: 기존 방식 또는 에러 반환
         return await self._fallback_candle_request(symbol_list, interval, count)
 
+    async def get_trades(
+        self,
+        symbols: Union[str, List[str]],
+        count: int = 100,
+        realtime_priority: RealtimePriority = RealtimePriority.MEDIUM
+    ) -> Dict[str, Any]:
+        """체결 데이터 조회 (메인 시스템 호환 인터페이스)
+
+        Args:
+            symbols: 심볼 또는 심볼 리스트
+            count: 조회할 체결 개수 (최대 500개)
+            realtime_priority: 실시간 우선순위
+
+        Returns:
+            체결 데이터 (기존 형식 호환)
+        """
+        if not self.is_initialized:
+            await self.initialize()
+
+        # 심볼 정규화
+        symbol_list = [symbols] if isinstance(symbols, str) else symbols
+
+        if self.enable_smart_routing and self.smart_router:
+            try:
+                result = await self.smart_router.get_trades(
+                    symbol_list,
+                    count=min(count, 500),  # API 최대 제한
+                    realtime_priority=realtime_priority
+                )
+
+                if result["success"]:
+                    return self._convert_to_legacy_format(result, "trades")
+                else:
+                    logger.warning(f"스마트 라우터 체결 요청 실패: {result.get('error', 'Unknown')}")
+
+            except Exception as e:
+                logger.error(f"스마트 라우터 체결 요청 오류: {e}")
+
+        # 폴백: 기존 방식 또는 에러 반환
+        return await self._fallback_trades_request(symbol_list, count)
+
     async def get_orderbook_data(
         self,
         symbols: Union[str, List[str]],
@@ -232,6 +273,18 @@ class SmartRouterMainAdapter:
     async def _fallback_candle_request(self, symbols: List[str], interval: str, count: int) -> Dict[str, Any]:
         """폴백 캔들 요청 (기존 방식)"""
         logger.warning("폴백 캔들 요청 - 기존 API 클라이언트 직접 사용")
+        # TODO: 기존 UpbitPublicClient 직접 사용
+        return {
+            "success": False,
+            "error": "Fallback not implemented",
+            "data": None,
+            "timestamp": datetime.now().isoformat(),
+            "source": "fallback"
+        }
+
+    async def _fallback_trades_request(self, symbols: List[str], count: int) -> Dict[str, Any]:
+        """폴백 체결 요청 (기존 방식)"""
+        logger.warning("폴백 체결 요청 - 기존 API 클라이언트 직접 사용")
         # TODO: 기존 UpbitPublicClient 직접 사용
         return {
             "success": False,

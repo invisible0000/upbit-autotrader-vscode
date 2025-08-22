@@ -5,6 +5,7 @@ Smart Data Provider 메인 클래스
 from typing import List, Dict, Optional, Union, Any
 from datetime import datetime
 import time
+import asyncio
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
@@ -16,6 +17,8 @@ from ..adapters.smart_router_adapter import SmartRouterAdapter
 from ..cache.memory_realtime_cache import MemoryRealtimeCache
 from ..cache.cache_coordinator import CacheCoordinator
 from ..cache.storage_performance_monitor import get_performance_monitor
+from ..processing.request_splitter import RequestSplitter
+from ..processing.response_merger import ResponseMerger
 
 logger = create_component_logger("SmartDataProvider")
 
@@ -68,6 +71,10 @@ class SmartDataProvider:
         # 성능 모니터 (Phase 2.4)
         self.performance_monitor = get_performance_monitor()
 
+        # 요청 분할 및 병합 처리기 (Phase 3.1)
+        self.request_splitter = RequestSplitter()
+        self.response_merger = ResponseMerger()
+
         # 기존 메모리 캐시 (호환성 유지)
         self._memory_cache: Dict[str, Dict] = {}
         self._cache_timestamps: Dict[str, datetime] = {}
@@ -116,12 +123,12 @@ class SmartDataProvider:
 
         logger.debug(f"캔들 데이터 요청: {symbol} {timeframe}, count={count}, priority={priority}")
 
-        # 체결 개수 범위 검증 (업비트 API 공식 한계)
-        if count is not None and (count <= 0 or count > 200):
+        # 기본 캔들 개수 검증 (0 이하만 방지)
+        if count is not None and count <= 0:
             logger.warning(f"유효하지 않은 캔들 개수: {count}")
             return DataResponse(
                 success=False,
-                error=f"캔들 개수는 1~200 범위여야 합니다. 입력값: {count}",
+                error=f"캔들 개수는 1 이상이어야 합니다. 입력값: {count}",
                 metadata=ResponseMetadata(
                     priority_used=priority,
                     source="validation_error",
@@ -157,15 +164,113 @@ class SmartDataProvider:
                     metadata=metadata
                 )
 
-            # 2. Smart Router를 통한 API 호출
+            # 2. 요청 분할 검사 및 Smart Router 호출
             logger.info(f"캔들 캐시 미스: {symbol} {timeframe}, Smart Router 시도")
 
-            smart_router_result = await self.smart_router.get_candles(
+            # RequestSplitter로 대용량 요청 분할 검사
+            datetime_start = None
+            datetime_end = None
+            if start_time:
+                try:
+                    datetime_start = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                except:
+                    logger.warning(f"시작 시간 파싱 실패: {start_time}")
+            if end_time:
+                try:
+                    datetime_end = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                except:
+                    logger.warning(f"종료 시간 파싱 실패: {end_time}")
+
+            # 분할 요청 생성
+            split_requests = self.request_splitter.split_candle_request(
+                request_id=f"candle_{symbol}_{timeframe}_{int(time.time())}",
                 symbol=symbol,
                 timeframe=timeframe,
                 count=count,
-                start_time=start_time,
-                end_time=end_time,
+                start_time=datetime_start,
+                end_time=datetime_end
+            )
+
+            if len(split_requests) > 1:
+                logger.info(f"대용량 캔들 요청 분할: {len(split_requests)}개 요청으로 분할")
+
+                # 분할된 요청들을 병렬 처리
+                all_candle_data = []
+
+                for split_req in split_requests:
+                    logger.debug(f"분할 요청 처리: {split_req.split_id} ({split_req.split_index + 1}/{split_req.total_splits})")
+
+                    # 분할된 요청의 시간을 문자열로 변환
+                    split_start_str = split_req.start_time.isoformat() if split_req.start_time else None
+                    split_end_str = split_req.end_time.isoformat() if split_req.end_time else None
+
+                    split_result = await self.smart_router.get_candles(
+                        symbol=split_req.symbol,
+                        timeframe=split_req.timeframe,
+                        count=split_req.count,
+                        start_time=split_start_str,
+                        end_time=split_end_str,
+                        priority=priority
+                    )
+
+                    if split_result.get('success', False):
+                        # Smart Router 응답에서 실제 캔들 리스트 추출
+                        raw_data = split_result.get('data', {})
+                        if isinstance(raw_data, dict):
+                            split_candles = raw_data.get('_candles_list', [])
+                        else:
+                            split_candles = raw_data if isinstance(raw_data, list) else []
+
+                        all_candle_data.extend(split_candles)
+                        logger.debug(f"분할 요청 완료: {len(split_candles)}개 캔들")
+                    else:
+                        error_msg = split_result.get('error', f'분할 요청 실패: {split_req.split_id}')
+                        logger.error(f"분할 요청 실패: {error_msg}")
+                        return DataResponse(
+                            success=False,
+                            error=f"분할 요청 실패: {error_msg}",
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="split_request_error",
+                                response_time_ms=time.time() * 1000 - start_time_ms,
+                                cache_hit=False
+                            )
+                        )
+
+                # 분할된 결과 병합
+                logger.info(f"분할 요청 완료: 총 {len(all_candle_data)}개 캔들 수집")
+
+                end_time_ms = time.time() * 1000
+                response_time = end_time_ms - start_time_ms
+
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source="smart_router_split",
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(all_candle_data)
+                )
+
+                # API로 받은 데이터를 SQLite 캐시에 저장
+                try:
+                    await self._save_candles_to_cache(symbol, timeframe, all_candle_data)
+                    logger.debug(f"분할 캔들 데이터 캐시 저장 완료: {symbol} {timeframe}, {len(all_candle_data)}개")
+                except Exception as e:
+                    logger.warning(f"분할 캔들 데이터 캐시 저장 실패: {symbol} {timeframe}, {e}")
+
+                return DataResponse(
+                    success=True,
+                    data=all_candle_data,
+                    metadata=metadata
+                )
+            else:
+                # 단일 요청 처리 (기존 로직)
+                smart_router_result = await self.smart_router.get_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    count=count,
+                    start_time=start_time,
+                    end_time=end_time,
                 priority=priority
             )
 
@@ -609,7 +714,14 @@ class SmartDataProvider:
                 smart_result = await self.smart_router.get_trades(symbol, count, priority)
 
                 if smart_result.get('success', False):
-                    trades_data = smart_result.get('data', [])
+                    raw_trades_data = smart_result.get('data', {})
+
+                    # Smart Router 응답에서 실제 체결 리스트 추출
+                    if isinstance(raw_trades_data, dict):
+                        trades_data = raw_trades_data.get('data', [])
+                    else:
+                        trades_data = raw_trades_data if isinstance(raw_trades_data, list) else []
+
                     if trades_data:
                         # 메모리 캐시에 저장 (최적 TTL 적용)
                         optimal_ttl = self.cache_coordinator.get_optimal_ttl("trades", symbol)

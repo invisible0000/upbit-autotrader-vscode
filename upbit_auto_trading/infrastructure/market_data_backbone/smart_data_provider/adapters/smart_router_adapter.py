@@ -296,12 +296,30 @@ class SmartRouterAdapter:
         try:
             logger.debug(f"Smart Router 체결 요청: {symbol}, count={count}")
 
-            # 체결 내역은 현재 Smart Router에서 미구현
-            return {
-                'success': False,
-                'error': 'Smart Router에서 체결 내역 미구현',
-                'source': 'smart_router_unsupported'
-            }
+            # Smart Router를 통한 체결 데이터 요청
+            result = await self.smart_router_adapter.get_trades(
+                symbols=[symbol],
+                count=min(count, 500),  # API 최대 제한 적용
+                realtime_priority=priority
+            )
+
+            if result.get('success', False):
+                trades = result.get('data', [])
+
+                logger.info(f"Smart Router 체결 성공: {symbol}, {len(trades)}개")
+                return {
+                    'success': True,
+                    'data': trades,
+                    'source': 'smart_router',
+                    'channel': result.get('metadata', {}).get('channel', 'unknown')
+                }
+            else:
+                logger.error(f"Smart Router 체결 실패: {symbol}, {result.get('error')}")
+                return {
+                    'success': False,
+                    'error': result.get('error', 'Smart Router 체결 요청 실패'),
+                    'source': 'smart_router_error'
+                }
 
         except Exception as e:
             logger.error(f"Smart Router 체결 요청 예외: {symbol}, {e}")
