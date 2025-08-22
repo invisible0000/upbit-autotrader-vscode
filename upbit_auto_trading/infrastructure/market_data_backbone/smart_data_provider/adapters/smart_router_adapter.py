@@ -74,7 +74,15 @@ class SmartRouterAdapter:
 
             if result.get('success', False):
                 candles = result.get('data', [])
-                logger.info(f"Smart Router 캔들 성공: {symbol} {timeframe}, {len(candles)}개")
+
+                # 실제 캔들 수 계산 (data가 dict이면 _candles_list에서, list이면 직접)
+                if isinstance(candles, dict):
+                    actual_candles = candles.get('_candles_list', [])
+                    candle_count = len(actual_candles)
+                else:
+                    candle_count = len(candles) if isinstance(candles, list) else 0
+
+                logger.info(f"Smart Router 캔들 성공: {symbol} {timeframe}, {candle_count}개")
                 return {
                     'success': True,
                     'data': candles,

@@ -7,13 +7,15 @@ from datetime import datetime
 import time
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.market_data_backbone.candle_table_manager import CandleTableManager
+from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
+from upbit_auto_trading.infrastructure.repositories.sqlite_candle_repository import SqliteCandleRepository
+from upbit_auto_trading.infrastructure.database.database_manager import DatabaseConnectionProvider
 from ..models.priority import Priority
 from ..models.responses import DataResponse, ResponseMetadata
 from ..adapters.smart_router_adapter import SmartRouterAdapter
 from ..cache.memory_realtime_cache import MemoryRealtimeCache
 from ..cache.cache_coordinator import CacheCoordinator
-from ..cache.storage_performance_monitor import get_performance_monitor, OperationType, StorageLayer
+from ..cache.storage_performance_monitor import get_performance_monitor
 
 logger = create_component_logger("SmartDataProvider")
 
@@ -29,9 +31,30 @@ class SmartDataProvider:
     - 자동 분할/병합 처리
     """
 
-    def __init__(self, db_path: str = "data/market_data.sqlite3"):
+    def __init__(self,
+                 candle_repository: Optional[CandleRepositoryInterface] = None,
+                 db_path: str = "data/market_data.sqlite3"):
+        """
+        Args:
+            candle_repository: 캔들 Repository (의존성 주입)
+            db_path: 레거시 호환성을 위한 DB 경로 (Repository가 없을 때만 사용)
+        """
         self.db_path = db_path
-        self.candle_manager = CandleTableManager(db_path)
+
+        # Repository 패턴 사용 (DDD 준수)
+        if candle_repository:
+            self.candle_repository = candle_repository
+        else:
+            # 레거시 호환성: DatabaseManager 자동 초기화
+            db_provider = DatabaseConnectionProvider()
+            if not hasattr(db_provider, '_db_manager') or db_provider._db_manager is None:
+                db_provider.initialize({
+                    "market_data": db_path,
+                    "settings": "data/settings.sqlite3",
+                    "strategies": "data/strategies.sqlite3"
+                })
+            self.candle_repository = SqliteCandleRepository(db_provider.get_manager())
+            logger.info("SqliteCandleRepository 자동 초기화 완료 (레거시 호환성)")
 
         # Smart Router 어댑터
         self.smart_router = SmartRouterAdapter()
@@ -55,6 +78,13 @@ class SmartDataProvider:
         self._api_calls = 0
 
         logger.info("Smart Data Provider 초기화 완료 - 캐시 조정자 포함")
+
+    # =====================================
+    # 유틸리티 메서드
+    # =====================================
+
+    # 검증 로직은 validation/input_validator.py로 분리됨
+    # 마켓 API에서 받은 데이터는 검증 불필요
 
     # =====================================
     # 캔들 데이터 API
@@ -85,6 +115,20 @@ class SmartDataProvider:
         self._request_count += 1
 
         logger.debug(f"캔들 데이터 요청: {symbol} {timeframe}, count={count}, priority={priority}")
+
+        # 체결 개수 범위 검증 (업비트 API 공식 한계)
+        if count is not None and (count <= 0 or count > 200):
+            logger.warning(f"유효하지 않은 캔들 개수: {count}")
+            return DataResponse(
+                success=False,
+                error=f"캔들 개수는 1~200 범위여야 합니다. 입력값: {count}",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
+            )
 
         try:
             # 1. SQLite 캐시에서 조회
@@ -128,7 +172,13 @@ class SmartDataProvider:
             if smart_router_result.get('success', False):
                 # Smart Router 성공
                 self._api_calls += 1
-                api_data = smart_router_result.get('data', [])
+                raw_data = smart_router_result.get('data', {})
+
+                # Smart Router 응답에서 실제 캔들 리스트 추출
+                if isinstance(raw_data, dict):
+                    api_data = raw_data.get('_candles_list', [])
+                else:
+                    api_data = raw_data if isinstance(raw_data, list) else []
 
                 end_time_ms = time.time() * 1000
                 response_time = end_time_ms - start_time_ms
@@ -183,14 +233,14 @@ class SmartDataProvider:
             )
 
     async def _get_candles_from_cache(self,
-                                    symbol: str,
-                                    timeframe: str,
-                                    count: Optional[int],
-                                    start_time: Optional[str],
-                                    end_time: Optional[str]) -> Optional[List[Dict]]:
-        """SQLite 캐시에서 캔들 데이터 조회"""
+                                      symbol: str,
+                                      timeframe: str,
+                                      count: Optional[int],
+                                      start_time: Optional[str],
+                                      end_time: Optional[str]) -> Optional[List[Dict]]:
+        """SQLite 캐시에서 캔들 데이터 조회 (Repository 패턴 사용)"""
         try:
-            candles = self.candle_manager.get_candles(
+            candles = await self.candle_repository.get_candles(
                 symbol=symbol,
                 timeframe=timeframe,
                 start_time=start_time,
@@ -328,7 +378,21 @@ class SmartDataProvider:
         start_time_ms = time.time() * 1000
         self._request_count += 1
 
-        logger.debug(f"다중 티커 조회: {len(symbols)}개 심볼, priority={priority}")
+        logger.debug(f"다중 티커 조회: {len(symbols) if symbols else 0}개 심볼, priority={priority}")
+
+        # 기본 입력 검증만 유지
+        if not symbols or not isinstance(symbols, list):
+            logger.warning("심볼 리스트가 비어있거나 유효하지 않음")
+            return DataResponse(
+                success=False,
+                error="심볼 리스트가 필요합니다",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
+            )
 
         try:
             # 각 심볼별 개별 조회 (향후 배치 최적화 가능)
@@ -491,6 +555,20 @@ class SmartDataProvider:
 
         logger.debug(f"체결 내역 조회: {symbol}, count={count}, priority={priority}")
 
+        # 체결 개수 범위 검증 (업비트 API 공식 한계: 500개)
+        if count <= 0 or count > 500:  # 업비트 공식 최대값
+            logger.warning(f"유효하지 않은 체결 개수: {count}")
+            return DataResponse(
+                success=False,
+                error=f"체결 개수는 1~500 범위여야 합니다. 입력값: {count} (업비트 공식 한계)",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
+            )
+
         try:
             # 1. 메모리 캐시 확인
             cached_trades = self.realtime_cache.get_trades(symbol)
@@ -650,13 +728,13 @@ class SmartDataProvider:
     # =====================================
 
     async def _save_candles_to_cache(self, symbol: str, timeframe: str, candles_data: List[Dict]) -> None:
-        """API로 받은 캔들 데이터를 SQLite 캐시에 저장"""
+        """API로 받은 캔들 데이터를 SQLite 캐시에 저장 (Repository 패턴 사용)"""
         try:
             if not candles_data:
                 return
 
-            # CandleTableManager를 통한 데이터 저장
-            success_count = self.candle_manager.insert_candles(symbol, timeframe, candles_data)
+            # Repository를 통한 데이터 저장 (FOREIGN KEY 제약 자동 해결)
+            success_count = await self.candle_repository.insert_candles(symbol, timeframe, candles_data)
 
             if success_count > 0:
                 logger.debug(f"캔들 캐시 저장 완료: {symbol} {timeframe}, {success_count}/{len(candles_data)}개")
@@ -665,6 +743,7 @@ class SmartDataProvider:
 
         except Exception as e:
             logger.error(f"캔들 캐시 저장 오류: {symbol} {timeframe}, {e}")
+            # Repository에서 예외가 발생해도 상위 로직은 계속 진행 (API 데이터는 이미 반환됨)
 
     def _format_candle_for_cache(self, candle: Dict) -> Optional[Dict]:
         """API 캔들 데이터를 캐시 저장용 포맷으로 변환 (업비트 API는 이미 완전 호환)"""
