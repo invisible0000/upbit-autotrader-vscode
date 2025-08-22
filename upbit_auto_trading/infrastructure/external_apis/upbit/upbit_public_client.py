@@ -5,7 +5,7 @@ import asyncio
 from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import (
     BaseApiClient, RateLimitConfig, ApiClientError
 )
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
+
 
 class UpbitPublicClient(BaseApiClient):
     """Upbit 공개 API 클라이언트 - 기존 UpbitAPI 메서드들 기반"""
@@ -25,12 +25,13 @@ class UpbitPublicClient(BaseApiClient):
             max_retries=3
         )
 
-        self._auth = UpbitAuthenticator()
-
     def _prepare_headers(self, method: str, endpoint: str,
                          params: Optional[Dict], data: Optional[Dict]) -> Dict[str, str]:
-        """공개 API용 헤더 준비"""
-        return self._auth.get_public_headers()
+        """공개 API용 헤더 준비 (인증 불필요)"""
+        return {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
 
     async def get_markets(self, is_details: bool = False) -> List[Dict[str, Any]]:
         """마켓 코드 조회 - 기존 get_markets 메서드 기반"""
