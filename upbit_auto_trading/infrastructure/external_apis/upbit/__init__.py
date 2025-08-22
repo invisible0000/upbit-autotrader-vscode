@@ -23,14 +23,16 @@ async with UpbitClient(access_key='your_key', secret_key='your_secret') as clien
 ```
 """
 
-from .upbit_client import UpbitClient
 from .upbit_public_client import UpbitPublicClient
 from .upbit_private_client import UpbitPrivateClient
+from .upbit_websocket_quotation_client import UpbitWebSocketQuotationClient
+from .upbit_websocket_private_client import UpbitWebSocketPrivateClient
 from .upbit_auth import UpbitAuthenticator
 
 __all__ = [
-    'UpbitClient',
     'UpbitPublicClient',
     'UpbitPrivateClient',
+    'UpbitWebSocketQuotationClient',
+    'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator'
 ]

@@ -25,9 +25,10 @@ async with UpbitClient(access_key='key', secret_key='secret') as client:
 
 # 현재는 Upbit만 제공하지만, 향후 다른 거래소도 추가 가능
 from .upbit import (
-    UpbitClient,
     UpbitPublicClient,
     UpbitPrivateClient,
+    UpbitWebSocketQuotationClient,
+    UpbitWebSocketPrivateClient,
     UpbitAuthenticator
 )
 
@@ -39,16 +40,12 @@ from .common import (
     ApiClientError
 )
 
-from .api_client_factory import ApiClientFactory
-
 __all__ = [
-    # 팩토리
-    'ApiClientFactory',
-
-    # Upbit API
-    'UpbitClient',
+    # Upbit API (4개 클라이언트 구조)
     'UpbitPublicClient',
     'UpbitPrivateClient',
+    'UpbitWebSocketQuotationClient',
+    'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
 
     # 공통 기반 클래스

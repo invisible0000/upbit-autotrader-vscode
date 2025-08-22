@@ -9,7 +9,7 @@ import time
 from typing import Dict, List, Any
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 from ..core.rate_limit_manager import get_global_rate_limiter, RateLimitType
 
 logger = create_component_logger("RestApiManager")
@@ -21,7 +21,7 @@ class RestApiManager:
     WARM_CACHE_REST와 COLD_REST Tier를 위한 REST API 호출을 관리합니다.
     """
 
-    def __init__(self, upbit_client: UpbitClient):
+    def __init__(self, upbit_client: UpbitPublicClient):
         """REST API 관리자 초기화
 
         Args:

@@ -14,6 +14,7 @@ from datetime import datetime
 from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import RateLimitConfig, RateLimiter
 
 
 class WebSocketDataType(Enum):
@@ -48,6 +49,9 @@ class UpbitWebSocketQuotationClient:
         self.message_handlers: Dict[WebSocketDataType, List[Callable]] = {}
         self.logger = create_component_logger("UpbitWebSocketQuotation")
 
+        # 🆕 통합 Rate Limiter 적용
+        self.rate_limiter = RateLimiter(RateLimitConfig.upbit_websocket_connect())
+
         # 재연결 설정
         self.auto_reconnect = True
         self.reconnect_delay = 5.0
@@ -73,6 +77,9 @@ class UpbitWebSocketQuotationClient:
     async def connect(self) -> bool:
         """WebSocket 연결 (API 키 불필요)"""
         try:
+            # 🆕 Rate Limit 검사
+            await self.rate_limiter.acquire()
+
             self.logger.info(f"WebSocket 연결 시도: {self.url}")
 
             # 연결 설정 (인증 불필요)
@@ -194,6 +201,9 @@ class UpbitWebSocketQuotationClient:
                 subscribe_msg[1]["type"] = actual_type
 
             await self.websocket.send(json.dumps(subscribe_msg))
+
+            # 🆕 Rate Limit 검사 (메시지 전송 시)
+            await self.rate_limiter.acquire()
 
             # 구독 정보 저장 (중복 방지)
             if data_type.value not in self.subscriptions:

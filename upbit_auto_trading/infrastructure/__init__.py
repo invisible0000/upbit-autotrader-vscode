@@ -29,9 +29,10 @@ from .database.database_manager import DatabaseManager, DatabaseConnectionProvid
 # 새로운 외부 API 클라이언트 추가
 try:
     from .external_apis import (
-        UpbitClient,
         UpbitPublicClient,
         UpbitPrivateClient,
+        UpbitWebSocketQuotationClient,
+        UpbitWebSocketPrivateClient,
         UpbitAuthenticator,
         BaseApiClient,
         RateLimiter,
@@ -44,9 +45,10 @@ try:
         'RepositoryContainer',
         'DatabaseManager',
         'DatabaseConnectionProvider',
-        'UpbitClient',
         'UpbitPublicClient',
         'UpbitPrivateClient',
+        'UpbitWebSocketQuotationClient',
+        'UpbitWebSocketPrivateClient',
         'UpbitAuthenticator',
         'BaseApiClient',
         'RateLimiter',

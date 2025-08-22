@@ -10,7 +10,7 @@ import time
 from typing import Dict, List, Any, Optional
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_client import UpbitClient
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 
 from .data_converter import DataConverter
 from .cache_manager import CacheManager
@@ -39,7 +39,7 @@ class UpbitDataProvider:
         logger.info("UpbitDataProvider 초기화 시작")
 
         # 핵심 API 클라이언트
-        self.upbit_client = UpbitClient()
+        self.upbit_client = UpbitPublicClient()
 
         # 서비스 컴포넌트들 초기화
         self.data_converter = DataConverter()

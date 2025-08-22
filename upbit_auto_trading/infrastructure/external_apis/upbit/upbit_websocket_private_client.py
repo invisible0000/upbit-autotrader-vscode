@@ -15,6 +15,7 @@ from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
+from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import RateLimitConfig, RateLimiter
 
 
 class PrivateWebSocketDataType(Enum):
@@ -46,6 +47,9 @@ class UpbitWebSocketPrivateClient:
         self.subscriptions: Dict[str, List[str]] = {}  # type -> markets
         self.message_handlers: Dict[PrivateWebSocketDataType, List[Callable]] = {}
         self.logger = create_component_logger("UpbitWebSocketPrivate")
+
+        # 🆕 통합 Rate Limiter 적용 (Private API 정책)
+        self.rate_limiter = RateLimiter(RateLimitConfig.upbit_private_api())
 
         # 연결 관리
         self.ping_interval = 30.0  # 30초마다 PING
