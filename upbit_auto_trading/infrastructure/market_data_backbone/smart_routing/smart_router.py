@@ -102,11 +102,16 @@ class SmartRouter:
                 )
                 self.websocket_client = UpbitWebSocketQuotationClient()
 
-                # WebSocket 연결 시도
-                await self.websocket_client.connect()
-                is_connected = self.websocket_client.is_connected
-                self.channel_selector.update_websocket_status(is_connected)
-                logger.info(f"WebSocket 클라이언트 초기화 완료 - 연결 상태: {'연결됨' if is_connected else '연결 실패'}")
+                # WebSocket 연결 시도 (에러 발생 시 상태만 업데이트)
+                try:
+                    await self.websocket_client.connect()
+                    is_connected = self.websocket_client.is_connected
+                    self.channel_selector.update_websocket_status(is_connected)
+                    logger.info(f"WebSocket 클라이언트 초기화 완료 - 연결 상태: {'연결됨' if is_connected else '연결 실패'}")
+                except Exception as conn_error:
+                    logger.warning(f"WebSocket 연결 실패: {conn_error}")
+                    self.channel_selector.update_websocket_status(False)
+
             except Exception as e:
                 logger.warning(f"WebSocket 클라이언트 초기화 실패: {e}")
                 self.channel_selector.update_websocket_status(False)
@@ -256,19 +261,14 @@ class SmartRouter:
 
     async def _execute_websocket_request(self, request: DataRequest) -> Dict[str, Any]:
         """WebSocket 요청 실행"""
-        if not self.websocket_client or not self.websocket_client.is_connected:
-            if self.websocket_manager:
-                # 기존 매니저 사용 (호환성)
-                logger.warning("WebSocket 클라이언트 연결 실패 - 기존 매니저 사용")
-                return {
-                    "source": "websocket_manager",
-                    "data": {},
-                    "timestamp": int(time.time() * 1000)
-                }
-            else:
-                raise Exception("WebSocket 연결이 설정되지 않음")
-
         try:
+            # 클라이언트 초기화 확인
+            await self._ensure_clients_initialized()
+
+            if not self.websocket_client or not getattr(self.websocket_client, 'is_connected', False):
+                logger.warning("WebSocket 연결이 설정되지 않음 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
             if request.data_type == DataType.TICKER:
                 # 현재가 구독 후 메시지 수신
                 await self.websocket_client.subscribe_ticker(request.symbols)
@@ -490,7 +490,25 @@ class SmartRouter:
         if cached_item:
             # TTL 확인
             if time.time() - cached_item["timestamp"] < self.cache_ttl:
-                return cached_item["data"]
+                cached_data = cached_item["data"]
+
+                # 캐시된 데이터가 올바른 응답 구조인지 확인
+                if isinstance(cached_data, dict) and "success" in cached_data:
+                    return cached_data
+                else:
+                    # 이전 형식의 캐시 데이터를 올바른 구조로 변환
+                    logger.debug("이전 형식의 캐시 데이터 발견 - 올바른 구조로 변환")
+                    return {
+                        "success": True,
+                        "data": cached_data,
+                        "metadata": {
+                            "channel": "cache",
+                            "reason": "cache_hit",
+                            "confidence": 1.0,
+                            "response_time_ms": 0,
+                            "request_id": request.request_id
+                        }
+                    }
             else:
                 # 만료된 캐시 삭제
                 del self.cache[cache_key]
@@ -498,10 +516,25 @@ class SmartRouter:
         return None
 
     def _store_cache(self, request: DataRequest, data: Dict[str, Any]) -> None:
-        """캐시 저장"""
+        """캐시 저장 - 통일된 응답 데이터만 저장"""
         cache_key = self._generate_cache_key(request)
-        self.cache[cache_key] = {
+
+        # 응답 구조를 올바른 형식으로 저장
+        cache_data = {
+            "success": True,
             "data": data,
+            "metadata": {
+                "channel": "cache",
+                "reason": "cache_stored",
+                "confidence": 1.0,
+                "response_time_ms": 0,
+                "request_id": request.request_id,
+                "cached_at": int(time.time() * 1000)
+            }
+        }
+
+        self.cache[cache_key] = {
+            "data": cache_data,
             "timestamp": time.time()
         }
 
@@ -587,6 +620,53 @@ class SmartRouter:
         self.metrics = RoutingMetrics()
         self.cache.clear()
         logger.info("✅ 메트릭 초기화 완료")
+
+    def clear_cache(self) -> None:
+        """캐시 클리어"""
+        logger.debug("캐시 클리어")
+        self.cache.clear()
+
+    def get_cache_info(self) -> Dict[str, Any]:
+        """캐시 정보 조회"""
+        return {
+            "cache_size": len(self.cache),
+            "cache_ttl": self.cache_ttl,
+            "cache_keys": list(self.cache.keys())
+        }
+
+    async def cleanup_resources(self) -> None:
+        """리소스 정리"""
+        logger.info("SmartRouter 리소스 정리 시작")
+
+        # WebSocket 연결 정리
+        if self.websocket_client and hasattr(self.websocket_client, 'disconnect'):
+            try:
+                await self.websocket_client.disconnect()
+                logger.debug("WebSocket 클라이언트 연결 해제 완료")
+            except Exception as e:
+                logger.warning(f"WebSocket 연결 해제 중 오류: {e}")
+
+        # REST 클라이언트 정리
+        if self.rest_client and hasattr(self.rest_client, 'close'):
+            try:
+                await self.rest_client.close()
+                logger.debug("REST 클라이언트 연결 해제 완료")
+            except Exception as e:
+                logger.warning(f"REST 클라이언트 정리 중 오류: {e}")
+
+        # 캐시 정리
+        self.cache.clear()
+
+        logger.info("✅ SmartRouter 리소스 정리 완료")
+
+    async def __aenter__(self):
+        """컨텍스트 매니저 진입"""
+        await self.initialize()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """컨텍스트 매니저 종료"""
+        await self.cleanup_resources()
 
 
 # 전역 인스턴스 (싱글톤 패턴)
