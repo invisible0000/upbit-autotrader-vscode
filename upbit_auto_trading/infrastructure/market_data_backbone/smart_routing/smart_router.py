@@ -240,14 +240,36 @@ class SmartRouter:
         )
         return await self.get_data(request)
 
-    async def get_candles(self, symbols: List[str], interval: str = "1m", count: int = 100) -> Dict[str, Any]:
-        """캔들 데이터 조회 (편의 메서드)"""
+    async def get_candles(
+        self,
+        symbols: List[str],
+        interval: str = "1m",
+        count: int = 1,
+        to: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """캔들 데이터 조회 (편의 메서드)
+
+        Args:
+            symbols: 조회할 심볼 리스트 (예: ["KRW-BTC"])
+            interval: 캔들 간격 (예: "1m", "5m", "15m", "1h", "1d")
+            count: 조회할 캔들 개수 (최대 200개, 기본값: 1)
+            to: 조회 기간 종료 시각 (ISO 8601 형식, 예: "2025-06-24T04:56:53Z")
+        """
+        # 실시간성 우선순위 결정
+        if count <= 10:
+            realtime_priority = RealtimePriority.HIGH
+        elif count <= 50:
+            realtime_priority = RealtimePriority.MEDIUM
+        else:
+            realtime_priority = RealtimePriority.LOW
+
         request = DataRequest(
             symbols=symbols,
             data_type=DataType.CANDLES,
-            realtime_priority=RealtimePriority.LOW,  # 과거 데이터는 실시간성 낮음
+            realtime_priority=realtime_priority,
             count=count,
             interval=interval,
+            to=to,
             request_id=f"candles_{int(time.time() * 1000)}"
         )
         return await self.get_data(request)
@@ -286,6 +308,25 @@ class SmartRouter:
 
                 # 임시로 REST API로 폴백
                 logger.warning("WebSocket 실시간 데이터 수신 구현 중 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.TRADES:
+                # 체결 구독 후 메시지 수신
+                await self.websocket_client.subscribe_trade(request.symbols)
+                logger.info(f"WebSocket 체결 구독 완료: {request.symbols}")
+
+                # 임시로 REST API로 폴백
+                logger.warning("WebSocket 실시간 체결 데이터 수신 구현 중 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.CANDLES or request.data_type == DataType.CANDLES_1S:
+                # 캔들 구독 후 메시지 수신
+                interval_unit = self._convert_interval_to_websocket_unit(request.interval or "1m")
+                await self.websocket_client.subscribe_candle(request.symbols, interval_unit)
+                logger.info(f"WebSocket 캔들 구독 완료: {request.symbols}, 간격: {request.interval or '1m'}")
+
+                # 임시로 REST API로 폴백 (실시간 데이터 수신 구현 필요)
+                logger.warning("WebSocket 실시간 캔들 데이터 수신 구현 중 - REST API로 폴백")
                 return await self._execute_rest_request(request)
 
             else:
@@ -347,33 +388,36 @@ class SmartRouter:
                 # 캔들 데이터 조회
                 all_candles = []
                 interval = request.interval or "1m"
-                count = request.count or 100
+                count = request.count or 1
+                to = request.to  # 조회 기간 종료 시각
 
                 for symbol in request.symbols:
                     if interval.endswith('m'):
                         # 분봉
                         unit = int(interval.replace('m', ''))
                         candles = await self.rest_client.get_candles_minutes(
-                            symbol, unit=unit, count=count
+                            symbol, unit=unit, count=count, to=to
                         )
                     elif interval == '1d':
                         # 일봉
                         candles = await self.rest_client.get_candles_days(
-                            symbol, count=count
+                            symbol, count=count, to=to
                         )
                     elif interval == '1w':
                         # 주봉
                         candles = await self.rest_client.get_candles_weeks(
-                            symbol, count=count
+                            symbol, count=count, to=to
                         )
                     elif interval == '1M':
                         # 월봉
                         candles = await self.rest_client.get_candles_months(
-                            symbol, count=count
+                            symbol, count=count, to=to
                         )
                     else:
                         logger.warning(f"지원하지 않는 캔들 간격: {interval}")
-                        candles = await self.rest_client.get_candles_minutes(symbol, count=count)
+                        candles = await self.rest_client.get_candles_minutes(
+                            symbol, count=count, to=to
+                        )
 
                     # 심볼 정보 추가
                     for candle in candles:
@@ -546,7 +590,8 @@ class SmartRouter:
     def _generate_cache_key(self, request: DataRequest) -> str:
         """캐시 키 생성"""
         symbols_str = ",".join(sorted(request.symbols))
-        return f"{request.data_type.value}:{symbols_str}:{request.count}:{request.interval}"
+        to_str = request.to if request.to else "latest"
+        return f"{request.data_type.value}:{symbols_str}:{request.count}:{request.interval}:{to_str}"
 
     def _update_metrics(self, decision: Optional[ChannelDecision], response_time: float, success: bool) -> None:
         """메트릭 업데이트"""
@@ -658,6 +703,34 @@ class SmartRouter:
         self.cache.clear()
 
         logger.info("✅ SmartRouter 리소스 정리 완료")
+
+    def _convert_interval_to_websocket_unit(self, interval: str) -> int:
+        """REST API 간격을 WebSocket 캔들 단위로 변환
+
+        Args:
+            interval: REST API 간격 (예: "1m", "5m", "15m", "1h", "1d")
+
+        Returns:
+            WebSocket 캔들 단위 (분 단위)
+        """
+        # 간격별 변환 매핑
+        interval_mapping = {
+            "1s": 1,      # 1초 -> 1분 (WebSocket에서는 최소 1분)
+            "1m": 1,      # 1분
+            "3m": 3,      # 3분
+            "5m": 5,      # 5분
+            "10m": 10,    # 10분
+            "15m": 15,    # 15분
+            "30m": 30,    # 30분
+            "1h": 60,     # 1시간 = 60분
+            "60m": 60,    # 60분
+            "240m": 240,  # 240분 = 4시간
+            "1d": 1440,   # 1일 = 1440분 (WebSocket은 분단위만 지원하므로 REST로 폴백)
+            "1w": 10080,  # 1주 = 10080분 (WebSocket은 분단위만 지원하므로 REST로 폴백)
+            "1M": 43200   # 1월 = 약 43200분 (WebSocket은 분단위만 지원하므로 REST로 폴백)
+        }
+
+        return interval_mapping.get(interval, 1)  # 기본값: 1분
 
     async def __aenter__(self):
         """컨텍스트 매니저 진입"""

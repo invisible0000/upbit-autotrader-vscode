@@ -123,7 +123,48 @@ class ChannelSelector:
         for symbol in request.symbols:
             self.pattern_analyzer.record_request(symbol, request.data_type)
 
-        # 1단계: 고정 채널 확인
+        # 1단계: WebSocket 제약 검증 (데이터 무결성 보장)
+        if request.data_type == DataType.CANDLES:
+            # 필수 매개변수 검증
+            if not request.interval:
+                raise ValueError("캔들 요청 시 타임프레임(interval)은 필수입니다")
+            if not request.symbols:
+                raise ValueError("캔들 요청 시 심볼(symbols)은 필수입니다")
+
+            # WebSocket 제약 검증 - 과거 데이터나 다중 캔들은 REST 필수
+            if request.to is not None:
+                return ChannelDecision(
+                    channel=ChannelType.REST_API,
+                    reason="past_data_requires_rest",
+                    confidence=1.0
+                )
+            if request.count and request.count > 1:
+                return ChannelDecision(
+                    channel=ChannelType.REST_API,
+                    reason="multiple_candles_requires_rest",
+                    confidence=1.0
+                )
+
+        elif request.data_type == DataType.TRADES:
+            # 체결 요청 WebSocket 제약 검증
+            if not request.symbols:
+                raise ValueError("체결 요청 시 심볼(symbols)은 필수입니다")
+
+            # WebSocket 제약 검증 - 과거 데이터나 다중 체결은 REST 필수
+            if request.to is not None:
+                return ChannelDecision(
+                    channel=ChannelType.REST_API,
+                    reason="past_trades_requires_rest",
+                    confidence=1.0
+                )
+            if request.count and request.count > 1:
+                return ChannelDecision(
+                    channel=ChannelType.REST_API,
+                    reason="multiple_trades_requires_rest",
+                    confidence=1.0
+                )
+
+        # 2단계: 고정 채널 확인
         endpoint_config = ALL_ENDPOINT_CONFIGS.get(request.data_type)
         if endpoint_config and endpoint_config.fixed_channel:
             return ChannelDecision(
@@ -220,6 +261,16 @@ class ChannelSelector:
         else:
             score += 1
 
+        # 6. 다중 타임프레임 캔들 효율성 (가중치: 2x)
+        if request.data_type == DataType.CANDLES:
+            # 과거 데이터 조회 시 WebSocket 점수 대폭 감소
+            if request.to is not None:
+                score -= 20  # 과거 데이터는 WebSocket 부적합
+            elif len(request.symbols) > 1:
+                score += 8 * 2  # 다중 심볼 캔들은 WebSocket이 매우 효율적
+            else:
+                score += 4 * 2  # 단일 심볼 캔들도 실시간성이 있으면 WebSocket 유리
+
         return score
 
     def _calculate_rest_score(self, request: DataRequest) -> float:
@@ -237,9 +288,18 @@ class ChannelSelector:
         else:
             score += 3
 
-        # 3. 과거 데이터 요청 (가중치: 2x)
+        # 3. 데이터 타입별 조정 (가중치: 2x)
         if request.data_type == DataType.CANDLES:
-            score += 10 * 2  # 과거 데이터는 REST가 효율적
+            # 과거 데이터 조회 감지 ('to' 매개변수 존재)
+            if request.to is not None:
+                score += 12 * 2  # 과거 데이터는 REST API가 필수적
+            # 실시간 우선순위에 따라 점수 차등 적용
+            elif request.realtime_priority == RealtimePriority.LOW:
+                score += 8 * 2  # 과거 데이터 조회는 REST 유리
+            elif request.realtime_priority == RealtimePriority.MEDIUM:
+                score += 4 * 2  # 중간 우선순위는 WebSocket과 경쟁
+            else:
+                score += 2 * 2  # 실시간 우선순위는 WebSocket 우대
 
         # 4. Rate Limit 상태 (가중치: 2x)
         rest_usage = self.rate_limits["rest"]["current"] / self.rate_limits["rest"]["limit"]

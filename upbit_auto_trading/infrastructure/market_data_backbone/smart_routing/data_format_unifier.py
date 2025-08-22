@@ -7,8 +7,7 @@ WebSocket과 REST API의 서로 다른 응답 형식을 REST API 기준으로 �
 
 import time
 from datetime import datetime
-from typing import Dict, Any, Optional, List
-from decimal import Decimal
+from typing import Dict, Any, List, Union
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .models import DataType, ChannelType
@@ -23,17 +22,45 @@ class DataFormatUnifier:
         """형식 통일기 초기화"""
         logger.info("DataFormatUnifier 초기화")
 
-    def unify_ticker_data(self, data: Dict[str, Any], source: ChannelType) -> Dict[str, Any]:
+    def unify_ticker_data(self, data: Union[Dict[str, Any], List[Dict[str, Any]]], source: ChannelType) -> Dict[str, Any]:
         """티커 데이터를 REST API 형식으로 통일
 
         Args:
-            data: 원본 데이터 (WebSocket 또는 REST 형식)
+            data: 원본 데이터 (WebSocket 또는 REST 형식, dict 또는 list 가능)
             source: 데이터 소스 (websocket 또는 rest_api)
 
         Returns:
             REST API 형식으로 통일된 데이터
         """
         try:
+            # list 형태의 데이터 처리
+            if isinstance(data, list):
+                if len(data) == 0:
+                    logger.warning("빈 리스트 데이터 수신")
+                    return self._create_empty_response(source)
+
+                # 다중 티커 데이터 처리
+                if len(data) > 1:
+                    unified_list = []
+                    for item in data:
+                        if source == ChannelType.WEBSOCKET:
+                            unified_list.append(self._convert_websocket_ticker_to_rest(item))
+                        else:
+                            unified_list.append(self._add_source_metadata(item, source))
+
+                    return {
+                        "_unified": True,
+                        "_source": source.value,
+                        "_timestamp": int(time.time() * 1000),
+                        "_count": len(unified_list),
+                        "_original_data": unified_list,
+                        "data": unified_list
+                    }
+                else:
+                    # 단일 아이템인 경우 첫 번째 요소 처리
+                    data = data[0]
+
+            # dict 형태의 데이터 처리 (기존 로직)
             if source == ChannelType.WEBSOCKET:
                 return self._convert_websocket_ticker_to_rest(data)
             else:
@@ -41,11 +68,41 @@ class DataFormatUnifier:
 
         except Exception as e:
             logger.error(f"티커 데이터 형식 통일 실패: {e}")
-            return self._create_error_response(data, source, str(e))
+            error_data = data if isinstance(data, dict) else {"error": "conversion_failed"}
+            return self._create_error_response(error_data, source, str(e))
 
-    def unify_orderbook_data(self, data: Dict[str, Any], source: ChannelType) -> Dict[str, Any]:
+    def unify_orderbook_data(self, data: Union[Dict[str, Any], List[Dict[str, Any]]],
+                             source: ChannelType) -> Dict[str, Any]:
         """호가 데이터를 REST API 형식으로 통일"""
         try:
+            # list 형태의 데이터 처리
+            if isinstance(data, list):
+                if len(data) == 0:
+                    logger.warning("빈 리스트 호가 데이터 수신")
+                    return self._create_empty_response(source)
+
+                # 다중 호가 데이터 처리
+                if len(data) > 1:
+                    unified_list = []
+                    for item in data:
+                        if source == ChannelType.WEBSOCKET:
+                            unified_list.append(self._convert_websocket_orderbook_to_rest(item))
+                        else:
+                            unified_list.append(self._add_source_metadata(item, source))
+
+                    return {
+                        "_unified": True,
+                        "_source": source.value,
+                        "_timestamp": int(time.time() * 1000),
+                        "_count": len(unified_list),
+                        "_original_data": unified_list,
+                        "data": unified_list
+                    }
+                else:
+                    # 단일 아이템인 경우 첫 번째 요소 처리
+                    data = data[0]
+
+            # dict 형태의 데이터 처리 (기존 로직)
             if source == ChannelType.WEBSOCKET:
                 return self._convert_websocket_orderbook_to_rest(data)
             else:
@@ -53,36 +110,76 @@ class DataFormatUnifier:
 
         except Exception as e:
             logger.error(f"호가 데이터 형식 통일 실패: {e}")
-            return self._create_error_response(data, source, str(e))
+            error_data = data if isinstance(data, dict) else {"error": "conversion_failed"}
+            return self._create_error_response(error_data, source, str(e))
 
-    def unify_trades_data(self, data: Any, source: ChannelType) -> Dict[str, Any]:
+    def unify_trades_data(self, data: Union[Dict[str, Any], List[Dict[str, Any]]],
+                          source: ChannelType) -> Dict[str, Any]:
         """체결 데이터를 REST API 형식으로 통일"""
         try:
             if source == ChannelType.WEBSOCKET:
                 if isinstance(data, dict):
                     return self._convert_websocket_trades_to_rest(data)
+                elif isinstance(data, list):
+                    if len(data) == 0:
+                        logger.warning("빈 리스트 체결 데이터 수신")
+                        return self._create_empty_response(source)
+
+                    # 다중 체결 데이터 처리
+                    unified_list = []
+                    for item in data:
+                        if isinstance(item, dict):
+                            unified_list.append(self._convert_websocket_trades_to_rest(item))
+                        else:
+                            logger.warning(f"체결 데이터 아이템이 dict가 아님: {type(item)}")
+
+                    return {
+                        "_unified": True,
+                        "_source": source.value,
+                        "_timestamp": int(time.time() * 1000),
+                        "_count": len(unified_list),
+                        "_original_data": unified_list,
+                        "data": unified_list
+                    }
                 else:
                     logger.warning(f"WebSocket 체결 데이터가 예상 형식이 아님: {type(data)}")
-                    return self._create_error_response({"error": "invalid_websocket_data"}, source, "Invalid WebSocket data format")
+                    error_data = {"error": "invalid_websocket_data"}
+                    return self._create_error_response(error_data, source,
+                                                       "Invalid WebSocket data format")
             else:
                 # REST API 체결 데이터 처리
                 if isinstance(data, list):
-                    # 첫 번째 체결 데이터로 통일된 응답 생성 (리스트 형태는 metadata에 보관)
-                    if len(data) > 0 and isinstance(data[0], dict):
-                        unified_data = self._add_source_metadata(data[0], source)
-                        unified_data["_trades_list"] = data  # 전체 리스트 보관
-                        return unified_data
-                    else:
-                        return self._create_error_response({"error": "empty_trades_list"}, source, "Empty trades list")
+                    if len(data) == 0:
+                        logger.warning("빈 리스트 체결 데이터 수신")
+                        return self._create_empty_response(source)
+
+                    # 체결 데이터 리스트 형태로 통일된 응답 생성
+                    unified_list = []
+                    for item in data:
+                        if isinstance(item, dict):
+                            unified_list.append(self._add_source_metadata(item, source))
+                        else:
+                            logger.warning(f"체결 데이터 아이템이 dict가 아님: {type(item)}")
+
+                    return {
+                        "_unified": True,
+                        "_source": source.value,
+                        "_timestamp": int(time.time() * 1000),
+                        "_count": len(unified_list),
+                        "_original_data": data,  # 원본 데이터 보관
+                        "data": unified_list
+                    }
                 elif isinstance(data, dict):
                     return self._add_source_metadata(data, source)
                 else:
                     logger.warning(f"예상치 못한 체결 데이터 형태: {type(data)}")
-                    return self._create_error_response({"error": "invalid_data_format"}, source, "Invalid data format")
+                    error_data = {"error": "invalid_data_format"}
+                    return self._create_error_response(error_data, source, "Invalid data format")
 
         except Exception as e:
             logger.error(f"체결 데이터 형식 통일 실패: {e}")
-            return self._create_error_response(data if isinstance(data, dict) else {"error": "conversion_failed"}, source, str(e))
+            error_data = data if isinstance(data, dict) else {"error": "conversion_failed"}
+            return self._create_error_response(error_data, source, str(e))
 
     def unify_candles_data(self, data: Any, source: ChannelType) -> Dict[str, Any]:
         """캔들 데이터 형식 통일 (주로 REST API 사용)"""
@@ -253,6 +350,20 @@ class DataFormatUnifier:
             },
             "_original_data": original_data,
             "success": False
+        }
+
+    def _create_empty_response(self, source: ChannelType) -> Dict[str, Any]:
+        """빈 응답 생성"""
+        return {
+            "_unified": {
+                "source": source.value,
+                "unified_at": time.time(),
+                "format_version": "2.0"
+            },
+            "_original_data": [],
+            "data": [],
+            "_count": 0,
+            "success": True
         }
 
     def unify_data(self, data: Dict[str, Any], data_type: DataType,

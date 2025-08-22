@@ -51,7 +51,8 @@ class DataRequest:
     data_type: DataType
     realtime_priority: RealtimePriority = RealtimePriority.MEDIUM
     count: Optional[int] = None
-    interval: Optional[str] = None
+    interval: Optional[str] = None  # 캔들 간격 (예: "1m", "5m", "1h", "1d")
+    to: Optional[str] = None  # 조회 기간 종료 시각 (ISO 8601 형식)
     request_id: Optional[str] = None
     requested_at: datetime = field(default_factory=datetime.now)
 
@@ -107,14 +108,8 @@ class EndpointConfig:
     description: str = ""
 
 
-# 고정 채널 규칙 정의
+# 고정 채널 규칙 정의 (진정한 API 제약 사항만)
 REST_ONLY_ENDPOINTS = {
-    DataType.CANDLES: EndpointConfig(
-        data_type=DataType.CANDLES,
-        supported_channels=[ChannelType.REST_API],
-        fixed_channel=ChannelType.REST_API,
-        description="과거 데이터는 REST가 효율적"
-    ),
     DataType.ACCOUNTS: EndpointConfig(
         data_type=DataType.ACCOUNTS,
         supported_channels=[ChannelType.REST_API],
@@ -142,12 +137,7 @@ REST_ONLY_ENDPOINTS = {
 }
 
 WEBSOCKET_ONLY_ENDPOINTS = {
-    DataType.CANDLES_1S: EndpointConfig(
-        data_type=DataType.CANDLES_1S,
-        supported_channels=[ChannelType.WEBSOCKET],
-        fixed_channel=ChannelType.WEBSOCKET,
-        description="1초 캔들은 WebSocket만 지원 (Beta)"
-    )
+    # 현재는 없음 - 모든 시세 데이터는 양쪽 지원
 }
 
 FLEXIBLE_ENDPOINTS = {
@@ -168,6 +158,18 @@ FLEXIBLE_ENDPOINTS = {
         supported_channels=[ChannelType.WEBSOCKET, ChannelType.REST_API],
         preferred_channel=ChannelType.WEBSOCKET,
         description="실시간성 vs 과거 데이터"
+    ),
+    DataType.CANDLES: EndpointConfig(
+        data_type=DataType.CANDLES,
+        supported_channels=[ChannelType.WEBSOCKET, ChannelType.REST_API],
+        preferred_channel=ChannelType.WEBSOCKET,  # 다중 타임프레임 실시간 전략 효율성 우선
+        description="실시간 다중 타임프레임 vs 과거 데이터 조회"
+    ),
+    DataType.CANDLES_1S: EndpointConfig(
+        data_type=DataType.CANDLES_1S,
+        supported_channels=[ChannelType.WEBSOCKET, ChannelType.REST_API],
+        preferred_channel=ChannelType.WEBSOCKET,
+        description="초단위 실시간 캔들"
     )
 }
 
