@@ -57,7 +57,8 @@ class TTLCache:
             if entry.is_expired():
                 del self._cache[key]
                 self._misses += 1
-                logger.debug(f"캐시 만료: {key}")
+                # 개별 만료 로그는 TRACE 레벨로 변경 (과도한 로그 방지)
+                # logger.debug(f"캐시 만료: {key}")
                 return None
 
             # LRU 갱신 (맨 끝으로 이동)
@@ -80,7 +81,8 @@ class TTLCache:
             while len(self._cache) >= self.maxsize:
                 oldest_key, _ = self._cache.popitem(last=False)  # FIFO
                 self._evictions += 1
-                logger.debug(f"캐시 용량 초과로 삭제: {oldest_key}")
+                # 개별 삭제 로그는 과도한 로그 방지를 위해 제거
+                # logger.debug(f"캐시 용량 초과로 삭제: {oldest_key}")
 
             # 새 엔트리 추가
             entry = CacheEntry(
@@ -178,7 +180,8 @@ class MemoryRealtimeCache:
     def set_ticker(self, symbol: str, ticker_data: Dict[str, Any], ttl: Optional[float] = None) -> None:
         """티커 데이터 저장"""
         self.ticker_cache.set(f"ticker:{symbol}", ticker_data, ttl)
-        logger.debug(f"티커 캐시 저장: {symbol}")
+        # 개별 심볼 저장 로그는 과도한 로그 방지를 위해 제거
+        # logger.debug(f"티커 캐시 저장: {symbol}")
 
     def get_tickers(self, symbols: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
         """다중 티커 데이터 조회"""
@@ -204,7 +207,8 @@ class MemoryRealtimeCache:
     def set_orderbook(self, symbol: str, orderbook_data: Dict[str, Any], ttl: Optional[float] = None) -> None:
         """호가 데이터 저장"""
         self.orderbook_cache.set(f"orderbook:{symbol}", orderbook_data, ttl)
-        logger.debug(f"호가 캐시 저장: {symbol}")
+        # 개별 심볼 저장 로그는 과도한 로그 방지를 위해 제거
+        # logger.debug(f"호가 캐시 저장: {symbol}")
 
     def get_orderbooks(self, symbols: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
         """다중 호가 데이터 조회"""
@@ -225,7 +229,8 @@ class MemoryRealtimeCache:
     def set_trades(self, symbol: str, trades_data: List[Dict[str, Any]], ttl: Optional[float] = None) -> None:
         """체결 데이터 저장"""
         self.trades_cache.set(f"trades:{symbol}", trades_data, ttl)
-        logger.debug(f"체결 캐시 저장: {symbol}, {len(trades_data)}개")
+        # 개별 심볼 저장 로그는 과도한 로그 방지를 위해 제거
+        # logger.debug(f"체결 캐시 저장: {symbol}, {len(trades_data)}개")
 
     # =====================================
     # 시장 개요 캐시 API
@@ -242,7 +247,8 @@ class MemoryRealtimeCache:
                             ttl: Optional[float] = None) -> None:
         """시장 개요 데이터 저장"""
         self.market_overview_cache.set(f"market:{cache_key}", overview_data, ttl)
-        logger.debug(f"시장 개요 캐시 저장: {cache_key}")
+        # 개별 시장 개요 저장 로그는 과도한 로그 방지를 위해 제거
+        # logger.debug(f"시장 개요 캐시 저장: {cache_key}")
 
     # =====================================
     # 통합 관리 API
