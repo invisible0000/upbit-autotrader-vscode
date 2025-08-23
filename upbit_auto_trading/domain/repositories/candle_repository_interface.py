@@ -6,6 +6,7 @@ Infrastructure Layer에서 이 인터페이스를 구현해야 합니다.
 """
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import List, Dict, Optional, Any
 
 
@@ -104,5 +105,111 @@ class CandleRepositoryInterface(ABC):
 
         Returns:
             테이블 존재 여부
+        """
+        pass
+
+    # === 수집 상태 관리 메서드 (Smart Candle Collector 기능) ===
+
+    @abstractmethod
+    async def get_collection_status(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime
+    ) -> Optional[Dict[str, Any]]:
+        """특정 시간의 수집 상태 조회
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            target_time: 대상 시간
+
+        Returns:
+            수집 상태 정보 또는 None
+        """
+        pass
+
+    @abstractmethod
+    async def update_collection_status(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime,
+        status: str,
+        api_response_code: Optional[int] = None
+    ) -> None:
+        """수집 상태 업데이트
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            target_time: 대상 시간
+            status: 수집 상태 ('COLLECTED', 'EMPTY', 'PENDING', 'FAILED')
+            api_response_code: API 응답 코드
+        """
+        pass
+
+    @abstractmethod
+    async def get_missing_candle_times(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[datetime]:
+        """미수집 캔들 시간 목록 조회
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            end_time: 종료 시간
+
+        Returns:
+            미수집 캔들 시간 목록
+        """
+        pass
+
+    @abstractmethod
+    async def get_empty_candle_times(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[datetime]:
+        """빈 캔들 시간 목록 조회
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            end_time: 종료 시간
+
+        Returns:
+            빈 캔들 시간 목록
+        """
+        pass
+
+    @abstractmethod
+    async def get_continuous_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        include_empty: bool = True
+    ) -> List[Dict[str, Any]]:
+        """연속된 캔들 데이터 조회 (빈 캔들 포함/제외 선택 가능)
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            end_time: 종료 시간
+            include_empty: 빈 캔들 포함 여부
+
+        Returns:
+            연속된 캔들 데이터 (빈 캔들 포함/제외)
         """
         pass

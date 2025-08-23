@@ -905,6 +905,153 @@ class SmartDataProvider:
         self._api_calls = 0
         logger.info("성능 통계 초기화 완료")
 
+    # === Smart Candle Collector 기능 ===
+
+    async def get_continuous_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        include_empty: bool = True,
+        priority: Priority = Priority.NORMAL
+    ) -> DataResponse:
+        """
+        연속된 캔들 데이터 조회 (빈 캔들 포함/제외 선택 가능)
+
+        Args:
+            symbol: 거래 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            end_time: 종료 시간
+            include_empty: 빈 캔들 포함 여부 (True: 차트용, False: 지표용)
+            priority: 요청 우선순위
+
+        Returns:
+            연속된 캔들 데이터 응답
+        """
+        from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.processing.collection_status_manager import (
+            CollectionStatusManager
+        )
+
+        self._request_count += 1
+        start_time_ms = time.time() * 1000
+
+        logger.info(
+            f"연속 캔들 요청: {symbol} {timeframe} "
+            f"{start_time.strftime('%Y-%m-%d %H:%M')} ~ {end_time.strftime('%Y-%m-%d %H:%M')} "
+            f"(빈 캔들 {'포함' if include_empty else '제외'})"
+        )
+
+        try:
+            # CollectionStatusManager 초기화
+            collection_manager = CollectionStatusManager(self.db_path)
+
+            if include_empty:
+                # 차트용: 빈 캔들을 채워서 연속 데이터 제공
+                # 1. 기존 get_candles로 실제 데이터 조회
+                candles_response = await self.get_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    priority=priority
+                )
+
+                if not candles_response.success:
+                    return candles_response
+
+                # 2. 빈 캔들 채움 처리
+                candles_data = candles_response.data or []
+                continuous_candles = collection_manager.fill_empty_candles(
+                    candles=candles_data,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+                # 3. CandleWithStatus를 Dict로 변환
+                result_data = []
+                for candle_with_status in continuous_candles:
+                    candle_dict = {
+                        'market': candle_with_status.market,
+                        'candle_date_time_utc': candle_with_status.candle_date_time_utc.isoformat() + 'Z',
+                        'candle_date_time_kst': candle_with_status.candle_date_time_kst.isoformat() + 'Z',
+                        'opening_price': float(candle_with_status.opening_price),
+                        'high_price': float(candle_with_status.high_price),
+                        'low_price': float(candle_with_status.low_price),
+                        'trade_price': float(candle_with_status.trade_price),
+                        'timestamp': candle_with_status.timestamp,
+                        'candle_acc_trade_price': float(candle_with_status.candle_acc_trade_price),
+                        'candle_acc_trade_volume': float(candle_with_status.candle_acc_trade_volume),
+                        'unit': candle_with_status.unit,
+                        'is_empty': candle_with_status.is_empty,
+                        'collection_status': candle_with_status.collection_status.value
+                    }
+                    result_data.append(candle_dict)
+
+                end_time_ms = time.time() * 1000
+                response_time = end_time_ms - start_time_ms
+
+                cache_hit = candles_response.metadata.cache_hit if candles_response.metadata else False
+
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source="continuous_with_empty",
+                    response_time_ms=response_time,
+                    cache_hit=cache_hit,
+                    records_count=len(result_data)
+                )
+
+                logger.info(f"연속 캔들 응답 (빈 캔들 포함): {len(result_data)}개")
+                return DataResponse(success=True, data=result_data, metadata=metadata)
+
+            else:
+                # 지표용: 실제 거래 데이터만 제공 (기존 get_candles와 동일)
+                logger.debug("지표용 데이터 요청 - 기존 get_candles 사용")
+                response = await self.get_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat(),
+                    priority=priority
+                )
+
+                # 메타데이터에 source 정보 업데이트 (새로운 ResponseMetadata 생성)
+                if response.success and response.metadata:
+                    new_metadata = ResponseMetadata(
+                        priority_used=response.metadata.priority_used,
+                        source=f"{response.metadata.source}_indicators_only",
+                        response_time_ms=response.metadata.response_time_ms,
+                        cache_hit=response.metadata.cache_hit,
+                        records_count=response.metadata.records_count
+                    )
+                    response = DataResponse(
+                        success=response.success,
+                        data=response.data,
+                        error=response.error,
+                        metadata=new_metadata
+                    )
+
+                return response
+
+        except Exception as e:
+            logger.error(f"연속 캔들 조회 실패: {symbol} {timeframe}, {e}")
+            end_time_ms = time.time() * 1000
+            response_time = end_time_ms - start_time_ms
+
+            return DataResponse(
+                success=False,
+                error=f"연속 캔들 조회 실패: {str(e)}",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="continuous_candles_error",
+                    response_time_ms=response_time,
+                    cache_hit=False
+                )
+            )
+
     def __str__(self) -> str:
         stats = self.get_performance_stats()
         provider_stats = stats.get("provider_stats", {})

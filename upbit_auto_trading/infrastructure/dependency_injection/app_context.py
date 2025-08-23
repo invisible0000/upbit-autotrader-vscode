@@ -9,9 +9,11 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 
+from upbit_auto_trading.infrastructure.database.database_manager import DatabaseConnectionProvider
 from upbit_auto_trading.infrastructure.config.models.config_models import ApplicationConfig
 from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
 from upbit_auto_trading.infrastructure.dependency_injection.container import DIContainer
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 class ApplicationContextError(Exception):
     """애플리케이션 컨텍스트 관련 오류"""
@@ -37,9 +39,10 @@ class ApplicationContext:
         self._environment = environment
         self._config_dir = config_dir
         self._config: Optional[ApplicationConfig] = None
+        self.db_connection_provider: Optional[DatabaseConnectionProvider] = None
         self._container: Optional[DIContainer] = None
-        self._logger = logging.getLogger(__name__)
-        self._initialized = False
+        self._logger: Optional[Any] = None
+        self._is_initialized = False
 
     def initialize(self) -> None:
         """
@@ -54,11 +57,15 @@ class ApplicationContext:
         Raises:
             ApplicationContextError: 초기화 실패 시
         """
-        if self._initialized:
-            self._logger.debug("애플리케이션 컨텍스트가 이미 초기화되었습니다")
+        if self._is_initialized:
+            if self._logger:
+                self._logger.debug("애플리케이션 컨텍스트가 이미 초기화되었습니다")
             return
 
         try:
+            # 0. 임시 로거 설정
+            self._logger = create_component_logger("AppContext")
+
             # 1. 설정 로드
             self._load_configuration()
 
@@ -71,7 +78,7 @@ class ApplicationContext:
             # 4. 핵심 서비스 등록
             self._register_core_services()
 
-            self._initialized = True
+            self._is_initialized = True
             self._logger.info(
                 f"✅ 애플리케이션 컨텍스트 초기화 완료 (환경: {self.config.environment.value})"
             )
@@ -162,24 +169,26 @@ class ApplicationContext:
             # 타입 기반 등록
             self._container.register_instance(ILoggingService, logging_service)
 
-            # 문자열 키 기반 등록 (호환성)
-            from upbit_auto_trading.infrastructure.dependency_injection.container import ServiceRegistration, LifetimeScope
-            registration = ServiceRegistration(
-                service_type=str,  # 문자열 키
-                implementation=logging_service,
-                lifetime=LifetimeScope.SINGLETON
-            )
-            registration.instance = logging_service
-            self._container._services["ILoggingService"] = registration
-            self._container._instances["ILoggingService"] = logging_service
+            # 문자열 키 기반 등록은 제거하고 타입 기반 등록만 사용
+            # from upbit_auto_trading.infrastructure.dependency_injection.container import ServiceRegistration, LifetimeScope
+            # registration = ServiceRegistration(
+            #     service_type=str,  # 문자열 키
+            #     implementation=logging_service,
+            #     lifetime=LifetimeScope.SINGLETON
+            # )
+            # registration.instance = logging_service
+            # self._container._services["ILoggingService"] = registration
+            # self._container._instances["ILoggingService"] = logging_service
 
             # 환경별 로깅 설정 적용
             self._configure_environment_logging(logging_service)
 
-            self._logger.debug("✅ Infrastructure 통합 로깅 시스템 등록 완료")
+            if self._logger:
+                self._logger.debug("✅ Infrastructure 통합 로깅 시스템 등록 완료")
 
         except Exception as e:
-            self._logger.warning(f"⚠️ 통합 로깅 시스템 등록 실패: {e}")
+            if self._logger:
+                self._logger.warning(f"⚠️ 통합 로깅 시스템 등록 실패: {e}")
             # 기본 로깅으로 폴백 (에러 처리 정책 준수)
 
     def _configure_environment_logging(self, logging_service) -> None:
@@ -220,42 +229,59 @@ class ApplicationContext:
             logging_service.set_context(context)
             logging_service.set_scope(scope)
 
-            self._logger.debug(f"🎯 환경별 로깅 설정 적용: {context.value} / {scope.value}")
+            if self._logger:
+                self._logger.debug(f"🎯 환경별 로깅 설정 적용: {context.value} / {scope.value}")
 
         except Exception as e:
-            self._logger.warning(f"환경별 로깅 설정 실패: {e}")
+            if self._logger:
+                self._logger.warning(f"환경별 로깅 설정 실패: {e}")
 
     def _register_database_services(self) -> None:
         """데이터베이스 관련 서비스 등록 및 시스템 필수 검증"""
         try:
-            self._logger.info("🔍 시스템 필수 데이터베이스 검증 시작")
+            if self._logger:
+                self._logger.info("🔍 데이터베이스 서비스 등록 및 검증 시작")
 
-            # 1. 데이터베이스 검증 Use Case 등록
+            # 1. 데이터베이스 경로 설정
+            from upbit_auto_trading.infrastructure.configuration import get_path_service
+            path_service = get_path_service()
+            db_paths = {
+                'settings': str(path_service.get_database_path('settings')),
+                'strategies': str(path_service.get_database_path('strategies')),
+                'market_data': str(path_service.get_database_path('market_data'))
+            }
+
+            # 2. DatabaseConnectionProvider 초기화 및 등록
+            self.db_connection_provider = DatabaseConnectionProvider()
+            self.db_connection_provider.initialize(db_paths)
+            if self._container:
+                self._container.register_instance(DatabaseConnectionProvider, self.db_connection_provider)
+
+            # 3. 데이터베이스 검증 Use Case 등록 및 실행
             from upbit_auto_trading.application.use_cases.database_configuration.\
                 database_validation_use_case import DatabaseValidationUseCase
             from upbit_auto_trading.infrastructure.repositories.\
                 database_config_repository import DatabaseConfigRepository
 
-            # Repository 인스턴스 생성 및 등록
             db_repo = DatabaseConfigRepository()
             validation_use_case = DatabaseValidationUseCase(db_repo)
+            if self._container:
+                self._container.register_singleton(DatabaseValidationUseCase, validation_use_case)
 
-            # 컨테이너에 등록
-            self._container.register_singleton(DatabaseValidationUseCase, validation_use_case)
-
-            # 2. 시스템 필수 DB 검증 실행
             self._validate_system_databases(validation_use_case)
 
-            self._logger.info("✅ 데이터베이스 서비스 등록 및 검증 완료")
+            if self._logger:
+                self._logger.info("✅ 데이터베이스 서비스 등록 및 검증 완료")
 
         except Exception as e:
-            self._logger.error(f"❌ 데이터베이스 서비스 등록 실패: {e}")
-            # 시스템 필수 DB가 문제가 있으면 애플리케이션을 시작할 수 없음
+            if self._logger:
+                self._logger.error(f"❌ 데이터베이스 서비스 등록 실패: {e}")
             raise ApplicationContextError(f"필수 데이터베이스 검증 실패: {e}") from e
 
     def _validate_system_databases(self, validation_use_case: Any) -> None:
         """시스템 필수 데이터베이스 검증 및 복구"""
-        self._logger.info("📊 필수 데이터베이스 파일 무결성 검증 중...")
+        if self._logger:
+            self._logger.info("📊 필수 데이터베이스 파일 무결성 검증 중...")
 
         try:
             # 필수 DB 경로들 확인 - Factory 패턴 사용
@@ -274,21 +300,25 @@ class ApplicationContext:
                 try:
                     # 기본 파일 존재 확인
                     if not Path(db_path).exists():
-                        self._logger.warning(f"⚠️ {db_name} DB 파일 없음: {db_path}")
+                        if self._logger:
+                            self._logger.warning(f"⚠️ {db_name} DB 파일 없음: {db_path}")
                         self._create_default_database(db_name, str(db_path))
                         continue
 
                     # SQLite 무결성 검증
                     if not self._verify_sqlite_integrity(str(db_path)):
-                        self._logger.error(f"❌ {db_name} DB 손상 감지: {db_path}")
+                        if self._logger:
+                            self._logger.error(f"❌ {db_name} DB 손상 감지: {db_path}")
                         self._handle_corrupted_database(db_name, str(db_path))
                         failed_databases.append(db_name)
                         continue
 
-                    self._logger.info(f"✅ {db_name} DB 무결성 검증 완료")
+                    if self._logger:
+                        self._logger.info(f"✅ {db_name} DB 무결성 검증 완료")
 
                 except Exception as db_error:
-                    self._logger.error(f"❌ {db_name} DB 검증 실패: {db_error}")
+                    if self._logger:
+                        self._logger.error(f"❌ {db_name} DB 검증 실패: {db_error}")
                     failed_databases.append(db_name)
 
             # 복구 불가능한 DB가 있으면 시스템 시작 중단
@@ -299,7 +329,8 @@ class ApplicationContext:
                 )
 
         except Exception as e:
-            self._logger.error(f"❌ 시스템 DB 검증 중 오류: {e}")
+            if self._logger:
+                self._logger.error(f"❌ 시스템 DB 검증 중 오류: {e}")
             raise
 
     def _verify_sqlite_integrity(self, db_path: str) -> bool:
@@ -315,16 +346,19 @@ class ApplicationContext:
                 if result and result[0] == "ok":
                     return True
                 else:
-                    self._logger.error(f"무결성 검사 실패: {result}")
+                    if self._logger:
+                        self._logger.error(f"무결성 검사 실패: {result}")
                     return False
 
         except Exception as e:
-            self._logger.error(f"SQLite 검증 실패: {e}")
+            if self._logger:
+                self._logger.error(f"SQLite 검증 실패: {e}")
             return False
 
     def _create_default_database(self, db_name: str, db_path: str) -> None:
         """기본 데이터베이스 생성"""
-        self._logger.info(f"🔧 {db_name} 기본 DB 생성 중: {db_path}")
+        if self._logger:
+            self._logger.info(f"🔧 {db_name} 기본 DB 생성 중: {db_path}")
 
         try:
             # 디렉토리 생성
@@ -338,27 +372,32 @@ class ApplicationContext:
             elif db_name == 'market_data':
                 self._create_market_data_schema(db_path)
 
-            self._logger.info(f"✅ {db_name} 기본 DB 생성 완료")
+            if self._logger:
+                self._logger.info(f"✅ {db_name} 기본 DB 생성 완료")
 
         except Exception as e:
-            self._logger.error(f"❌ {db_name} DB 생성 실패: {e}")
+            if self._logger:
+                self._logger.error(f"❌ {db_name} DB 생성 실패: {e}")
             raise
 
     def _handle_corrupted_database(self, db_name: str, db_path: str) -> None:
         """손상된 데이터베이스 처리"""
-        self._logger.warning(f"🔧 {db_name} 손상된 DB 복구 시도: {db_path}")
+        if self._logger:
+            self._logger.warning(f"🔧 {db_name} 손상된 DB 복구 시도: {db_path}")
 
         try:
             # 손상된 파일 백업
             backup_path = f"{db_path}.corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             Path(db_path).rename(backup_path)
-            self._logger.info(f"📦 손상된 DB 백업 완료: {backup_path}")
+            if self._logger:
+                self._logger.info(f"📦 손상된 DB 백업 완료: {backup_path}")
 
             # 새 DB 생성
             self._create_default_database(db_name, db_path)
 
         except Exception as e:
-            self._logger.error(f"❌ {db_name} DB 복구 실패: {e}")
+            if self._logger:
+                self._logger.error(f"❌ {db_name} DB 복구 실패: {e}")
             raise
 
     def _create_settings_schema(self, db_path: str) -> None:
@@ -428,7 +467,8 @@ class ApplicationContext:
         """API 클라이언트 서비스 등록"""
         # API 클라이언트들 등록 (향후 구현)
         # 현재는 placeholder로 남겨둠
-        self._logger.debug("API 서비스 등록 (placeholder)")
+        if self._logger:
+            self._logger.debug("API 서비스 등록 (placeholder)")
 
     def _register_repositories(self) -> None:
         """Repository 등록"""
@@ -437,7 +477,8 @@ class ApplicationContext:
         # self._container.register_singleton(IStrategyRepository, SqliteStrategyRepository)
         # self._container.register_singleton(ITriggerRepository, SqliteTriggerRepository)
         # 현재는 placeholder로 남겨둠
-        self._logger.debug("Repository 등록 (placeholder)")
+        if self._logger:
+            self._logger.debug("Repository 등록 (placeholder)")
 
     def _register_event_system(self) -> None:
         """Event System 등록"""
@@ -445,7 +486,8 @@ class ApplicationContext:
         # 실제 구현에서는 다음과 같이 등록:
         # self._container.register_singleton(IEventBus, InMemoryEventBus)
         # 현재는 placeholder로 남겨둠
-        self._logger.debug("Event System 등록 (placeholder)")
+        if self._logger:
+            self._logger.debug("Event System 등록 (placeholder)")
 
     def _register_application_services(self) -> None:
         """Application Service 등록"""
@@ -454,7 +496,8 @@ class ApplicationContext:
         # self._container.register_transient(StrategyApplicationService)
         # self._container.register_transient(TriggerApplicationService)
         # 현재는 placeholder로 남겨둠
-        self._logger.debug("Application Service 등록 (placeholder)")
+        if self._logger:
+            self._logger.debug("Application Service 등록 (placeholder)")
 
     def _cleanup_on_failure(self) -> None:
         """초기화 실패 시 정리 작업"""
@@ -462,9 +505,10 @@ class ApplicationContext:
             try:
                 self._container.dispose()
             except Exception as e:
-                self._logger.warning(f"컨테이너 정리 중 오류: {e}")
+                if self._logger:
+                    self._logger.warning(f"컨테이너 정리 중 오류: {e}")
             self._container = None
-        self._initialized = False
+        self._is_initialized = False
 
     @property
     def config(self) -> ApplicationConfig:
@@ -477,7 +521,7 @@ class ApplicationContext:
         Raises:
             RuntimeError: 컨텍스트가 초기화되지 않은 경우
         """
-        if not self._initialized or not self._config:
+        if not self._is_initialized or not self._config:
             raise RuntimeError("애플리케이션 컨텍스트가 초기화되지 않았습니다")
         return self._config
 
@@ -492,14 +536,14 @@ class ApplicationContext:
         Raises:
             RuntimeError: 컨텍스트가 초기화되지 않은 경우
         """
-        if not self._initialized or not self._container:
+        if not self._is_initialized or not self._container:
             raise RuntimeError("애플리케이션 컨텍스트가 초기화되지 않았습니다")
         return self._container
 
     @property
     def is_initialized(self) -> bool:
         """초기화 상태 확인"""
-        return self._initialized
+        return self._is_initialized
 
     def resolve(self, service_type: type) -> Any:
         """
@@ -528,12 +572,14 @@ class ApplicationContext:
 
         주의: 이미 생성된 서비스 인스턴스들은 새 설정을 반영하지 않을 수 있음
         """
-        if not self._initialized or not self._config or not self._container:
-            self._logger.warning("컨텍스트가 초기화되지 않아 설정 리로드를 건너뜁니다")
+        if not self._is_initialized or not self._config or not self._container:
+            if self._logger:
+                self._logger.warning("컨텍스트가 초기화되지 않아 설정 리로드를 건너뜁니다")
             return
 
         try:
-            self._logger.info("설정 다시 로드 중...")
+            if self._logger:
+                self._logger.info("설정 다시 로드 중...")
 
             # 새 설정 로드
             config_loader = ConfigLoader(self._config_dir)
@@ -544,14 +590,17 @@ class ApplicationContext:
             self._config = new_config
 
             # 컨테이너의 설정 인스턴스 업데이트
-            self._container.register_instance(ApplicationConfig, self._config)
+            if self._container:
+                self._container.register_instance(ApplicationConfig, self._config)
 
-            self._logger.info(
-                f"설정 다시 로드 완료: {old_env.value} -> {new_config.environment.value}"
-            )
+            if self._logger:
+                self._logger.info(
+                    f"설정 다시 로드 완료: {old_env.value} -> {new_config.environment.value}"
+                )
 
         except Exception as e:
-            self._logger.error(f"설정 리로드 실패: {e}")
+            if self._logger:
+                self._logger.error(f"설정 리로드 실패: {e}")
             raise ApplicationContextError(f"설정 리로드 실패: {e}") from e
 
     def dispose(self) -> None:
@@ -560,8 +609,9 @@ class ApplicationContext:
 
         모든 관리되는 리소스를 정리하고 컨테이너를 해제합니다.
         """
-        if not self._initialized:
-            self._logger.debug("컨텍스트가 이미 해제되었거나 초기화되지 않았습니다")
+        if not self._is_initialized:
+            if self._logger:
+                self._logger.debug("컨텍스트가 이미 해제되었거나 초기화되지 않았습니다")
             return
 
         try:
@@ -570,16 +620,86 @@ class ApplicationContext:
                 self._container = None
 
             self._config = None
-            self._initialized = False
+            self._is_initialized = False
 
-            self._logger.info("애플리케이션 컨텍스트 해제 완료")
+            if self._logger:
+                self._logger.info("애플리케이션 컨텍스트 해제 완료")
 
         except Exception as e:
-            self._logger.error(f"컨텍스트 해제 중 오류: {e}")
+            if self._logger:
+                self._logger.error(f"컨텍스트 해제 중 오류: {e}")
             # 해제 실패해도 상태는 정리
             self._container = None
             self._config = None
-            self._initialized = False
+            self._is_initialized = False
+
+    def shutdown(self) -> None:
+        """애플리케이션 종료 시 리소스 정리 - 개선된 안전한 종료"""
+        if self._logger:
+            self._logger.info("🚀 애플리케이션 컨텍스트 종료 시작...")
+
+        # 1. 데이터베이스 연결 정리
+        try:
+            if self.db_connection_provider:
+                db_manager = self.db_connection_provider.get_manager()
+                if db_manager:
+                    # 모든 활성 연결 강제 종료
+                    db_manager.close_all()
+
+                    # Connection Provider는 자체 정리 메서드가 없으므로 참조만 제거
+                    self.db_connection_provider = None
+
+                    if self._logger:
+                        self._logger.info("✅ 모든 데이터베이스 연결이 성공적으로 종료되었습니다.")
+                else:
+                    if self._logger:
+                        self._logger.warning("⚠️ DatabaseManager가 None입니다.")
+            else:
+                if self._logger:
+                    self._logger.warning("⚠️ DatabaseConnectionProvider가 None입니다.")
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"❌ 데이터베이스 연결 종료 중 오류 발생: {e}")
+
+        # 2. DI Container 리소스 정리
+        try:
+            if self._container:
+                # Container의 모든 Disposable 리소스 정리
+                self._container.dispose()
+                self._container = None
+                if self._logger:
+                    self._logger.info("✅ DI Container 리소스 정리 완료")
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"❌ DI Container 정리 중 오류: {e}")
+
+        # 3. 설정 및 상태 정리
+        try:
+            self._config = None
+            self._is_initialized = False
+            if self._logger:
+                self._logger.info("✅ 애플리케이션 상태 정리 완료")
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"❌ 상태 정리 중 오류: {e}")
+
+        # 4. 강제 가비지 컬렉션 (SQLite 연결 정리 보장)
+        try:
+            import gc
+            gc.collect()
+            if self._logger:
+                self._logger.info("✅ 메모리 정리 (가비지 컬렉션) 완료")
+        except Exception as e:
+            if self._logger:
+                self._logger.warning(f"⚠️ 가비지 컬렉션 중 오류: {e}")
+
+        if self._logger:
+            self._logger.info("🏁 애플리케이션 컨텍스트 종료 완료.")
+
+    def _initialize_logging(self) -> None:
+        """로깅 시스템 초기화"""
+        # ... existing code ...
+        pass
 
     def __enter__(self) -> 'ApplicationContext':
         """컨텍스트 매니저 진입"""
@@ -592,14 +712,16 @@ class ApplicationContext:
 
     def __repr__(self) -> str:
         """문자열 표현"""
-        if self._initialized and self._config:
+        if self._is_initialized and self._config:
             env = self._config.environment.value
             return f"ApplicationContext(environment={env}, initialized=True)"
         else:
             return f"ApplicationContext(environment={self._environment}, initialized=False)"
 
+
 # 애플리케이션 전역 컨텍스트 (선택적 사용)
 _app_context: Optional[ApplicationContext] = None
+
 
 def get_application_context() -> ApplicationContext:
     """
@@ -620,6 +742,7 @@ def get_application_context() -> ApplicationContext:
         _app_context.initialize()
     return _app_context
 
+
 def set_application_context(context: ApplicationContext) -> None:
     """
     전역 애플리케이션 컨텍스트 설정
@@ -634,6 +757,7 @@ def set_application_context(context: ApplicationContext) -> None:
         _app_context.dispose()
     _app_context = context
 
+
 def reset_application_context() -> None:
     """
     전역 애플리케이션 컨텍스트 재설정
@@ -644,6 +768,7 @@ def reset_application_context() -> None:
     if _app_context and _app_context.is_initialized:
         _app_context.dispose()
     _app_context = None
+
 
 def is_application_context_initialized() -> bool:
     """

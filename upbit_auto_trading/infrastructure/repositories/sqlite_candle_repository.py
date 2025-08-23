@@ -5,6 +5,7 @@ DDD Infrastructure Layer에서 CandleRepositoryInterface를 구현합니다.
 DatabaseManager를 통해 올바른 DB 연결을 관리하고, FOREIGN KEY 제약을 해결합니다.
 """
 
+from datetime import datetime
 from typing import List, Dict, Optional, Any
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
@@ -333,3 +334,228 @@ class SqliteCandleRepository(CandleRepositoryInterface):
     def _get_table_name(self, symbol: str, timeframe: str) -> str:
         """심볼과 타임프레임으로 테이블명 생성"""
         return f"candles_{symbol.replace('-', '_')}_{timeframe}"
+
+    # === 수집 상태 관리 메서드 (Smart Candle Collector 기능) ===
+
+    async def get_collection_status(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime
+    ) -> Optional[Dict[str, Any]]:
+        """특정 시간의 수집 상태 조회"""
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.execute("""
+                    SELECT id, symbol, timeframe, target_time, collection_status,
+                           last_attempt_at, attempt_count, api_response_code,
+                           created_at, updated_at
+                    FROM candle_collection_status
+                    WHERE symbol = ? AND timeframe = ? AND target_time = ?
+                """, (symbol, timeframe, target_time.isoformat()))
+
+                row = cursor.fetchone()
+                if not row:
+                    return None
+
+                columns = [description[0] for description in cursor.description]
+                return dict(zip(columns, row))
+
+        except Exception as e:
+            logger.error(f"수집 상태 조회 실패: {symbol} {timeframe} {target_time}, {e}")
+            return None
+
+    async def update_collection_status(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime,
+        status: str,
+        api_response_code: Optional[int] = None
+    ) -> None:
+        """수집 상태 업데이트"""
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.cursor()
+
+                # UPSERT 쿼리
+                cursor.execute("""
+                    INSERT INTO candle_collection_status (
+                        symbol, timeframe, target_time, collection_status,
+                        last_attempt_at, attempt_count, api_response_code,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT(symbol, timeframe, target_time) DO UPDATE SET
+                        collection_status = excluded.collection_status,
+                        last_attempt_at = excluded.last_attempt_at,
+                        attempt_count = attempt_count + 1,
+                        api_response_code = excluded.api_response_code,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (
+                    symbol,
+                    timeframe,
+                    target_time.isoformat(),
+                    status,
+                    datetime.now().isoformat(),
+                    api_response_code
+                ))
+
+                conn.commit()
+                logger.debug(f"수집 상태 업데이트: {symbol} {timeframe} {target_time} -> {status}")
+
+        except Exception as e:
+            logger.error(f"수집 상태 업데이트 실패: {symbol} {timeframe} {target_time}, {e}")
+            raise
+
+    async def get_missing_candle_times(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[datetime]:
+        """미수집 캔들 시간 목록 조회"""
+        from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.processing.time_utils import (
+            generate_candle_times
+        )
+
+        try:
+            # 예상되는 모든 캔들 시간 생성
+            expected_times = generate_candle_times(start_time, end_time, timeframe)
+
+            if not expected_times:
+                return []
+
+            # DB에서 수집 상태 조회
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.cursor()
+
+                # IN 절을 위한 placeholder 생성
+                placeholders = ','.join(['?' for _ in expected_times])
+                time_strings = [t.isoformat() for t in expected_times]
+
+                cursor.execute(f"""
+                    SELECT target_time, collection_status
+                    FROM candle_collection_status
+                    WHERE symbol = ? AND timeframe = ?
+                    AND target_time IN ({placeholders})
+                """, [symbol, timeframe] + time_strings)
+
+                existing_statuses = {
+                    datetime.fromisoformat(row[0]): row[1]
+                    for row in cursor.fetchall()
+                }
+
+            # 미수집 시간 필터링
+            missing_times = []
+            for time in expected_times:
+                status = existing_statuses.get(time)
+                if status is None or status in ['PENDING', 'FAILED']:
+                    missing_times.append(time)
+
+            return missing_times
+
+        except Exception as e:
+            logger.error(f"미수집 캔들 시간 조회 실패: {symbol} {timeframe}, {e}")
+            return []
+
+    async def get_empty_candle_times(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> List[datetime]:
+        """빈 캔들 시간 목록 조회"""
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.execute("""
+                    SELECT target_time
+                    FROM candle_collection_status
+                    WHERE symbol = ? AND timeframe = ?
+                    AND collection_status = 'EMPTY'
+                    AND target_time BETWEEN ? AND ?
+                    ORDER BY target_time
+                """, (
+                    symbol,
+                    timeframe,
+                    start_time.isoformat(),
+                    end_time.isoformat()
+                ))
+
+                return [datetime.fromisoformat(row[0]) for row in cursor.fetchall()]
+
+        except Exception as e:
+            logger.error(f"빈 캔들 시간 조회 실패: {symbol} {timeframe}, {e}")
+            return []
+
+    async def get_continuous_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        include_empty: bool = True
+    ) -> List[Dict[str, Any]]:
+        """연속된 캔들 데이터 조회 (빈 캔들 포함/제외 선택 가능)"""
+        try:
+            if include_empty:
+                # 차트용: CollectionStatusManager 사용
+                from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.processing import (
+                    collection_status_manager
+                )
+
+                db_path = "data/market_data.sqlite3"  # 기본 경로 사용
+                collection_manager = collection_status_manager.CollectionStatusManager(db_path)
+
+                # 실제 캔들 데이터 조회
+                actual_candles = await self.get_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat()
+                )
+
+                # 빈 캔들 채움
+                continuous_candles = collection_manager.fill_empty_candles(
+                    candles=actual_candles,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
+                # CandleWithStatus를 Dict로 변환
+                result = []
+                for candle_with_status in continuous_candles:
+                    candle_dict = {
+                        'market': candle_with_status.market,
+                        'candle_date_time_utc': candle_with_status.candle_date_time_utc.isoformat() + 'Z',
+                        'candle_date_time_kst': candle_with_status.candle_date_time_kst.isoformat() + 'Z',
+                        'opening_price': float(candle_with_status.opening_price),
+                        'high_price': float(candle_with_status.high_price),
+                        'low_price': float(candle_with_status.low_price),
+                        'trade_price': float(candle_with_status.trade_price),
+                        'timestamp': candle_with_status.timestamp,
+                        'candle_acc_trade_price': float(candle_with_status.candle_acc_trade_price),
+                        'candle_acc_trade_volume': float(candle_with_status.candle_acc_trade_volume),
+                        'unit': candle_with_status.unit,
+                        'is_empty': candle_with_status.is_empty,
+                        'collection_status': candle_with_status.collection_status.value
+                    }
+                    result.append(candle_dict)
+
+                return result
+
+            else:
+                # 지표용: 기존 get_candles 사용 (실제 거래 데이터만)
+                return await self.get_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start_time.isoformat(),
+                    end_time=end_time.isoformat()
+                )
+
+        except Exception as e:
+            logger.error(f"연속 캔들 조회 실패: {symbol} {timeframe}, {e}")
+            return []

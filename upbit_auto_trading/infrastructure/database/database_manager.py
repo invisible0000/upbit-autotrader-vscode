@@ -106,18 +106,21 @@ class DatabaseManager:
         """마지막 삽입된 행의 ID 반환"""
         with self.get_connection(db_name) as conn:
             cursor = conn.execute("SELECT last_insert_rowid()")
-            return cursor.fetchone()[0]
+            result = cursor.fetchone()
+            return result[0] if result else 0
 
     def close_all(self) -> None:
         """모든 데이터베이스 연결 종료"""
-        for db_name, conn in self._connections.items():
-            try:
-                conn.close()
-                self._logger.info(f"데이터베이스 연결 종료: {db_name}")
-            except Exception as e:
-                self._logger.error(f"데이터베이스 연결 종료 실패 {db_name}: {e}")
+        with self._lock:
+            for db_name, conn in self._connections.items():
+                try:
+                    conn.close()
+                    self._logger.info(f"✅ 데이터베이스 연결 종료: {db_name}")
+                except Exception as e:
+                    self._logger.error(f"❌ 데이터베이스 연결 종료 실패 {db_name}: {e}")
 
-        self._connections.clear()
+            self._connections.clear()
+            self._logger.info("모든 활성 데이터베이스 연결이 정리되었습니다.")
 
 class DatabaseConnectionProvider:
     """데이터베이스 연결 제공자 (Singleton)"""

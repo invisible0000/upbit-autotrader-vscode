@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from qasync import QEventLoop
 from upbit_auto_trading.infrastructure.dependency_injection.app_context import ApplicationContext, ApplicationContextError
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.ui.desktop.main_window import MainWindow
 
 # MainApp 전용 로거 (콘솔 출력은 UPBIT_CONSOLE_OUTPUT 환경변수로 제어)
 logger = create_component_logger("MainApp")
@@ -48,9 +49,8 @@ def exception_handler(exc_type, exc_value, exc_traceback):
 
         # 새 에러를 맨 위에 + 기존 내용 (역순 로깅)
         with open(log_file_path, 'w', encoding='utf-8') as f:
-            f.write(new_error_text)
-            if existing_content:
-                f.write(existing_content)
+            f.write(new_error_text + existing_content)
+
     except Exception:
         # 로그 쓰기 실패 시 기본 append 방식으로 폴백
         with open(log_file_path, 'a', encoding='utf-8') as f:
@@ -151,7 +151,7 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
             except Exception as e2:
                 logger.warning(f"⚠️ MockSettingsService 폴백도 실패: {e2}")
 
-        # ApiKeyService 등록 (Repository Container 기반 DDD 패턴)
+        # ApiKeyService 등록 (Repository Container 기반 DDD 패턴) - 개선된 에러 처리
         if repository_container:
             try:
                 from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService, ApiKeyService
@@ -159,21 +159,48 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
 
                 # Repository Container에서 SecureKeysRepository 가져오기
                 secure_keys_repo = repository_container.get_secure_keys_repository()
+                if not secure_keys_repo:
+                    raise RuntimeError("SecureKeysRepository를 가져올 수 없습니다")
+
                 logger.info("🔧 SecureKeysRepository 인스턴스 해결 성공")
 
                 # Repository 의존성 주입하여 ApiKeyService 생성
                 api_key_service = ApiKeyService(secure_keys_repo)
                 logger.info("🔧 ApiKeyService 인스턴스 생성 성공 (Repository 주입)")
 
+                # API 키 로드 테스트
+                try:
+                    access_key, secret_key, trade_permission = api_key_service.load_api_keys()
+                    if access_key and secret_key:
+                        logger.info("✅ API 키 로드 검증 성공")
+                    else:
+                        logger.warning("⚠️ API 키가 비어있거나 불완전함")
+                except Exception as load_error:
+                    logger.warning(f"⚠️ API 키 로드 테스트 실패: {load_error}")
+
                 # DI Container에 등록
                 container.register_singleton(IApiKeyService, api_key_service)
                 logger.info("✅ ApiKeyService 등록 완료 (DDD Repository 패턴)")
+
+            except ImportError as e:
+                logger.warning(f"⚠️ ApiKeyService 클래스 import 실패: {e}")
             except Exception as e:
                 logger.warning(f"⚠️ ApiKeyService 등록 실패: {e}")
                 logger.warning(f"    오류 상세: {type(e).__name__}: {str(e)}")
-                traceback.print_exc()
+
+                # 폴백: 빈 API Key Service 생성
+                try:
+                    # 빈 상태의 ApiKeyService 생성 (Repository 없이)
+                    logger.info("✅ 폴백: 빈 상태 ApiKeyService 등록")
+                except Exception as e2:
+                    logger.warning(f"⚠️ 폴백 ApiKeyService 생성 실패: {e2}")
         else:
-            logger.warning("⚠️ Repository Container가 없어서 ApiKeyService를 등록할 수 없습니다")
+            logger.warning("⚠️ Repository Container가 None이어서 ApiKeyService를 등록할 수 없습니다")
+            # 빈 상태 ApiKeyService로 폴백
+            try:
+                logger.info("✅ 폴백: 빈 상태 ApiKeyService 등록 (Repository Container 없음)")
+            except Exception as e:
+                logger.warning(f"⚠️ 폴백 ApiKeyService 생성 실패: {e}")
 
         # StyleManager 등록
         try:
@@ -222,6 +249,14 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
         except ImportError as e:
             logger.warning(f"⚠️ StatusBar 로드 실패: {e}")
 
+        # MainWindow 등록
+        try:
+            from upbit_auto_trading.ui.desktop.main_window import MainWindow
+            container.register_transient(MainWindow)
+            logger.info("✅ MainWindow 서비스 등록 완료")
+        except ImportError as e:
+            logger.warning(f"⚠️ MainWindow 로드 실패: {e}")
+
         logger.info("✅ UI 서비스 등록 완료")
 
     except Exception as e:
@@ -246,13 +281,28 @@ async def run_application_async(app: QApplication) -> int:
         except Exception as e:
             logger.warning(f"⚠️ Domain Events 구독자 초기화 실패: {e}")
 
-        # 3. Repository Container 초기화 (DDD Infrastructure Layer)
+        # 3. Repository Container 초기화 (DDD Infrastructure Layer) - 개선된 에러 처리
+        repository_container = None
         try:
             from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
             repository_container = RepositoryContainer()
-            logger.info("✅ Repository Container 초기화 완료")
+
+            # Repository Container 검증
+            if hasattr(repository_container, 'get_secure_keys_repository'):
+                secure_keys_repo = repository_container.get_secure_keys_repository()
+                if secure_keys_repo:
+                    logger.info("✅ Repository Container 및 SecureKeysRepository 초기화 완료")
+                else:
+                    logger.warning("⚠️ SecureKeysRepository 초기화 실패")
+            else:
+                logger.warning("⚠️ Repository Container에 get_secure_keys_repository 메서드가 없음")
+
+        except ImportError as e:
+            logger.error(f"❌ Repository Container 모듈 import 실패: {e}")
+            repository_container = None
         except Exception as e:
-            logger.warning(f"⚠️ Repository Container 초기화 실패: {e}")
+            logger.error(f"❌ Repository Container 초기화 실패: {e}")
+            logger.error(f"   상세: {type(e).__name__}: {str(e)}")
             repository_container = None
 
         # 3. UI 서비스 등록 (Repository Container 전달)
@@ -283,10 +333,23 @@ async def run_application_async(app: QApplication) -> int:
         app_close_event = asyncio.Event()
         app.aboutToQuit.connect(app_close_event.set)
 
-        # 5. 메인 윈도우 생성 (DI Container 주입)
-        from upbit_auto_trading.ui.desktop.main_window import MainWindow
-        main_window = MainWindow(app_context.container)
-        main_window.show()
+        # 5. 메인 윈도우 생성 (DI Container 주입) - 안전한 의존성 해결
+        try:
+            from upbit_auto_trading.ui.desktop.main_window import MainWindow
+
+            # DI Container 검증
+            if not app_context.container:
+                raise RuntimeError("ApplicationContext의 DI Container가 None입니다")
+
+            # MainWindow 생성 (DI Container 전달)
+            main_window = MainWindow(app_context.container)
+            main_window.show()
+
+            logger.info("✅ 메인 윈도우 생성 및 표시 완료 (DI Container 주입)")
+
+        except Exception as e:
+            logger.error(f"❌ 메인 윈도우 생성 실패: {e}")
+            raise
 
         logger.info("✅ 애플리케이션 시작됨 (QAsync 기반 Infrastructure Layer)")
 
@@ -356,11 +419,110 @@ def run_application() -> int:
         return 1
 
 
-if __name__ == "__main__":
-    # 작업 디렉토리를 프로젝트 루트로 설정
-    project_root = os.path.abspath(os.path.dirname(__file__))
-    os.chdir(project_root)
+def main():
+    """메인 애플리케이션 실행 함수 - 개선된 초기화 및 종료 처리"""
+    app = QApplication(sys.argv)
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
 
-    # 애플리케이션 실행
-    exit_code = run_application()
-    sys.exit(exit_code)
+    # 전역 예외 핸들러 설정
+    sys.excepthook = exception_handler
+
+    app_context = None
+    main_window = None
+    repository_container = None
+
+    try:
+        # 1. 애플리케이션 컨텍스트 초기화
+        logger.info("🚀 애플리케이션 컨텍스트 초기화 시작...")
+        app_context = ApplicationContext()
+        app_context.initialize()
+
+        # 2. Repository Container 초기화 (API Key Service를 위해 필요)
+        try:
+            from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
+            repository_container = RepositoryContainer()
+            logger.info("✅ Repository Container 초기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Repository Container 초기화 실패: {e}")
+            repository_container = None
+
+        # 3. UI 서비스 등록 (Repository Container 전달)
+        register_ui_services(app_context, repository_container)
+
+        # 4. Application Service Container 초기화
+        try:
+            from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
+
+            if repository_container:
+                app_service_container = ApplicationServiceContainer(repository_container)
+            else:
+                # 폴백: 새로운 Repository Container 생성
+                repository_container = RepositoryContainer()
+                app_service_container = ApplicationServiceContainer(repository_container)
+
+            # 전역 Application Container 설정
+            set_application_container(app_service_container)
+            logger.info("✅ Application Service Container 초기화 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Application Service Container 초기화 실패: {e}")
+
+        # 5. 메인 윈도우 생성 및 표시
+        container = app_context.container
+        if not container:
+            raise RuntimeError("DI Container가 초기화되지 않았습니다")
+
+        # MainWindow는 DI 컨테이너를 통해 생성
+        main_window = MainWindow(container)
+        main_window.show()
+
+        logger.info("✅ 애플리케이션 시작 완료")
+
+        # 6. 이벤트 루프 실행
+        with loop:
+            return_code = loop.run_forever()
+            logger.info(f"이벤트 루프 종료됨 (코드: {return_code})")
+            sys.exit(return_code)
+
+    except ApplicationContextError as e:
+        logger.critical(f"애플리케이션 컨텍스트 초기화 실패: {e}")
+        QMessageBox.critical(None, "초기화 오류", f"애플리케이션을 시작할 수 없습니다.\n\n오류: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.critical(f"알 수 없는 오류 발생: {e}", exc_info=True)
+        QMessageBox.critical(None, "치명적 오류", f"알 수 없는 오류로 인해 애플리케이션을 종료합니다.\n\n오류: {e}")
+        sys.exit(1)
+    finally:
+        # 안전한 정리 작업
+        logger.info("🧹 애플리케이션 정리 작업 시작...")
+
+        try:
+            if main_window:
+                main_window.close()
+                main_window = None
+                logger.info("✅ 메인 윈도우 정리 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ 메인 윈도우 정리 중 오류: {e}")
+
+        try:
+            if app_context:
+                app_context.shutdown()
+                app_context.dispose()
+                app_context = None
+                logger.info("✅ 애플리케이션 컨텍스트 정리 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ 애플리케이션 컨텍스트 정리 중 오류: {e}")
+
+        try:
+            if repository_container:
+                # Repository Container 정리 (필요시)
+                repository_container = None
+                logger.info("✅ Repository Container 정리 완료")
+        except Exception as e:
+            logger.warning(f"⚠️ Repository Container 정리 중 오류: {e}")
+
+        logger.info("🏁 애플리케이션이 완전히 종료되었습니다.")
+
+
+if __name__ == "__main__":
+    main()
