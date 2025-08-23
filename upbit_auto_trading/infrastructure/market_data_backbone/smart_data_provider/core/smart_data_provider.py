@@ -500,22 +500,69 @@ class SmartDataProvider:
             )
 
         try:
-            # 각 심볼별 개별 조회 (향후 배치 최적화 가능)
+            # 캐시 최적화 구현
             results = {}
             cache_hits = 0
+            uncached_symbols = []
 
+            # 1. 캐시에서 먼저 조회
             for symbol in symbols:
-                ticker_response = await self.get_ticker(symbol, priority)
-                if ticker_response.success:
-                    results[symbol] = ticker_response.data
-                    if ticker_response.metadata and ticker_response.metadata.cache_hit:
-                        cache_hits += 1
+                cached_data = self.realtime_cache.get_ticker(symbol)
+                if cached_data:
+                    results[symbol] = cached_data
+                    cache_hits += 1
+                else:
+                    uncached_symbols.append(symbol)
+
+            logger.debug(f"캐시 조회 결과: {cache_hits}개 히트, {len(uncached_symbols)}개 미스")
+
+            # 2. 캐시 미스된 심볼들을 한번에 조회 (분할 없음)
+            if uncached_symbols:
+                try:
+                    # Smart Router를 통한 배치 조회 시도
+                    batch_response = await self.smart_router.get_tickers_batch(
+                        symbols=uncached_symbols,
+                        priority=priority
+                    )
+
+                    if batch_response.get('success', False) and batch_response.get('data'):
+                        batch_data = batch_response.get('data', {})
+                        for symbol in uncached_symbols:
+                            if symbol in batch_data and batch_data[symbol]:
+                                results[symbol] = batch_data[symbol]
+                                # 캐시에 저장
+                                self.realtime_cache.set_ticker(symbol, batch_data[symbol])
+
+                        logger.info(f"Smart Router 배치 조회 성공: {len(batch_data)}개 심볼")
+                    else:
+                        logger.warning("Smart Router 배치 조회 실패, 폴백 처리")
+                        raise Exception("Smart Router 배치 조회 실패")
+
+                except Exception as router_error:
+                    logger.warning(f"Smart Router 배치 조회 실패: {router_error}, 업비트 API 폴백")
+
+                    # 폴백: 업비트 API 직접 전체 조회 (분할 없음)
+                    from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
+                    upbit_client = UpbitPublicClient()
+
+                    # 모든 심볼을 한번에 조회 (업비트 API는 실제로 분할이 필요 없음)
+                    try:
+                        tickers = await upbit_client.get_tickers(uncached_symbols)
+                        for ticker in tickers:
+                            symbol = ticker['market']
+                            results[symbol] = ticker
+                            # 캐시에 저장
+                            self.realtime_cache.set_ticker(symbol, ticker)
+
+                        logger.info(f"업비트 API 전체 조회 성공: {len(tickers)}개 심볼")
+                    except Exception as api_error:
+                        logger.error(f"업비트 API 조회 실패: {api_error}")
 
             response_time = time.time() * 1000 - start_time_ms
 
             metadata = ResponseMetadata(
                 priority_used=priority,
-                source="mixed" if cache_hits > 0 else "api",
+                source="mixed" if cache_hits > 0 else "api_batch",
                 response_time_ms=response_time,
                 cache_hit=cache_hits > 0,
                 records_count=len(results)
@@ -1068,3 +1115,53 @@ class SmartDataProvider:
                 f"cache_hit_rate={cache_hit_rate:.1f}%, "
                 f"realtime_cache={total_entries} entries, "
                 f"memory≈{cache_mb:.1f}MB)")
+
+    async def get_markets(self,
+                          is_details: bool = False,
+                          priority: Priority = Priority.NORMAL) -> DataResponse:
+        """
+        마켓 목록 조회
+
+        Args:
+            is_details: 상세 정보 포함 여부
+            priority: 요청 우선순위
+
+        Returns:
+            DataResponse 객체
+        """
+        start_time_ms = time.time() * 1000
+        self._request_count += 1
+
+        logger.debug(f"마켓 목록 조회: is_details={is_details}, priority={priority}")
+
+        try:
+            # 현재 Smart Router는 마켓 목록 조회를 지원하지 않으므로
+            # 직접 UpbitPublicClient 사용
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
+            upbit_client = UpbitPublicClient()
+            markets_data = await upbit_client.get_markets(is_details=is_details)
+
+            response_time = time.time() * 1000 - start_time_ms
+            return DataResponse(
+                success=True,
+                data=markets_data,
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="upbit_api_direct",
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(markets_data)
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"마켓 목록 조회 실패: {e}")
+            return DataResponse(
+                success=False,
+                error=str(e),
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
+            )

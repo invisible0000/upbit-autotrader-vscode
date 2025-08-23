@@ -161,6 +161,27 @@ class SmartRouterAdapter:
                 'source': 'smart_router_error'
             }
 
+    async def get_markets(self,
+                          is_details: bool = False,
+                          priority: Priority = Priority.NORMAL) -> Dict[str, Any]:
+        """
+        마켓 목록 조회
+
+        Args:
+            is_details: 상세 정보 포함 여부
+            priority: 요청 우선순위
+
+        Returns:
+            마켓 목록 데이터
+        """
+        # Smart Router는 현재 마켓 목록 조회를 지원하지 않으므로
+        # 항상 폴백으로 처리
+        return {
+            'success': False,
+            'error': 'Smart Router에서 마켓 목록 조회 미지원',
+            'source': 'smart_router_not_supported'
+        }
+
     async def get_tickers(self,
                           symbols: List[str],
                           priority: Priority = Priority.HIGH) -> Dict[str, Any]:

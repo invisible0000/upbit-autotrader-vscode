@@ -155,10 +155,7 @@ class UpbitPublicClient(BaseApiClient):
         return response.data
 
     async def get_tickers(self, markets: List[str]) -> List[Dict[str, Any]]:
-        """현재가 정보 조회"""
-        if len(markets) > 100:
-            raise ValueError("한 번에 최대 100개 마켓까지만 조회 가능합니다")
-
+        """현재가 정보 조회 - 업비트 API는 티커 조회에 개수 제한이 없음"""
         params = {'markets': ','.join(markets)}
 
         response = await self._make_request('GET', '/ticker', params=params)

@@ -1,15 +1,18 @@
 """
-코인 리스트 서비스 (Application Layer)
+코인 리스트 서비스 (Application Layer) - Smart Data Provider 통합
 
 차트뷰어 코인 리스트 위젯을 위한 비즈니스 로직을 담당합니다.
-업비트 API를 통해 마켓 데이터를 조회하고 UI에서 사용할 형태로 변환합니다.
+Smart Data Provider를 통해 마켓 데이터를 조회하고 UI에서 사용할 형태로 변환합니다.
 """
 
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.external_apis.upbit import UpbitPublicClient
+from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.core.smart_data_provider import (
+    SmartDataProvider
+)
+from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.models.priority import Priority
 
 
 @dataclass(frozen=True)
@@ -30,10 +33,10 @@ class CoinInfo:
 
 class CoinListService:
     """
-    코인 리스트 서비스
+    코인 리스트 서비스 - Smart Data Provider 통합
 
     기능:
-    - 업비트 마켓 데이터 조회 및 캐싱
+    - Smart Data Provider를 통한 업비트 마켓 데이터 조회 및 캐싱
     - 마켓별 코인 목록 필터링 (KRW/BTC/USDT)
     - 검색 및 즐겨찾기 지원
     - 실시간 가격 정보 포맷팅
@@ -42,22 +45,39 @@ class CoinListService:
     def __init__(self):
         """서비스 초기화"""
         self._logger = create_component_logger("CoinListService")
-        self._upbit_client = UpbitPublicClient()
+        self._smart_data_provider = SmartDataProvider()
 
         # 캐시 데이터
         self._markets_cache: List[Dict[str, Any]] = []
         self._tickers_cache: Dict[str, Dict[str, Any]] = {}
         self._last_update: Optional[str] = None
 
-        self._logger.info("🪙 코인 리스트 서비스 초기화 완료")
+        self._logger.info("🪙 코인 리스트 서비스 초기화 완료 (Smart Data Provider 연동)")
 
     async def get_markets_data(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
-        """마켓 데이터 조회 (캐싱)"""
+        """마켓 데이터 조회 (캐싱) - Smart Data Provider 사용"""
         if force_refresh or not self._markets_cache:
             try:
-                self._logger.debug("업비트 마켓 데이터 조회 중...")
-                self._markets_cache = await self._upbit_client.get_markets(is_details=True)
-                self._logger.info(f"✅ 마켓 데이터 조회 완료: {len(self._markets_cache)}개")
+                self._logger.debug("Smart Data Provider를 통한 마켓 데이터 조회 중...")
+
+                # Smart Data Provider를 통해 마켓 데이터 조회
+                response = await self._smart_data_provider.get_markets(
+                    is_details=True,
+                    priority=Priority.NORMAL
+                )
+
+                if response.success and response.data:
+                    self._markets_cache = response.data
+                    source = response.metadata.source if response.metadata else "unknown"
+                    response_time = response.metadata.response_time_ms if response.metadata else 0
+                    self._logger.info(
+                        f"✅ 마켓 데이터 조회 완료: {len(self._markets_cache)}개 "
+                        f"(소스: {source}, 응답시간: {response_time:.1f}ms)"
+                    )
+                else:
+                    self._logger.error(f"❌ 마켓 데이터 조회 실패: {response.error}")
+                    raise RuntimeError(response.error)
+
             except Exception as e:
                 self._logger.error(f"❌ 마켓 데이터 조회 실패: {e}")
                 raise
@@ -65,7 +85,7 @@ class CoinListService:
         return self._markets_cache
 
     async def get_tickers_data(self, markets: List[str], force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
-        """현재가 데이터 조회 (캐싱)"""
+        """현재가 데이터 조회 (캐싱) - Smart Data Provider 사용 - 배치 최적화"""
         # 캐시되지 않은 마켓만 조회
         uncached_markets = []
         if force_refresh:
@@ -76,19 +96,35 @@ class CoinListService:
 
         if uncached_markets:
             try:
-                self._logger.debug(f"업비트 현재가 데이터 조회 중: {len(uncached_markets)}개")
+                self._logger.debug(f"Smart Data Provider를 통한 현재가 데이터 조회 중: {len(uncached_markets)}개")
 
-                # 100개씩 분할하여 조회 (API 제한)
-                for i in range(0, len(uncached_markets), 100):
-                    batch = uncached_markets[i:i + 100]
-                    tickers = await self._upbit_client.get_tickers(batch)
+                # Smart Data Provider를 통해 모든 심볼을 한번에 조회
+                # 마켓과 티커는 분할 처리가 필요 없음 (캔들과 달리)
+                response = await self._smart_data_provider.get_tickers(
+                    symbols=uncached_markets,
+                    priority=Priority.HIGH
+                )
 
-                    for ticker in tickers:
-                        self._tickers_cache[ticker['market']] = ticker
+                if response.success and response.data:
+                    # 응답 데이터를 캐시에 저장
+                    if isinstance(response.data, dict):
+                        for symbol, ticker_data in response.data.items():
+                            if ticker_data:
+                                self._tickers_cache[symbol] = ticker_data
+                    elif isinstance(response.data, list):
+                        for ticker_data in response.data:
+                            if ticker_data and 'market' in ticker_data:
+                                symbol = ticker_data['market']
+                                self._tickers_cache[symbol] = ticker_data
 
-                self._logger.info(f"✅ 현재가 데이터 조회 완료: {len(self._tickers_cache)}개")
+                    self._logger.info(f"✅ Smart Data Provider 티커 조회 완료: {len(self._tickers_cache)}개")
+                else:
+                    self._logger.error(f"❌ Smart Data Provider 티커 조회 실패: {response.error}")
+
             except Exception as e:
                 self._logger.error(f"❌ 현재가 데이터 조회 실패: {e}")
+                import traceback
+                self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
                 raise
 
         return {market: self._tickers_cache[market] for market in markets if market in self._tickers_cache}
@@ -105,8 +141,11 @@ class CoinListService:
             코인 정보 목록
         """
         try:
+            self._logger.info(f"🔍 {market_type} 마켓 코인 목록 조회 시작 (검색: '{search_filter}')")
+
             # 1. 마켓 데이터 조회
             markets_data = await self.get_markets_data()
+            self._logger.debug(f"📊 전체 마켓 데이터: {len(markets_data)}개")
 
             # 2. 해당 마켓 필터링
             filtered_markets = []
@@ -115,12 +154,16 @@ class CoinListService:
                 if symbol.startswith(f"{market_type}-"):
                     filtered_markets.append(symbol)
 
+            self._logger.info(f"📈 {market_type} 마켓 필터링 결과: {len(filtered_markets)}개")
+
             if not filtered_markets:
                 self._logger.warning(f"⚠️  {market_type} 마켓에 코인이 없습니다")
                 return []
 
             # 3. 현재가 정보 조회
+            self._logger.debug(f"💰 현재가 정보 조회 시작: {len(filtered_markets)}개")
             tickers_data = await self.get_tickers_data(filtered_markets)
+            self._logger.info(f"✅ 현재가 정보 조회 완료: {len(tickers_data)}개")
 
             # 4. CoinInfo 객체 생성
             coins = []
@@ -132,6 +175,7 @@ class CoinListService:
                 # 현재가 정보 확인
                 ticker = tickers_data.get(symbol)
                 if not ticker:
+                    self._logger.debug(f"⚠️ {symbol}: 현재가 정보 없음")
                     continue
 
                 # 검색 필터 적용
@@ -149,11 +193,20 @@ class CoinListService:
             # 5. 거래량 기준 정렬 (높은 순) - 원본 값 사용
             coins.sort(key=lambda x: x.volume_raw, reverse=True)
 
-            self._logger.debug(f"✅ {market_type} 마켓 코인 목록 생성: {len(coins)}개")
+            self._logger.info(f"✅ {market_type} 마켓 코인 목록 생성 완료: {len(coins)}개")
+
+            # 상위 10개 코인 정보 로그
+            if coins:
+                top_coins = coins[:10]
+                for i, coin in enumerate(top_coins, 1):
+                    self._logger.debug(f"  {i}. {coin.symbol} - {coin.name} | {coin.price_formatted} ({coin.change_rate})")
+
             return coins
 
         except Exception as e:
             self._logger.error(f"❌ {market_type} 마켓 코인 목록 조회 실패: {e}")
+            import traceback
+            self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
             return []
 
     def _create_coin_info(self, market_info: Dict[str, Any], ticker: Dict[str, Any]) -> CoinInfo:

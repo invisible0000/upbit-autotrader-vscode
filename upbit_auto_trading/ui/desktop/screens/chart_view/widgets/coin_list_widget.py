@@ -235,20 +235,24 @@ class CoinListWidget(QWidget):
                 asyncio.set_event_loop(new_loop)
 
                 try:
+                    self._logger.info(f"🔄 {self._current_market} 실제 데이터 로드 시작...")
+
                     # 비동기 작업 실행
                     coins = new_loop.run_until_complete(
                         self._coin_service.get_coins_by_market(self._current_market, self._search_filter)
                     )
 
+                    self._logger.info(f"📊 데이터 로드 완료: {len(coins) if coins else 0}개")
+
                     if coins:
                         self._coin_data = coins
                         # 메인 UI 스레드에서 업데이트 (안전한 크로스 스레드 호출)
-                        QTimer.singleShot(0, self._update_ui)
+                        QTimer.singleShot(0, self._update_ui_after_load)
                         self._logger.info(f"✅ {self._current_market} 실제 데이터 로드 완료: {len(coins)}개")
                     else:
                         self._logger.warning(f"⚠️ {self._current_market} 마켓에 데이터가 없습니다")
                         self._coin_data = []
-                        QTimer.singleShot(0, self._update_ui)
+                        QTimer.singleShot(0, self._update_ui_after_load)
 
                 finally:
                     # 이벤트 루프 완전히 정리
@@ -258,13 +262,26 @@ class CoinListWidget(QWidget):
 
             except Exception as e:
                 self._logger.error(f"❌ 실제 데이터 로드 실패: {e}")
+                import traceback
+                self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
                 # 에러 발생 시 빈 데이터로 업데이트
                 self._coin_data = []
-                QTimer.singleShot(0, self._update_ui)
+                QTimer.singleShot(0, self._update_ui_after_load)
 
         # 완전히 새로운 데몬 스레드에서 실행 (UI 스레드와 격리)
         thread = threading.Thread(target=load_data_isolated, daemon=True)
         thread.start()
+
+    def _update_ui_after_load(self) -> None:
+        """데이터 로드 후 UI 업데이트"""
+        try:
+            self._logger.info(f"🎨 UI 업데이트 시작: {len(self._coin_data)}개 코인")
+            self._update_ui()
+            self._logger.info("✅ UI 업데이트 완료")
+        except Exception as e:
+            self._logger.error(f"❌ UI 업데이트 실패: {e}")
+            import traceback
+            self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
 
     def _update_ui(self) -> None:
         """UI 업데이트"""
