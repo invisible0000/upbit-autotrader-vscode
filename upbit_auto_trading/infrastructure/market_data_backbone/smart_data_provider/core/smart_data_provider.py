@@ -370,7 +370,7 @@ class SmartDataProvider:
                         symbol: str,
                         priority: Priority = Priority.HIGH) -> DataResponse:
         """
-        실시간 티커 조회
+        실시간 티커 조회 (캐시 사용 안함)
 
         Args:
             symbol: 심볼
@@ -382,52 +382,18 @@ class SmartDataProvider:
         start_time_ms = time.time() * 1000
         self._request_count += 1
 
-        logger.debug(f"티커 조회 요청: {symbol}, priority={priority}")
+        logger.debug(f"티커 조회 요청 (캐시 미사용): {symbol}, priority={priority}")
 
         try:
-            # 1. 새로운 메모리 캐시 확인
-            cached_ticker = self.realtime_cache.get_ticker(symbol)
-
-            if cached_ticker:
-                self._cache_hits += 1
-                # 캐시 조정자에 적중 기록
-                self.cache_coordinator.record_access("ticker", symbol, cache_hit=True)
-
-                response_time = time.time() * 1000 - start_time_ms
-
-                metadata = ResponseMetadata(
-                    priority_used=priority,
-                    source="memory_cache",
-                    response_time_ms=response_time,
-                    cache_hit=True
-                )
-
-                logger.debug(f"티커 캐시 히트: {symbol}, {response_time:.1f}ms")
-
-                return DataResponse(
-                    success=True,
-                    data=cached_ticker,
-                    metadata=metadata
-                )
-
-            # 2. Smart Router 연동
-            logger.debug(f"티커 캐시 미스: {symbol}, Smart Router 연동 시도")
-
-            # 캐시 조정자에 미스 기록
-            self.cache_coordinator.record_access("ticker", symbol, cache_hit=False)
-
+            # Smart Router 직접 연동 (캐시 사용 안함)
             try:
                 smart_result = await self.smart_router.get_ticker(symbol, priority)
 
                 if smart_result.get('success', False):
                     ticker_data = smart_result.get('data')
                     if ticker_data:
-                        # 새로운 메모리 캐시에 저장 (최적 TTL 적용)
-                        optimal_ttl = self.cache_coordinator.get_optimal_ttl("ticker", symbol)
-                        self.realtime_cache.set_ticker(symbol, ticker_data, ttl=optimal_ttl)
-
                         response_time = time.time() * 1000 - start_time_ms
-                        logger.info(f"Smart Router 티커 성공: {symbol}, TTL={optimal_ttl:.1f}s, {response_time:.1f}ms")
+                        logger.info(f"Smart Router 티커 성공 (캐시 미사용): {symbol}, {response_time:.1f}ms")
 
                         return DataResponse(
                             success=True,
@@ -471,7 +437,7 @@ class SmartDataProvider:
                          symbols: List[str],
                          priority: Priority = Priority.HIGH) -> DataResponse:
         """
-        다중 심볼 티커 조회
+        다중 심볼 티커 조회 (캐시 사용 안함)
 
         Args:
             symbols: 심볼 리스트
@@ -483,9 +449,9 @@ class SmartDataProvider:
         start_time_ms = time.time() * 1000
         self._request_count += 1
 
-        logger.debug(f"다중 티커 조회: {len(symbols) if symbols else 0}개 심볼, priority={priority}")
+        logger.debug(f"다중 티커 조회 (캐시 미사용): {len(symbols) if symbols else 0}개 심볼, priority={priority}")
 
-        # 기본 입력 검증만 유지
+        # 기본 입력 검증
         if not symbols or not isinstance(symbols, list):
             logger.warning("심볼 리스트가 비어있거나 유효하지 않음")
             return DataResponse(
@@ -500,71 +466,46 @@ class SmartDataProvider:
             )
 
         try:
-            # 캐시 최적화 구현
             results = {}
-            cache_hits = 0
-            uncached_symbols = []
 
-            # 1. 캐시에서 먼저 조회
-            for symbol in symbols:
-                cached_data = self.realtime_cache.get_ticker(symbol)
-                if cached_data:
-                    results[symbol] = cached_data
-                    cache_hits += 1
-                else:
-                    uncached_symbols.append(symbol)
+            # Smart Router를 통한 직접 조회 (캐시 미사용)
+            try:
+                # 개별 티커 조회로 대체
+                results = {}
+                for symbol in symbols:
+                    ticker_result = await self.smart_router.get_ticker(symbol, priority)
+                    if ticker_result.get('success', False) and ticker_result.get('data'):
+                        results[symbol] = ticker_result.get('data')
 
-            logger.debug(f"캐시 조회 결과: {cache_hits}개 히트, {len(uncached_symbols)}개 미스")
+                logger.info(f"Smart Router 개별 조회 성공 (캐시 미사용): {len(results)}개 심볼")
 
-            # 2. 캐시 미스된 심볼들을 한번에 조회 (분할 없음)
-            if uncached_symbols:
+                if not results:
+                    raise Exception("Smart Router 조회 실패")
+
+            except Exception as router_error:
+                logger.warning(f"Smart Router 배치 조회 실패: {router_error}, 업비트 API 폴백")
+
+                # 폴백: 업비트 API 직접 조회
+                from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
+                upbit_client = UpbitPublicClient()
+
                 try:
-                    # Smart Router를 통한 배치 조회 시도
-                    batch_response = await self.smart_router.get_tickers_batch(
-                        symbols=uncached_symbols,
-                        priority=priority
-                    )
+                    tickers = await upbit_client.get_tickers(symbols)
+                    for ticker in tickers:
+                        symbol = ticker['market']
+                        results[symbol] = ticker
 
-                    if batch_response.get('success', False) and batch_response.get('data'):
-                        batch_data = batch_response.get('data', {})
-                        for symbol in uncached_symbols:
-                            if symbol in batch_data and batch_data[symbol]:
-                                results[symbol] = batch_data[symbol]
-                                # 캐시에 저장
-                                self.realtime_cache.set_ticker(symbol, batch_data[symbol])
-
-                        logger.info(f"Smart Router 배치 조회 성공: {len(batch_data)}개 심볼")
-                    else:
-                        logger.warning("Smart Router 배치 조회 실패, 폴백 처리")
-                        raise Exception("Smart Router 배치 조회 실패")
-
-                except Exception as router_error:
-                    logger.warning(f"Smart Router 배치 조회 실패: {router_error}, 업비트 API 폴백")
-
-                    # 폴백: 업비트 API 직접 전체 조회 (분할 없음)
-                    from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
-                    upbit_client = UpbitPublicClient()
-
-                    # 모든 심볼을 한번에 조회 (업비트 API는 실제로 분할이 필요 없음)
-                    try:
-                        tickers = await upbit_client.get_tickers(uncached_symbols)
-                        for ticker in tickers:
-                            symbol = ticker['market']
-                            results[symbol] = ticker
-                            # 캐시에 저장
-                            self.realtime_cache.set_ticker(symbol, ticker)
-
-                        logger.info(f"업비트 API 전체 조회 성공: {len(tickers)}개 심볼")
-                    except Exception as api_error:
-                        logger.error(f"업비트 API 조회 실패: {api_error}")
+                    logger.info(f"업비트 API 조회 성공 (캐시 미사용): {len(tickers)}개 심볼")
+                except Exception as api_error:
+                    logger.error(f"업비트 API 조회 실패: {api_error}")
 
             response_time = time.time() * 1000 - start_time_ms
 
             metadata = ResponseMetadata(
                 priority_used=priority,
-                source="mixed" if cache_hits > 0 else "api_batch",
+                source="smart_router",
                 response_time_ms=response_time,
-                cache_hit=cache_hits > 0,
+                cache_hit=False,
                 records_count=len(results)
             )
 
@@ -590,7 +531,7 @@ class SmartDataProvider:
                            symbol: str,
                            priority: Priority = Priority.HIGH) -> DataResponse:
         """
-        호가창 조회
+        호가창 조회 (캐시 사용 안함)
 
         Args:
             symbol: 심볼
@@ -602,52 +543,18 @@ class SmartDataProvider:
         start_time_ms = time.time() * 1000
         self._request_count += 1
 
-        logger.debug(f"호가창 조회: {symbol}, priority={priority}")
+        logger.debug(f"호가창 조회 (캐시 미사용): {symbol}, priority={priority}")
 
         try:
-            # 1. 메모리 캐시 확인
-            cached_orderbook = self.realtime_cache.get_orderbook(symbol)
-
-            if cached_orderbook:
-                self._cache_hits += 1
-                # 캐시 조정자에 적중 기록
-                self.cache_coordinator.record_access("orderbook", symbol, cache_hit=True)
-
-                response_time = time.time() * 1000 - start_time_ms
-
-                metadata = ResponseMetadata(
-                    priority_used=priority,
-                    source="memory_cache",
-                    response_time_ms=response_time,
-                    cache_hit=True
-                )
-
-                logger.debug(f"호가 캐시 히트: {symbol}, {response_time:.1f}ms")
-
-                return DataResponse(
-                    success=True,
-                    data=cached_orderbook,
-                    metadata=metadata
-                )
-
-            # 2. Smart Router 연동 (향후 구현)
-            logger.debug(f"호가 캐시 미스: {symbol}, Smart Router 연동 시도")
-
-            # 캐시 조정자에 미스 기록
-            self.cache_coordinator.record_access("orderbook", symbol, cache_hit=False)
-
+            # Smart Router 직접 연동 (캐시 사용 안함)
             try:
                 smart_result = await self.smart_router.get_orderbook(symbol, priority)
 
                 if smart_result.get('success', False):
                     orderbook_data = smart_result.get('data')
                     if orderbook_data:
-                        # 메모리 캐시에 저장 (최적 TTL 적용)
-                        optimal_ttl = self.cache_coordinator.get_optimal_ttl("orderbook", symbol)
-                        self.realtime_cache.set_orderbook(symbol, orderbook_data, ttl=optimal_ttl)
-
                         response_time = time.time() * 1000 - start_time_ms
-                        logger.info(f"Smart Router 호가 성공: {symbol}, TTL={optimal_ttl:.1f}s, {response_time:.1f}ms")
+                        logger.info(f"Smart Router 호가 성공 (캐시 미사용): {symbol}, {response_time:.1f}ms")
 
                         return DataResponse(
                             success=True,
@@ -870,8 +777,6 @@ class SmartDataProvider:
 
         return {
             "realtime_cache": {
-                "ticker_keys": len(self.realtime_cache.get_cache_keys("ticker")),
-                "orderbook_keys": len(self.realtime_cache.get_cache_keys("orderbook")),
                 "trades_keys": len(self.realtime_cache.get_cache_keys("trades")),
                 "market_keys": len(self.realtime_cache.get_cache_keys("market")),
                 "performance": realtime_stats

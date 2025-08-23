@@ -17,6 +17,7 @@ from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from .websocket_subscription_manager import WebSocketSubscriptionManager
 from .models import (
     DataRequest, ChannelDecision, RoutingMetrics,
     DataType, ChannelType, RealtimePriority
@@ -51,6 +52,9 @@ class SmartRouter:
         # API 클라이언트들 (lazy loading)
         self.rest_client: Optional['UpbitPublicClient'] = None
         self.websocket_client: Optional['UpbitWebSocketQuotationClient'] = None
+
+        # 🆕 WebSocket 구독 관리자
+        self.subscription_manager: Optional[WebSocketSubscriptionManager] = None
 
         # 외부 매니저 (이전 호환성 유지)
         self.websocket_manager = None
@@ -102,6 +106,12 @@ class SmartRouter:
                 )
                 self.websocket_client = UpbitWebSocketQuotationClient()
 
+                # 🚨 극도 보수적 WebSocket 구독 관리자 초기화 (기본 1개 구독)
+                self.subscription_manager = WebSocketSubscriptionManager(
+                    websocket_client=self.websocket_client,
+                    max_subscriptions=1  # 🚨 극도 보수적: 기본 1개만 허용
+                )
+
                 # WebSocket 연결 시도 (에러 발생 시 상태만 업데이트)
                 try:
                     await self.websocket_client.connect()
@@ -134,13 +144,17 @@ class SmartRouter:
             # 메트릭 업데이트
             self.metrics.total_requests += 1
 
-            # 1단계: 캐시 확인 (호가/티커는 실시간성 우선으로 캐시 건너뛰기)
-            if request.data_type not in [DataType.ORDERBOOK, DataType.TICKER]:
+            # 1단계: 캐시 확인 (use_cache=False이거나 호가/티커 데이터는 캐시 제외)
+            if not request.use_cache or request.data_type.value in ["orderbook", "ticker"]:
+                logger.debug(f"캐시 사용 안함 - use_cache={request.use_cache}, data_type={request.data_type.value}")
+                cached_result = None
+            else:
                 cached_result = self._check_cache(request)
-                if cached_result:
-                    logger.debug("캐시에서 데이터 반환")
-                    self.metrics.cache_hit_ratio = self._update_cache_hit_ratio(True)
-                    return cached_result
+
+            if cached_result:
+                logger.debug("캐시에서 데이터 반환")
+                self.metrics.cache_hit_ratio = self._update_cache_hit_ratio(True)
+                return cached_result
 
             self.metrics.cache_hit_ratio = self._update_cache_hit_ratio(False)
 
@@ -154,9 +168,11 @@ class SmartRouter:
             # 4단계: 데이터 형식 통일
             unified_data = self._unify_response_data(raw_data, request.data_type, channel_decision.channel)
 
-            # 5단계: 캐시 저장 (호가/티커는 실시간성 우선으로 캐시 저장 건너뛰기)
-            if request.data_type not in [DataType.ORDERBOOK, DataType.TICKER]:
+            # 5단계: 캐시 저장 (use_cache=False이거나 호가/티커 데이터는 캐시 저장 제외)
+            if request.use_cache and request.data_type.value not in ["orderbook", "ticker"]:
                 self._store_cache(request, unified_data)
+            else:
+                logger.debug(f"캐시 저장 생략 - use_cache={request.use_cache}, data_type={request.data_type.value}")
 
             # 6단계: 메트릭 업데이트
             self._update_metrics(channel_decision, time.time() - start_time, True)
@@ -284,33 +300,80 @@ class SmartRouter:
             return await self._execute_rest_request(request)
 
     async def _execute_websocket_request(self, request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 요청 실행"""
+        """WebSocket 요청 실행 (극도 보수적 구독 매니저 통합)"""
         try:
             # 클라이언트 초기화 확인
             await self._ensure_clients_initialized()
 
-            if not self.websocket_client or not getattr(self.websocket_client, 'is_connected', False):
+            # 🚨 개선된 WebSocket 연결 상태 체크
+            websocket_connected = (
+                self.websocket_client and 
+                hasattr(self.websocket_client, 'is_connected') and 
+                self.websocket_client.is_connected
+            )
+            
+            if not websocket_connected:
                 logger.warning("WebSocket 연결이 설정되지 않음 - REST API로 폴백")
                 return await self._execute_rest_request(request)
 
             if request.data_type == DataType.TICKER:
-                # 현재가 구독 후 메시지 수신
-                await self.websocket_client.subscribe_ticker(request.symbols)
-                # 실시간 데이터 대기 (간단한 구현 - 추후 개선 필요)
-                logger.info(f"WebSocket 현재가 구독 완료: {request.symbols}")
-
-                # 임시로 REST API로 폴백
-                logger.warning("WebSocket 실시간 데이터 수신 구현 중 - REST API로 폴백")
-                return await self._execute_rest_request(request)
+                # 🚨 극도 보수적 구독 매니저를 통한 현재가 처리
+                return await self._handle_ticker_with_subscription_manager(request)
 
             elif request.data_type == DataType.ORDERBOOK:
-                # 호가 구독 후 메시지 수신
-                await self.websocket_client.subscribe_orderbook(request.symbols)
-                logger.info(f"WebSocket 호가 구독 완료: {request.symbols}")
+                # � 극도 보수적 구독 매니저를 통한 호가 처리
+                return await self._handle_orderbook_with_subscription_manager(request)
 
-                # 임시로 REST API로 폴백
-                logger.warning("WebSocket 실시간 데이터 수신 구현 중 - REST API로 폴백")
+            elif request.data_type == DataType.TRADES:
+                # 🚨 극도 보수적 구독 매니저를 통한 체결 처리
+                return await self._handle_trades_with_subscription_manager(request)
+
+            else:
+                # 기타 데이터 타입은 REST API로 처리
+                logger.debug(f"데이터 타입 {request.data_type}는 REST API로 처리")
                 return await self._execute_rest_request(request)
+
+        except Exception as e:
+                    logger.error(f"WebSocket 현재가 구독 오류: {request.symbols} - {e}")
+                    return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.ORDERBOOK:
+                # 호가 구독 후 메시지 수신 - 예외 처리 강화
+                try:
+                    success = await self.websocket_client.subscribe_orderbook(request.symbols)
+                    if success:
+                        logger.info(f"WebSocket 호가 구독 완료: {request.symbols}")
+
+                        # 🔥 실제 WebSocket 데이터 수신 대기
+                        websocket_data = await self._wait_for_websocket_data(request.symbols[0], "orderbook", timeout=0.2)
+                        if websocket_data:
+                            logger.info(f"✅ WebSocket 호가 데이터 수신 성공: {request.symbols[0]}")
+
+                            # 🔥 디버깅: 변환 전후 데이터 로깅
+                            if isinstance(websocket_data, dict):
+                                logger.debug(f"🔍 WebSocket 원시 데이터 키: {list(websocket_data.keys())}")
+                                if 'orderbook_units' in websocket_data:
+                                    units_count = len(websocket_data['orderbook_units'])
+                                    logger.debug(f"🔍 orderbook_units 개수: {units_count}")
+
+                            response = self._convert_websocket_to_response(
+                                websocket_data, request.data_type, request.symbols[0]
+                            )
+
+                            response_data = response.get('data')
+                            if isinstance(response_data, dict):
+                                logger.debug(f"🔍 변환된 응답 data 키: {list(response_data.keys())}")
+
+                            return response
+                        else:
+                            logger.warning(f"WebSocket 호가 데이터 수신 실패 - REST API로 폴백: {request.symbols}")
+                            return await self._execute_rest_request(request)
+                    else:
+                        logger.warning(f"WebSocket 호가 구독 실패: {request.symbols} - REST API로 폴백")
+                        return await self._execute_rest_request(request)
+                except Exception as e:
+                    logger.error(f"WebSocket 호가 구독 오류: {request.symbols} - {e}")
+                    return await self._execute_rest_request(request)
 
             elif request.data_type == DataType.TRADES:
                 # 체결 구독 후 메시지 수신
@@ -742,6 +805,103 @@ class SmartRouter:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """컨텍스트 매니저 종료"""
         await self.cleanup_resources()
+
+    # 🔥 WebSocket 데이터 수신 도우미 메서드들
+    async def _wait_for_websocket_data(self, market: str, data_type: str, timeout: float = 0.2) -> Optional[Dict[str, Any]]:
+        """WebSocket에서 데이터 수신 대기 (극도 보수적 구독 관리)"""
+        import asyncio
+
+        if not self.websocket_client:
+            return None
+
+        # 🚨 극도 보수적 전략: 구독 매니저를 통한 관리
+        if self.subscription_manager:
+            # 데이터 타입 매핑
+            subscription_type_map = {
+                "ticker": "ticker",
+                "trade": "trade",
+                "orderbook": "orderbook"
+            }
+
+            from .websocket_subscription_manager import SubscriptionType
+
+            if data_type in subscription_type_map:
+                try:
+                    subscription_type = SubscriptionType(subscription_type_map[data_type])
+
+                    # 🚨 구독 요청 (극도 보수적 관리)
+                    success = await self.subscription_manager.request_subscription(
+                        symbol=market,
+                        subscription_type=subscription_type,
+                        priority=1  # 높은 우선순위
+                    )
+
+                    if success:
+                        logger.debug(f"✅ WebSocket 구독 활성화: {market}:{data_type}")
+                        # 구독 성공 시 메시지 카운트 증가
+                        self.subscription_manager.increment_message_count()
+
+                        # WebSocket이 연결되어 있다면 구독이 활성화된 것으로 간주
+                        if hasattr(self.websocket_client, 'is_connected') and self.websocket_client.is_connected:
+                            return {"status": "subscribed", "market": market, "type": data_type}
+                    else:
+                        logger.warning(f"⚠️ WebSocket 구독 실패: {market}:{data_type}")
+
+                except Exception as e:
+                    logger.error(f"❌ 구독 요청 중 오류: {e}")
+
+        # 짧은 대기 시간
+        await asyncio.sleep(timeout)
+        return None
+
+    def _convert_websocket_to_response(
+        self, websocket_data: Dict[str, Any], data_type: DataType, market: str
+    ) -> Dict[str, Any]:
+        """WebSocket 데이터를 DataResponse 형식으로 변환"""
+        if data_type == DataType.TICKER:
+            return {
+                "success": True,
+                "source": "websocket",
+                "data": {
+                    market: [websocket_data]  # 단일 심볼을 리스트로 래핑
+                },
+                "metadata": {
+                    "source": "websocket",
+                    "channel": "ticker",
+                    "timestamp": websocket_data.get("timestamp", "")
+                }
+            }
+        elif data_type == DataType.ORDERBOOK:
+            # 🔥 WebSocket 호가 데이터는 이미 올바른 형식이므로 직접 사용
+            return {
+                "success": True,
+                "source": "websocket",
+                "data": websocket_data,  # 🚫 리스트로 래핑하지 않음 - 원시 데이터 직접 전달
+                "metadata": {
+                    "source": "websocket",
+                    "channel": "orderbook",
+                    "timestamp": websocket_data.get("timestamp", "")
+                }
+            }
+        elif data_type == DataType.TRADES:
+            return {
+                "success": True,
+                "source": "websocket",
+                "data": {
+                    market: [websocket_data]  # 단일 심볼을 리스트로 래핑
+                },
+                "metadata": {
+                    "source": "websocket",
+                    "channel": "trade",
+                    "timestamp": websocket_data.get("timestamp", "")
+                }
+            }
+        else:
+            return {
+                "success": False,
+                "source": "websocket",
+                "error": f"지원하지 않는 데이터 타입: {data_type}"
+            }
 
 
 # 전역 인스턴스 (싱글톤 패턴)

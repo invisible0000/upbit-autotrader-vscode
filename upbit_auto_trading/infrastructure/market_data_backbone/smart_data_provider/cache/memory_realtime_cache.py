@@ -142,16 +142,14 @@ class MemoryRealtimeCache:
     """
     실시간 데이터 메모리 캐시 시스템
 
-    - 티커: 현재가 정보 (TTL: 1초)
-    - 호가: 호가창 정보 (TTL: 5초)
     - 체결: 최근 체결 내역 (TTL: 30초)
     - 시장 개요: 전체 마켓 정보 (TTL: 60초)
+
+    Note: 호가와 티커는 실시간성 보장을 위해 캐시에서 제외됨
     """
 
     def __init__(self):
-        # 데이터 타입별 전용 캐시
-        self.ticker_cache = TTLCache(maxsize=500, default_ttl=1.0)      # 현재가: 1초
-        self.orderbook_cache = TTLCache(maxsize=200, default_ttl=5.0)   # 호가: 5초
+        # 데이터 타입별 전용 캐시 (호가/티커 제외)
         self.trades_cache = TTLCache(maxsize=100, default_ttl=30.0)     # 체결: 30초
         self.market_overview_cache = TTLCache(maxsize=50, default_ttl=60.0)  # 시장 개요: 60초
 
@@ -164,54 +162,7 @@ class MemoryRealtimeCache:
         self._last_cleanup = datetime.now()
         self._cleanup_interval = 60  # 60초마다 정리
 
-        logger.info("메모리 실시간 캐시 시스템 초기화 완료")
-
-    # =====================================
-    # 티커 캐시 API
-    # =====================================
-
-    def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """티커 데이터 조회"""
-        self._update_stats()
-        return self.ticker_cache.get(f"ticker:{symbol}")
-
-    def set_ticker(self, symbol: str, ticker_data: Dict[str, Any], ttl: Optional[float] = None) -> None:
-        """티커 데이터 저장"""
-        self.ticker_cache.set(f"ticker:{symbol}", ticker_data, ttl)
-        logger.debug(f"티커 캐시 저장: {symbol}")
-
-    def get_tickers(self, symbols: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
-        """다중 티커 데이터 조회"""
-        results = {}
-        for symbol in symbols:
-            results[symbol] = self.get_ticker(symbol)
-        return results
-
-    def set_tickers(self, tickers_data: Dict[str, Dict[str, Any]], ttl: Optional[float] = None) -> None:
-        """다중 티커 데이터 저장"""
-        for symbol, ticker_data in tickers_data.items():
-            self.set_ticker(symbol, ticker_data, ttl)
-
-    # =====================================
-    # 호가 캐시 API
-    # =====================================
-
-    def get_orderbook(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """호가 데이터 조회"""
-        self._update_stats()
-        return self.orderbook_cache.get(f"orderbook:{symbol}")
-
-    def set_orderbook(self, symbol: str, orderbook_data: Dict[str, Any], ttl: Optional[float] = None) -> None:
-        """호가 데이터 저장"""
-        self.orderbook_cache.set(f"orderbook:{symbol}", orderbook_data, ttl)
-        logger.debug(f"호가 캐시 저장: {symbol}")
-
-    def get_orderbooks(self, symbols: List[str]) -> Dict[str, Optional[Dict[str, Any]]]:
-        """다중 호가 데이터 조회"""
-        results = {}
-        for symbol in symbols:
-            results[symbol] = self.get_orderbook(symbol)
-        return results
+        logger.info("메모리 실시간 캐시 시스템 초기화 완료 (호가/티커 캐시 제외)")
 
     # =====================================
     # 체결 캐시 API
@@ -249,16 +200,12 @@ class MemoryRealtimeCache:
     # =====================================
 
     def invalidate_symbol(self, symbol: str) -> None:
-        """특정 심볼의 모든 캐시 무효화"""
-        self.ticker_cache.delete(f"ticker:{symbol}")
-        self.orderbook_cache.delete(f"orderbook:{symbol}")
+        """특정 심볼의 모든 캐시 무효화 (체결 캐시만)"""
         self.trades_cache.delete(f"trades:{symbol}")
         logger.debug(f"심볼 캐시 무효화: {symbol}")
 
     def invalidate_all(self) -> None:
         """모든 캐시 무효화"""
-        self.ticker_cache.clear()
-        self.orderbook_cache.clear()
         self.trades_cache.clear()
         self.market_overview_cache.clear()
         logger.info("전체 캐시 무효화 완료")
@@ -266,8 +213,6 @@ class MemoryRealtimeCache:
     def cleanup_expired(self) -> Dict[str, int]:
         """만료된 캐시 정리"""
         results = {
-            "ticker": self.ticker_cache.cleanup_expired(),
-            "orderbook": self.orderbook_cache.cleanup_expired(),
             "trades": self.trades_cache.cleanup_expired(),
             "market_overview": self.market_overview_cache.cleanup_expired()
         }
@@ -291,22 +236,17 @@ class MemoryRealtimeCache:
     def get_performance_stats(self) -> Dict[str, Union[int, float, Dict]]:
         """성능 통계"""
         with self._lock:
-            # 개별 캐시 통계
-            ticker_stats = self.ticker_cache.get_stats()
-            orderbook_stats = self.orderbook_cache.get_stats()
+            # 개별 캐시 통계 (호가/티커 제외)
             trades_stats = self.trades_cache.get_stats()
             market_stats = self.market_overview_cache.get_stats()
 
             # 통합 통계
-            total_hits = (ticker_stats["hits"] + orderbook_stats["hits"] +
-                         trades_stats["hits"] + market_stats["hits"])
-            total_misses = (ticker_stats["misses"] + orderbook_stats["misses"] +
-                           trades_stats["misses"] + market_stats["misses"])
+            total_hits = (trades_stats["hits"] + market_stats["hits"])
+            total_misses = (trades_stats["misses"] + market_stats["misses"])
             total_requests = total_hits + total_misses
             overall_hit_rate = (total_hits / total_requests * 100) if total_requests > 0 else 0
 
-            total_entries = (len(self.ticker_cache) + len(self.orderbook_cache) +
-                           len(self.trades_cache) + len(self.market_overview_cache))
+            total_entries = (len(self.trades_cache) + len(self.market_overview_cache))
 
             return {
                 "overall": {
@@ -315,8 +255,6 @@ class MemoryRealtimeCache:
                     "total_misses": total_misses,
                     "hit_rate": overall_hit_rate
                 },
-                "ticker": ticker_stats,
-                "orderbook": orderbook_stats,
                 "trades": trades_stats,
                 "market_overview": market_stats,
                 "memory_usage": {
@@ -328,8 +266,6 @@ class MemoryRealtimeCache:
         """메모리 사용량 추정 (MB)"""
         # 간단한 추정: 엔트리당 평균 1KB로 가정
         total_entries = (
-            len(self.ticker_cache) +
-            len(self.orderbook_cache) +
             len(self.trades_cache) +
             len(self.market_overview_cache)
         )
@@ -350,8 +286,6 @@ class MemoryRealtimeCache:
     def get_cache_keys(self, cache_type: str) -> List[str]:
         """캐시 키 목록 조회"""
         cache_map = {
-            "ticker": self.ticker_cache,
-            "orderbook": self.orderbook_cache,
             "trades": self.trades_cache,
             "market": self.market_overview_cache
         }
@@ -363,10 +297,14 @@ class MemoryRealtimeCache:
 
     def __str__(self) -> str:
         stats = self.get_performance_stats()
-        overall = stats["overall"]
+        overall = stats.get("overall", {})
+        memory_usage = stats.get("memory_usage", {})
         memory_mb = self.get_memory_usage_mb()
 
+        total_entries = memory_usage.get("total_entries", 0) if isinstance(memory_usage, dict) else 0
+        hit_rate = overall.get("hit_rate", 0.0) if isinstance(overall, dict) else 0.0
+
         return (f"MemoryRealtimeCache("
-                f"entries={stats['memory_usage']['total_entries']}, "
-                f"hit_rate={overall['hit_rate']:.1f}%, "
+                f"entries={total_entries}, "
+                f"hit_rate={hit_rate:.1f}%, "
                 f"memory≈{memory_mb:.1f}MB)")
