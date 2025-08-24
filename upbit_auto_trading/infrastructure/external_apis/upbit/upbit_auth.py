@@ -67,7 +67,7 @@ class UpbitAuthenticator:
 
     def create_jwt_token(self, query_params: Optional[Dict] = None,
                          request_body: Optional[Dict] = None) -> str:
-        """JWT 토큰 생성 - 기존 _get_auth_header 로직 기반"""
+        """JWT 토큰 생성 - 업비트 공식 예제 방식"""
         if not self.is_authenticated():
             raise AuthenticationError("API 키가 설정되지 않았습니다")
 
@@ -76,20 +76,22 @@ class UpbitAuthenticator:
             'nonce': str(uuid.uuid4())
         }
 
-        # 쿼리 파라미터 해시 추가 (기존 로직 보존)
+        # 쿼리스트링 생성 및 해시 추가
+        query_string_data = {}
+
+        # GET 요청의 쿼리 파라미터
         if query_params:
-            query_string = urlencode(query_params, doseq=True).encode()
+            query_string_data.update(query_params)
+
+        # POST 요청의 body 데이터 (업비트 공식 방식: body를 query_string으로 처리)
+        if request_body:
+            query_string_data.update(request_body)
+
+        # 쿼리스트링이 있으면 해시 생성
+        if query_string_data:
+            query_string = urlencode(query_string_data, doseq=True).encode()
             m = hashlib.sha512()
             m.update(query_string)
-            payload['query_hash'] = m.hexdigest()
-            payload['query_hash_alg'] = 'SHA512'
-
-        # 요청 본문 해시 추가 (POST/DELETE 요청용)
-        if request_body:
-            import json
-            body_string = json.dumps(request_body, separators=(',', ':')).encode()
-            m = hashlib.sha512()
-            m.update(body_string)
             payload['query_hash'] = m.hexdigest()
             payload['query_hash_alg'] = 'SHA512'
 
@@ -98,9 +100,9 @@ class UpbitAuthenticator:
             if not self._secret_key:
                 raise AuthenticationError("Secret key is None")
 
-            # 기존 jwt.encode 호출 방식 보존
+            # JWT 토큰 생성
             token = jwt.encode(payload, self._secret_key, algorithm='HS256')
-            return f'Bearer {token}'
+            return token  # Bearer 접두사 제거 (헤더에서 추가)
         except Exception as e:
             self._logger.error(f"JWT 토큰 생성 실패: {e}")
             raise AuthenticationError(f"JWT 토큰 생성 실패: {e}")
@@ -118,6 +120,7 @@ class UpbitAuthenticator:
         headers = self.get_public_headers()
 
         if self.is_authenticated():
-            headers['Authorization'] = self.create_jwt_token(query_params, request_body)
+            token = self.create_jwt_token(query_params, request_body)
+            headers['Authorization'] = f'Bearer {token}'
 
         return headers
