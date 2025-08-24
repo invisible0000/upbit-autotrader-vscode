@@ -1,190 +1,170 @@
-from typing import List, Dict, Any, Optional, Union
+"""
+업비트 프라이빗 API 클라이언트 - 어댑터 패턴 적용
+
+인증이 필요한 REST API 기능을 담당합니다.
+"""
+from typing import List, Dict, Any, Optional, Union, Literal
 from decimal import Decimal
 
-from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import (
-    BaseApiClient, RateLimitConfig, ApiClientError
-)
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
+from ..core.base_client import BaseExchangeClient
+from ..core.rate_limiter import UniversalRateLimiter, ExchangeRateLimitConfig
+from ..adapters.upbit_adapter import UpbitAdapter
+from .upbit_auth import UpbitAuthenticator
 
-class UpbitPrivateClient(BaseApiClient):
-    """Upbit 프라이빗 API 클라이언트 - 인증이 필요한 API 담당"""
 
-    def __init__(self, access_key: str, secret_key: str):
+class UpbitPrivateClient(BaseExchangeClient):
+    """
+    업비트 프라이빗 API 클라이언트
+
+    특징:
+    - 인증이 필요한 모든 REST API 기능 제공
+    - JWT 토큰 기반 인증
+    - Rate Limiting 적용
+    - 견고한 에러 처리
+    """
+
+    def __init__(self, access_key: Optional[str] = None, secret_key: Optional[str] = None,
+                 adapter: Optional[UpbitAdapter] = None,
+                 rate_limiter: Optional[UniversalRateLimiter] = None):
         """
+        업비트 프라이빗 API 클라이언트 초기화
+
         Args:
-            access_key: Upbit API Access Key
-            secret_key: Upbit API Secret Key
+            access_key: Upbit API Access Key (기본값: 환경변수 또는 설정에서 로드)
+            secret_key: Upbit API Secret Key (기본값: 환경변수 또는 설정에서 로드)
+            adapter: 업비트 어댑터 (기본값: 자동 생성)
+            rate_limiter: Rate Limiter (기본값: Private API용 설정)
         """
-        if not access_key or not secret_key:
-            raise ValueError("API 키가 설정되지 않았습니다.")
+        if adapter is None:
+            adapter = UpbitAdapter()
+        if rate_limiter is None:
+            config = ExchangeRateLimitConfig.for_upbit_private()
+            rate_limiter = UniversalRateLimiter(config)
 
-        # Upbit 프라이빗 API 제한: 초당 8회, 분당 200회 (기존 설정 보존)
-        rate_config = RateLimitConfig(
-            requests_per_second=8,
-            requests_per_minute=200,
-            burst_limit=50
-        )
+        super().__init__(adapter, rate_limiter)
 
-        super().__init__(
-            base_url='https://api.upbit.com/v1',
-            rate_limit_config=rate_config,
-            timeout=30,
-            max_retries=3
-        )
-
+        # 인증 관리자 초기화
         self._auth = UpbitAuthenticator(access_key, secret_key)
+        if not self._auth.is_authenticated():
+            raise ValueError("API 키가 설정되지 않았습니다. 인증이 필요한 API는 사용할 수 없습니다.")
 
     def _prepare_headers(self, method: str, endpoint: str,
                          params: Optional[Dict], data: Optional[Dict]) -> Dict[str, str]:
         """프라이빗 API용 JWT 인증 헤더 준비"""
         return self._auth.get_private_headers(query_params=params, request_body=data)
 
+    # ================================================================
+    # 자산(Asset) API
+    # ================================================================
+
     async def get_accounts(self) -> List[Dict[str, Any]]:
-        """계좌 정보 조회"""
+        """
+        계좌 정보 조회
+
+        Returns:
+            List[Dict]: 보유 자산 목록
+        """
         response = await self._make_request('GET', '/accounts')
-
-        if not response.success:
-            raise ApiClientError(f"계좌 정보 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
         return response.data
 
-    async def get_account_balance(self, currency: str) -> Optional[Dict[str, Any]]:
-        """특정 화폐 잔고 조회"""
-        accounts = await self.get_accounts()
+    # ================================================================
+    # 주문(Order) API
+    # ================================================================
 
-        for account in accounts:
-            if account.get('currency') == currency:
-                return {
-                    'currency': account['currency'],
-                    'balance': float(account['balance']),
-                    'locked': float(account['locked']),
-                    'avg_buy_price': float(account.get('avg_buy_price', 0)),
-                    'avg_buy_price_modified': account.get('avg_buy_price_modified', False),
-                    'unit_currency': account.get('unit_currency')
-                }
-
-        return None
-
-    async def place_order(self, market: str, side: str, volume: Optional[str] = None,
-                          price: Optional[str] = None, ord_type: str = 'limit',
-                          identifier: Optional[str] = None) -> Dict[str, Any]:
-        """주문 실행
+    async def get_orders_chance(self, market: str) -> Dict[str, Any]:
+        """
+        페어별 주문 가능 정보 조회
 
         Args:
-            market: 마켓 코드 (예: "KRW-BTC")
-            side: 주문 방향 ('bid': 매수, 'ask': 매도)
-            volume: 주문량 (ord_type이 'limit' 또는 'market'일 때)
-            price: 주문 가격 (ord_type이 'limit' 또는 'price'일 때)
-            ord_type: 주문 유형 ('limit': 지정가, 'price': 시장가 매수, 'market': 시장가 매도)
-            identifier: 조회용 사용자 지정 값 (선택적)
+            market: 마켓 아이디 (예: KRW-BTC)
+
+        Returns:
+            Dict: 주문 가능 정보
         """
-        if side not in ['bid', 'ask']:
-            raise ValueError("side는 'bid' 또는 'ask'여야 합니다.")
+        params = {'market': market}
+        response = await self._make_request('GET', '/orders/chance', params=params)
+        return response.data
 
-        if ord_type not in ['limit', 'price', 'market']:
-            raise ValueError("ord_type은 'limit', 'price', 'market' 중 하나여야 합니다.")
+    async def place_order(self, market: str, side: Literal['bid', 'ask'],
+                         ord_type: Literal['limit', 'price', 'market'],
+                         volume: Optional[Decimal] = None, price: Optional[Decimal] = None,
+                         identifier: Optional[str] = None) -> Dict[str, Any]:
+        """
+        주문 생성
 
+        Args:
+            market: 마켓 아이디 (예: KRW-BTC)
+            side: 주문 종류 ('bid': 매수, 'ask': 매도)
+            ord_type: 주문 타입 ('limit': 지정가, 'price': 시장가 매수, 'market': 시장가 매도)
+            volume: 주문 수량 (지정가, 시장가 매도 시 필수)
+            price: 주문 가격 (지정가, 시장가 매수 시 필수)
+            identifier: 조회용 사용자 지정값 (선택)
+
+        Returns:
+            Dict: 생성된 주문 정보
+        """
         data = {
             'market': market,
             'side': side,
             'ord_type': ord_type
         }
 
-        if ord_type == 'limit':
-            if not volume or not price:
-                raise ValueError("지정가 주문에는 volume과 price가 필요합니다.")
+        if volume is not None:
             data['volume'] = str(volume)
+        if price is not None:
             data['price'] = str(price)
-        elif ord_type == 'price':
-            if not price:
-                raise ValueError("시장가 매수 주문에는 price가 필요합니다.")
-            data['price'] = str(price)
-        elif ord_type == 'market':
-            if not volume:
-                raise ValueError("시장가 매도 주문에는 volume이 필요합니다.")
-            data['volume'] = str(volume)
-
-        if identifier:
+        if identifier is not None:
             data['identifier'] = identifier
 
         response = await self._make_request('POST', '/orders', data=data)
-
-        if not response.success:
-            raise ApiClientError(f"주문 실행 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
-        return response.data
-
-    async def cancel_order(self, uuid: Optional[str] = None,
-                           identifier: Optional[str] = None) -> Dict[str, Any]:
-        """주문 취소
-
-        Args:
-            uuid: 주문 UUID (uuid와 identifier 중 하나는 필수)
-            identifier: 조회용 사용자 지정 값
-        """
-        if not uuid and not identifier:
-            raise ValueError("uuid와 identifier 중 하나는 필수입니다.")
-
-        data = {}
-        if uuid:
-            data['uuid'] = uuid
-        if identifier:
-            data['identifier'] = identifier
-
-        response = await self._make_request('DELETE', '/order', data=data)
-
-        if not response.success:
-            raise ApiClientError(f"주문 취소 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
         return response.data
 
     async def get_order(self, uuid: Optional[str] = None,
-                        identifier: Optional[str] = None) -> Dict[str, Any]:
-        """개별 주문 조회
+                       identifier: Optional[str] = None) -> Dict[str, Any]:
+        """
+        개별 주문 조회
 
         Args:
-            uuid: 주문 UUID (uuid와 identifier 중 하나는 필수)
-            identifier: 조회용 사용자 지정 값
-        """
-        if not uuid and not identifier:
-            raise ValueError("uuid와 identifier 중 하나는 필수입니다.")
+            uuid: 주문 UUID (uuid 또는 identifier 중 하나 필수)
+            identifier: 조회용 사용자 지정값
 
+        Returns:
+            Dict: 주문 정보
+        """
         params = {}
         if uuid:
             params['uuid'] = uuid
-        if identifier:
+        elif identifier:
             params['identifier'] = identifier
+        else:
+            raise ValueError("uuid 또는 identifier 중 하나는 필수입니다")
 
         response = await self._make_request('GET', '/order', params=params)
-
-        if not response.success:
-            raise ApiClientError(f"주문 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
         return response.data
 
-    async def get_orders(self, market: Optional[str] = None, uuids: Optional[List[str]] = None,
-                         identifiers: Optional[List[str]] = None, state: Optional[str] = None,
-                         states: Optional[List[str]] = None, page: int = 1,
-                         limit: int = 100, order_by: str = 'desc') -> List[Dict[str, Any]]:
-        """주문 목록 조회
+    async def get_orders(self, market: Optional[str] = None,
+                        uuids: Optional[List[str]] = None,
+                        identifiers: Optional[List[str]] = None,
+                        state: Optional[Literal['wait', 'watch', 'done', 'cancel']] = None,
+                        states: Optional[List[str]] = None,
+                        page: int = 1, limit: int = 100,
+                        order_by: Literal['asc', 'desc'] = 'desc') -> List[Dict[str, Any]]:
+        """
+        주문 목록 조회
 
         Args:
-            market: 마켓 코드 (선택적)
-            uuids: 주문 UUID 목록 (선택적)
-            identifiers: 조회용 사용자 지정 값 목록 (선택적)
-            state: 주문 상태 ('wait', 'watch', 'done', 'cancel') (선택적)
-            states: 주문 상태 목록 (선택적)
-            page: 페이지 번호
-            limit: 페이지당 개수 (최대 100)
-            order_by: 정렬 순서 ('asc', 'desc')
-        """
-        if limit > 100:
-            raise ValueError("한 번에 최대 100개까지만 조회 가능합니다")
+            market: 마켓 아이디
+            uuids: 주문 UUID 목록 (최대 100개)
+            identifiers: 사용자 지정값 목록 (최대 100개)
+            state: 주문 상태
+            states: 주문 상태 목록
+            page: 페이지 수 (기본: 1)
+            limit: 요청 개수 (기본: 100, 최대: 100)
+            order_by: 정렬 방식
 
+        Returns:
+            List[Dict]: 주문 목록
+        """
         params = {
             'page': page,
             'limit': limit,
@@ -203,131 +183,102 @@ class UpbitPrivateClient(BaseApiClient):
             params['states'] = states
 
         response = await self._make_request('GET', '/orders', params=params)
-
-        if not response.success:
-            raise ApiClientError(f"주문 목록 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
         return response.data
 
-    async def get_order_chance(self, market: str) -> Dict[str, Any]:
-        """주문 가능 정보 조회
+    async def cancel_order(self, uuid: Optional[str] = None,
+                          identifier: Optional[str] = None) -> Dict[str, Any]:
+        """
+        주문 취소
 
         Args:
-            market: 마켓 코드 (예: "KRW-BTC")
+            uuid: 주문 UUID (uuid 또는 identifier 중 하나 필수)
+            identifier: 조회용 사용자 지정값
+
+        Returns:
+            Dict: 취소된 주문 정보
         """
-        params = {'market': market}
+        data = {}
+        if uuid:
+            data['uuid'] = uuid
+        elif identifier:
+            data['identifier'] = identifier
+        else:
+            raise ValueError("uuid 또는 identifier 중 하나는 필수입니다")
 
-        response = await self._make_request('GET', '/orders/chance', params=params)
-
-        if not response.success:
-            raise ApiClientError(f"주문 가능 정보 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
+        response = await self._make_request('DELETE', '/order', data=data)
         return response.data
 
-    async def get_orders_chance_batch(self, markets: List[str]) -> Dict[str, Dict[str, Any]]:
-        """여러 마켓의 주문 가능 정보 일괄 조회"""
-        import asyncio
+    async def cancel_orders(self, uuids: Optional[List[str]] = None,
+                           identifiers: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        주문 일괄 취소
 
-        if len(markets) > 10:
-            raise ValueError("한 번에 최대 10개 마켓까지만 조회 가능합니다")
+        Args:
+            uuids: 취소할 주문 UUID 목록
+            identifiers: 취소할 사용자 지정값 목록
 
-        try:
-            tasks = [self.get_order_chance(market) for market in markets]
-            results = await asyncio.gather(*tasks)
+        Returns:
+            List[Dict]: 취소된 주문 목록
+        """
+        data = {}
+        if uuids:
+            data['uuids'] = uuids
+        elif identifiers:
+            data['identifiers'] = identifiers
+        else:
+            raise ValueError("uuids 또는 identifiers 중 하나는 필수입니다")
 
-            return {market: result for market, result in zip(markets, results)}
+        response = await self._make_request('DELETE', '/orders', data=data)
+        return response.data
 
-        except Exception as e:
-            self._logger.error(f"주문 가능 정보 일괄 조회 실패: {e}")
-            raise ApiClientError(f"주문 가능 정보 일괄 조회 실패: {str(e)}")
+    async def get_trades_history(self, market: Optional[str] = None,
+                                 limit: int = 100,
+                                 order_by: Literal['asc', 'desc'] = 'desc') -> List[Dict[str, Any]]:
+        """
+        내 체결 내역 조회 (기본 메서드)
 
-    async def place_limit_buy_order(self, market: str, price: Union[str, float, Decimal],
-                                    volume: Union[str, float, Decimal],
-                                    identifier: Optional[str] = None) -> Dict[str, Any]:
-        """지정가 매수 주문"""
-        return await self.place_order(
-            market=market,
-            side='bid',
-            volume=str(volume),
-            price=str(price),
-            ord_type='limit',
-            identifier=identifier
-        )
-
-    async def place_limit_sell_order(self, market: str, price: Union[str, float, Decimal],
-                                     volume: Union[str, float, Decimal],
-                                     identifier: Optional[str] = None) -> Dict[str, Any]:
-        """지정가 매도 주문"""
-        return await self.place_order(
-            market=market,
-            side='ask',
-            volume=str(volume),
-            price=str(price),
-            ord_type='limit',
-            identifier=identifier
-        )
-
-    async def place_market_buy_order(self, market: str, price: Union[str, float, Decimal],
-                                     identifier: Optional[str] = None) -> Dict[str, Any]:
-        """시장가 매수 주문 (KRW 금액 지정)"""
-        return await self.place_order(
-            market=market,
-            side='bid',
-            price=str(price),
-            ord_type='price',
-            identifier=identifier
-        )
-
-    async def place_market_sell_order(self, market: str, volume: Union[str, float, Decimal],
-                                      identifier: Optional[str] = None) -> Dict[str, Any]:
-        """시장가 매도 주문 (코인 수량 지정)"""
-        return await self.place_order(
-            market=market,
-            side='ask',
-            volume=str(volume),
-            ord_type='market',
-            identifier=identifier
-        )
-
-    async def get_deposits(self, currency: Optional[str] = None, state: Optional[str] = None,
-                           uuids: Optional[List[str]] = None, txids: Optional[List[str]] = None,
-                           limit: int = 100, page: int = 1, order_by: str = 'desc') -> List[Dict[str, Any]]:
-        """입금 리스트 조회"""
-        if limit > 100:
-            raise ValueError("한 번에 최대 100개까지만 조회 가능합니다")
-
+        Args:
+            market: 마켓 코드 (예: KRW-BTC)
+            limit: 조회 개수 (최대 500)
+            order_by: 정렬 순서
+        """
         params = {
-            'limit': limit,
-            'page': page,
+            'limit': min(limit, 500),
             'order_by': order_by
         }
+        if market:
+            params['market'] = market
 
-        if currency:
-            params['currency'] = currency
-        if state:
-            params['state'] = state
-        if uuids:
-            params['uuids'] = uuids
-        if txids:
-            params['txids'] = txids
-
-        response = await self._make_request('GET', '/deposits', params=params)
-
-        if not response.success:
-            raise ApiClientError(f"입금 리스트 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
+        response = await self._make_request('GET', '/orders', params=params)
         return response.data
 
-    async def get_withdraws(self, currency: Optional[str] = None, state: Optional[str] = None,
-                            uuids: Optional[List[str]] = None, txids: Optional[List[str]] = None,
-                            limit: int = 100, page: int = 1, order_by: str = 'desc') -> List[Dict[str, Any]]:
-        """출금 리스트 조회"""
-        if limit > 100:
-            raise ValueError("한 번에 최대 100개까지만 조회 가능합니다")
+    # ================================================================
+    # 출금(Withdraw) API
+    # ================================================================
 
+    async def get_withdraws(self, currency: Optional[str] = None,
+                           state: Optional[Literal['submitting', 'submitted', 'almost_accepted',
+                                                  'rejected', 'accepted', 'processing',
+                                                  'done', 'canceled']] = None,
+                           uuids: Optional[List[str]] = None,
+                           txids: Optional[List[str]] = None,
+                           limit: int = 100, page: int = 1,
+                           order_by: Literal['asc', 'desc'] = 'desc') -> List[Dict[str, Any]]:
+        """
+        출금 목록 조회
+
+        Args:
+            currency: 화폐를 의미하는 영문 대문자 코드
+            state: 출금 상태
+            uuids: 출금 UUID 목록
+            txids: 출금 transaction ID 목록
+            limit: 요청 개수 (기본: 100, 최대: 100)
+            page: 페이지 수 (기본: 1)
+            order_by: 정렬 방식
+
+        Returns:
+            List[Dict]: 출금 목록
+        """
         params = {
             'limit': limit,
             'page': page,
@@ -344,51 +295,137 @@ class UpbitPrivateClient(BaseApiClient):
             params['txids'] = txids
 
         response = await self._make_request('GET', '/withdraws', params=params)
-
-        if not response.success:
-            raise ApiClientError(f"출금 리스트 조회 실패: {response.error_message}",
-                                 response.status_code, response.data)
-
         return response.data
 
-    async def get_portfolio_summary(self) -> Dict[str, Any]:
-        """포트폴리오 요약 정보 조회"""
-        try:
-            accounts = await self.get_accounts()
+    async def get_withdraw(self, uuid: Optional[str] = None,
+                          txid: Optional[str] = None,
+                          currency: Optional[str] = None) -> Dict[str, Any]:
+        """
+        개별 출금 조회
 
-            total_krw = 0.0
-            holdings = []
+        Args:
+            uuid: 출금 UUID
+            txid: 출금 transaction ID
+            currency: 화폐를 의미하는 영문 대문자 코드
 
-            for account in accounts:
-                currency = account['currency']
-                balance = float(account['balance'])
-                locked = float(account['locked'])
-                total_balance = balance + locked
+        Returns:
+            Dict: 출금 정보
+        """
+        params = {}
+        if uuid:
+            params['uuid'] = uuid
+        if txid:
+            params['txid'] = txid
+        if currency:
+            params['currency'] = currency
 
-                if total_balance > 0:
-                    holding = {
-                        'currency': currency,
-                        'balance': balance,
-                        'locked': locked,
-                        'total': total_balance,
-                        'avg_buy_price': float(account.get('avg_buy_price', 0))
-                    }
+        if not any([uuid, txid]):
+            raise ValueError("uuid 또는 txid 중 하나는 필수입니다")
 
-                    if currency == 'KRW':
-                        total_krw += total_balance
-                        holding['krw_value'] = total_balance
-                    else:
-                        # 현재가 정보가 필요한 경우 퍼블릭 클라이언트와 연동 필요
-                        holding['krw_value'] = 0.0
+        response = await self._make_request('GET', '/withdraw', params=params)
+        return response.data
 
-                    holdings.append(holding)
+    # ================================================================
+    # 입금(Deposit) API
+    # ================================================================
 
-            return {
-                'total_krw': total_krw,
-                'holdings': holdings,
-                'currencies_count': len(holdings)
-            }
+    async def get_deposits(self, currency: Optional[str] = None,
+                          state: Optional[Literal['submitting', 'submitted', 'almost_accepted',
+                                                 'rejected', 'accepted', 'processing']] = None,
+                          uuids: Optional[List[str]] = None,
+                          txids: Optional[List[str]] = None,
+                          limit: int = 100, page: int = 1,
+                          order_by: Literal['asc', 'desc'] = 'desc') -> List[Dict[str, Any]]:
+        """
+        입금 목록 조회
 
-        except Exception as e:
-            self._logger.error(f"포트폴리오 요약 조회 실패: {e}")
-            raise ApiClientError(f"포트폴리오 요약 조회 실패: {str(e)}")
+        Args:
+            currency: 화폐를 의미하는 영문 대문자 코드
+            state: 입금 상태
+            uuids: 입금 UUID 목록
+            txids: 입금 transaction ID 목록
+            limit: 요청 개수 (기본: 100, 최대: 100)
+            page: 페이지 수 (기본: 1)
+            order_by: 정렬 방식
+
+        Returns:
+            List[Dict]: 입금 목록
+        """
+        params = {
+            'limit': limit,
+            'page': page,
+            'order_by': order_by
+        }
+
+        if currency:
+            params['currency'] = currency
+        if state:
+            params['state'] = state
+        if uuids:
+            params['uuids'] = uuids
+        if txids:
+            params['txids'] = txids
+
+        response = await self._make_request('GET', '/deposits', params=params)
+        return response.data
+
+    async def generate_coin_address(self, currency: str) -> Dict[str, Any]:
+        """
+        입금 주소 생성 요청
+
+        Args:
+            currency: 화폐를 의미하는 영문 대문자 코드
+
+        Returns:
+            Dict: 생성된 입금 주소 정보
+        """
+        data = {'currency': currency}
+        response = await self._make_request('POST', '/deposits/generate_coin_address', data=data)
+        return response.data
+
+    async def get_coin_addresses(self) -> List[Dict[str, Any]]:
+        """
+        전체 입금 주소 조회
+
+        Returns:
+            List[Dict]: 입금 주소 목록
+        """
+        response = await self._make_request('GET', '/deposits/coin_addresses')
+        return response.data
+
+    async def get_coin_address(self, currency: str) -> Dict[str, Any]:
+        """
+        개별 입금 주소 조회
+
+        Args:
+            currency: 화폐를 의미하는 영문 대문자 코드
+
+        Returns:
+            Dict: 입금 주소 정보
+        """
+        params = {'currency': currency}
+        response = await self._make_request('GET', '/deposits/coin_address', params=params)
+        return response.data
+
+
+# ================================================================
+# 편의 팩토리 함수
+# ================================================================
+
+def create_upbit_private_client(access_key: Optional[str] = None,
+                               secret_key: Optional[str] = None) -> UpbitPrivateClient:
+    """
+    업비트 프라이빗 API 클라이언트 생성 (편의 함수)
+
+    Args:
+        access_key: Upbit API Access Key (기본값: 환경변수에서 로드)
+        secret_key: Upbit API Secret Key (기본값: 환경변수에서 로드)
+
+    Returns:
+        UpbitPrivateClient: 설정된 클라이언트 인스턴스
+    """
+    adapter = UpbitAdapter()
+    config = ExchangeRateLimitConfig.for_upbit_private()
+    rate_limiter = UniversalRateLimiter(config)
+
+    return UpbitPrivateClient(access_key, secret_key, adapter, rate_limiter)

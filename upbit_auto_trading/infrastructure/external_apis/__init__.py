@@ -27,31 +27,31 @@ async with UpbitClient(access_key='key', secret_key='secret') as client:
 from .upbit import (
     UpbitPublicClient,
     UpbitPrivateClient,
-    UpbitWebSocketQuotationClient,
+    UpbitWebSocketPublicClient,
     UpbitWebSocketPrivateClient,
     UpbitAuthenticator
 )
 
-from .common import (
-    BaseApiClient,
-    RateLimiter,
-    RateLimitConfig,
-    ApiResponse,
-    ApiClientError
+from .core.exceptions import (
+    ApiClientError,
+    AuthenticationError,
+    RateLimitError,
+    NetworkError,
+    ValidationError
 )
 
 __all__ = [
     # Upbit API (4개 클라이언트 구조)
     'UpbitPublicClient',
     'UpbitPrivateClient',
-    'UpbitWebSocketQuotationClient',
+    'UpbitWebSocketPublicClient',
     'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
 
-    # 공통 기반 클래스
-    'BaseApiClient',
-    'RateLimiter',
-    'RateLimitConfig',
-    'ApiResponse',
-    'ApiClientError'
+    # 공통 예외 클래스
+    'ApiClientError',
+    'AuthenticationError',
+    'RateLimitError',
+    'NetworkError',
+    'ValidationError'
 ]

@@ -15,7 +15,9 @@ from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
-from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import RateLimitConfig, RateLimiter
+from upbit_auto_trading.infrastructure.external_apis.core.rate_limiter import (
+    UniversalRateLimiter, ExchangeRateLimitConfig
+)
 
 
 class PrivateWebSocketDataType(Enum):
@@ -48,8 +50,9 @@ class UpbitWebSocketPrivateClient:
         self.message_handlers: Dict[PrivateWebSocketDataType, List[Callable]] = {}
         self.logger = create_component_logger("UpbitWebSocketPrivate")
 
-        # 🆕 통합 Rate Limiter 적용 (Private API 정책)
-        self.rate_limiter = RateLimiter(RateLimitConfig.upbit_private_api())
+        # 통합 Rate Limiter 적용 (Private API 정책)
+        config = ExchangeRateLimitConfig.for_upbit_private()
+        self.rate_limiter = UniversalRateLimiter(config)
 
         # 연결 관리
         self.ping_interval = 30.0  # 30초마다 PING
@@ -144,6 +147,14 @@ class UpbitWebSocketPrivateClient:
     async def subscribe_my_assets(self) -> bool:
         """내 자산(잔고) 정보 구독"""
         return await self._subscribe("myAsset", None)
+
+    async def subscribe_my_order(self, markets: Optional[List[str]] = None) -> bool:
+        """내 주문 정보 구독 (단수형 별칭)"""
+        return await self.subscribe_my_orders(markets)
+
+    async def subscribe_my_asset(self) -> bool:
+        """내 자산 정보 구독 (단수형 별칭)"""
+        return await self.subscribe_my_assets()
 
     async def _subscribe(self, data_type: str, markets: Optional[List[str]]) -> bool:
         """데이터 구독"""

@@ -1,6 +1,6 @@
 """
-업비트 WebSocket Quotation 클라이언트
-- API 키 불필요한 시세 데이터 실시간 수신
+업비트 WebSocket Public 클라이언트
+- 인증이 필요없는 공개 시세 데이터 실시간 수신
 - 스크리너/백테스팅 최적화 설계
 """
 
@@ -14,7 +14,6 @@ from datetime import datetime
 from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import RateLimitConfig, RateLimiter
 
 
 class WebSocketDataType(Enum):
@@ -35,22 +34,19 @@ class WebSocketMessage:
     raw_data: str
 
 
-class UpbitWebSocketQuotationClient:
+class UpbitWebSocketPublicClient:
     """
-    업비트 WebSocket Quotation 클라이언트 (API 키 불필요)
+    업비트 WebSocket Public 클라이언트 (인증 불필요)
     스크리너/백테스팅용 실시간 시세 데이터 수신
     """
 
     def __init__(self):
-        self.url = "wss://api.upbit.com/websocket/v1"  # API 키 불필요
+        self.url = "wss://api.upbit.com/websocket/v1"  # 인증 불필요
         self.websocket: Optional[Any] = None
         self.is_connected = False
-        self.subscriptions: Dict[str, List[str]] = {}  # type -> markets
+        self.subscriptions: Dict[str, List[str]] = {}  # type -> symbols
         self.message_handlers: Dict[WebSocketDataType, List[Callable]] = {}
-        self.logger = create_component_logger("UpbitWebSocketQuotation")
-
-        # 🆕 통합 Rate Limiter 적용
-        self.rate_limiter = RateLimiter(RateLimitConfig.upbit_websocket_connect())
+        self.logger = create_component_logger("UpbitWebSocketPublic")
 
         # 재연결 설정
         self.auto_reconnect = True
@@ -75,11 +71,8 @@ class UpbitWebSocketQuotationClient:
         self._background_tasks: set = set()  # 백그라운드 태스크 추적
 
     async def connect(self) -> bool:
-        """WebSocket 연결 (API 키 불필요)"""
+        """WebSocket 연결 (인증 불필요)"""
         try:
-            # 🆕 Rate Limit 검사
-            await self.rate_limiter.acquire()
-
             self.logger.info(f"WebSocket 연결 시도: {self.url}")
 
             # 연결 설정 (인증 불필요)
@@ -148,23 +141,56 @@ class UpbitWebSocketQuotationClient:
             self.websocket = None
             self._message_loop_running = False
 
-    async def subscribe_ticker(self, markets: List[str]) -> bool:
-        """현재가 정보 구독 (스크리너 핵심)"""
-        return await self._subscribe(WebSocketDataType.TICKER, markets)
+    async def subscribe_ticker(self, symbols: List[str]) -> bool:
+        """
+        현재가 정보 구독 (단수형 컨벤션)
 
-    async def subscribe_trade(self, markets: List[str]) -> bool:
-        """체결 정보 구독"""
-        return await self._subscribe(WebSocketDataType.TRADE, markets)
+        Args:
+            symbols: 심볼 리스트 (모든 심볼 동시 구독 가능)
 
-    async def subscribe_orderbook(self, markets: List[str]) -> bool:
-        """호가 정보 구독"""
-        return await self._subscribe(WebSocketDataType.ORDERBOOK, markets)
+        Returns:
+            bool - 구독 성공 여부
+        """
+        return await self._subscribe(WebSocketDataType.TICKER, symbols)
 
-    async def subscribe_candle(self, markets: List[str], unit: int = 1) -> bool:
-        """캔들 정보 구독 (단위는 smart_routing에서 처리)"""
-        return await self._subscribe(WebSocketDataType.CANDLE, markets, unit)
+    async def subscribe_trade(self, symbols: List[str]) -> bool:
+        """
+        체결 정보 구독 (단수형 컨벤션)
 
-    async def _subscribe(self, data_type: WebSocketDataType, markets: List[str], candle_unit: Optional[int] = None) -> bool:
+        Args:
+            symbols: 심볼 리스트 (모든 심볼 동시 구독 가능)
+
+        Returns:
+            bool - 구독 성공 여부
+        """
+        return await self._subscribe(WebSocketDataType.TRADE, symbols)
+
+    async def subscribe_orderbook(self, symbols: List[str]) -> bool:
+        """
+        호가 정보 구독 (단수형 컨벤션)
+
+        Args:
+            symbols: 심볼 리스트 (모든 심볼 동시 구독 가능)
+
+        Returns:
+            bool - 구독 성공 여부
+        """
+        return await self._subscribe(WebSocketDataType.ORDERBOOK, symbols)
+
+    async def subscribe_candle(self, symbols: List[str], unit: int = 1) -> bool:
+        """
+        캔들 정보 구독 (단수형 컨벤션)
+
+        Args:
+            symbols: 심볼 리스트 (모든 심볼 동시 구독 가능)
+            unit: 캔들 단위
+
+        Returns:
+            bool - 구독 성공 여부
+        """
+        return await self._subscribe(WebSocketDataType.CANDLE, symbols, unit)
+
+    async def _subscribe(self, data_type: WebSocketDataType, symbols: List[str], candle_unit: Optional[int] = None) -> bool:
         """내부 구독 메서드"""
         if not self.is_connected or not self.websocket:
             self.logger.error("WebSocket이 연결되지 않음")
@@ -177,7 +203,7 @@ class UpbitWebSocketQuotationClient:
             # 구독 메시지 구성
             subscribe_msg = [
                 {"ticket": ticket},
-                {"type": data_type.value, "codes": markets},
+                {"type": data_type.value, "codes": symbols},
                 {"format": "DEFAULT"}  # 압축하지 않은 기본 형식
             ]
 
@@ -202,24 +228,21 @@ class UpbitWebSocketQuotationClient:
 
             await self.websocket.send(json.dumps(subscribe_msg))
 
-            # 🆕 Rate Limit 검사 (메시지 전송 시)
-            await self.rate_limiter.acquire()
-
             # 구독 정보 저장 (중복 방지)
             if data_type.value not in self.subscriptions:
                 self.subscriptions[data_type.value] = []
 
             # 중복 제거하면서 추가
-            for market in markets:
-                if market not in self.subscriptions[data_type.value]:
-                    self.subscriptions[data_type.value].append(market)
+            for symbol in symbols:
+                if symbol not in self.subscriptions[data_type.value]:
+                    self.subscriptions[data_type.value].append(symbol)
 
             # 🔧 첫 구독 시 자동으로 메시지 수신 루프 시작
             if self.auto_start_message_loop and not self.message_loop_task and not self._message_loop_running:
                 self.message_loop_task = asyncio.create_task(self._message_receiver_loop())
                 self.logger.debug("🚀 메시지 수신 루프 자동 시작")
 
-            self.logger.info(f"✅ {data_type.value} 구독 완료: {markets}")
+            self.logger.info(f"✅ {data_type.value} 구독 완료: {symbols}")
             return True
 
         except Exception as e:
@@ -411,11 +434,20 @@ class UpbitWebSocketQuotationClient:
 
         if await self.connect():
             # 기존 구독 복원
-            for data_type, markets in self.subscriptions.items():
-                await self._subscribe(WebSocketDataType(data_type), markets)
+            for data_type, symbols in self.subscriptions.items():
+                await self._subscribe(WebSocketDataType(data_type), symbols)
             return True
 
         return False
+
+    async def unsubscribe(self) -> None:
+        """모든 구독 해제 (기본 메서드)"""
+        self.subscriptions.clear()
+        self.logger.info("모든 구독 해제됨")
+
+    async def close(self) -> None:
+        """연결 종료 (disconnect 별칭)"""
+        await self.disconnect()
 
     async def __aenter__(self):
         """async with 컨텍스트 매니저 진입"""

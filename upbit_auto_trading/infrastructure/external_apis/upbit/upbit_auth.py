@@ -6,9 +6,8 @@ from typing import Dict, Optional
 import os
 import logging
 
-from upbit_auto_trading.infrastructure.external_apis.common.api_client_base import (
-    AuthenticationError
-)
+from ..core.exceptions import AuthenticationError
+
 
 class UpbitAuthenticator:
     """Upbit API 인증 처리 - ApiKeyService 연동"""

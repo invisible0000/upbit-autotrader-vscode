@@ -363,82 +363,15 @@ class SmartDataProvider:
         return None
 
     # =====================================
-    # 기존 단일 API (호환성 유지)
+    # 실시간 데이터 API - 업비트 네이티브 패턴
     # =====================================
-
-    async def get_ticker(self,
-                        symbol: str,
-                        priority: Priority = Priority.HIGH) -> DataResponse:
-        """
-        실시간 티커 조회 (캐시 사용 안함)
-
-        Args:
-            symbol: 심볼
-            priority: 요청 우선순위
-
-        Returns:
-            DataResponse 객체
-        """
-        start_time_ms = time.time() * 1000
-        self._request_count += 1
-
-        logger.debug(f"티커 조회 요청 (캐시 미사용): {symbol}, priority={priority}")
-
-        try:
-            # Smart Router 직접 연동 (캐시 사용 안함)
-            try:
-                smart_result = await self.smart_router.get_ticker(symbol, priority)
-
-                if smart_result.get('success', False):
-                    ticker_data = smart_result.get('data')
-                    if ticker_data:
-                        response_time = time.time() * 1000 - start_time_ms
-                        logger.info(f"Smart Router 티커 성공 (캐시 미사용): {symbol}, {response_time:.1f}ms")
-
-                        return DataResponse(
-                            success=True,
-                            data=ticker_data,
-                            metadata=ResponseMetadata(
-                                priority_used=priority,
-                                source="smart_router",
-                                response_time_ms=response_time,
-                                cache_hit=False
-                            )
-                        )
-                else:
-                    logger.error(f"Smart Router 티커 실패: {symbol}, {smart_result.get('error')}")
-
-            except Exception as e:
-                logger.error(f"Smart Router 티커 연동 오류: {symbol}, {e}")
-
-            return DataResponse(
-                success=False,
-                error="티커 데이터 조회 실패",
-                metadata=ResponseMetadata(
-                    priority_used=priority,
-                    source="failed",
-                    response_time_ms=time.time() * 1000 - start_time_ms
-                )
-            )
-
-        except Exception as e:
-            logger.error(f"티커 조회 실패: {symbol}, {e}")
-            return DataResponse(
-                success=False,
-                error=str(e),
-                metadata=ResponseMetadata(
-                    priority_used=priority,
-                    source="error",
-                    response_time_ms=time.time() * 1000 - start_time_ms
-                )
-            )
 
     async def get_tickers(self,
                          symbols: List[str],
                          priority: Priority = Priority.HIGH) -> DataResponse:
         """
         실시간 티커 일괄 조회 (업비트 네이티브 패턴)
-
+        
         모든 심볼을 동시에 처리 - 개수 제한 없음
         항상 List[str] → List[Dict] 패턴
 
@@ -470,71 +403,159 @@ class SmartDataProvider:
         try:
             # Smart Router 일괄 조회 (모든 심볼 동시 처리)
             smart_result = await self.smart_router.get_ticker(symbols, priority)
+        if isinstance(symbols, str):
+            symbols_list = [symbols]
+            is_single_request = True
+        else:
+            symbols_list = symbols if symbols else []
+            is_single_request = False
+
+        if not symbols_list:
+            logger.warning("심볼이 비어있음")
+            return DataResponse(
+                success=False,
+                error="심볼이 필요합니다",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
+            )
+
+        logger.debug(f"티커 조회 요청 (캐시 미사용): {len(symbols_list)}개 심볼, priority={priority}")
+
+        try:
+            # Smart Router 일괄 조회 (내부적으로 배치 처리)
+            smart_result = await self.smart_router.get_ticker(symbols_list, priority)
 
             if smart_result.get('success', False):
                 raw_data = smart_result.get('data', [])
 
-                # 업비트 네이티브 패턴: 항상 List[Dict] 반환
+                # 응답 데이터 처리
                 if isinstance(raw_data, list):
-                    tickers_list = raw_data
+                    # 리스트를 딕셔너리로 변환
+                    results = {}
+                    for ticker in raw_data:
+                        if ticker and 'market' in ticker:
+                            results[ticker['market']] = ticker
                 else:
-                    # 단일 객체인 경우 리스트로 래핑
-                    tickers_list = [raw_data] if raw_data else []
+                    results = raw_data if isinstance(raw_data, dict) else {}
 
                 response_time = time.time() * 1000 - start_time_ms
-                logger.info(f"Smart Router 티커 성공: {len(symbols)}개 심볼, {len(tickers_list)}개 반환, {response_time:.1f}ms")
 
-                return DataResponse(
-                    success=True,
-                    data=tickers_list,  # 항상 리스트
-                    metadata=ResponseMetadata(
-                        priority_used=priority,
-                        source="smart_router",
-                        response_time_ms=response_time,
-                        cache_hit=False,
-                        records_count=len(tickers_list)
+                # 단일 요청인 경우 단일 객체 반환
+                if is_single_request and symbols_list:
+                    single_symbol = symbols_list[0]
+                    single_data = results.get(single_symbol)
+                    if single_data:
+                        logger.info(f"Smart Router 티커 성공 (캐시 미사용): {single_symbol}, {response_time:.1f}ms")
+                        return DataResponse(
+                            success=True,
+                            data=single_data,
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="smart_router",
+                                response_time_ms=response_time,
+                                cache_hit=False,
+                                records_count=1
+                            )
+                        )
+                    else:
+                        logger.error(f"Smart Router 티커 데이터 없음: {single_symbol}")
+                        return DataResponse(
+                            success=False,
+                            error=f"티커 데이터 없음: {single_symbol}",
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="smart_router_no_data",
+                                response_time_ms=response_time,
+                                cache_hit=False
+                            )
+                        )
+                else:
+                    # 일괄 요청인 경우 딕셔너리 반환
+                    logger.info(f"Smart Router 티커 성공 (캐시 미사용): {len(results)}개 심볼, {response_time:.1f}ms")
+                    return DataResponse(
+                        success=True,
+                        data=results,
+                        metadata=ResponseMetadata(
+                            priority_used=priority,
+                            source="smart_router",
+                            response_time_ms=response_time,
+                            cache_hit=False,
+                            records_count=len(results)
+                        )
                     )
-                )
             else:
-                logger.warning(f"Smart Router 티커 실패: {smart_result.get('error')}")
+                logger.error(f"Smart Router 티커 실패: {smart_result.get('error')}")
 
-        except Exception as e:
-            logger.error(f"Smart Router 티커 예외: {e}")
-
-        # 폴백: 업비트 API 직접 조회 (네이티브 패턴 활용)
-        logger.info("업비트 Public API 폴백 시작")
-        try:
+            # 폴백: 업비트 API 직접 조회
+            logger.warning("Smart Router 실패, 업비트 API 폴백")
             from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
             upbit_client = UpbitPublicClient()
 
-            # 업비트 네이티브 호출: List[str] → List[Dict]
-            api_data = await upbit_client.get_tickers(symbols)
-            response_time = time.time() * 1000 - start_time_ms
+            try:
+                api_data = await upbit_client.get_tickers(symbols_list)
+                results = {}
+                for ticker in api_data:
+                    if ticker and 'market' in ticker:
+                        results[ticker['market']] = ticker
 
-            logger.info(f"업비트 API 티커 성공: {len(symbols)}개 요청, {len(api_data)}개 반환, {response_time:.1f}ms")
+                response_time = time.time() * 1000 - start_time_ms
+
+                if is_single_request and symbols_list:
+                    single_symbol = symbols_list[0]
+                    single_data = results.get(single_symbol)
+                    if single_data:
+                        logger.info(f"업비트 API 티커 성공: {single_symbol}, {response_time:.1f}ms")
+                        return DataResponse(
+                            success=True,
+                            data=single_data,
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="upbit_api_fallback",
+                                response_time_ms=response_time,
+                                cache_hit=False,
+                                records_count=1
+                            )
+                        )
+                else:
+                    logger.info(f"업비트 API 티커 성공: {len(results)}개 심볼, {response_time:.1f}ms")
+                    return DataResponse(
+                        success=True,
+                        data=results,
+                        metadata=ResponseMetadata(
+                            priority_used=priority,
+                            source="upbit_api_fallback",
+                            response_time_ms=response_time,
+                            cache_hit=False,
+                            records_count=len(results)
+                        )
+                    )
+
+            except Exception as api_error:
+                logger.error(f"업비트 API 폴백 실패: {api_error}")
 
             return DataResponse(
-                success=True,
-                data=api_data,  # 네이티브 리스트 그대로
+                success=False,
+                error="티커 데이터 조회 실패",
                 metadata=ResponseMetadata(
                     priority_used=priority,
-                    source="upbit_rest_api",
-                    response_time_ms=response_time,
-                    cache_hit=False,
-                    records_count=len(api_data)
+                    source="failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms
                 )
             )
 
         except Exception as e:
-            logger.error(f"업비트 API 티커 폴백 실패: {e}")
+            logger.error(f"티커 조회 실패: {e}")
             return DataResponse(
                 success=False,
-                error=f"모든 데이터 소스 실패: {str(e)}",
+                error=str(e),
                 metadata=ResponseMetadata(
                     priority_used=priority,
-                    source="all_sources_failed",
-                    response_time_ms=time.time() * 1000 - start_time_ms,
-                    cache_hit=False
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
                 )
             )
 
