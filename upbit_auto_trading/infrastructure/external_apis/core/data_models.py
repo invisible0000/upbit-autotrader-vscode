@@ -78,15 +78,17 @@ class ApiResponse:
 
 @dataclass
 class UnifiedResponse:
-    """통합 응답 형식 - 거래소 중립적"""
+    """통합 응답 형식 - Dict 기반 통일"""
     success: bool
-    data: Dict[str, Any]
+    data: Dict[str, Any]  # 항상 Dict 형태로 통일
     metadata: Dict[str, Any]
     error: Optional[str] = None
     exchange: Optional[str] = None
 
-    def get(self) -> Any:
-        """원본 입력 형태에 맞는 응답 반환"""
+    def get(self, key: Optional[str] = None) -> Any:
+        """키별 데이터 반환 또는 전체 Dict 반환"""
+        if key:
+            return self.data.get(key, {})
         return self.data
 
     def get_single(self, symbol: str) -> Any:
@@ -96,6 +98,26 @@ class UnifiedResponse:
     def get_all(self) -> Dict[str, Any]:
         """전체 Dict 데이터 반환"""
         return self.data
+
+    def keys(self):
+        """Dict keys 반환"""
+        return self.data.keys()
+
+    def values(self):
+        """Dict values 반환"""
+        return self.data.values()
+
+    def items(self):
+        """Dict items 반환"""
+        return self.data.items()
+
+    def __getitem__(self, key: str):
+        """Dict 스타일 접근 지원: response['KRW-BTC']"""
+        return self.data[key]
+
+    def __contains__(self, key: str):
+        """in 연산자 지원: 'KRW-BTC' in response"""
+        return key in self.data
 
 
 class ExchangeMetadata:

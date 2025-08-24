@@ -312,27 +312,78 @@ class ApiKeyService(IApiKeyService):
             # UpbitPrivateClient 직접 사용 (4-client 구조)
             client = UpbitPrivateClient(access_key=access_key, secret_key=secret_key)
 
-            # PyQt 환경에서는 기존 이벤트 루프 사용 (새 루프 생성 금지)
+            # PyQt 환경에서도 실제 API 호출 수행 (20,000원 테스트를 위해)
             try:
                 # 현재 실행 중인 이벤트 루프가 있는지 확인
                 import asyncio
                 loop = asyncio.get_running_loop()
 
-                # 이미 실행 중인 루프에서 코루틴 실행
-                # PyQt 환경에서는 동기적 API 호출이 불가능하므로 간단한 유효성 검증만 수행
-                self.logger.info("✅ PyQt 환경에서 API 키 포맷 검증 완료")
+                # PyQt 환경에서도 실제 API 호출 수행
+                self.logger.info("🔍 PyQt 환경에서 실제 API 호출 시작")
 
-                # API 키 포맷 기본 검증
-                if not access_key or not secret_key:
-                    return False, "API 키가 누락되었습니다", {}
-                if len(access_key) < 10 or len(secret_key) < 10:
-                    return False, "API 키 형식이 올바르지 않습니다", {}
+                # 새로운 스레드에서 비동기 작업 실행
+                def run_async_in_thread():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        async def test_connection():
+                            async with client:
+                                return await client.get_accounts()
+                        return new_loop.run_until_complete(test_connection())
+                    finally:
+                        new_loop.close()
 
-                # PyQt 환경에서는 실제 API 호출 대신 키 유효성만 확인
-                return True, "API 키 검증 완료 (PyQt 환경)", {
-                    'validation': 'format_check_only',
-                    'environment': 'pyqt'
-                }
+                # 스레드에서 실행
+                import threading
+                result_container = []
+                error_container = []
+
+                def thread_worker():
+                    try:
+                        result = run_async_in_thread()
+                        result_container.append(result)
+                    except Exception as e:
+                        error_container.append(e)
+
+                thread = threading.Thread(target=thread_worker)
+                thread.start()
+                thread.join(timeout=10)  # 10초 타임아웃
+
+                if error_container:
+                    raise error_container[0]
+
+                if result_container:
+                    accounts = result_container[0]
+                    # 계좌 정보 처리
+                    account_info = {}
+                    total_krw = 0.0
+
+                    if isinstance(accounts, list):
+                        for account in accounts:
+                            currency = account.get('currency', '')
+                            balance = float(account.get('balance', 0))
+                            locked = float(account.get('locked', 0))
+
+                            if currency == 'KRW':
+                                total_krw = balance + locked
+
+                            account_info[currency] = {
+                                'balance': balance,
+                                'locked': locked,
+                                'total': balance + locked
+                            }
+
+                        self.logger.info(f"✅ API 연결 테스트 성공 - KRW 잔고: {total_krw:,.0f}원")
+                        return True, f"연결 성공\nKRW 잔고: {total_krw:,.0f}원", {
+                            'KRW': account_info.get('KRW', {'balance': 0, 'locked': 0, 'total': 0}),
+                            'accounts': account_info,
+                            'total_krw': total_krw,
+                            'currencies_count': len(account_info)
+                        }
+                    else:
+                        return False, "계좌 정보 형식 오류", {}
+                else:
+                    raise TimeoutError("API 호출 타임아웃")
 
             except RuntimeError:
                 # 실행 중인 루프가 없는 경우 (비PyQt 환경)

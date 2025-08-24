@@ -131,31 +131,61 @@ class ResponseNormalizer:
     @staticmethod
     def normalize_to_dict(data: List[Any], symbols: List[str],
                           key_field: str = 'symbol') -> Dict[str, Any]:
-        """List 응답을 Dict 형태로 변환"""
+        """
+        List 응답을 Dict 형태로 변환
+
+        배열 데이터(캔들, 체결)는 심볼별 리스트로 그룹화하고,
+        단일 데이터(티커, 호가)는 심볼별 객체로 매핑합니다.
+        """
         if not isinstance(data, list):
             return {}
 
-        result = {}
-        for item in data:
-            if isinstance(item, dict):
-                key = item.get(key_field)
-                if key:
-                    result[key] = item
-            elif hasattr(item, key_field):
-                # 객체인 경우 (StandardTicker 등)
-                key = getattr(item, key_field)
-                if key:
-                    result[key] = item
-            elif hasattr(item, 'symbol'):
-                # 기본적으로 symbol 속성 확인
-                key = getattr(item, 'symbol')
-                if key:
-                    result[key] = item
+        # 배열 데이터인지 확인 (캔들, 체결 등)
+        # 캔들: candle_date_time 필드 존재
+        # 체결: sequential_id 필드 존재 (업비트 체결 데이터 고유 필드)
+        is_array_data = any('candle_date_time' in str(item) or 'sequential_id' in str(item)
+                            for item in data if isinstance(item, dict))
 
-        # 요청한 심볼 중 누락된 것들은 빈 dict로 추가
-        for symbol in symbols:
-            if symbol not in result:
-                result[symbol] = {}
+        result = {}
+
+        if is_array_data:
+            # 배열 데이터: 심볼별로 리스트 그룹화
+            for symbol in symbols:
+                result[symbol] = []
+
+            for item in data:
+                if isinstance(item, dict):
+                    # market 필드로 심볼 추출 (업비트 표준)
+                    key = item.get('market') or item.get(key_field)
+                    if key and key in result:
+                        result[key].append(item)
+                    elif key:
+                        # 새로운 심볼인 경우 리스트 생성
+                        if key not in result:
+                            result[key] = []
+                        result[key].append(item)
+        else:
+            # 단일 데이터: 기존 로직 유지
+            for item in data:
+                if isinstance(item, dict):
+                    key = item.get('market') or item.get(key_field)
+                    if key:
+                        result[key] = item
+                elif hasattr(item, key_field):
+                    # 객체인 경우 (StandardTicker 등)
+                    key = getattr(item, key_field)
+                    if key:
+                        result[key] = item
+                elif hasattr(item, 'symbol'):
+                    # 기본적으로 symbol 속성 확인
+                    key = getattr(item, 'symbol')
+                    if key:
+                        result[key] = item
+
+            # 요청한 심볼 중 누락된 것들은 빈 dict로 추가
+            for symbol in symbols:
+                if symbol not in result:
+                    result[symbol] = {}
 
         return result
 
@@ -212,7 +242,11 @@ class InputTypeHandler:
     @staticmethod
     def format_output(data: Dict[str, Any], was_single_input: bool,
                       single_symbol: Optional[str] = None) -> Any:
-        """입력 타입에 맞는 출력 형태로 변환"""
-        if was_single_input and single_symbol:
-            return data.get(single_symbol, {})
+        """
+        Dict 통일을 위한 출력 형태 변환
+
+        단일/복수 요청 모두 Dict 형태로 통일하여
+        일관된 접근 패턴을 제공합니다.
+        """
+        # Dict 통일: 단일 요청도 Dict 형태 유지
         return data

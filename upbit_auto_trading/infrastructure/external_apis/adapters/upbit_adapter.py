@@ -206,6 +206,8 @@ class UpbitAdapter(ExchangeAdapter):
             '10m': '/candles/minutes/10',
             '15m': '/candles/minutes/15',
             '30m': '/candles/minutes/30',
+            '60m': '/candles/minutes/60',    # 60분 직접 매핑 추가
+            '240m': '/candles/minutes/240',  # 240분 직접 매핑 추가
             '1h': '/candles/minutes/60',
             '4h': '/candles/minutes/240',
             # 일/주/월/년 캔들 (표준 표기법)
