@@ -241,6 +241,51 @@ class UpbitPublicClient(BaseExchangeClient):
 
         return result
 
+    async def get_orderbook_instruments(self, markets: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """
+        호가 정책 조회 (API 문서: /orderbook/instruments)
+
+        각 마켓의 호가 단위(tick_size) 정보를 조회합니다.
+
+        Args:
+            markets: 조회하고자 하는 페어(거래쌍) 목록. 쉼표로 구분. 예: "KRW-BTC,KRW-ETH"
+                    None일 경우 모든 원화 마켓을 조회합니다.
+
+        Returns:
+            Dict[str, Dict]: {
+                'KRW-BTC': {
+                    'market': 'KRW-BTC',
+                    'tick_size': '1000',
+                    'quote_currency': 'KRW',
+                    'supported_levels': [0, 10000, ...],
+                    ...
+                },
+                ...
+            }
+        """
+        params = {}
+        if markets:
+            params['markets'] = markets
+        else:
+            # 기본값: 주요 원화 마켓들
+            params['markets'] = 'KRW-BTC,KRW-ETH,KRW-XRP,KRW-ADA,KRW-DOT'
+
+        response = await self._make_request('GET', '/orderbook/instruments', params=params)
+
+        if not response.success:
+            from ..core.data_models import ExchangeApiError
+            raise ExchangeApiError(f"호가 정책 조회 실패: {response.error_message}")
+
+        # List를 Dict로 변환 (market을 키로 사용)
+        data = response.data or []
+        result = {}
+        for instrument_info in data:
+            market_code = instrument_info.get('market', '')
+            if market_code:
+                result[market_code] = instrument_info
+
+        return result
+
     async def get_krw_market_list(self) -> List[str]:
         """KRW 마켓 목록 조회 - Dict 통일 호환"""
         markets = await self.get_market()

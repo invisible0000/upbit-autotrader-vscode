@@ -81,36 +81,34 @@ class BaseExchangeClient(ABC):
             if (self.adapter.supports_batch(endpoint)
                     and len(symbols_list) <= self.adapter.get_max_batch_size(endpoint)):
 
-                print(f"[DEBUG] 배치 처리 선택됨")
+                # 배치 처리
                 response_data = await self._handle_batch_request(
                     endpoint, symbols_list, method, **kwargs
                 )
             else:
-                print(f"[DEBUG] 개별 처리 선택됨")
+                # 개별 처리
                 response_data = await self._handle_individual_requests(
                     endpoint, symbols_list, method, **kwargs
                 )
 
-            print(f"[DEBUG] response_data: {response_data}")            # 3. 어댑터를 통한 응답 파싱
+            # 3. 어댑터를 통한 응답 파싱
             parsed_data = self._parse_response_via_adapter(
                 response_data, endpoint, symbols_list, **kwargs
             )
-
-            print(f"[DEBUG] 파싱된 데이터: {parsed_data}")
 
             # 4. 통합 응답 형식으로 변환
             unified_dict = ResponseNormalizer.normalize_to_dict(
                 parsed_data, symbols_list, self._get_symbol_key_field(endpoint)
             )
 
-            print(f"[DEBUG] 정규화된 Dict: {unified_dict}")
+            # print(f"[DEBUG] 정규화된 Dict: {unified_dict}")
 
             # 5. 최종 응답 생성
             final_data = InputTypeHandler.format_output(
                 unified_dict, was_single, symbols_list[0] if symbols_list else None
             )
 
-            print(f"[DEBUG] 최종 데이터: {final_data}")
+            # print(f"[DEBUG] 최종 데이터: {final_data}")
 
             return UnifiedResponse(
                 success=True,
@@ -153,30 +151,31 @@ class BaseExchangeClient(ABC):
         tasks = []
         for symbol in symbols:
             params = self.adapter.build_single_params(symbol, endpoint, **kwargs)
-            print(f"[DEBUG] 개별 요청 - 심볼: {symbol}, 엔드포인트: {endpoint}, 파라미터: {params}")
+            # print(f"[DEBUG] 개별 요청 - 심볼: {symbol}, 엔드포인트: {endpoint}, 파라미터: {params}")
             task = self._make_request(method, endpoint, params=params)
             tasks.append(task)
 
         responses = await asyncio.gather(*tasks, return_exceptions=True)
-        print(f"[DEBUG] 개별 응답 개수: {len(responses)}")
+        # print(f"[DEBUG] 개별 응답 개수: {len(responses)}")
 
         results = []
         for i, response in enumerate(responses):
-            print(f"[DEBUG] 응답 {i}: 타입={type(response)}, 성공={getattr(response, 'success', 'N/A')}")
+            # print(f"[DEBUG] 응답 {i}: 타입={type(response)}, 성공={getattr(response, 'success', 'N/A')}")
             if isinstance(response, Exception):
-                print(f"[DEBUG] 예외 발생: {response}")
+                # print(f"[DEBUG] 예외 발생: {response}")
                 continue
 
             if isinstance(response, ApiResponse) and response.success:
-                print(f"[DEBUG] 성공 응답 데이터: {response.data}")
+                # print(f"[DEBUG] 성공 응답 데이터: {response.data}")
                 if isinstance(response.data, list):
                     results.extend(response.data)
                 else:
                     results.append(response.data)
             else:
-                print(f"[DEBUG] 실패 응답: {getattr(response, 'error_message', 'Unknown error')}")
+                # print(f"[DEBUG] 실패 응답: {getattr(response, 'error_message', 'Unknown error')}")
+                continue
 
-        print(f"[DEBUG] 최종 결과 개수: {len(results)}")
+        # print(f"[DEBUG] 최종 결과 개수: {len(results)}")
         return results
 
     def _parse_response_via_adapter(
