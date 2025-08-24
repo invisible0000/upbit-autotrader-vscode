@@ -27,7 +27,7 @@ await private_client.close()
 """
 
 from .upbit_public_client import UpbitPublicClient, create_upbit_public_client
-from .upbit_private_client import UpbitPrivateClient, create_upbit_private_client
+from .upbit_private_client import UpbitPrivateClient
 from .upbit_websocket_public_client import UpbitWebSocketPublicClient
 from .upbit_websocket_private_client import UpbitWebSocketPrivateClient
 from .upbit_auth import UpbitAuthenticator
@@ -38,6 +38,5 @@ __all__ = [
     'UpbitWebSocketPublicClient',
     'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
-    'create_upbit_public_client',
-    'create_upbit_private_client'
+    'create_upbit_public_client'
 ]

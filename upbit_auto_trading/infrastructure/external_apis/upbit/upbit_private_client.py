@@ -181,13 +181,13 @@ class UpbitPrivateClient(BaseExchangeClient):
         if market:
             params['market'] = market
         if uuids:
-            params['uuids'] = uuids
+            params['uuids'] = ','.join(uuids)
         if identifiers:
-            params['identifiers'] = identifiers
+            params['identifiers'] = ','.join(identifiers)
         if state:
             params['state'] = state
         if states:
-            params['states'] = states
+            params['states'] = ','.join(states) if isinstance(states, list) else states
 
         response = await self._make_request('GET', '/orders', params=params)
 
@@ -246,9 +246,9 @@ class UpbitPrivateClient(BaseExchangeClient):
         if market:
             params['market'] = market
         if uuids:
-            params['uuids'] = uuids
+            params['uuids'] = ','.join(uuids)
         if identifiers:
-            params['identifiers'] = identifiers
+            params['identifiers'] = ','.join(identifiers)
 
         response = await self._make_request('GET', '/orders/uuids', params=params)
 
@@ -459,36 +459,13 @@ class UpbitPrivateClient(BaseExchangeClient):
 
         params = {}
         if uuids:
-            # 리스트를 쿼리 파라미터 배열로 직접 전달 (어댑터에서 처리)
-            params['uuids'] = uuids
+            # 리스트를 쿼리 파라미터 배열로 변환하여 전달
+            params['uuids'] = ','.join(uuids)
         if identifiers:
-            # 리스트를 쿼리 파라미터 배열로 직접 전달 (어댑터에서 처리)
-            params['identifiers'] = identifiers
+            # 리스트를 쿼리 파라미터 배열로 변환하여 전달
+            params['identifiers'] = ','.join(identifiers)
 
         response = await self._make_request('DELETE', '/orders/uuids', params=params)
-        return response.data
-
-    async def cancel_orders(self, uuids: Optional[List[str]] = None,
-                            identifiers: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """
-        주문 일괄 취소
-
-        Args:
-            uuids: 취소할 주문 UUID 목록
-            identifiers: 취소할 사용자 지정값 목록
-
-        Returns:
-            List[Dict]: 취소된 주문 목록
-        """
-        data = {}
-        if uuids:
-            data['uuids'] = uuids
-        elif identifiers:
-            data['identifiers'] = identifiers
-        else:
-            raise ValueError("uuids 또는 identifiers 중 하나는 필수입니다")
-
-        response = await self._make_request('DELETE', '/orders', data=data)
         return response.data
 
     async def batch_cancel_orders(self, quote_currencies: Optional[List[str]] = None,
@@ -615,14 +592,20 @@ class UpbitPrivateClient(BaseExchangeClient):
 
     async def get_trades_history(self, market: Optional[str] = None,
                                  limit: int = 100,
-                                 order_by: Literal['asc', 'desc'] = 'desc') -> List[Dict[str, Any]]:
+                                 order_by: Literal['asc', 'desc'] = 'desc') -> Dict[str, Dict[str, Any]]:
         """
-        내 체결 내역 조회 (기본 메서드)
+        내 체결 내역 조회 - Dict 통일
 
         Args:
             market: 마켓 코드 (예: KRW-BTC)
             limit: 조회 개수 (최대 500)
             order_by: 정렬 순서
+
+        Returns:
+            Dict[str, Dict]: {
+                'trade_id_1': {...},
+                'trade_id_2': {...}
+            }
         """
         params = {
             'limit': min(limit, 500),
@@ -632,186 +615,18 @@ class UpbitPrivateClient(BaseExchangeClient):
             params['market'] = market
 
         response = await self._make_request('GET', '/orders', params=params)
-        return response.data
-
-    # ================================================================
-    # 출금(Withdraw) API
-    # ================================================================
-
-    async def get_withdraws(self, currency: Optional[str] = None,
-                            state: Optional[Literal['submitting', 'submitted', 'almost_accepted',
-                                                    'rejected', 'accepted', 'processing',
-                                                    'done', 'canceled']] = None,
-                            uuids: Optional[List[str]] = None,
-                            txids: Optional[List[str]] = None,
-                            limit: int = 100, page: int = 1,
-                            order_by: Literal['asc', 'desc'] = 'desc') -> Dict[str, Dict[str, Any]]:
-        """
-        출금 목록 조회 - Dict 통일
-
-        Returns:
-            Dict[str, Dict]: {
-                'withdraw_uuid_1': {...},
-                'withdraw_uuid_2': {...}
-            }
-        """
-        params = {
-            'limit': limit,
-            'page': page,
-            'order_by': order_by
-        }
-
-        if currency:
-            params['currency'] = currency
-        if state:
-            params['state'] = state
-        if uuids:
-            params['uuids'] = uuids
-        if txids:
-            params['txids'] = txids
-
-        response = await self._make_request('GET', '/withdraws', params=params)
 
         # List 응답을 Dict로 변환
-        withdraws_dict = {}
+        trades_dict = {}
         if isinstance(response.data, list):
-            for withdraw in response.data:
-                withdraw_id = withdraw.get('uuid') or withdraw.get('txid')
-                if withdraw_id:
-                    withdraws_dict[withdraw_id] = withdraw
-        return withdraws_dict
-
-    async def get_withdraw(self, uuid: Optional[str] = None,
-                           txid: Optional[str] = None,
-                           currency: Optional[str] = None) -> Dict[str, Any]:
-        """
-        개별 출금 조회
-
-        Args:
-            uuid: 출금 UUID
-            txid: 출금 transaction ID
-            currency: 화폐를 의미하는 영문 대문자 코드
-
-        Returns:
-            Dict: 출금 정보
-        """
-        params = {}
-        if uuid:
-            params['uuid'] = uuid
-        if txid:
-            params['txid'] = txid
-        if currency:
-            params['currency'] = currency
-
-        if not any([uuid, txid]):
-            raise ValueError("uuid 또는 txid 중 하나는 필수입니다")
-
-        response = await self._make_request('GET', '/withdraw', params=params)
-        return response.data
-
-    # ================================================================
-    # 입금(Deposit) API
-    # ================================================================
-
-    async def get_deposits(self, currency: Optional[str] = None,
-                           state: Optional[Literal['submitting', 'submitted', 'almost_accepted',
-                                                   'rejected', 'accepted', 'processing']] = None,
-                           uuids: Optional[List[str]] = None,
-                           txids: Optional[List[str]] = None,
-                           limit: int = 100, page: int = 1,
-                           order_by: Literal['asc', 'desc'] = 'desc') -> Dict[str, Dict[str, Any]]:
-        """
-        입금 목록 조회 - Dict 통일
-
-        Returns:
-            Dict[str, Dict]: {
-                'deposit_uuid_1': {...},
-                'deposit_uuid_2': {...}
-            }
-        """
-        params = {
-            'limit': limit,
-            'page': page,
-            'order_by': order_by
-        }
-
-        if currency:
-            params['currency'] = currency
-        if state:
-            params['state'] = state
-        if uuids:
-            params['uuids'] = uuids
-        if txids:
-            params['txids'] = txids
-
-        response = await self._make_request('GET', '/deposits', params=params)
-
-        # List 응답을 Dict로 변환
-        deposits_dict = {}
-        if isinstance(response.data, list):
-            for deposit in response.data:
-                deposit_id = deposit.get('uuid') or deposit.get('txid')
-                if deposit_id:
-                    deposits_dict[deposit_id] = deposit
-        return deposits_dict
-
-    async def generate_coin_address(self, currency: str) -> Dict[str, Any]:
-        """
-        입금 주소 생성 요청
-
-        Args:
-            currency: 화폐를 의미하는 영문 대문자 코드
-
-        Returns:
-            Dict: 생성된 입금 주소 정보
-        """
-        data = {'currency': currency}
-        response = await self._make_request('POST', '/deposits/generate_coin_address', data=data)
-        return response.data
-
-    async def get_coin_addresses(self) -> List[Dict[str, Any]]:
-        """
-        전체 입금 주소 조회
-
-        Returns:
-            List[Dict]: 입금 주소 목록
-        """
-        response = await self._make_request('GET', '/deposits/coin_addresses')
-        return response.data
-
-    async def get_coin_address(self, currency: str) -> Dict[str, Any]:
-        """
-        개별 입금 주소 조회
-
-        Args:
-            currency: 화폐를 의미하는 영문 대문자 코드
-
-        Returns:
-            Dict: 입금 주소 정보
-        """
-        params = {'currency': currency}
-        response = await self._make_request('GET', '/deposits/coin_address', params=params)
-        return response.data
+            for i, trade in enumerate(response.data):
+                # trade_id가 있으면 사용, 없으면 인덱스 기반 키 생성
+                trade_id = trade.get('uuid', f'trade_{i}')
+                trades_dict[trade_id] = trade
+        return trades_dict
 
 
 # ================================================================
-# 편의 팩토리 함수
+# Note: create_upbit_private_client 함수는 보안상 제거됨
+# 직접 UpbitPrivateClient(access_key, secret_key) 생성자를 사용하세요
 # ================================================================
-
-def create_upbit_private_client(access_key: Optional[str] = None,
-                                secret_key: Optional[str] = None) -> UpbitPrivateClient:
-    """
-    업비트 프라이빗 API 클라이언트 생성 (편의 함수)
-
-    Args:
-        access_key: Upbit API Access Key (기본값: 환경변수에서 로드)
-        secret_key: Upbit API Secret Key (기본값: 환경변수에서 로드)
-
-    Returns:
-        UpbitPrivateClient: 설정된 클라이언트 인스턴스
-    """
-    adapter = UpbitAdapter()
-    config = ExchangeRateLimitConfig.for_upbit_private()
-    rate_limiter = UniversalRateLimiter(config)
-
-    return UpbitPrivateClient(access_key, secret_key, adapter, rate_limiter)
