@@ -209,9 +209,17 @@ class UpbitWebSocketPublicClient:
             self.logger.info("✅ WebSocket 연결 성공 (API 키 불필요)")
 
             # PING 메시지로 연결 유지
-            keep_alive_task = asyncio.create_task(self._keep_alive())
-            self._background_tasks.add(keep_alive_task)
-            keep_alive_task.add_done_callback(self._background_tasks.discard)
+            try:
+                loop = asyncio.get_running_loop()
+                keep_alive_task = loop.create_task(self._keep_alive())
+            except RuntimeError:
+                # 이벤트 루프가 없는 경우 백그라운드 태스크 없이 진행
+                self.logger.warning("Event Loop가 없어 keep_alive 태스크를 시작할 수 없음")
+                keep_alive_task = None
+
+            if keep_alive_task:
+                self._background_tasks.add(keep_alive_task)
+                keep_alive_task.add_done_callback(self._background_tasks.discard)
 
             return True
 
@@ -433,10 +441,23 @@ class UpbitWebSocketPublicClient:
 
             # 첫 구독 시 자동으로 메시지 수신 루프 시작
             if self.auto_start_message_loop and not self.message_loop_task and not self._message_loop_running:
-                self.message_loop_task = asyncio.create_task(self._message_receiver_loop())
-                self.logger.debug("🚀 메시지 수신 루프 자동 시작")
+                # 현재 이벤트 루프 확인 (안전한 방식)
+                try:
+                    loop = asyncio.get_running_loop()
+                    self.message_loop_task = loop.create_task(self._message_receiver_loop())
+                    self.logger.debug("🚀 메시지 수신 루프 자동 시작")
+                except RuntimeError:
+                    # 이벤트 루프가 없는 경우 수신 루프 없이 진행
+                    self.logger.warning("Event Loop가 없어 메시지 수신 루프를 시작할 수 없음")
+                    self._enable_external_listen = False
+                except Exception as e:
+                    self.logger.error(f"메시지 수신 루프 시작 실패: {e}")
+                    # Event Loop 문제 시 폴백 모드로 동작
+                    self._enable_external_listen = False
 
-            self.logger.info(f"✅ {data_type.value} 구독 완료: {symbols}")
+            # 심볼 로그 최적화 (대량 심볼일 때 간결하게 표시)
+            symbols_display = self._format_symbols_for_log(symbols)
+            self.logger.info(f"✅ {data_type.value} 구독 완료: {symbols_display}")
             return True
 
         except Exception as e:
@@ -465,8 +486,14 @@ class UpbitWebSocketPublicClient:
 
         # 메시지 루프가 없으면 시작
         if not self.message_loop_task and not self._message_loop_running:
-            self.message_loop_task = asyncio.create_task(self._message_receiver_loop())
-            self.logger.debug("🚀 메시지 수신 루프 시작 (listen() 요청)")
+            try:
+                loop = asyncio.get_running_loop()
+                self.message_loop_task = loop.create_task(self._message_receiver_loop())
+                self.logger.debug("🚀 메시지 수신 루프 시작 (listen() 요청)")
+            except RuntimeError as e:
+                self.logger.error(f"Event Loop 오류로 메시지 수신 루프 시작 실패: {e}")
+                # Event Loop 문제 시에는 직접 대기하지 않고 즉시 종료
+                return
 
         try:
             while self.is_connected:
@@ -640,26 +667,34 @@ class UpbitWebSocketPublicClient:
                 break
 
     async def _attempt_reconnect(self) -> bool:
-        """자동 재연결 시도"""
+        """자동 재연결 시도 - 빠른 재연결"""
         if not self.auto_reconnect or self.reconnect_attempts >= self.max_reconnect_attempts:
+            self.logger.warning(f"재연결 중단: attempts={self.reconnect_attempts}, max={self.max_reconnect_attempts}")
             return False
 
         self.reconnect_attempts += 1
         self.logger.info(f"재연결 시도 {self.reconnect_attempts}/{self.max_reconnect_attempts}")
 
-        await asyncio.sleep(self.reconnect_delay)
+        # 빠른 재연결을 위해 대기시간 단축 (최대 2초)
+        wait_time = min(self.reconnect_attempts * 0.5, 2.0)
+        await asyncio.sleep(wait_time)
 
         if await self.connect():
             # 기존 구독 복원 - Dict 통일 방식
             subscriptions = self._subscription_manager.get_subscriptions()
             for data_type_str, sub_data in subscriptions.items():
-                data_type = WebSocketDataType(data_type_str)
-                symbols = sub_data['symbols']
-                metadata = sub_data['metadata']
+                try:
+                    data_type = WebSocketDataType(data_type_str)
+                    symbols = sub_data['symbols']
+                    metadata = sub_data['metadata']
 
-                # 캔들 단위가 있는 경우 전달
-                candle_unit = metadata.get('candle_unit')
-                await self._subscribe(data_type, symbols, candle_unit)
+                    # 캔들 단위가 있는 경우 전달
+                    candle_unit = metadata.get('candle_unit')
+                    await self._subscribe(data_type, symbols, candle_unit)
+                except Exception as e:
+                    self.logger.warning(f"구독 복원 실패: {data_type_str} - {e}")
+
+            self.logger.info("✅ 재연결 및 구독 복원 완료")
             return True
 
         return False
@@ -728,3 +763,29 @@ class UpbitWebSocketPublicClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """async with 컨텍스트 매니저 종료"""
         await self.disconnect()
+
+    def _format_symbols_for_log(self, symbols: List[str], max_display: int = 3) -> str:
+        """심볼 목록을 로그에 적합하게 포맷팅
+
+        Args:
+            symbols: 심볼 목록
+            max_display: 최대 표시할 심볼 수 (앞/뒤)
+
+        Returns:
+            포맷팅된 문자열 (예: "[KRW-BTC, KRW-ETH, ..., KRW-DOT] (총 189개)")
+        """
+        if not symbols:
+            return "[]"
+
+        total_count = len(symbols)
+
+        # 심볼이 적으면 모두 표시
+        if total_count <= max_display * 2:
+            return f"[{', '.join(symbols)}]"
+
+        # 심볼이 많으면 처음 3개 + ... + 마지막 1개 + 총 개수
+        first_part = symbols[:max_display]
+        last_part = symbols[-1:]  # 마지막 1개만
+
+        formatted = f"[{', '.join(first_part)}, ..., {', '.join(last_part)}] (총 {total_count}개)"
+        return formatted

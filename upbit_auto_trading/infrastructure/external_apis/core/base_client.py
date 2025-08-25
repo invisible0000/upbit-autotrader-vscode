@@ -23,7 +23,7 @@ class BaseExchangeClient(ABC):
     """
 
     def __init__(self, adapter: Any, rate_limiter: UniversalRateLimiter,
-                 timeout: int = 30, max_retries: int = 3):
+                 timeout: int = 2, max_retries: int = 1):
         self.adapter = adapter
         self.rate_limiter = rate_limiter
         self.timeout = timeout
@@ -42,7 +42,7 @@ class BaseExchangeClient(ABC):
         """HTTP 세션 확보"""
         if self._session is None or self._session.closed:
             connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
-            timeout = aiohttp.ClientTimeout(total=self.timeout, connect=5)
+            timeout = aiohttp.ClientTimeout(total=self.timeout, connect=1)  # 연결 타임아웃 1초
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
@@ -303,11 +303,11 @@ class ExchangeClientFactory:
 
         if exchange_lower == 'upbit':
             from ..adapters.upbit_adapter import UpbitAdapter
-            from ..upbit.upbit_public_client_v2 import UpbitPublicClientV2
+            from ..upbit.upbit_public_client import UpbitPublicClient
 
             adapter = UpbitAdapter()
             rate_limiter = RateLimiterFactory.create_for_exchange('upbit', 'public')
-            return UpbitPublicClientV2(adapter, rate_limiter)
+            return UpbitPublicClient(adapter, rate_limiter)
 
         # elif exchange_lower == 'binance':
         #     from ..adapters.binance_adapter import BinanceAdapter

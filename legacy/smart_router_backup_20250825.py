@@ -23,64 +23,12 @@ from .models import (
 )
 from .data_format_unifier import DataFormatUnifier
 from .channel_selector import ChannelSelector
-from .websocket_subscription_manager import WebSocketSubscriptionManager, SubscriptionType
-
-
-class SmartRouterConfig:
-    """스마트 라우터 설정 일괄 관리"""
-
-    # WebSocket 타임아웃 설정
-    WEBSOCKET_SUBSCRIPTION_TIMEOUT = 3.0  # 구독 타임아웃 (초)
-    WEBSOCKET_DATA_RECEIVE_TIMEOUT = 3.0  # 데이터 수신 타임아웃 (초)
-    WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY = 0.1  # 구독 후 안정화 대기 (초)
-
-    # REST API 타임아웃 설정
-    REST_API_TIMEOUT = 5.0  # REST API 요청 타임아웃 (초)
-
-    # 캐시 설정
-    CACHE_TTL_SECONDS = 60.0  # 캐시 TTL (초)
-    MAX_CACHE_SIZE = 1000  # 최대 캐시 개수
-
-    # 성능 임계값
-    WEBSOCKET_MIN_PERFORMANCE_THRESHOLD = 50  # WebSocket 최소 성능 임계값 (메시지/초)
-    MAX_RETRY_ATTEMPTS = 3  # 최대 재시도 횟수
-
-    # 구독 관리 설정 - v3.0 WebSocket 구독 모델
-    MAX_SUBSCRIPTION_TYPES = 4  # 업비트 WebSocket 지원 타입 수 (ticker, trade, orderbook, candle)
-    BUFFER_SUBSCRIPTION_TYPES = 5  # 끊김 없는 전환을 위한 버퍼 (4+1 전략)
-    SUBSCRIPTION_TRANSITION_STABILIZATION_DELAY = 0.5  # 구독 전환 시 안정화 대기 (초)
-
-    # 레거시 호환성 (Deprecated - v3.0에서는 구독 타입 수가 제한 요소)
-    MAX_CONCURRENT_SUBSCRIPTIONS = BUFFER_SUBSCRIPTION_TYPES  # v3.0 호환: 타입 기준으로 설정
-    EMERGENCY_SUBSCRIPTION_LIMIT = 3  # 비상시 구독 제한
-
-    @classmethod
-    def get_websocket_timeouts(cls) -> Dict[str, float]:
-        """WebSocket 관련 타임아웃 설정 반환"""
-        return {
-            "subscription_timeout": cls.WEBSOCKET_SUBSCRIPTION_TIMEOUT,
-            "data_receive_timeout": cls.WEBSOCKET_DATA_RECEIVE_TIMEOUT,
-            "stabilization_delay": cls.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY
-        }
-
-    @classmethod
-    def update_websocket_timeouts(cls, subscription_timeout: Optional[float] = None,
-                                  data_receive_timeout: Optional[float] = None,
-                                  stabilization_delay: Optional[float] = None) -> None:
-        """WebSocket 타임아웃 설정 업데이트"""
-        if subscription_timeout is not None:
-            cls.WEBSOCKET_SUBSCRIPTION_TIMEOUT = subscription_timeout
-        if data_receive_timeout is not None:
-            cls.WEBSOCKET_DATA_RECEIVE_TIMEOUT = data_receive_timeout
-        if stabilization_delay is not None:
-            cls.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY = stabilization_delay
-
 
 # Lazy import를 위한 TYPE_CHECKING
 if TYPE_CHECKING:
     from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
-    from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_public_client import (
-        UpbitWebSocketPublicClient, WebSocketDataType
+    from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
+        UpbitWebSocketQuotationClient, WebSocketDataType
     )
 
 logger = create_component_logger("SmartRouter")
@@ -102,10 +50,7 @@ class SmartRouter:
 
         # API 클라이언트들 (lazy loading)
         self.rest_client: Optional['UpbitPublicClient'] = None
-        self.websocket_client: Optional['UpbitWebSocketPublicClient'] = None
-
-        # WebSocket 구독 매니저
-        self.websocket_subscription_manager: Optional[WebSocketSubscriptionManager] = None
+        self.websocket_client: Optional['UpbitWebSocketQuotationClient'] = None
 
         # 외부 매니저 (이전 호환성 유지)
         self.websocket_manager = None
@@ -113,7 +58,7 @@ class SmartRouter:
 
         # 캐시 시스템 (간단한 메모리 캐시)
         self.cache = {}
-        self.cache_ttl = SmartRouterConfig.CACHE_TTL_SECONDS
+        self.cache_ttl = 60.0  # 60초 TTL
 
         # 상태 관리
         self.is_initialized = False
@@ -152,25 +97,16 @@ class SmartRouter:
 
         if self.websocket_client is None:
             try:
-                from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_public_client import (
-                    UpbitWebSocketPublicClient
+                from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
+                    UpbitWebSocketQuotationClient
                 )
-                self.websocket_client = UpbitWebSocketPublicClient()
+                self.websocket_client = UpbitWebSocketQuotationClient()
 
                 # WebSocket 연결 시도 (에러 발생 시 상태만 업데이트)
                 try:
                     await self.websocket_client.connect()
                     is_connected = self.websocket_client.is_connected
                     self.channel_selector.update_websocket_status(is_connected)
-
-                    # WebSocket 구독 매니저 초기화 - v3.0 버퍼 전략 적용
-                    if is_connected and self.websocket_subscription_manager is None:
-                        self.websocket_subscription_manager = WebSocketSubscriptionManager(
-                            self.websocket_client,
-                            max_subscription_types=SmartRouterConfig.BUFFER_SUBSCRIPTION_TYPES
-                        )
-                        logger.info(f"WebSocket 구독 매니저 v3.0 초기화 완료 - 버퍼 전략: {SmartRouterConfig.BUFFER_SUBSCRIPTION_TYPES}개 타입")
-
                     logger.info(f"WebSocket 클라이언트 초기화 완료 - 연결 상태: {'연결됨' if is_connected else '연결 실패'}")
                 except Exception as conn_error:
                     logger.warning(f"WebSocket 연결 실패: {conn_error}")
@@ -193,9 +129,7 @@ class SmartRouter:
         channel_decision = None
 
         try:
-            # 로그용 심볼 표시 제한 (처음 3개 + 마지막 3개)
-            symbols_display = self._format_symbols_for_log(request.symbols)
-            logger.debug(f"데이터 요청 처리 시작 - type: {request.data_type.value}, symbols: {symbols_display}")
+            logger.debug(f"데이터 요청 처리 시작 - type: {request.data_type.value}, symbols: {request.symbols}")
 
             # 메트릭 업데이트
             self.metrics.total_requests += 1
@@ -350,188 +284,66 @@ class SmartRouter:
             return await self._execute_rest_request(request)
 
     async def _execute_websocket_request(self, request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 요청 실행 - 최적화된 버전"""
+        """WebSocket 요청 실행"""
         try:
             # 클라이언트 초기화 확인
             await self._ensure_clients_initialized()
 
             if not self.websocket_client or not getattr(self.websocket_client, 'is_connected', False):
-                logger.warning("WebSocket 연결 없음 - 즉시 REST 폴백")
-                self.channel_selector.record_websocket_error()
+                logger.warning("WebSocket 연결이 설정되지 않음 - REST API로 폴백")
                 return await self._execute_rest_request(request)
 
-            # WebSocket 구독 및 실시간 데이터 수신 통합 처리
             if request.data_type == DataType.TICKER:
-                return await self._handle_websocket_ticker(request)
-            elif request.data_type == DataType.ORDERBOOK:
-                return await self._handle_websocket_orderbook(request)
-            elif request.data_type == DataType.TRADES:
-                return await self._handle_websocket_trades(request)
-            elif request.data_type == DataType.CANDLES or request.data_type == DataType.CANDLES_1S:
-                # 캔들 데이터는 WebSocket 제약이 많아 REST API로 처리
-                logger.info("캔들 데이터 요청 - REST API 사용")
-                self.channel_selector.record_websocket_error()
+                # 현재가 구독 후 메시지 수신
+                await self.websocket_client.subscribe_ticker(request.symbols)
+                # 실시간 데이터 대기 (간단한 구현 - 추후 개선 필요)
+                logger.info(f"WebSocket 현재가 구독 완료: {request.symbols}")
+
+                # 임시로 REST API로 폴백
+                logger.warning("WebSocket 실시간 데이터 수신 구현 중 - REST API로 폴백")
                 return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.ORDERBOOK:
+                # 호가 구독 후 메시지 수신
+                await self.websocket_client.subscribe_orderbook(request.symbols)
+                logger.info(f"WebSocket 호가 구독 완료: {request.symbols}")
+
+                # 임시로 REST API로 폴백
+                logger.warning("WebSocket 실시간 데이터 수신 구현 중 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.TRADES:
+                # 체결 구독 후 메시지 수신
+                await self.websocket_client.subscribe_trade(request.symbols)
+                logger.info(f"WebSocket 체결 구독 완료: {request.symbols}")
+
+                # 임시로 REST API로 폴백
+                logger.warning("WebSocket 실시간 체결 데이터 수신 구현 중 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
+            elif request.data_type == DataType.CANDLES or request.data_type == DataType.CANDLES_1S:
+                # 캔들 구독 후 메시지 수신
+                interval_unit = self._convert_interval_to_websocket_unit(request.interval or "1m")
+                await self.websocket_client.subscribe_candle(request.symbols, interval_unit)
+                logger.info(f"WebSocket 캔들 구독 완료: {request.symbols}, 간격: {request.interval or '1m'}")
+
+                # 임시로 REST API로 폴백 (실시간 데이터 수신 구현 필요)
+                logger.warning("WebSocket 실시간 캔들 데이터 수신 구현 중 - REST API로 폴백")
+                return await self._execute_rest_request(request)
+
             else:
+                # 다른 데이터 타입은 REST API로 폴백
                 logger.warning(f"WebSocket에서 지원하지 않는 데이터 타입: {request.data_type.value}")
-                self.channel_selector.record_websocket_error()
                 return await self._execute_rest_request(request)
 
         except Exception as e:
             logger.error(f"WebSocket 요청 실행 실패: {e}")
-            self.channel_selector.record_websocket_error()
-            return await self._execute_rest_request(request)
-
-    async def _handle_websocket_ticker(self, request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 현재가 데이터 처리 - 구독 매니저 통합"""
-        try:
-            # Rate Limit 사용량 증가 (구독 기반)
-            current_usage = self.channel_selector.rate_limits["websocket"]["current"] + 1
-            self.channel_selector.update_rate_limit("websocket", current_usage)
-
-            # 구독 매니저를 통한 구독 처리 (에러 시 즉시 폴백)
-            try:
-                # 구독 매니저가 있으면 배치 구독 사용
-                if self.websocket_subscription_manager:
-                    success = await self.websocket_subscription_manager.request_batch_subscription(
-                        request.symbols, SubscriptionType.TICKER, priority=5
-                    )
-
-                    if not success:
-                        logger.warning("구독 매니저를 통한 배치 구독 실패 - 직접 구독 시도")
-                        raise Exception("구독 매니저 배치 구독 실패")
-
-                    symbols_display = self._format_symbols_for_log(request.symbols)
-                    logger.info(f"구독 매니저를 통한 현재가 배치 구독 완료: {symbols_display}")
-                else:
-                    # 기존 직접 구독 방식
-                    if self.websocket_client and hasattr(self.websocket_client, 'subscribe_ticker'):
-                        await self.websocket_client.subscribe_ticker(request.symbols)
-                        symbols_display = self._format_symbols_for_log(request.symbols)
-                        logger.info(f"WebSocket 현재가 구독 완료: {symbols_display}")
-                    else:
-                        raise Exception("WebSocket 클라이언트 없음")
-
-                # 구독 후 안정화 대기 (설정값 사용)
-                import asyncio
-                await asyncio.sleep(SmartRouterConfig.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY)
-
-            except Exception as subscribe_error:
-                logger.warning(f"WebSocket 구독 실패: {subscribe_error} - REST 폴백")
-                # Rate Limit 롤백
-                rollback_usage = self.channel_selector.rate_limits["websocket"]["current"] - 1
-                self.channel_selector.update_rate_limit("websocket", rollback_usage)
-                return await self._execute_rest_request(request)
-
-            # 실시간 데이터 수신 (설정값 사용)
-            realtime_data = await self._receive_websocket_data(
-                data_type="ticker",
-                symbols=request.symbols,
-                timeout=SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
-            )
-
-            if realtime_data:
-                logger.info("✅ WebSocket 실시간 현재가 데이터 수신 성공")
-                self.channel_selector.record_websocket_success()
-                return self._format_websocket_response(realtime_data, request)
-            else:
-                # 실시간 수신 실패 시 REST API로 폴백
-                logger.warning("WebSocket 실시간 수신 실패 → REST 폴백")
-                self.channel_selector.record_websocket_error()
-                return await self._execute_rest_request(request)
-
-        except Exception as e:
-            logger.error(f"WebSocket 현재가 처리 실패: {e}")
-            self.channel_selector.record_websocket_error()
-            return await self._execute_rest_request(request)
-
-    async def _handle_websocket_orderbook(self, request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 호가 데이터 처리 - 설정 기반 최적화"""
-        try:
-            # 구독 처리
-            try:
-                if self.websocket_client and hasattr(self.websocket_client, 'subscribe_orderbook'):
-                    await self.websocket_client.subscribe_orderbook(request.symbols)
-                    symbols_display = self._format_symbols_for_log(request.symbols)
-                    logger.info(f"WebSocket 호가 구독 완료: {symbols_display}")
-
-                    # 구독 후 안정화 대기 (설정값 사용)
-                    import asyncio
-                    await asyncio.sleep(SmartRouterConfig.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY)
-                else:
-                    raise Exception("WebSocket 클라이언트 없음")
-            except Exception as subscribe_error:
-                logger.warning(f"WebSocket 호가 구독 실패: {subscribe_error} - REST 폴백")
-                return await self._execute_rest_request(request)
-
-            # 실시간 데이터 수신 (설정값 사용)
-            realtime_data = await self._receive_websocket_data(
-                data_type="orderbook",
-                symbols=request.symbols,
-                timeout=SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
-            )
-
-            if realtime_data:
-                logger.info("✅ WebSocket 실시간 호가 데이터 수신 성공")
-                self.channel_selector.record_websocket_success()
-                return self._format_websocket_response(realtime_data, request)
-            else:
-                logger.warning("WebSocket 호가 실시간 수신 실패 → REST 폴백")
-                self.channel_selector.record_websocket_error()
-                return await self._execute_rest_request(request)
-
-        except Exception as e:
-            logger.error(f"WebSocket 호가 처리 실패: {e}")
-            self.channel_selector.record_websocket_error()
-            return await self._execute_rest_request(request)
-
-    async def _handle_websocket_trades(self, request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 체결 데이터 처리 - 설정 기반 최적화"""
-        try:
-            # 구독 처리
-            try:
-                if self.websocket_client and hasattr(self.websocket_client, 'subscribe_trade'):
-                    await self.websocket_client.subscribe_trade(request.symbols)
-                    symbols_display = self._format_symbols_for_log(request.symbols)
-                    logger.info(f"WebSocket 체결 구독 완료: {symbols_display}")
-
-                    # 구독 후 안정화 대기 (설정값 사용)
-                    import asyncio
-                    await asyncio.sleep(SmartRouterConfig.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY)
-                else:
-                    raise Exception("WebSocket 클라이언트 없음")
-            except Exception as subscribe_error:
-                logger.warning(f"WebSocket 체결 구독 실패: {subscribe_error} - REST 폴백")
-                return await self._execute_rest_request(request)
-
-            # 실시간 데이터 수신 (설정값 사용)
-            realtime_data = await self._receive_websocket_data(
-                data_type="trade",
-                symbols=request.symbols,
-                timeout=SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
-            )
-
-            if realtime_data:
-                logger.info("✅ WebSocket 실시간 체결 데이터 수신 성공")
-                self.channel_selector.record_websocket_success()
-                return self._format_websocket_response(realtime_data, request)
-            else:
-                logger.warning("WebSocket 체결 실시간 수신 실패 → REST 폴백")
-                self.channel_selector.record_websocket_error()
-                return await self._execute_rest_request(request)
-
-        except Exception as e:
-            logger.error(f"WebSocket 체결 처리 실패: {e}")
-            self.channel_selector.record_websocket_error()
+            # 폴백으로 REST API 사용
             return await self._execute_rest_request(request)
 
     async def _execute_rest_request(self, request: DataRequest) -> Dict[str, Any]:
         """REST API 요청 실행"""
         try:
-            # Rate Limit 사용량 증가 (요청 기반)
-            current_usage = self.channel_selector.rate_limits["rest"]["current"] + 1
-            self.channel_selector.update_rate_limit("rest", current_usage)
-
             # 클라이언트 초기화 확인
             await self._ensure_clients_initialized()
 
@@ -542,7 +354,7 @@ class SmartRouter:
 
             if request.data_type == DataType.TICKER:
                 # 현재가 정보 조회
-                data = await self.rest_client.get_ticker(request.symbols)
+                data = await self.rest_client.get_tickers(request.symbols)
                 return {
                     "source": "rest_api",
                     "data": data,
@@ -560,17 +372,13 @@ class SmartRouter:
 
             elif request.data_type == DataType.TRADES:
                 # 체결 내역 조회 (한 심볼씩)
-                all_trades = {}
+                all_trades = []
                 for symbol in request.symbols:
-                    trades_dict = await self.rest_client.get_trades(
+                    trades = await self.rest_client.get_trades_ticks(
                         symbol,
                         count=request.count or 100
                     )
-                    # Dict 형태 응답을 처리
-                    if isinstance(trades_dict, dict) and symbol in trades_dict:
-                        all_trades[symbol] = trades_dict[symbol]
-                    else:
-                        all_trades[symbol] = []
+                    all_trades.extend(trades)
 
                 return {
                     "source": "rest_api",
@@ -580,7 +388,7 @@ class SmartRouter:
 
             elif request.data_type == DataType.CANDLES:
                 # 캔들 데이터 조회
-                all_candles = {}
+                all_candles = []
                 interval = request.interval or "1m"
                 count = request.count or 1
                 to = request.to  # 조회 기간 종료 시각
@@ -589,35 +397,34 @@ class SmartRouter:
                     if interval.endswith('m'):
                         # 분봉
                         unit = int(interval.replace('m', ''))
-                        candles_dict = await self.rest_client.get_candle_minutes(
+                        candles = await self.rest_client.get_candles_minutes(
                             symbol, unit=unit, count=count, to=to
                         )
                     elif interval == '1d':
                         # 일봉
-                        candles_dict = await self.rest_client.get_candle_days(
+                        candles = await self.rest_client.get_candles_days(
                             symbol, count=count, to=to
                         )
                     elif interval == '1w':
                         # 주봉
-                        candles_dict = await self.rest_client.get_candle_weeks(
+                        candles = await self.rest_client.get_candles_weeks(
                             symbol, count=count, to=to
                         )
                     elif interval == '1M':
                         # 월봉
-                        candles_dict = await self.rest_client.get_candle_months(
+                        candles = await self.rest_client.get_candles_months(
                             symbol, count=count, to=to
                         )
                     else:
                         logger.warning(f"지원하지 않는 캔들 간격: {interval}")
-                        candles_dict = await self.rest_client.get_candle_minutes(
+                        candles = await self.rest_client.get_candles_minutes(
                             symbol, count=count, to=to
                         )
 
-                    # Dict 형태 응답을 처리
-                    if isinstance(candles_dict, dict) and symbol in candles_dict:
-                        all_candles[symbol] = candles_dict[symbol]
-                    else:
-                        all_candles[symbol] = []
+                    # 심볼 정보 추가
+                    for candle in candles:
+                        candle['market'] = symbol
+                    all_candles.extend(candles)
 
                 return {
                     "source": "rest_api",
@@ -720,15 +527,6 @@ class SmartRouter:
             return self.data_unifier.unify_data(raw_data["data"], data_type, source)
         else:
             return self.data_unifier.unify_data(raw_data, data_type, source)
-
-    def _format_symbols_for_log(self, symbols: List[str], max_display: int = 3) -> str:
-        """로그용 심볼 표시 제한 (처음 3개 + ... + 마지막 3개)"""
-        if len(symbols) <= max_display * 2:
-            return f"[{', '.join(symbols)}]"
-
-        first_part = symbols[:max_display]
-        last_part = symbols[-max_display:]
-        return f"[{', '.join(first_part)}, ... +{len(symbols) - max_display * 2}개, {', '.join(last_part)}]"
 
     def _check_cache(self, request: DataRequest) -> Optional[Dict[str, Any]]:
         """캐시 확인"""
@@ -935,91 +733,6 @@ class SmartRouter:
         }
 
         return interval_mapping.get(interval, 1)  # 기본값: 1분
-
-    async def _receive_websocket_data(self, data_type: str, symbols: list, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
-        """WebSocket 실시간 데이터 수신 - 최적화된 버전"""
-        # 타임아웃 기본값을 설정에서 가져오기
-        if timeout is None:
-            timeout = SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
-
-        try:
-            # WebSocket 클라이언트 상태 확인
-            if not self.websocket_client or not hasattr(self.websocket_client, 'listen'):
-                logger.warning("WebSocket 클라이언트 없음 - 즉시 폴백")
-                return None
-
-            # 연결 상태 빠른 확인
-            if not getattr(self.websocket_client, 'is_connected', False):
-                logger.warning("WebSocket 미연결 - 즉시 폴백")
-                return None
-
-            # 실시간 메시지 수신 시도 (짧은 타임아웃으로 빠른 응답)
-            import asyncio
-            try:
-                async with asyncio.timeout(timeout):
-                    async for message in self.websocket_client.listen():
-                        # 메시지 유효성 검증
-                        if not message or not hasattr(message, 'type') or not hasattr(message, 'data'):
-                            continue
-
-                        # 요청한 데이터 타입과 심볼 매칭
-                        message_type = message.type.value.lower()
-                        if message_type == data_type.lower() and hasattr(message, 'market'):
-                            if message.market in symbols:
-                                logger.debug(f"WebSocket 실시간 데이터 수신: {data_type} - {message.market}")
-                                return message.data
-
-                        # 관련 메시지 발견 시 즉시 반환
-                        if message_type == data_type.lower():
-                            logger.debug(f"WebSocket 데이터 수신 (심볼 무관): {data_type}")
-                            return message.data
-
-            except asyncio.TimeoutError:
-                logger.debug(f"WebSocket 데이터 수신 타임아웃: {timeout}초 - 폴백")
-                return None
-
-        except Exception as e:
-            logger.warning(f"WebSocket 실시간 데이터 수신 오류: {e} - 폴백")
-            return None
-
-        return None
-
-    def _format_websocket_response(self, data: Dict[str, Any], request: DataRequest) -> Dict[str, Any]:
-        """WebSocket 데이터를 표준 응답 형식으로 변환"""
-        try:
-            # DataFormatUnifier를 통해 통합 포맷으로 변환
-            unified_data = self.data_unifier.unify_data(
-                data, request.data_type, ChannelType.WEBSOCKET
-            )
-
-            # 메타데이터 추가
-            current_time = time.time()
-            metadata = {
-                "channel": "websocket",
-                "reason": "realtime_websocket_success",
-                "confidence": 0.95,  # WebSocket 실시간 데이터 신뢰도
-                "request_id": f"ws_realtime_{int(current_time * 1000)}",
-                "response_time_ms": 50  # 실시간 수신이므로 매우 빠름
-            }
-
-            return {
-                "success": True,
-                "data": unified_data,
-                "metadata": metadata
-            }
-
-        except Exception as e:
-            logger.error(f"WebSocket 응답 포맷 변환 실패: {e}")
-            # 변환 실패 시 기본 응답 반환
-            return {
-                "success": False,
-                "error": f"WebSocket 데이터 포맷 변환 실패: {e}",
-                "metadata": {
-                    "channel": "websocket",
-                    "reason": "format_conversion_error",
-                    "confidence": 0.0
-                }
-            }
 
     async def __aenter__(self):
         """컨텍스트 매니저 진입"""
