@@ -2,6 +2,7 @@
 업비트 WebSocket Private 클라이언트
 - API 키 필요한 개인 거래/계좌 정보 실시간 수신
 - 실시간 매매 전략 최적화 설계
+- Public 클라이언트와 동일한 수준의 기능 지원
 """
 
 import asyncio
@@ -20,19 +21,37 @@ from upbit_auto_trading.infrastructure.external_apis.core.rate_limiter import (
 )
 
 
+class StreamType(Enum):
+    """WebSocket 스트림 타입 (Private도 동일하게 지원)"""
+    SNAPSHOT = "SNAPSHOT"   # 스냅샷 데이터
+    REALTIME = "REALTIME"   # 실시간 데이터
+
+
 class PrivateWebSocketDataType(Enum):
-    """Private WebSocket 데이터 타입"""
+    """Private WebSocket 데이터 타입 (업비트 공식 스펙)"""
     MY_ORDER = "myOrder"     # 내 주문/체결 정보
     MY_ASSET = "myAsset"     # 내 자산(잔고) 정보
 
 
-@dataclass
+@dataclass(frozen=True)
 class PrivateWebSocketMessage:
-    """Private WebSocket 메시지 구조"""
+    """
+    Private WebSocket 메시지 구조 (Public과 동일한 일관성)
+    모든 데이터는 Dict 형태로 통일된 접근 제공
+    """
     type: PrivateWebSocketDataType
     data: Dict[str, Any]
     timestamp: datetime
     raw_data: str
+    stream_type: Optional[StreamType] = None
+
+    def is_snapshot(self) -> bool:
+        """스냅샷 메시지 여부"""
+        return self.stream_type == StreamType.SNAPSHOT
+
+    def is_realtime(self) -> bool:
+        """실시간 메시지 여부"""
+        return self.stream_type == StreamType.REALTIME
 
 
 class UpbitWebSocketPrivateClient:
@@ -41,7 +60,14 @@ class UpbitWebSocketPrivateClient:
     실시간 매매/자산 정보 수신
     """
 
-    def __init__(self, access_key: str, secret_key: str):
+    def __init__(self, access_key: Optional[str] = None, secret_key: Optional[str] = None):
+        """
+        업비트 Private WebSocket 클라이언트 초기화
+
+        Args:
+            access_key: Upbit API Access Key (기본값: 시스템에서 자동 로드)
+            secret_key: Upbit API Secret Key (기본값: 시스템에서 자동 로드)
+        """
         self.url = "wss://api.upbit.com/websocket/v1/private"
         self.auth = UpbitAuthenticator(access_key, secret_key)
         self.websocket: Optional[Any] = None
@@ -69,7 +95,7 @@ class UpbitWebSocketPrivateClient:
             # JWT 토큰 생성
             jwt_token = self.auth.create_jwt_token()
             headers = {
-                "Authorization": jwt_token  # 'Bearer ' 접두사는 create_jwt_token에서 이미 추가됨
+                "Authorization": f"Bearer {jwt_token}"  # Bearer 접두사 명시적 추가
             }
 
             self.websocket = await websockets.connect(
@@ -102,7 +128,16 @@ class UpbitWebSocketPrivateClient:
             if self.websocket:
                 try:
                     # WebSocket 상태 확인 후 정상적으로 닫기
-                    if not self.websocket.closed:
+                    # websockets 라이브러리 버전 호환성을 위해 hasattr로 체크
+                    if hasattr(self.websocket, 'closed'):
+                        is_closed = self.websocket.closed
+                    elif hasattr(self.websocket, 'close_code'):
+                        is_closed = self.websocket.close_code is not None
+                    else:
+                        # 상태 확인이 불가능한 경우 직접 닫기 시도
+                        is_closed = False
+
+                    if not is_closed:
                         await asyncio.wait_for(self.websocket.close(), timeout=3.0)
                 except asyncio.TimeoutError:
                     self.logger.warning("WebSocket 닫기 타임아웃 - 강제 종료")
@@ -223,12 +258,16 @@ class UpbitWebSocketPrivateClient:
                     if not message_type:
                         continue
 
-                    # 메시지 객체 생성
+                    # 스트림 타입 추출
+                    stream_type = self._extract_stream_type(data)
+
+                    # 메시지 객체 생성 (Public과 동일한 구조)
                     message = PrivateWebSocketMessage(
                         type=message_type,
                         data=data,
                         timestamp=datetime.now(),
-                        raw_data=raw_message
+                        raw_data=raw_message,
+                        stream_type=stream_type
                     )
 
                     # 메시지 핸들러 호출
@@ -251,19 +290,59 @@ class UpbitWebSocketPrivateClient:
             self.is_connected = False
 
     def _identify_message_type(self, data: Dict[str, Any]) -> Optional[PrivateWebSocketDataType]:
-        """메시지 타입 식별"""
+        """
+        메시지 타입 식별 (업비트 공식 스펙 기반)
+        Public 클라이언트와 동일한 정확성 보장
+        """
         try:
-            # 메시지 타입별 고유 필드로 식별
-            if 'order_id' in data or 'trade_id' in data:
+            # 1. type 필드 기반 식별 (가장 정확한 방법)
+            message_type = data.get('type', '')
+            if message_type == 'myOrder':
                 return PrivateWebSocketDataType.MY_ORDER
-            elif 'balance' in data or 'locked' in data:
+            elif message_type == 'myAsset':
                 return PrivateWebSocketDataType.MY_ASSET
 
-            self.logger.debug(f"알 수 없는 메시지 타입: {data}")
+            # 2. 업비트 공식 필드 기반 식별 (fallback)
+            # MyOrder 필드들: uuid, ask_bid, order_type, state, trade_uuid 등
+            myorder_fields = {'uuid', 'ask_bid', 'order_type', 'state', 'trade_uuid',
+                              'price', 'volume', 'executed_volume', 'trades_count'}
+
+            # MyAsset 필드들: asset_uuid, assets, asset_timestamp
+            myasset_fields = {'asset_uuid', 'assets', 'asset_timestamp'}
+
+            data_keys = set(data.keys())
+
+            # MyOrder 식별
+            if any(field in data_keys for field in myorder_fields):
+                return PrivateWebSocketDataType.MY_ORDER
+
+            # MyAsset 식별
+            if any(field in data_keys for field in myasset_fields):
+                return PrivateWebSocketDataType.MY_ASSET
+
+            # 알 수 없는 메시지 타입
+            self.logger.debug(f"알 수 없는 Private 메시지 타입: {list(data.keys())[:5]}")
             return None
 
         except Exception as e:
-            self.logger.error(f"메시지 타입 식별 실패: {e}")
+            self.logger.error(f"Private 메시지 타입 식별 실패: {e}")
+            return None
+
+    def _extract_stream_type(self, data: Dict[str, Any]) -> Optional[StreamType]:
+        """
+        스트림 타입 추출 (업비트 공식 스펙 지원)
+        Private WebSocket도 SNAPSHOT/REALTIME 구분 제공
+        """
+        try:
+            stream_type_str = data.get('stream_type')
+            if stream_type_str == 'SNAPSHOT':
+                return StreamType.SNAPSHOT
+            elif stream_type_str == 'REALTIME':
+                return StreamType.REALTIME
+            else:
+                return None  # stream_type이 없거나 알 수 없는 값
+        except Exception as e:
+            self.logger.debug(f"스트림 타입 추출 실패: {e}")
             return None
 
     def add_handler(self, data_type: PrivateWebSocketDataType, handler: Callable) -> None:
@@ -271,6 +350,36 @@ class UpbitWebSocketPrivateClient:
         if data_type not in self.message_handlers:
             self.message_handlers[data_type] = []
         self.message_handlers[data_type].append(handler)
+        self.logger.debug(f"메시지 핸들러 등록: {data_type.value}")
+
+    def add_message_handler(self, data_type: PrivateWebSocketDataType, handler: Callable) -> None:
+        """메시지 핸들러 추가 (별칭)"""
+        self.add_handler(data_type, handler)
+
+    def add_snapshot_handler(self, data_type: PrivateWebSocketDataType, handler: Callable) -> None:
+        """스냅샷 전용 핸들러 추가"""
+        def snapshot_filter(message: PrivateWebSocketMessage):
+            if message.is_snapshot():
+                handler(message)
+
+        self.add_handler(data_type, snapshot_filter)
+
+    def add_realtime_handler(self, data_type: PrivateWebSocketDataType, handler: Callable) -> None:
+        """실시간 전용 핸들러 추가"""
+        def realtime_filter(message: PrivateWebSocketMessage):
+            if message.is_realtime():
+                handler(message)
+
+        self.add_handler(data_type, realtime_filter)
+
+    def add_order_completion_handler(self, handler: Callable) -> None:
+        """주문 완료 전용 핸들러 (주문 상태가 done인 경우)"""
+        def order_completion_filter(message: PrivateWebSocketMessage):
+            if (message.type == PrivateWebSocketDataType.MY_ORDER and
+                    message.data.get('state') == 'done'):
+                handler(message)
+
+        self.add_handler(PrivateWebSocketDataType.MY_ORDER, order_completion_filter)
 
     async def _call_handlers(self, message: PrivateWebSocketMessage) -> None:
         """메시지 핸들러 호출"""
