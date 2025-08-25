@@ -104,40 +104,27 @@ class SmartRouter:
         self.rest_client: Optional['UpbitPublicClient'] = None
         self.websocket_client: Optional['UpbitWebSocketPublicClient'] = None
 
-        # WebSocket 구독 매니저
+        # WebSocket 구독 매니저 (v3.0 핵심 컴포넌트)
         self.websocket_subscription_manager: Optional[WebSocketSubscriptionManager] = None
 
-        # 외부 매니저 (이전 호환성 유지)
-        self.websocket_manager = None
-        self.rest_manager = None
-
-        # 캐시 시스템 (간단한 메모리 캐시)
+        # 캐시 시스템 (v3.0 최적화된 단순 캐시)
         self.cache = {}
         self.cache_ttl = SmartRouterConfig.CACHE_TTL_SECONDS
 
         # 상태 관리
         self.is_initialized = False
 
-        logger.info("SmartRouter 초기화 완료 (클라이언트들은 lazy loading)")
+        logger.info("SmartRouter v3.0 초기화 완료 (클라이언트들은 on-demand 초기화)")
 
-    async def initialize(self, websocket_manager=None, rest_manager=None) -> None:
-        """스마트 라우터 초기화
+    async def initialize(self) -> None:
+        """스마트 라우터 v3.0 초기화"""
+        logger.info("SmartRouter v3.0 서비스 초기화")
 
-        Args:
-            websocket_manager: WebSocket 매니저 (선택적, 이전 호환성)
-            rest_manager: REST API 매니저 (선택적, 이전 호환성)
-        """
-        logger.info("SmartRouter 서비스 초기화")
-
-        # 외부 매니저 설정 (이전 호환성 유지)
-        self.websocket_manager = websocket_manager
-        self.rest_manager = rest_manager
-
-        # API 클라이언트들을 lazy loading으로 초기화
+        # API 클라이언트들을 on-demand 초기화
         await self._ensure_clients_initialized()
 
         self.is_initialized = True
-        logger.info("✅ SmartRouter 초기화 완료")
+        logger.info("✅ SmartRouter v3.0 초기화 완료")
 
     async def _ensure_clients_initialized(self) -> None:
         """API 클라이언트들을 lazy loading으로 초기화"""
@@ -636,18 +623,13 @@ class SmartRouter:
         except Exception as e:
             logger.error(f"REST API 요청 실행 실패: {e}")
 
-            # 기존 매니저 폴백 시도
-            if self.rest_manager:
-                logger.warning("REST 클라이언트 실패 - 기존 매니저로 폴백")
-                return {
-                    "source": "rest_manager_fallback",
-                    "data": self._generate_dummy_data(request.data_type)["data"],
-                    "timestamp": int(time.time() * 1000)
-                }
-            else:
-                # 최종적으로 더미 데이터 반환
-                logger.warning("REST API 실패 - 테스트용 더미 데이터 반환")
-                return self._generate_dummy_data(request.data_type)
+            # v3.0: 직접 더미 데이터 반환 (외부 매니저 의존성 제거)
+            logger.warning("REST 클라이언트 실패 - 더미 데이터로 폴백")
+            return {
+                "source": "rest_fallback_v3",
+                "data": self._generate_dummy_data(request.data_type)["data"],
+                "timestamp": int(time.time() * 1000)
+            }
 
     def _generate_dummy_data(self, data_type: DataType) -> Dict[str, Any]:
         """테스트용 더미 데이터 생성"""
@@ -1045,8 +1027,8 @@ def get_smart_router() -> SmartRouter:
     return _global_smart_router
 
 
-async def initialize_smart_router(websocket_manager=None, rest_manager=None) -> SmartRouter:
-    """SmartRouter 초기화 및 설정"""
+async def initialize_smart_router() -> SmartRouter:
+    """SmartRouter v3.0 초기화 및 설정"""
     router = get_smart_router()
-    await router.initialize(websocket_manager, rest_manager)
+    await router.initialize()
     return router

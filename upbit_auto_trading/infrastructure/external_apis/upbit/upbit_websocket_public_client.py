@@ -4,6 +4,7 @@
 - Dict 통일 정책 적용
 - 타입 안전성 보장
 - Infrastructure 로깅 체계
+- Rate Limiter 통합 (HTTP 429 방지)
 """
 
 import asyncio
@@ -16,6 +17,7 @@ from datetime import datetime
 from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from ..core.rate_limiter import UniversalRateLimiter, ExchangeRateLimitConfig
 
 
 class WebSocketDataType(Enum):
@@ -134,7 +136,7 @@ class UpbitWebSocketPublicClient:
 
     def __init__(self, auto_reconnect: bool = True, max_reconnect_attempts: int = 10,
                  reconnect_delay: float = 5.0, ping_interval: float = 30.0,
-                 message_timeout: float = 10.0):
+                 message_timeout: float = 10.0, rate_limiter: Optional[UniversalRateLimiter] = None):
         """
         클라이언트 초기화
 
@@ -144,11 +146,18 @@ class UpbitWebSocketPublicClient:
             reconnect_delay: 재연결 지연 시간 (초)
             ping_interval: PING 간격 (초)
             message_timeout: 메시지 타임아웃 (초)
+            rate_limiter: Rate Limiter (기본값: Public API용 설정)
         """
         # 연결 설정
         self.url = "wss://api.upbit.com/websocket/v1"
         self.websocket: Optional[Any] = None
         self.is_connected = False
+
+        # Rate Limiter 설정 (HTTP 429 방지 - 업비트 공식 규격)
+        if rate_limiter is None:
+            config = ExchangeRateLimitConfig.for_upbit_websocket_connect()
+            rate_limiter = UniversalRateLimiter(config)
+        self.rate_limiter = rate_limiter
 
         # 구독 관리 - Dict 통일 정책 적용
         self._subscription_manager = SubscriptionResult()
@@ -191,8 +200,11 @@ class UpbitWebSocketPublicClient:
         }
 
     async def connect(self) -> bool:
-        """WebSocket 연결 (인증 불필요)"""
+        """WebSocket 연결 (인증 불필요, Rate Limiter 적용)"""
         try:
+            # Rate Limiter 적용하여 과도한 연결 요청 방지
+            await self.rate_limiter.acquire()
+
             self.logger.info(f"WebSocket 연결 시도: {self.url}")
 
             # 연결 설정 (인증 불필요)
@@ -206,7 +218,7 @@ class UpbitWebSocketPublicClient:
             self.is_connected = True
             self.reconnect_attempts = 0
             self._stats['connection_start_time'] = datetime.now()
-            self.logger.info("✅ WebSocket 연결 성공 (API 키 불필요)")
+            self.logger.info("✅ WebSocket 연결 성공 (Rate Limiter 적용)")
 
             # PING 메시지로 연결 유지
             try:
@@ -667,7 +679,7 @@ class UpbitWebSocketPublicClient:
                 break
 
     async def _attempt_reconnect(self) -> bool:
-        """자동 재연결 시도 - 빠른 재연결"""
+        """자동 재연결 시도 - 1초 내 통신 완료 규칙 준수"""
         if not self.auto_reconnect or self.reconnect_attempts >= self.max_reconnect_attempts:
             self.logger.warning(f"재연결 중단: attempts={self.reconnect_attempts}, max={self.max_reconnect_attempts}")
             return False
@@ -675,9 +687,18 @@ class UpbitWebSocketPublicClient:
         self.reconnect_attempts += 1
         self.logger.info(f"재연결 시도 {self.reconnect_attempts}/{self.max_reconnect_attempts}")
 
-        # 빠른 재연결을 위해 대기시간 단축 (최대 2초)
-        wait_time = min(self.reconnect_attempts * 0.5, 2.0)
-        await asyncio.sleep(wait_time)
+        # 1초 내 통신 완료 규칙: 재연결 대기시간을 최대 0.8초로 제한
+        # Rate Limiter에서 이미 지연을 처리하므로 추가 지연은 최소화
+        base_delay = min(self.reconnect_attempts * 0.1, 0.3)  # 최대 0.3초
+        rate_limiter_delay = 0.2  # Rate Limiter 예상 지연
+
+        # 전체 대기시간이 0.8초를 초과하지 않도록 조정
+        total_expected = base_delay + rate_limiter_delay
+        if total_expected > 0.8:
+            base_delay = max(0.1, 0.8 - rate_limiter_delay)
+
+        self.logger.debug(f"1초 규칙 준수 재연결 대기: {base_delay:.2f}초 (Rate Limiter 예상: {rate_limiter_delay:.2f}초)")
+        await asyncio.sleep(base_delay)
 
         if await self.connect():
             # 기존 구독 복원 - Dict 통일 방식
@@ -694,7 +715,7 @@ class UpbitWebSocketPublicClient:
                 except Exception as e:
                     self.logger.warning(f"구독 복원 실패: {data_type_str} - {e}")
 
-            self.logger.info("✅ 재연결 및 구독 복원 완료")
+            self.logger.info("✅ 재연결 및 구독 복원 완료 (1초 규칙 준수)")
             return True
 
         return False

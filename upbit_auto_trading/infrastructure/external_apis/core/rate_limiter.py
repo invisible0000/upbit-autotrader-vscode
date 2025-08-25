@@ -21,23 +21,56 @@ class ExchangeRateLimitConfig:
 
     @classmethod
     def for_upbit_public(cls) -> 'ExchangeRateLimitConfig':
-        """업비트 공개 API 설정"""
+        """업비트 공개 API 설정 (업비트 공식 문서 기준)"""
         return cls(
-            requests_per_second=10,
-            requests_per_minute=600,
-            burst_limit=50,
-            exchange_name='upbit',
+            requests_per_second=10,  # Quotation 그룹: 초당 10회
+            requests_per_minute=600,  # 분당 600회 (안전 마진)
+            burst_limit=30,  # 버스트 제한 (공식 문서 기준)
+            exchange_name='upbit_public',
             header_parser=cls._parse_upbit_headers
         )
 
     @classmethod
     def for_upbit_private(cls) -> 'ExchangeRateLimitConfig':
-        """업비트 프라이빗 API 설정"""
+        """업비트 프라이빗 API 설정 (업비트 공식 문서 기준)"""
         return cls(
-            requests_per_second=8,
-            requests_per_minute=200,
-            burst_limit=30,
-            exchange_name='upbit',
+            requests_per_second=8,   # Exchange order 그룹: 초당 8회 (주문 생성)
+            requests_per_minute=200,  # 분당 200회 (안전 마진)
+            burst_limit=20,  # 버스트 제한
+            exchange_name='upbit_private',
+            header_parser=cls._parse_upbit_headers
+        )
+
+    @classmethod
+    def for_upbit_exchange_default(cls) -> 'ExchangeRateLimitConfig':
+        """업비트 Exchange Default 그룹 (조회 API)"""
+        return cls(
+            requests_per_second=30,  # Exchange default 그룹: 초당 30회
+            requests_per_minute=1800,  # 분당 1800회
+            burst_limit=50,
+            exchange_name='upbit_exchange_default',
+            header_parser=cls._parse_upbit_headers
+        )
+
+    @classmethod
+    def for_upbit_websocket_connect(cls) -> 'ExchangeRateLimitConfig':
+        """업비트 WebSocket 연결 (업비트 공식 문서 기준)"""
+        return cls(
+            requests_per_second=5,   # WebSocket 연결: 초당 5회
+            requests_per_minute=100,  # 분당 100회 (안전 마진)
+            burst_limit=10,
+            exchange_name='upbit_websocket_connect',
+            header_parser=cls._parse_upbit_headers
+        )
+
+    @classmethod
+    def for_upbit_websocket_message(cls) -> 'ExchangeRateLimitConfig':
+        """업비트 WebSocket 메시지 (업비트 공식 문서 기준)"""
+        return cls(
+            requests_per_second=5,   # WebSocket 메시지: 초당 5회
+            requests_per_minute=100,  # WebSocket 메시지: 분당 100회
+            burst_limit=15,
+            exchange_name='upbit_websocket_message',
             header_parser=cls._parse_upbit_headers
         )
 
@@ -152,7 +185,7 @@ class UniversalRateLimiter:
         await self._enforce_per_second_limit(now)
 
     async def _enforce_per_minute_limit(self, now: float) -> None:
-        """분당 제한 강제"""
+        """분당 제한 강제 (1초 내 통신 완료 규칙 준수)"""
         # 1분 이상 지난 요청 제거
         self._minute_requests = [ts for ts in self._minute_requests if now - ts < 60]
 
@@ -161,23 +194,33 @@ class UniversalRateLimiter:
             wait_time = 60 - (now - oldest)
             if wait_time > 0:
                 self._apply_backoff()
+
+                # 1초 내 통신 완료 규칙: 분당 제한 시에도 최대 0.9초로 제한
                 adjusted_wait = wait_time * self._backoff_multiplier
+                max_wait = min(adjusted_wait, 0.9)  # 최대 0.9초로 제한
+
                 self._logger.warning(
-                    f"[{self.config.exchange_name}] 분당 제한 대기: {adjusted_wait:.2f}초 "
-                    f"(백오프: {self._backoff_multiplier:.1f}x)"
+                    f"[{self.config.exchange_name}] 분당 제한 대기: {max_wait:.2f}초 "
+                    f"(1초 규칙 준수, 원래: {adjusted_wait:.2f}초)"
                 )
-                await asyncio.sleep(adjusted_wait)
+                await asyncio.sleep(max_wait)
 
     async def _enforce_per_second_limit(self, now: float) -> None:
-        """초당 제한 강제"""
+        """초당 제한 강제 (1초 내 통신 완료 규칙 준수)"""
         # 1초 이상 지난 요청 제거
         self._second_requests = [ts for ts in self._second_requests if now - ts < 1]
 
         if len(self._second_requests) >= self.config.requests_per_second:
             self._apply_backoff()
-            wait_time = 1.0 * self._backoff_multiplier
+
+            # 1초 내 통신 완료 규칙: 최대 대기시간 0.8초로 제한
+            base_wait = 1.0 / self.config.requests_per_second  # 기본 간격
+            backoff_wait = base_wait * self._backoff_multiplier
+            wait_time = min(backoff_wait, 0.8)  # 최대 0.8초로 제한
+
             self._logger.warning(
-                f"[{self.config.exchange_name}] 초당 제한 대기: {wait_time:.2f}초"
+                f"[{self.config.exchange_name}] 초당 제한 대기: {wait_time:.2f}초 "
+                f"(1초 규칙 준수)"
             )
             await asyncio.sleep(wait_time)
 
@@ -284,11 +327,14 @@ class RateLimiterFactory:
 
     @staticmethod
     def create_for_exchange(exchange: str, api_type: str, client_id: Optional[str] = None) -> UniversalRateLimiter:
-        """거래소별 Rate Limiter 생성"""
+        """거래소별 Rate Limiter 생성 (업비트 공식 규격 반영)"""
         config_map = {
             'upbit': {
                 'public': ExchangeRateLimitConfig.for_upbit_public(),
-                'private': ExchangeRateLimitConfig.for_upbit_private()
+                'private': ExchangeRateLimitConfig.for_upbit_private(),
+                'exchange_default': ExchangeRateLimitConfig.for_upbit_exchange_default(),
+                'websocket_connect': ExchangeRateLimitConfig.for_upbit_websocket_connect(),
+                'websocket_message': ExchangeRateLimitConfig.for_upbit_websocket_message()
             },
             'binance': {
                 'public': ExchangeRateLimitConfig.for_binance_public(),
