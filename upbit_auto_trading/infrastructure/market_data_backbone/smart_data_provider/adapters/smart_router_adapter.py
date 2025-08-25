@@ -45,6 +45,13 @@ class SmartRouterAdapter:
             self.smart_router = None
             self._is_available = False
 
+    async def _ensure_smart_router_initialized(self):
+        """SmartRouter가 완전히 초기화되었는지 확인하고 필요시 초기화"""
+        if self.smart_router and not self.smart_router.is_initialized:
+            logger.info("SmartRouter 자동 초기화 시작")
+            await self.smart_router.initialize()
+            logger.info("SmartRouter 자동 초기화 완료")
+
     async def get_candles(self,
                           symbols: Union[str, List[str]],
                           timeframe: str,
@@ -59,6 +66,9 @@ class SmartRouterAdapter:
                 'error': 'Smart Router 사용 불가',
                 'source': 'smart_router_unavailable'
             }
+
+        # SmartRouter 초기화 확인 및 수행
+        await self._ensure_smart_router_initialized()
 
         try:
             # 입력 정규화
@@ -120,6 +130,9 @@ class SmartRouterAdapter:
                 'error': 'Smart Router 사용 불가',
                 'source': 'smart_router_unavailable'
             }
+
+        # SmartRouter 초기화 확인 및 수행
+        await self._ensure_smart_router_initialized()
 
         try:
             # 입력 정규화
@@ -189,6 +202,9 @@ class SmartRouterAdapter:
                 'source': 'smart_router_unavailable'
             }
 
+        # SmartRouter 초기화 확인 및 수행
+        await self._ensure_smart_router_initialized()
+
         try:
             # 입력 정규화
             if isinstance(symbols, str):
@@ -257,6 +273,9 @@ class SmartRouterAdapter:
                 'error': 'Smart Router 사용 불가',
                 'source': 'smart_router_unavailable'
             }
+
+        # SmartRouter 초기화 확인 및 수행
+        await self._ensure_smart_router_initialized()
 
         try:
             # 입력 정규화

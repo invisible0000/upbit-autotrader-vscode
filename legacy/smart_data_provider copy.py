@@ -12,7 +12,7 @@ from upbit_auto_trading.domain.repositories.candle_repository_interface import C
 from upbit_auto_trading.infrastructure.repositories.sqlite_candle_repository import SqliteCandleRepository
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseConnectionProvider
 from ..models.priority import Priority
-from ..models.responses import DataResponse
+from ..models.responses import UnifiedDataResponse
 from ..adapters.smart_router_adapter import SmartRouterAdapter
 from ..cache.memory_realtime_cache import MemoryRealtimeCache
 from ..cache.cache_coordinator import CacheCoordinator
@@ -103,7 +103,7 @@ class SmartDataProvider:
                          count: Optional[int] = None,
                          start_time: Optional[str] = None,
                          end_time: Optional[str] = None,
-                         priority: Priority = Priority.NORMAL) -> DataResponse:
+                         priority: Priority = Priority.NORMAL) -> UnifiedDataResponse:
         """
         캔들 데이터 조회 - Dict 형식 통일
 
@@ -126,7 +126,7 @@ class SmartDataProvider:
         # 기본 캔들 개수 검증 (0 이하만 방지)
         if count is not None and count <= 0:
             logger.warning(f"유효하지 않은 캔들 개수: {count}")
-            return DataResponse.create_error(
+            return UnifiedDataResponse.create_error(
                 error=f"캔들 개수는 1 이상이어야 합니다. 입력값: {count}",
                 source="validation_error",
                 response_time_ms=time.time() * 1000 - start_time_ms,
@@ -146,7 +146,7 @@ class SmartDataProvider:
 
                 logger.info(f"캔들 캐시 히트: {symbol} {timeframe}, {len(cached_data)}개, {response_time:.1f}ms")
 
-                return DataResponse.create_success(
+                return UnifiedDataResponse.create_success(
                     data=cached_data,
                     source="sqlite_cache",
                     response_time_ms=response_time,
@@ -195,11 +195,12 @@ class SmartDataProvider:
                     split_end_str = split_req.end_time.isoformat() if split_req.end_time else None
 
                     split_result = await self.smart_router.get_candles(
-                        symbols=[split_req.symbol],
+                        symbol=split_req.symbol,
                         timeframe=split_req.timeframe,
                         count=split_req.count,
                         start_time=split_start_str,
-                        end_time=split_end_str
+                        end_time=split_end_str,
+                        priority=priority
                     )
 
                     if split_result.get('success', False):
@@ -218,12 +219,12 @@ class SmartDataProvider:
                         return DataResponse(
                             success=False,
                             error=f"분할 요청 실패: {error_msg}",
-                            metadata={
-                                'priority_used': priority,
-                                'source': "split_request_error",
-                                'response_time_ms': time.time() * 1000 - start_time_ms,
-                                'cache_hit': False
-                            }
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="split_request_error",
+                                response_time_ms=time.time() * 1000 - start_time_ms,
+                                cache_hit=False
+                            )
                         )
 
                 # 분할된 결과 병합
@@ -232,13 +233,13 @@ class SmartDataProvider:
                 end_time_ms = time.time() * 1000
                 response_time = end_time_ms - start_time_ms
 
-                metadata = {
-                    'priority_used': priority,
-                    'source': "smart_router_split",
-                    'response_time_ms': response_time,
-                    'cache_hit': False,
-                    'records_count': len(all_candle_data)
-                }
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source="smart_router_split",
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(all_candle_data)
+                )
 
                 # API로 받은 데이터를 SQLite 캐시에 저장
                 try:
@@ -247,54 +248,57 @@ class SmartDataProvider:
                 except Exception as e:
                     logger.warning(f"분할 캔들 데이터 캐시 저장 실패: {symbol} {timeframe}, {e}")
 
-                return DataResponse.create_success(
+                return DataResponse(
+                    success=True,
                     data=all_candle_data,
-                    source=metadata.get('source', 'unknown'),
-                    response_time_ms=metadata.get('response_time_ms', 0.0),
-                    cache_hit=metadata.get('cache_hit', False)
+                    metadata=metadata
                 )
             else:
-                # 단일 요청 처리 - smart_router는 이미 dict 형식으로 반환
+                # 단일 요청 처리 (기존 로직)
                 smart_router_result = await self.smart_router.get_candles(
-                    symbols=[symbol],  # 리스트로 전달
+                    symbol=symbol,
                     timeframe=timeframe,
                     count=count,
-                    end_time=end_time
-                )
+                    start_time=start_time,
+                    end_time=end_time,
+                priority=priority
+            )
 
             if smart_router_result.get('success', False):
-                # Smart Router 성공 - 이미 dict 형식이므로 그대로 사용
+                # Smart Router 성공
                 self._api_calls += 1
+                raw_data = smart_router_result.get('data', {})
 
-                # smart_router의 data는 이미 올바른 dict 형식
-                unified_data = smart_router_result.get('data', {})
-                router_metadata = smart_router_result.get('metadata', {})
+                # Smart Router 응답에서 실제 캔들 리스트 추출
+                if isinstance(raw_data, dict):
+                    api_data = raw_data.get('_candles_list', [])
+                else:
+                    api_data = raw_data if isinstance(raw_data, list) else []
 
                 end_time_ms = time.time() * 1000
                 response_time = end_time_ms - start_time_ms
 
-                logger.info(f"Smart Router 캔들 성공: {symbol} {timeframe}")
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source=smart_router_result.get('source', 'smart_router'),
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(api_data)
+                )
 
-                # 캔들 데이터를 SQLite 캐시에 저장 (리스트 형태로 추출해서 저장)
+                logger.info(f"Smart Router 캔들 성공: {symbol} {timeframe}, {len(api_data)}개")
+
+                # API로 받은 데이터를 SQLite 캐시에 저장
                 try:
-                    if '_list_data' in unified_data:
-                        candles_list = unified_data['_list_data']
-                    elif symbol in unified_data:
-                        candles_list = unified_data[symbol]
-                    else:
-                        candles_list = []
-
-                    if candles_list:
-                        await self._save_candles_to_cache(symbol, timeframe, candles_list)
-                        logger.debug(f"캔들 데이터 캐시 저장 완료: {symbol} {timeframe}, {len(candles_list)}개")
+                    await self._save_candles_to_cache(symbol, timeframe, api_data)
+                    logger.debug(f"캔들 데이터 캐시 저장 완료: {symbol} {timeframe}, {len(api_data)}개")
                 except Exception as e:
                     logger.warning(f"캔들 데이터 캐시 저장 실패: {symbol} {timeframe}, {e}")
 
-                return DataResponse.create_success(
-                    data=unified_data,
-                    source=router_metadata.get('channel', 'smart_router'),
-                    response_time_ms=response_time,
-                    cache_hit=False
+                return DataResponse(
+                    success=True,
+                    data=api_data,
+                    metadata=metadata
                 )
             else:
                 # Smart Router 실패
@@ -304,11 +308,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error="캔들 데이터 조회 실패 - 캐시 미스 및 API 호출 실패",
-                metadata={
-                    'priority_used': priority,
-                    'source': "failed",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
         except Exception as e:
@@ -316,11 +320,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=str(e),
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
     async def _get_candles_from_cache(self,
@@ -356,7 +360,7 @@ class SmartDataProvider:
                         symbol: str,
                         priority: Priority = Priority.HIGH) -> DataResponse:
         """
-        실시간 티커 조회 (최적화됨 - 직접 경로)
+        실시간 티커 조회 (캐시 사용 안함)
 
         Args:
             symbol: 심볼
@@ -371,36 +375,40 @@ class SmartDataProvider:
         logger.debug(f"티커 조회 요청 (캐시 미사용): {symbol}, priority={priority}")
 
         try:
-            # 🚀 최적화: Smart Router 직접 호출 (불필요한 중간 로직 제거)
-            smart_result = await self.smart_router.get_ticker([symbol])
+            # Smart Router 직접 연동 (캐시 사용 안함)
+            try:
+                smart_result = await self.smart_router.get_ticker(symbol, priority)
 
-            if smart_result.get('success', False):
-                ticker_data = smart_result.get('data')
-                if ticker_data:
-                    response_time = time.time() * 1000 - start_time_ms
-                    logger.info(f"Smart Router 티커 성공 (캐시 미사용): {symbol}, {response_time:.1f}ms")
+                if smart_result.get('success', False):
+                    ticker_data = smart_result.get('data')
+                    if ticker_data:
+                        response_time = time.time() * 1000 - start_time_ms
+                        logger.info(f"Smart Router 티커 성공 (캐시 미사용): {symbol}, {response_time:.1f}ms")
 
-                    return DataResponse(
-                        success=True,
-                        data=ticker_data,
-                        metadata={
-                            'priority_used': priority,
-                            'source': "smart_router",
-                            'response_time_ms': response_time,
-                            'cache_hit': False
-                        }
-                    )
-            else:
-                logger.error(f"Smart Router 티커 실패: {symbol}, {smart_result.get('error')}")
+                        return DataResponse(
+                            success=True,
+                            data=ticker_data,
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="smart_router",
+                                response_time_ms=response_time,
+                                cache_hit=False
+                            )
+                        )
+                else:
+                    logger.error(f"Smart Router 티커 실패: {symbol}, {smart_result.get('error')}")
+
+            except Exception as e:
+                logger.error(f"Smart Router 티커 연동 오류: {symbol}, {e}")
 
             return DataResponse(
                 success=False,
                 error="티커 데이터 조회 실패",
-                metadata={
-                    'priority_used': priority,
-                    'source': "failed",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
         except Exception as e:
@@ -408,18 +416,18 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=str(e),
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
     async def get_tickers(self,
-                          symbols: List[str],
-                          priority: Priority = Priority.HIGH) -> DataResponse:
+                         symbols: List[str],
+                         priority: Priority = Priority.HIGH) -> DataResponse:
         """
-        실시간 티커 일괄 조회 (최적화됨 - 직접 경로)
+        실시간 티커 일괄 조회 (업비트 네이티브 패턴)
 
         모든 심볼을 동시에 처리 - 개수 제한 없음
         항상 List[str] → List[Dict] 패턴
@@ -439,19 +447,19 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error="심볼 리스트가 필요합니다",
-                metadata={
-                    'priority_used': priority,
-                    'source': "validation_error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms,
-                    'cache_hit': False
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
             )
 
         logger.debug(f"티커 일괄 조회 (캐시 미사용): {len(symbols)}개 심볼, priority={priority}")
 
         try:
-            # 🚀 최적화: Smart Router 직접 호출 (폴백 로직 제거)
-            smart_result = await self.smart_router.get_ticker(symbols)
+            # Smart Router 일괄 조회 (모든 심볼 동시 처리)
+            smart_result = await self.smart_router.get_ticker(symbols, priority)
 
             if smart_result.get('success', False):
                 raw_data = smart_result.get('data', [])
@@ -466,38 +474,58 @@ class SmartDataProvider:
                 response_time = time.time() * 1000 - start_time_ms
                 logger.info(f"Smart Router 티커 성공: {len(symbols)}개 심볼, {len(tickers_list)}개 반환, {response_time:.1f}ms")
 
-                return DataResponse.create_success(
+                return DataResponse(
+                    success=True,
                     data=tickers_list,  # 항상 리스트
-                    source="smart_router",
-                    response_time_ms=response_time,
-                    cache_hit=False,
-                    priority_used=priority,
-                    records_count=len(tickers_list)
+                    metadata=ResponseMetadata(
+                        priority_used=priority,
+                        source="smart_router",
+                        response_time_ms=response_time,
+                        cache_hit=False,
+                        records_count=len(tickers_list)
+                    )
                 )
             else:
                 logger.warning(f"Smart Router 티커 실패: {smart_result.get('error')}")
-                return DataResponse(
-                    success=False,
-                    error=f"Smart Router 티커 조회 실패: {smart_result.get('error', 'Unknown')}",
-                    metadata={
-                        'priority_used': priority,
-                        'source': "smart_router_failed",
-                        'response_time_ms': time.time() * 1000 - start_time_ms,
-                        'cache_hit': False
-                    }
-                )
 
         except Exception as e:
             logger.error(f"Smart Router 티커 예외: {e}")
+
+        # 폴백: 업비트 API 직접 조회 (네이티브 패턴 활용)
+        logger.info("업비트 Public API 폴백 시작")
+        try:
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
+            upbit_client = UpbitPublicClient()
+
+            # 업비트 네이티브 호출: List[str] → List[Dict]
+            api_data = await upbit_client.get_tickers(symbols)
+            response_time = time.time() * 1000 - start_time_ms
+
+            logger.info(f"업비트 API 티커 성공: {len(symbols)}개 요청, {len(api_data)}개 반환, {response_time:.1f}ms")
+
+            return DataResponse(
+                success=True,
+                data=api_data,  # 네이티브 리스트 그대로
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="upbit_rest_api",
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(api_data)
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"업비트 API 티커 폴백 실패: {e}")
             return DataResponse(
                 success=False,
-                error=f"티커 일괄 조회 실패: {str(e)}",
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms,
-                    'cache_hit': False
-                }
+                error=f"모든 데이터 소스 실패: {str(e)}",
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="all_sources_failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
             )
 
     async def get_orderbook(self,
@@ -521,7 +549,7 @@ class SmartDataProvider:
         try:
             # Smart Router 직접 연동 (캐시 사용 안함)
             try:
-                smart_result = await self.smart_router.get_orderbook([symbol])
+                smart_result = await self.smart_router.get_orderbook(symbol, priority)
 
                 if smart_result.get('success', False):
                     orderbook_data = smart_result.get('data')
@@ -532,12 +560,12 @@ class SmartDataProvider:
                         return DataResponse(
                             success=True,
                             data=orderbook_data,
-                            metadata={
-                                'priority_used': priority,
-                                'source': "smart_router",
-                                'response_time_ms': response_time,
-                                'cache_hit': False
-                            }
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="smart_router",
+                                response_time_ms=response_time,
+                                cache_hit=False
+                            )
                         )
                 else:
                     logger.error(f"Smart Router 호가 실패: {symbol}, {smart_result.get('error')}")
@@ -548,11 +576,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error="호가창 조회 실패",
-                metadata={
-                    'priority_used': priority,
-                    'source': "failed",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
         except Exception as e:
@@ -560,11 +588,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=str(e),
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
     async def get_trades(self,
@@ -593,12 +621,12 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=f"체결 개수는 1~500 범위여야 합니다. 입력값: {count} (업비트 공식 한계)",
-                metadata={
-                    'priority_used': priority,
-                    'source': "validation_error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms,
-                    'cache_hit': False
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="validation_error",
+                    response_time_ms=time.time() * 1000 - start_time_ms,
+                    cache_hit=False
+                )
             )
 
         try:
@@ -615,21 +643,20 @@ class SmartDataProvider:
                 # 요청된 개수만큼 반환
                 trades_data = cached_trades[:count] if len(cached_trades) > count else cached_trades
 
-                metadata = {
-                    'priority_used': priority,
-                    'source': "memory_cache",
-                    'response_time_ms': response_time,
-                    'cache_hit': True,
-                    'records_count': len(trades_data)
-                }
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source="memory_cache",
+                    response_time_ms=response_time,
+                    cache_hit=True,
+                    records_count=len(trades_data)
+                )
 
                 logger.debug(f"체결 캐시 히트: {symbol}, {len(trades_data)}개, {response_time:.1f}ms")
 
-                return DataResponse.create_success(
+                return DataResponse(
+                    success=True,
                     data=trades_data,
-                    source=metadata.get('source', 'cache'),
-                    response_time_ms=metadata.get('response_time_ms', 0.0),
-                    cache_hit=metadata.get('cache_hit', True)
+                    metadata=metadata
                 )
 
             # 2. Smart Router 연동
@@ -639,7 +666,7 @@ class SmartDataProvider:
             self.cache_coordinator.record_access("trades", symbol, cache_hit=False)
 
             try:
-                smart_result = await self.smart_router.get_trades([symbol], count)
+                smart_result = await self.smart_router.get_trades(symbol, count, priority)
 
                 if smart_result.get('success', False):
                     raw_trades_data = smart_result.get('data', {})
@@ -659,13 +686,16 @@ class SmartDataProvider:
                         logger.info(f"Smart Router 체결 성공: {symbol}, {len(trades_data)}개, "
                                     f"TTL={optimal_ttl:.1f}s, {response_time:.1f}ms")
 
-                        return DataResponse.create_success(
+                        return DataResponse(
+                            success=True,
                             data=trades_data,
-                            source="smart_router",
-                            response_time_ms=response_time,
-                            cache_hit=False,
-                            priority_used=priority,
-                            records_count=len(trades_data)
+                            metadata=ResponseMetadata(
+                                priority_used=priority,
+                                source="smart_router",
+                                response_time_ms=response_time,
+                                cache_hit=False,
+                                records_count=len(trades_data)
+                            )
                         )
                 else:
                     logger.error(f"Smart Router 체결 실패: {symbol}, {smart_result.get('error')}")
@@ -676,11 +706,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error="체결 내역 조회 실패",
-                metadata={
-                    'priority_used': priority,
-                    'source': "failed",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="failed",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
         except Exception as e:
@@ -688,11 +718,11 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=str(e),
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )
 
     # =====================================
@@ -885,7 +915,7 @@ class SmartDataProvider:
                     return candles_response
 
                 # 2. 빈 캔들 채움 처리
-                candles_data = candles_response.get_list()
+                candles_data = candles_response.data or []
                 continuous_candles = collection_manager.fill_empty_candles(
                     candles=candles_data,
                     symbol=symbol,
@@ -917,23 +947,18 @@ class SmartDataProvider:
                 end_time_ms = time.time() * 1000
                 response_time = end_time_ms - start_time_ms
 
-                cache_hit = candles_response.metadata.get('cache_hit', False) if candles_response.metadata else False
+                cache_hit = candles_response.metadata.cache_hit if candles_response.metadata else False
 
-                metadata = {
-                    'priority_used': priority,
-                    'source': "continuous_with_empty",
-                    'response_time_ms': response_time,
-                    'cache_hit': cache_hit,
-                    'records_count': len(result_data)
-                }
+                metadata = ResponseMetadata(
+                    priority_used=priority,
+                    source="continuous_with_empty",
+                    response_time_ms=response_time,
+                    cache_hit=cache_hit,
+                    records_count=len(result_data)
+                )
 
                 logger.info(f"연속 캔들 응답 (빈 캔들 포함): {len(result_data)}개")
-                return DataResponse.create_success(
-                    data=result_data,
-                    source=metadata.get('source', 'continuous'),
-                    response_time_ms=metadata.get('response_time_ms', 0.0),
-                    cache_hit=metadata.get('cache_hit', False)
-                )
+                return DataResponse(success=True, data=result_data, metadata=metadata)
 
             else:
                 # 지표용: 실제 거래 데이터만 제공 (기존 get_candles와 동일)
@@ -948,13 +973,13 @@ class SmartDataProvider:
 
                 # 메타데이터에 source 정보 업데이트 (새로운 ResponseMetadata 생성)
                 if response.success and response.metadata:
-                    new_metadata = {
-                        'priority_used': response.metadata.get('priority_used'),
-                        'source': f"{response.metadata.get('source', 'unknown')}_indicators_only",
-                        'response_time_ms': response.metadata.get('response_time_ms', 0.0),
-                        'cache_hit': response.metadata.get('cache_hit', False),
-                        'records_count': response.metadata.get('records_count', 0)
-                    }
+                    new_metadata = ResponseMetadata(
+                        priority_used=response.metadata.priority_used,
+                        source=f"{response.metadata.source}_indicators_only",
+                        response_time_ms=response.metadata.response_time_ms,
+                        cache_hit=response.metadata.cache_hit,
+                        records_count=response.metadata.records_count
+                    )
                     response = DataResponse(
                         success=response.success,
                         data=response.data,
@@ -972,12 +997,12 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=f"연속 캔들 조회 실패: {str(e)}",
-                metadata={
-                    'priority_used': priority,
-                    'source': "continuous_candles_error",
-                    'response_time_ms': response_time,
-                    'cache_hit': False
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="continuous_candles_error",
+                    response_time_ms=response_time,
+                    cache_hit=False
+                )
             )
 
     def __str__(self) -> str:
@@ -1026,13 +1051,13 @@ class SmartDataProvider:
             return DataResponse(
                 success=True,
                 data=markets_data,
-                metadata={
-                    'priority_used': priority,
-                    'source': "upbit_api_direct",
-                    'response_time_ms': response_time,
-                    'cache_hit': False,
-                    'records_count': len(markets_data)
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="upbit_api_direct",
+                    response_time_ms=response_time,
+                    cache_hit=False,
+                    records_count=len(markets_data)
+                )
             )
 
         except Exception as e:
@@ -1040,9 +1065,9 @@ class SmartDataProvider:
             return DataResponse(
                 success=False,
                 error=str(e),
-                metadata={
-                    'priority_used': priority,
-                    'source': "error",
-                    'response_time_ms': time.time() * 1000 - start_time_ms
-                }
+                metadata=ResponseMetadata(
+                    priority_used=priority,
+                    source="error",
+                    response_time_ms=time.time() * 1000 - start_time_ms
+                )
             )

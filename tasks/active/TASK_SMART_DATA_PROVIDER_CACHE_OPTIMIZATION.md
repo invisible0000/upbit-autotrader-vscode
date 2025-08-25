@@ -236,8 +236,8 @@ CACHE_CONFIG['TICKER_CACHE_ENABLED'] = False  # 🔍 검색: TICKER_CACHE_ENABLE
 
 ### ✅ **Definition of Done**
 - [ ] 티커/호가 캐시 정상 작동
-- [ ] API 호출량 90% 이상 감소 확인
 - [ ] 실시간성 200ms 이내 보장
+- [ ] 실시간 티커/호가요청을 방해하지 않을것(시스템내 다른 기능에서 중복 요청을 대비한 것이지 실시간 정보 취득을 막기 위한것이 아님. rate_limitor 한도에 맞출경우 실시간성 훼손은 없을거라 예상 )
 - [ ] 전체 테스트 PASS
 - [ ] 성능 벤치마크 기준 달성
 

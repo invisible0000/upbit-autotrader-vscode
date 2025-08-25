@@ -15,11 +15,12 @@ WebSocket과 REST API의 서로 다른 응답 형식을 REST API 기준으로 �
 """
 
 import time
+from datetime import datetime
 from typing import Dict, Any, List, Union
 from dataclasses import dataclass
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .models import ChannelType, DataType
+from .models import DataType, ChannelType
 
 logger = create_component_logger("DataFormatUnifier")
 
@@ -61,26 +62,6 @@ class DataFormatUnifier:
         self._initialize_field_mappings()
 
         logger.info("DataFormatUnifier 초기화 완료 (포괄적 API 지원 + Dict 통일 정책 적용)")
-
-    def unify_data(self, data: Dict[str, Any], data_type: DataType,
-                   source: ChannelType) -> Dict[str, Any]:
-        """데이터 타입에 따른 자동 형식 통일"""
-        try:
-            if data_type == DataType.TICKER:
-                return self.unify_ticker_data(data, source)
-            elif data_type == DataType.ORDERBOOK:
-                return self.unify_orderbook_data(data, source)
-            elif data_type == DataType.TRADES:
-                return self.unify_trades_data(data, source)
-            elif data_type in [DataType.CANDLES, DataType.CANDLES_1S]:
-                return self.unify_candles_data(data, source)
-            else:
-                # 기타 데이터 타입은 메타데이터만 추가
-                return self._add_source_metadata(data, source)
-
-        except Exception as e:
-            logger.error(f"데이터 형식 통일 실패 - type: {data_type}, source: {source}, error: {e}")
-            return self._create_error_response(data, source, str(e))
 
     def _initialize_field_mappings(self):
         """업비트 공식 API 필드 매핑 초기화"""
