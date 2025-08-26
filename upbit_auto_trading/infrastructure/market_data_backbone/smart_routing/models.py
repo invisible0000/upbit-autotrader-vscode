@@ -84,13 +84,13 @@ class FrequencyAnalysis:
 
 @dataclass
 class RoutingMetrics:
-    """라우팅 성능 메트릭"""
+    """라우팅 성능 메트릭 - 캐시 메트릭 제거"""
     total_requests: int = 0
     websocket_requests: int = 0
     rest_requests: int = 0
     avg_response_time_ms: float = 0.0
     accuracy_rate: float = 0.0
-    cache_hit_ratio: float = 0.0
+    # 🚀 cache_hit_ratio 제거: SmartDataProvider에서 관리
     websocket_uptime: float = 0.0
 
     # 시간별 통계

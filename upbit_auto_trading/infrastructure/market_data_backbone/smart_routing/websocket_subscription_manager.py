@@ -498,3 +498,79 @@ class WebSocketSubscriptionManager:
 
         except Exception as e:
             self.logger.error(f"❌ 정리 작업 실패: {e}")
+
+    # =====================================
+    # 🚀 3단계: WebSocket 소스 정보 추가 메서드들
+    # =====================================
+
+    def get_connection_health(self) -> float:
+        """WebSocket 연결 건강도 반환 (0.0-1.0)"""
+        if not self.type_subscriptions:
+            return 0.5  # 구독 없음
+
+        # 구독별 메시지 수신율 기반 건강도 계산
+        total_health = 0.0
+        active_subscriptions = 0
+
+        for subscription in self.type_subscriptions.values():
+            age_seconds = (datetime.now() - subscription.created_at).total_seconds()
+
+            if age_seconds > 0:
+                message_rate = subscription.message_count / age_seconds
+                # 1초당 1메시지 이상이면 건강한 상태로 간주
+                health_score = min(1.0, message_rate / 1.0)
+                total_health += health_score
+                active_subscriptions += 1
+
+        if active_subscriptions == 0:
+            return 0.5
+
+        return total_health / active_subscriptions
+
+    def get_subscription_info(self, subscription_id: Optional[str]) -> Dict[str, Any]:
+        """구독 정보 반환"""
+        # subscription_id를 타입으로 매핑하여 정보 반환
+        if not subscription_id:
+            return {
+                "is_new_subscription": True,
+                "age_ms": 0,
+                "subscription_id": None,
+                "sequence": 0,
+                "type": "unknown"
+            }
+
+        # subscription_id에서 타입 추출 (예: "ticker_KRW-BTC" -> "ticker")
+        subscription_type_str = subscription_id.split('_')[0] if '_' in subscription_id else subscription_id
+
+        try:
+            subscription_type = SubscriptionType(subscription_type_str)
+            if subscription_type in self.type_subscriptions:
+                subscription = self.type_subscriptions[subscription_type]
+                age_ms = (datetime.now() - subscription.created_at).total_seconds() * 1000
+
+                return {
+                    "is_new_subscription": age_ms < 1000,  # 1초 미만이면 새 구독
+                    "age_ms": age_ms,
+                    "subscription_id": subscription_id,
+                    "sequence": subscription.message_count,
+                    "type": subscription_type.value,
+                    "symbol_count": len(subscription.symbols),
+                    "message_count": subscription.message_count
+                }
+        except ValueError:
+            pass  # 잘못된 구독 타입
+
+        # 구독 정보를 찾을 수 없음
+        return {
+            "is_new_subscription": True,
+            "age_ms": 0,
+            "subscription_id": subscription_id,
+            "sequence": 0,
+            "type": "unknown"
+        }
+
+    def update_message_count(self, subscription_type: SubscriptionType) -> None:
+        """메시지 수신 시 카운터 업데이트"""
+        if subscription_type in self.type_subscriptions:
+            self.type_subscriptions[subscription_type].message_count += 1
+            self.type_subscriptions[subscription_type].last_updated = datetime.now()

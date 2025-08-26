@@ -246,6 +246,25 @@ class ChannelSelector:
 
     def _smart_selection(self, request: DataRequest) -> ChannelDecision:
         """스마트 채널 선택 알고리즘"""
+
+        # 🎯 단일 심볼 WebSocket 우선 정책
+        if len(request.symbols) == 1 and request.data_type in [DataType.TICKER, DataType.ORDERBOOK]:
+            # WebSocket 연결 상태 확인
+            if self.websocket_status.get("connected", False):
+                logger.debug(f"단일 심볼 ({request.symbols[0]}) {request.data_type.value} 요청 - WebSocket 우선 선택")
+                return ChannelDecision(
+                    channel=ChannelType.WEBSOCKET,
+                    reason="single_symbol_websocket_priority",
+                    confidence=0.9,
+                    metadata={
+                        "policy": "단일 심볼은 WebSocket 우선",
+                        "symbol": request.symbols[0],
+                        "data_type": request.data_type.value
+                    }
+                )
+            else:
+                logger.warning("단일 심볼 요청이지만 WebSocket 미연결 - REST API로 폴백")
+
         scores = {
             ChannelType.WEBSOCKET: self._calculate_websocket_score(request),
             ChannelType.REST_API: self._calculate_rest_score(request)

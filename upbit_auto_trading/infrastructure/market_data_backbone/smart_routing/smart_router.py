@@ -12,6 +12,7 @@
 - 자동 폴백 처리
 """
 
+import asyncio
 import time
 from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from datetime import datetime
@@ -37,9 +38,7 @@ class SmartRouterConfig:
     # REST API 타임아웃 설정
     REST_API_TIMEOUT = 5.0  # REST API 요청 타임아웃 (초)
 
-    # 캐시 설정
-    CACHE_TTL_SECONDS = 60.0  # 캐시 TTL (초)
-    MAX_CACHE_SIZE = 1000  # 최대 캐시 개수
+    # 🚀 캐시 제거 - SmartDataProvider에서 200ms TTL 캐시 관리
 
     # 성능 임계값
     WEBSOCKET_MIN_PERFORMANCE_THRESHOLD = 50  # WebSocket 최소 성능 임계값 (메시지/초)
@@ -107,24 +106,146 @@ class SmartRouter:
         # WebSocket 구독 매니저 (v3.0 핵심 컴포넌트)
         self.websocket_subscription_manager: Optional[WebSocketSubscriptionManager] = None
 
-        # 캐시 시스템 (v3.0 최적화된 단순 캐시)
-        self.cache = {}
-        self.cache_ttl = SmartRouterConfig.CACHE_TTL_SECONDS
-
         # 상태 관리
         self.is_initialized = False
 
-        logger.info("SmartRouter v3.0 초기화 완료 (클라이언트들은 on-demand 초기화)")
+        logger.info("SmartRouter v3.0 초기화 완료 (캐시 제거 - SmartDataProvider에서 관리)")
 
     async def initialize(self) -> None:
-        """스마트 라우터 v3.0 초기화"""
-        logger.info("SmartRouter v3.0 서비스 초기화")
+        """스마트 라우터 v3.0 완전 초기화 - 프로액티브 방식"""
+        logger.info("SmartRouter v3.0 프로액티브 초기화 시작")
 
-        # API 클라이언트들을 on-demand 초기화
-        await self._ensure_clients_initialized()
+        # 1단계: REST 클라이언트 초기화 (항상 필요)
+        await self._init_rest_client()
 
+        # 2단계: WebSocket 클라이언트 초기화 및 연결
+        await self._init_websocket_client()
+
+        # 3단계: ChannelSelector에 정확한 상태 전달
+        websocket_available = (self.websocket_client and
+                               self.websocket_client.is_connected and
+                               self.websocket_subscription_manager)
+
+        self.channel_selector.update_websocket_status(bool(websocket_available))
+
+        # 4단계: 초기화 완료 상태 설정
         self.is_initialized = True
-        logger.info("✅ SmartRouter v3.0 초기화 완료")
+
+        status_summary = {
+            "REST": "✅" if self.rest_client else "❌",
+            "WebSocket": "✅" if websocket_available else "❌",
+            "구독매니저": "✅" if self.websocket_subscription_manager else "❌"
+        }
+
+        logger.info(f"✅ SmartRouter v3.0 초기화 완료 - {status_summary}")
+
+    async def _init_rest_client(self) -> None:
+        """REST 클라이언트 초기화"""
+        if self.rest_client is not None:
+            return
+
+        try:
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
+            self.rest_client = UpbitPublicClient()
+            logger.info("REST 클라이언트 초기화 완료")
+        except Exception as e:
+            logger.error(f"REST 클라이언트 초기화 실패: {e}")
+            # REST는 필수이므로 예외 발생
+            raise RuntimeError(f"REST 클라이언트 초기화 필수: {e}")
+
+    async def _init_websocket_client(self) -> None:
+        """WebSocket 클라이언트 및 구독 매니저 지능적 초기화"""
+        if self.websocket_client is not None:
+            return
+
+        try:
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_public_client import (
+                UpbitWebSocketPublicClient
+            )
+
+            # WebSocket 클라이언트 생성
+            self.websocket_client = UpbitWebSocketPublicClient()
+            logger.info("WebSocket 클라이언트 생성 완료")
+
+            # WebSocket 연결 시도
+            try:
+                await self.websocket_client.connect()
+                is_connected = self.websocket_client.is_connected
+
+                if is_connected:
+                    logger.info("✅ WebSocket 연결 성공")
+
+                    # 구독 매니저 초기화 - 지능적 관리 시작
+                    await self._init_subscription_manager()
+                else:
+                    logger.warning("WebSocket 연결 실패 - REST API 전용 모드로 동작")
+
+            except Exception as conn_error:
+                logger.warning(f"WebSocket 연결 실패: {conn_error}")
+                # 연결 실패해도 클라이언트는 유지 (재연결 가능)
+
+        except Exception as e:
+            logger.warning(f"WebSocket 클라이언트 생성 실패: {e}")
+            # WebSocket은 선택사항이므로 계속 진행
+
+    async def _init_subscription_manager(self) -> None:
+        """WebSocket 구독 매니저 지능적 초기화"""
+        if not self.websocket_client or not self.websocket_client.is_connected:
+            logger.warning("WebSocket 미연결 - 구독 매니저 초기화 건너뜀")
+            return
+
+        if self.websocket_subscription_manager is not None:
+            logger.debug("구독 매니저 이미 초기화됨")
+            return
+
+        try:
+            # 구독 매니저 생성 - 최적화된 설정
+            self.websocket_subscription_manager = WebSocketSubscriptionManager(
+                self.websocket_client,
+                max_subscription_types=SmartRouterConfig.BUFFER_SUBSCRIPTION_TYPES
+            )
+
+            logger.info(f"✅ WebSocket 구독 매니저 초기화 완료 - 최대 {SmartRouterConfig.BUFFER_SUBSCRIPTION_TYPES}개 타입 관리")
+
+            # 🚀 지능적 사전 구독 전략
+            await self._setup_intelligent_subscriptions()
+
+        except Exception as e:
+            logger.error(f"구독 매니저 초기화 실패: {e}")
+            self.websocket_subscription_manager = None
+
+    async def _setup_intelligent_subscriptions(self) -> None:
+        """지능적 사전 구독 설정 - 사용 패턴 기반 최적화"""
+        if not self.websocket_subscription_manager:
+            return
+
+        logger.info("🧠 지능적 WebSocket 사전 구독 설정 시작")
+
+        # 📊 일반적인 사용 패턴 기반 우선순위 구독
+        high_priority_types = [
+            SubscriptionType.TICKER,    # 가장 많이 사용되는 데이터
+            SubscriptionType.ORDERBOOK  # 실시간 거래에 중요
+        ]
+
+        # 우선순위 높은 타입들 사전 구독 (빈 심볼로 시작)
+        for sub_type in high_priority_types:
+            try:
+                # 빈 구독으로 시작하여 나중에 심볼 추가 방식
+                success = await self.websocket_subscription_manager.subscribe_symbols(
+                    symbols=[],  # 빈 시작
+                    subscription_type=sub_type,
+                    priority=1   # 최고 우선순위
+                )
+
+                if success:
+                    logger.info(f"✅ {sub_type.value} 타입 사전 구독 완료")
+                else:
+                    logger.warning(f"❌ {sub_type.value} 타입 사전 구독 실패")
+
+            except Exception as e:
+                logger.warning(f"사전 구독 오류 - {sub_type.value}: {e}")
+
+        logger.info("🎯 지능적 WebSocket 사전 구독 설정 완료")
 
     async def _ensure_clients_initialized(self) -> None:
         """API 클라이언트들을 lazy loading으로 초기화"""
@@ -187,31 +308,22 @@ class SmartRouter:
             # 메트릭 업데이트
             self.metrics.total_requests += 1
 
-            # 1단계: 캐시 확인 (호가/티커는 실시간성 우선으로 캐시 건너뛰기)
-            if request.data_type not in [DataType.ORDERBOOK, DataType.TICKER]:
-                cached_result = self._check_cache(request)
-                if cached_result:
-                    logger.debug("캐시에서 데이터 반환")
-                    self.metrics.cache_hit_ratio = self._update_cache_hit_ratio(True)
-                    return cached_result
+            # 🚀 캐시 제거 - SmartDataProvider에서 200ms TTL 캐시 관리
+            # SmartRouter는 라우팅 로직에만 집중
 
-            self.metrics.cache_hit_ratio = self._update_cache_hit_ratio(False)
-
-            # 2단계: 채널 선택
+            # 1단계: 채널 선택 (정확한 정보 기반)
             channel_decision = self.channel_selector.select_channel(request)
             logger.info(f"채널 선택 완료 - 채널: {channel_decision.channel.value}, 이유: {channel_decision.reason}")
 
-            # 3단계: 선택된 채널로 데이터 요청
+            # 2단계: 선택된 채널로 데이터 요청
             raw_data = await self._execute_request(request, channel_decision)
 
             # 4단계: 데이터 형식 통일
             unified_data = self._unify_response_data(raw_data, request.data_type, channel_decision.channel)
 
-            # 5단계: 캐시 저장 (호가/티커는 실시간성 우선으로 캐시 저장 건너뛰기)
-            if request.data_type not in [DataType.ORDERBOOK, DataType.TICKER]:
-                self._store_cache(request, unified_data)
+            # 🚀 캐시 제거됨: SmartDataProvider에서 200ms TTL 캐시 관리
 
-            # 6단계: 메트릭 업데이트
+            # 5단계: 메트릭 업데이트
             self._update_metrics(channel_decision, time.time() - start_time, True)
 
             logger.debug(f"데이터 요청 처리 완료 - 소요시간: {(time.time() - start_time) * 1000:.1f}ms")
@@ -224,7 +336,13 @@ class SmartRouter:
                     "reason": channel_decision.reason,
                     "confidence": channel_decision.confidence,
                     "response_time_ms": (time.time() - start_time) * 1000,
-                    "request_id": request.request_id
+                    "request_id": request.request_id,
+                    # 🚀 2단계: 명확한 소스 정보 추가
+                    "source_type": self._determine_source_type(channel_decision, raw_data),
+                    "stream_info": self._extract_stream_info(channel_decision, raw_data),
+                    "reliability_score": self._calculate_reliability_score(channel_decision),
+                    "data_freshness": self._assess_data_freshness(channel_decision, raw_data),
+                    "timestamp": datetime.now().isoformat()
                 }
             }
 
@@ -390,18 +508,27 @@ class SmartRouter:
 
                     symbols_display = self._format_symbols_for_log(request.symbols)
                     logger.info(f"구독 매니저를 통한 현재가 배치 구독 완료: {symbols_display}")
+
+                    # 🚀 기존 구독인지 확인하여 안정화 대기 최적화
+                    existing_subscription = self.websocket_subscription_manager.type_subscriptions.get(SubscriptionType.TICKER)
+                    if existing_subscription and all(s in existing_subscription.symbols for s in request.symbols):
+                        # 모든 심볼이 이미 구독됨 - 안정화 대기 생략
+                        logger.debug("모든 심볼이 기존 구독됨 - 안정화 대기 생략")
+                    else:
+                        # 새 심볼 추가 - 짧은 안정화 대기
+                        await asyncio.sleep(0.1)  # 0.5초 → 0.1초 단축
+                        logger.debug("새 심볼 구독 - 짧은 안정화 완료")
+
                 else:
                     # 기존 직접 구독 방식
                     if self.websocket_client and hasattr(self.websocket_client, 'subscribe_ticker'):
                         await self.websocket_client.subscribe_ticker(request.symbols)
                         symbols_display = self._format_symbols_for_log(request.symbols)
                         logger.info(f"WebSocket 현재가 구독 완료: {symbols_display}")
+                        # 직접 구독은 항상 안정화 대기
+                        await asyncio.sleep(0.1)
                     else:
                         raise Exception("WebSocket 클라이언트 없음")
-
-                # 구독 후 안정화 대기 (설정값 사용)
-                import asyncio
-                await asyncio.sleep(SmartRouterConfig.WEBSOCKET_SUBSCRIPTION_STABILIZATION_DELAY)
 
             except Exception as subscribe_error:
                 logger.warning(f"WebSocket 구독 실패: {subscribe_error} - REST 폴백")
@@ -410,11 +537,27 @@ class SmartRouter:
                 self.channel_selector.update_rate_limit("websocket", rollback_usage)
                 return await self._execute_rest_request(request)
 
-            # 실시간 데이터 수신 (설정값 사용)
+            # 🚀 기존 구독 재사용 시 타임아웃 최적화 (캐시 사용 안함 - 실시간성 보장)
+            if (self.websocket_subscription_manager and
+                SubscriptionType.TICKER in self.websocket_subscription_manager.type_subscriptions):
+
+                existing_subscription = self.websocket_subscription_manager.type_subscriptions[SubscriptionType.TICKER]
+                if all(s in existing_subscription.symbols for s in request.symbols):
+                    # 기존 구독이므로 WebSocket 스트림에서 새 데이터가 즉시 올 것으로 예상
+                    timeout = 1.0  # 3초 → 1초로 단축 (실시간 데이터 대기)
+                    logger.debug("🔥 기존 구독 재사용 - 실시간 데이터 대기 (짧은 타임아웃)")
+                else:
+                    # 새 구독이므로 구독 + 안정화 + 데이터 수신 시간 필요
+                    timeout = SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
+                    logger.debug("새 구독 생성 - 표준 타임아웃 적용")
+            else:
+                timeout = SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
+
+            # 🔴 실시간 데이터 수신 (캐시 없음 - 항상 최신 데이터)
             realtime_data = await self._receive_websocket_data(
                 data_type="ticker",
                 symbols=request.symbols,
-                timeout=SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
+                timeout=timeout
             )
 
             if realtime_data:
@@ -712,73 +855,6 @@ class SmartRouter:
         last_part = symbols[-max_display:]
         return f"[{', '.join(first_part)}, ... +{len(symbols) - max_display * 2}개, {', '.join(last_part)}]"
 
-    def _check_cache(self, request: DataRequest) -> Optional[Dict[str, Any]]:
-        """캐시 확인"""
-        cache_key = self._generate_cache_key(request)
-        cached_item = self.cache.get(cache_key)
-
-        if cached_item:
-            # TTL 확인
-            if time.time() - cached_item["timestamp"] < self.cache_ttl:
-                cached_data = cached_item["data"]
-
-                # 캐시된 데이터가 올바른 응답 구조인지 확인
-                if isinstance(cached_data, dict) and "success" in cached_data:
-                    return cached_data
-                else:
-                    # 이전 형식의 캐시 데이터를 올바른 구조로 변환
-                    logger.debug("이전 형식의 캐시 데이터 발견 - 올바른 구조로 변환")
-                    return {
-                        "success": True,
-                        "data": cached_data,
-                        "metadata": {
-                            "channel": "cache",
-                            "reason": "cache_hit",
-                            "confidence": 1.0,
-                            "response_time_ms": 0,
-                            "request_id": request.request_id
-                        }
-                    }
-            else:
-                # 만료된 캐시 삭제
-                del self.cache[cache_key]
-
-        return None
-
-    def _store_cache(self, request: DataRequest, data: Dict[str, Any]) -> None:
-        """캐시 저장 - 통일된 응답 데이터만 저장"""
-        cache_key = self._generate_cache_key(request)
-
-        # 응답 구조를 올바른 형식으로 저장
-        cache_data = {
-            "success": True,
-            "data": data,
-            "metadata": {
-                "channel": "cache",
-                "reason": "cache_stored",
-                "confidence": 1.0,
-                "response_time_ms": 0,
-                "request_id": request.request_id,
-                "cached_at": int(time.time() * 1000)
-            }
-        }
-
-        self.cache[cache_key] = {
-            "data": cache_data,
-            "timestamp": time.time()
-        }
-
-        # 캐시 크기 제한 (1000개 초과 시 오래된 것부터 삭제)
-        if len(self.cache) > 1000:
-            oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k]["timestamp"])
-            del self.cache[oldest_key]
-
-    def _generate_cache_key(self, request: DataRequest) -> str:
-        """캐시 키 생성"""
-        symbols_str = ",".join(sorted(request.symbols))
-        to_str = request.to if request.to else "latest"
-        return f"{request.data_type.value}:{symbols_str}:{request.count}:{request.interval}:{to_str}"
-
     def _update_metrics(self, decision: Optional[ChannelDecision], response_time: float, success: bool) -> None:
         """메트릭 업데이트"""
         # 이전 총 요청 수 저장 (정확도 계산용)
@@ -810,19 +886,6 @@ class SmartRouter:
 
         self.metrics.last_updated = datetime.now()
 
-    def _update_cache_hit_ratio(self, hit: bool) -> float:
-        """캐시 히트율 업데이트"""
-        current_ratio = self.metrics.cache_hit_ratio
-        total_requests = self.metrics.total_requests
-
-        if total_requests > 1:
-            hit_count = current_ratio * (total_requests - 1)
-            if hit:
-                hit_count += 1
-            return hit_count / total_requests
-        else:
-            return 1.0 if hit else 0.0
-
     def get_metrics(self) -> RoutingMetrics:
         """현재 메트릭 조회"""
         return self.metrics
@@ -835,39 +898,25 @@ class SmartRouter:
                 "websocket_requests": self.metrics.websocket_requests,
                 "rest_requests": self.metrics.rest_requests,
                 "avg_response_time_ms": self.metrics.avg_response_time_ms,
-                "accuracy_rate": self.metrics.accuracy_rate,
-                "cache_hit_ratio": self.metrics.cache_hit_ratio
+                "accuracy_rate": self.metrics.accuracy_rate
+                # 🚀 cache_hit_ratio 제거: SmartDataProvider에서 관리
             },
-            "channel_selector": self.channel_selector.get_performance_summary(),
-            "cache_status": {
-                "cache_size": len(self.cache),
-                "cache_ttl": self.cache_ttl
-            }
+            "channel_selector": self.channel_selector.get_performance_summary()
+            # 🚀 cache_status 제거: SmartRouter에서 캐시 관리 안 함
         }
 
     def reset_metrics(self) -> None:
         """메트릭 초기화"""
-        logger.info("메트릭 초기화")
+        logger.info("메트릭 초기화 (캐시 제거됨)")
         self.metrics = RoutingMetrics()
-        self.cache.clear()
+        # 🚀 캐시 제거됨: SmartDataProvider에서 200ms TTL 캐시 관리
         logger.info("✅ 메트릭 초기화 완료")
-
-    def clear_cache(self) -> None:
-        """캐시 클리어"""
-        logger.debug("캐시 클리어")
-        self.cache.clear()
-
-    def get_cache_info(self) -> Dict[str, Any]:
-        """캐시 정보 조회"""
-        return {
-            "cache_size": len(self.cache),
-            "cache_ttl": self.cache_ttl,
-            "cache_keys": list(self.cache.keys())
-        }
 
     async def cleanup_resources(self) -> None:
         """리소스 정리"""
         logger.info("SmartRouter 리소스 정리 시작")
+
+        # 🚀 캐시 제거됨: SmartDataProvider에서 200ms TTL 캐시 관리
 
         # WebSocket 연결 정리
         if self.websocket_client and hasattr(self.websocket_client, 'disconnect'):
@@ -885,8 +934,8 @@ class SmartRouter:
             except Exception as e:
                 logger.warning(f"REST 클라이언트 정리 중 오류: {e}")
 
-        # 캐시 정리
-        self.cache.clear()
+        # 캐시 제거: 더 이상 캐시 정리 불필요
+        # 캐시가 제거되었으므로 정리할 것이 없음
 
         logger.info("✅ SmartRouter 리소스 정리 완료")
 
@@ -919,7 +968,7 @@ class SmartRouter:
         return interval_mapping.get(interval, 1)  # 기본값: 1분
 
     async def _receive_websocket_data(self, data_type: str, symbols: list, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
-        """WebSocket 실시간 데이터 수신 - 최적화된 버전"""
+        """WebSocket 실시간 데이터 수신 - 스트림 타입 정보 포함"""
         # 타임아웃 기본값을 설정에서 가져오기
         if timeout is None:
             timeout = SmartRouterConfig.WEBSOCKET_DATA_RECEIVE_TIMEOUT
@@ -949,12 +998,14 @@ class SmartRouter:
                         if message_type == data_type.lower() and hasattr(message, 'market'):
                             if message.market in symbols:
                                 logger.debug(f"WebSocket 실시간 데이터 수신: {data_type} - {message.market}")
-                                return message.data
+                                # 🚀 스트림 타입 정보 포함하여 반환
+                                return self._create_websocket_data_with_stream_type(message)
 
                         # 관련 메시지 발견 시 즉시 반환
                         if message_type == data_type.lower():
                             logger.debug(f"WebSocket 데이터 수신 (심볼 무관): {data_type}")
-                            return message.data
+                            # 🚀 스트림 타입 정보 포함하여 반환
+                            return self._create_websocket_data_with_stream_type(message)
 
             except asyncio.TimeoutError:
                 logger.debug(f"WebSocket 데이터 수신 타임아웃: {timeout}초 - 폴백")
@@ -965,6 +1016,30 @@ class SmartRouter:
             return None
 
         return None
+
+    def _create_websocket_data_with_stream_type(self, message) -> Dict[str, Any]:
+        """WebSocket 메시지에서 스트림 타입 정보를 포함한 데이터 생성"""
+        # 메시지의 데이터를 기본으로 하되, 스트림 타입 정보 추가
+        data = message.data.copy() if isinstance(message.data, dict) else {"raw_data": message.data}
+
+        # WebSocket 메시지에서 스트림 타입 정보 추출 및 추가
+        if hasattr(message, 'stream_type') and message.stream_type:
+            if hasattr(message.stream_type, 'value'):
+                stream_type_value = message.stream_type.value
+            else:
+                stream_type_value = str(message.stream_type)
+            data['stream_type'] = stream_type_value
+
+        # 원본 메시지 정보도 포함 (디버깅용)
+        message_type_value = message.type.value if hasattr(message.type, 'value') else str(message.type)
+        data['_websocket_metadata'] = {
+            "message_type": message_type_value,
+            "market": getattr(message, 'market', 'unknown'),
+            "timestamp": getattr(message, 'timestamp', None),
+            "has_stream_type": hasattr(message, 'stream_type') and message.stream_type is not None
+        }
+
+        return data
 
     def _format_websocket_response(self, data: Dict[str, Any], request: DataRequest) -> Dict[str, Any]:
         """WebSocket 데이터를 표준 응답 형식으로 변환"""
@@ -1011,6 +1086,151 @@ class SmartRouter:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """컨텍스트 매니저 종료"""
         await self.cleanup_resources()
+
+    # =====================================
+    # 🚀 2단계: 명확한 소스 정보 제공 헬퍼 메서드들
+    # =====================================
+
+    def _determine_source_type(self, channel_decision: ChannelDecision, raw_data: Dict[str, Any]) -> str:
+        """정확한 소스 타입 결정 - 추측 제거"""
+        if channel_decision.channel == ChannelType.WEBSOCKET:
+            # WebSocket의 경우 실제 스트림 타입에 따라 분류
+            # raw_data에서 실제 업비트 스트림 타입 확인
+            return self._extract_websocket_stream_type(raw_data)
+        else:
+            return "rest_api"
+
+    def _extract_websocket_stream_type(self, raw_data: Dict[str, Any]) -> str:
+        """WebSocket 메시지에서 실제 스트림 타입 추출"""
+        # 1. raw_data에서 직접 스트림 타입 확인 (업비트 API 스펙)
+        if 'stream_type' in raw_data:
+            stream_type = raw_data['stream_type']
+            if stream_type == 'REALTIME':
+                return "websocket_realtime"
+            elif stream_type == 'SNAPSHOT':
+                return "websocket_snapshot"
+
+        # 2. data 필드 내부에서 스트림 타입 확인
+        if 'data' in raw_data and isinstance(raw_data['data'], dict):
+            data_field = raw_data['data']
+            if 'stream_type' in data_field:
+                stream_type = data_field['stream_type']
+                if stream_type == 'REALTIME':
+                    return "websocket_realtime"
+                elif stream_type == 'SNAPSHOT':
+                    return "websocket_snapshot"
+
+        # 3. 스트림 타입이 없거나 불명확한 경우 - 기본값은 실시간으로 간주
+        # (업비트 WebSocket은 대부분 실시간 스트림)
+        return "websocket_realtime"
+
+    def _extract_stream_info(self, channel_decision: ChannelDecision, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """WebSocket 스트림 정보 추출"""
+        if channel_decision.channel != ChannelType.WEBSOCKET:
+            return {}
+
+        # 실제 WebSocket 메시지에서 스트림 타입 추출
+        stream_type = self._get_actual_stream_type_from_message(raw_data)
+
+        return {
+            "stream_type": stream_type,
+            "is_live_stream": stream_type == "realtime",
+            "connection_type": "websocket",
+            "data_flow": "push_based",
+            "raw_stream_type": raw_data.get('stream_type', 'unknown')
+        }
+
+    def _get_actual_stream_type_from_message(self, raw_data: Dict[str, Any]) -> str:
+        """WebSocket 메시지에서 실제 스트림 타입 추출"""
+        # 1. raw_data에서 직접 스트림 타입 확인
+        if 'stream_type' in raw_data:
+            stream_type = raw_data['stream_type']
+            if stream_type == 'REALTIME':
+                return "realtime"
+            elif stream_type == 'SNAPSHOT':
+                return "snapshot"
+
+        # 2. data 필드 내부에서 스트림 타입 확인
+        if 'data' in raw_data and isinstance(raw_data['data'], dict):
+            data_field = raw_data['data']
+            if 'stream_type' in data_field:
+                stream_type = data_field['stream_type']
+                if stream_type == 'REALTIME':
+                    return "realtime"
+                elif stream_type == 'SNAPSHOT':
+                    return "snapshot"
+
+        # 3. 기본값은 실시간으로 간주 (업비트 WebSocket 특성)
+        return "realtime"
+
+    def _calculate_reliability_score(self, channel_decision: ChannelDecision) -> float:
+        """채널별 신뢰도 점수 계산"""
+        base_score = channel_decision.confidence
+
+        if channel_decision.channel == ChannelType.WEBSOCKET:
+            # WebSocket 연결 품질 기반 신뢰도
+            if self.websocket_subscription_manager:
+                connection_health = self.websocket_subscription_manager.get_connection_health()
+                return min(0.99, base_score * connection_health)
+            else:
+                return 0.5  # WebSocket 매니저 없음
+        else:
+            # REST API는 기본 신뢰도
+            return min(0.95, base_score)
+
+    def _assess_data_freshness(self, channel_decision: ChannelDecision, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """데이터 신선도 평가"""
+        freshness_info = {
+            "channel": channel_decision.channel.value,
+            "timestamp": datetime.now().isoformat(),
+            "estimated_delay_ms": 0
+        }
+
+        if channel_decision.channel == ChannelType.WEBSOCKET:
+            # WebSocket의 경우 실제 스트림 타입에 따라 신선도 평가
+            actual_stream_type = self._get_actual_stream_type_from_message(raw_data)
+
+            if actual_stream_type == "realtime":
+                freshness_info.update({
+                    "is_realtime": True,
+                    "estimated_delay_ms": 5,  # 실시간 데이터 지연
+                    "stream_type": "realtime"
+                })
+            else:  # snapshot
+                freshness_info.update({
+                    "is_realtime": False,
+                    "estimated_delay_ms": 50,  # 스냅샷 데이터 지연
+                    "stream_type": "snapshot"
+                })
+        else:
+            # REST API는 네트워크 지연 고려
+            freshness_info.update({
+                "is_realtime": False,
+                "estimated_delay_ms": 100,  # REST API 기본 지연
+                "stream_type": "snapshot"
+            })
+
+        return freshness_info
+
+    def _get_websocket_subscription_status(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """WebSocket 구독 상태 정보 추출"""
+        if not self.websocket_subscription_manager:
+            return {"is_new_subscription": True, "age_ms": 0}
+
+        # 실제 구독 매니저에서 상태 조회
+        # 현재는 raw_data에서 구독 정보 추출
+        subscription_id = raw_data.get('subscription_id')
+        if subscription_id:
+            return self.websocket_subscription_manager.get_subscription_info(subscription_id)
+        else:
+            # 구독 ID가 없으면 새 구독으로 간주
+            return {
+                "is_new_subscription": True,
+                "age_ms": 0,
+                "subscription_id": None,
+                "sequence": 0,
+                "type": "unknown"
+            }
 
 
 # 전역 인스턴스 (싱글톤 패턴)

@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .response_models import DataResponse, Priority
+from .response_models import DataResponse, Priority, DataSourceInfo
 from .fast_cache import FastCache
 from .batch_processor import BatchProcessor
 
@@ -92,11 +92,26 @@ class SmartDataProvider:
             if cached_data:
                 self._cache_hits += 1
                 logger.debug(f"티커 캐시 히트: {symbols}")
+
+                # 🚀 캐시 데이터 소스 정보 생성
+                cache_age_ms = (time.time() - start_time) * 1000
+                cache_source = DataSourceInfo(
+                    channel="cache",
+                    cache_info={
+                        "ttl_ms": 200,  # FastCache TTL
+                        "age_ms": cache_age_ms,
+                        "hit_rate": self._cache_hits / max(1, self._cache_hits + self._api_calls)
+                    },
+                    reliability=0.95,  # 캐시 신뢰도
+                    latency_ms=cache_age_ms
+                )
+
                 return DataResponse.create_success(
                     data=cached_data,
-                    source="fast_cache",
+                    data_source=cache_source,
+                    source="fast_cache",  # 기존 호환성
                     cache_hit=True,
-                    response_time_ms=(time.time() - start_time) * 1000
+                    response_time_ms=cache_age_ms
                 )
 
             # 2. SmartRouter 직접 호출 (배치 처리)
@@ -113,12 +128,20 @@ class SmartDataProvider:
                 data = result.get('data', {})
                 self.cache.set(cache_key, data)
 
+                # 🚀 SmartRouter 응답에서 데이터 소스 정보 추출
+                response_time_ms = (time.time() - start_time) * 1000
+                router_metadata = result.get('metadata', {})
+
+                # SmartRouter의 채널 정보를 DataSourceInfo로 변환
+                router_source = self._extract_source_info_from_router(router_metadata, response_time_ms)
+
                 logger.debug(f"티커 성공: {symbols}")
                 return DataResponse.create_success(
                     data=data,
-                    source="smart_router",
+                    data_source=router_source,
+                    source="smart_router",  # 기존 호환성
                     cache_hit=False,
-                    response_time_ms=(time.time() - start_time) * 1000
+                    response_time_ms=response_time_ms
                 )
             else:
                 return DataResponse.create_error(
@@ -214,7 +237,8 @@ class SmartDataProvider:
             if isinstance(symbols, str):
                 symbols = [symbols]  # 리스트로 통일
 
-            result = await self.smart_router.get_tickers(symbols=symbols)
+            # SmartRouter V2.0 API 호출 (get_ticker 사용)
+            result = await self.smart_router.get_ticker(symbols=symbols)
             return result
 
         except Exception as e:
@@ -229,11 +253,12 @@ class SmartDataProvider:
         try:
             # 단일 심볼 처리 (SmartRouter는 캔들에서 단일 심볼만 지원)
             if isinstance(symbols, str):
+                # SmartRouter V2.0 API 호출 (interval 파라미터 사용)
                 result = await self.smart_router.get_candles(
                     symbols=[symbols],
-                    timeframe=kwargs.get('timeframe'),
-                    count=kwargs.get('count'),
-                    end_time=kwargs.get('end_time')
+                    interval=kwargs.get('timeframe', '1m'),
+                    count=kwargs.get('count', 1),
+                    to=kwargs.get('to')
                 )
                 return result
             else:
@@ -287,3 +312,59 @@ class SmartDataProvider:
         """기존 API 호환성 - get_candle로 리다이렉트"""
         logger.debug("기존 get_candles() 호출 -> get_candle()로 리다이렉트")
         return await self.get_candle(symbol, timeframe, **kwargs)
+
+    # 🚀 데이터 소스 정보 헬퍼 메서드들 - 추측 제거 버전
+    def _extract_source_info_from_router(self, router_metadata: Dict[str, Any], response_time_ms: float) -> DataSourceInfo:
+        """SmartRouter 메타데이터에서 정확한 DataSourceInfo 추출 - 추측 없음"""
+
+        # 🚀 2단계: SmartRouter의 명확한 소스 정보 사용
+        reliability_score = router_metadata.get('reliability_score', 0.8)
+        channel = router_metadata.get('channel', 'rest_api')
+
+        # WebSocket 데이터 처리 - 실제 스트림 타입 확인
+        if channel == "websocket":
+            # 실제 스트림 타입을 SmartRouter에서 추출한 정보로 확인
+            stream_info = router_metadata.get('stream_info', {})
+            actual_stream_type = stream_info.get('stream_type', 'realtime')
+
+            return DataSourceInfo(
+                channel="websocket",
+                stream_type=actual_stream_type,  # 실제 스트림 타입 사용
+                reliability=reliability_score,
+                latency_ms=response_time_ms,
+                cache_info={
+                    "stream_info": stream_info,
+                    "data_freshness": router_metadata.get('data_freshness', {}),
+                    "is_live_stream": actual_stream_type == "realtime",
+                    "raw_stream_type": stream_info.get('raw_stream_type', 'unknown')
+                }
+            )
+        else:
+            # REST API 데이터
+            freshness_info = router_metadata.get('data_freshness', {})
+
+            return DataSourceInfo(
+                channel="rest_api",
+                reliability=reliability_score,
+                latency_ms=response_time_ms,
+                cache_info={
+                    "estimated_delay_ms": freshness_info.get('estimated_delay_ms', 100),
+                    "server_timestamp": freshness_info.get('timestamp')
+                }
+            )
+
+    def _detect_stream_type(self, router_metadata: Dict[str, Any]) -> Optional[str]:
+        """WebSocket 스트림 타입 감지 - 더 이상 추측하지 않음"""
+        # SmartRouter에서 명확한 source_type 제공하므로 추측 불필요
+        source_type = router_metadata.get('source_type', '')
+
+        if source_type == "websocket_realtime":
+            return "realtime"
+        elif source_type == "websocket_snapshot":
+            return "snapshot"
+        else:
+            return None  # WebSocket이 아니거나 불명확한 경우
+
+    def cleanup(self) -> None:
+        """리소스 정리"""
+        logger.info("SmartDataProvider V4.0 정리 완료")

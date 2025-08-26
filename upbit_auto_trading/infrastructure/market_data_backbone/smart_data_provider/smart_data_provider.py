@@ -9,9 +9,8 @@ Layer 1: 통합 API 인터페이스
 - SmartRouter 호환성
 """
 import time
-import asyncio
 import threading
-from typing import Dict, List, Optional, Union, Any, Callable
+from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -21,6 +20,8 @@ from .market_data_models import DataResponse, Priority, PerformanceMetrics
 from .market_data_manager import MarketDataManager
 from .market_data_cache import MarketDataCache
 from .realtime_data_manager import RealtimeDataManager
+from ..smart_routing.smart_router import SmartRouter
+from ..smart_routing.models import DataRequest, DataType
 
 logger = create_component_logger("SmartDataProvider")
 
@@ -51,6 +52,12 @@ class SmartDataProvider:
         self.max_workers = max_workers
         self.thread_pool = ThreadPoolExecutor(max_workers=max_workers)
 
+        # SmartRouter 통합 (실제 API 통신)
+        self.smart_router = SmartRouter()
+
+        # SmartRouter 사전 초기화 (WebSocket 연결 포함)
+        self._initialize_smart_router()
+
         # 통계 및 모니터링
         self._request_count = 0
         self._start_time = time.time()
@@ -62,6 +69,24 @@ class SmartDataProvider:
 
         logger.info(f"SmartDataProvider V4.0 초기화: max_workers={max_workers}")
         self._log_initialization_complete()
+
+    def _initialize_smart_router(self) -> None:
+        """SmartRouter 사전 초기화 (WebSocket 연결 포함)"""
+        import asyncio
+        try:
+            # 이벤트 루프 확보
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # SmartRouter 비동기 초기화 (WebSocket 연결 포함)
+            loop.run_until_complete(self.smart_router.initialize())
+            logger.info("✅ SmartRouter 사전 초기화 완료 (WebSocket 연결됨)")
+
+        except Exception as e:
+            logger.warning(f"SmartRouter 초기화 중 오류: {e} - 데이터 요청 시 재시도")
 
     def _log_initialization_complete(self) -> None:
         """초기화 완료 로그"""
@@ -121,12 +146,20 @@ class SmartDataProvider:
             response_time_ms = (time.time() - start_time) * 1000
 
             if candle_data:
+                # 캔들 데이터를 Dict 형태로 포장
+                response_data = {
+                    'symbol': symbol,
+                    'candle_type': candle_type,
+                    'count': count,
+                    'candles': candle_data
+                }
+
                 # 캐시 저장
-                self.cache_system.set(cache_key, candle_data, "candles")
+                self.cache_system.set(cache_key, response_data, "candles")
 
                 return DataResponse(
                     success=True,
-                    data=candle_data,
+                    data=response_data,
                     error_message=None,
                     cache_hit=False,
                     response_time_ms=response_time_ms,
@@ -165,19 +198,45 @@ class SmartDataProvider:
 
         if cached_data:
             cache_time_ms = (time.time() - start_time) * 1000
-            return DataResponse(
-                success=True,
+            return DataResponse.create_success(
                 data=cached_data,
-                error_message=None,
                 cache_hit=True,
                 response_time_ms=cache_time_ms,
                 data_source="cache"
             )
 
-        # 실제 데이터 조회 (시뮬레이션)
         try:
-            # 실제 구현에서는 upbit API 호출
-            api_data = self._simulate_api_call(symbol, data_type)
+            # SmartRouter를 통한 실제 API 호출
+            from ..smart_routing.models import RealtimePriority
+
+            data_request = DataRequest(
+                symbols=[symbol],
+                data_type=DataType.TICKER if data_type == "ticker" else DataType.ORDERBOOK,
+                realtime_priority=RealtimePriority.MEDIUM
+            )
+
+            # SmartRouter 비동기 호출을 동기적으로 처리
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            router_response = loop.run_until_complete(self.smart_router.get_data(data_request))
+
+            if router_response.get("success") and router_response.get("data"):
+                api_data = router_response["data"].get(symbol, {})
+                metadata = router_response.get("metadata", {})
+                data_source = metadata.get("channel", "unknown")
+
+                # 스트림 타입 설정 (웹소켓인 경우)
+                if data_source == "websocket":
+                    api_data["stream_type"] = data_type
+            else:
+                # 에러 처리
+                error_msg = router_response.get("error", "SmartRouter 응답 실패")
+                raise Exception(error_msg)
 
             response_time_ms = (time.time() - start_time) * 1000
 
@@ -188,43 +247,25 @@ class SmartDataProvider:
             with self._lock:
                 self._request_count += 1
 
-            return DataResponse(
-                success=True,
+            return DataResponse.create_success(
                 data=api_data,
-                error_message=None,
                 cache_hit=False,
                 response_time_ms=response_time_ms,
-                data_source="api"
+                data_source=data_source,
+                data_type=data_type,
+                data_timestamp=datetime.now()
             )
 
         except Exception as e:
             response_time_ms = (time.time() - start_time) * 1000
             logger.error(f"데이터 조회 오류 ({symbol}, {data_type}): {e}")
 
-            return DataResponse(
-                success=False,
-                data=None,
-                error_message=str(e),
+            return DataResponse.create_error(
+                error=str(e),
                 cache_hit=False,
                 response_time_ms=response_time_ms,
                 data_source="error"
             )
-
-    def _simulate_api_call(self, symbol: str, data_type: str) -> Dict[str, Any]:
-        """API 호출 시뮬레이션 (실제 구현 시 대체 필요)"""
-        # 실제 응답 시간 시뮬레이션 (0.1-0.5초)
-        import random
-        time.sleep(random.uniform(0.001, 0.005))  # 1-5ms 시뮬레이션
-
-        # 시뮬레이션 데이터
-        return {
-            'symbol': symbol,
-            'data_type': data_type,
-            'timestamp': datetime.now().isoformat(),
-            'price': random.uniform(1000, 100000),
-            'volume': random.uniform(1, 1000),
-            'simulated': True
-        }
 
     # =================================================================
     # 다중 심볼 처리 (배치 최적화)
@@ -422,7 +463,7 @@ class SmartDataProvider:
     def subscribe_realtime_data(
         self,
         symbols: List[str],
-        data_types: List[str] = None,
+        data_types: Optional[List[str]] = None,
         callback: Optional[Callable] = None
     ) -> str:
         """실시간 데이터 구독"""
@@ -453,9 +494,6 @@ class SmartDataProvider:
         with self._lock:
             elapsed_time = time.time() - self._start_time
             throughput = self._request_count / elapsed_time if elapsed_time > 0 else 0
-
-            # 캐시 통계
-            cache_stats = self.cache_system.get_comprehensive_stats()
 
             return PerformanceMetrics(
                 total_requests=self._request_count,
@@ -504,5 +542,5 @@ class SmartDataProvider:
             if hasattr(self, 'thread_pool'):
                 self.thread_pool.shutdown(wait=True)
             logger.info("SmartDataProvider V4.0 정리 완료")
-        except:
+        except Exception:
             pass

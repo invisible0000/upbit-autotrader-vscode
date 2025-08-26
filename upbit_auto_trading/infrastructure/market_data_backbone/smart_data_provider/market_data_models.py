@@ -15,7 +15,36 @@ from decimal import Decimal
 
 
 # =====================================
-# 🎯 핵심 API 모델
+# � 데이터 소스 유형 정의
+# =====================================
+
+class DataSourceType(Enum):
+    """데이터 소스 유형"""
+    WEBSOCKET = "websocket"        # 실시간 웹소켓 데이터
+    REST_API = "rest_api"          # REST API 호출
+    CACHE = "cache"                # 캐시된 데이터
+    DATABASE = "database"          # 로컬 DB 데이터
+    HYBRID = "hybrid"              # 혼합 (캐시 + API)
+    SIMULATION = "simulation"      # 시뮬레이션 데이터
+    ERROR = "error"                # 에러 상태
+
+
+class StreamType(Enum):
+    """스트림 유형 (웹소켓 전용)"""
+    TICKER = "ticker"              # 현재가 스트림
+    ORDERBOOK = "orderbook"        # 호가 스트림
+    TRADE = "trade"                # 체결 스트림
+    CANDLE_1M = "candle_1m"        # 1분 캔들 스트림
+    CANDLE_5M = "candle_5m"        # 5분 캔들 스트림
+    CANDLE_15M = "candle_15m"      # 15분 캔들 스트림
+    CANDLE_1H = "candle_1h"        # 1시간 캔들 스트림
+    CANDLE_4H = "candle_4h"        # 4시간 캔들 스트림
+    CANDLE_1D = "candle_1d"        # 일 캔들 스트림
+    UNKNOWN = "unknown"            # 알 수 없는 스트림
+
+
+# =====================================
+# �🎯 핵심 API 모델
 # =====================================
 
 @dataclass
@@ -24,23 +53,51 @@ class DataResponse:
     통합 데이터 응답 모델
 
     모든 API 메서드의 표준 응답 형식
+    - 데이터 소스 유형 명확화
+    - 웹소켓/REST API 구분
+    - 스트림 정보 포함
     """
     success: bool
     data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     cache_hit: bool = False
     response_time_ms: float = 0.0
-    data_source: str = "unknown"
+
+    # 🌐 데이터 소스 정보 (개선됨)
+    data_source: str = "unknown"           # 기존 호환성 유지
+    data_source_type: DataSourceType = DataSourceType.REST_API  # 명확한 타입
+    stream_type: Optional[StreamType] = None  # 웹소켓 스트림 타입
+
+    # 📊 실시간 데이터 메타데이터
+    is_realtime: bool = False              # 실시간 데이터 여부
+    data_timestamp: Optional[datetime] = None  # 데이터 생성 시각
+    server_timestamp: Optional[datetime] = None  # 서버 응답 시각
 
     @classmethod
     def create_success(cls, data: Dict[str, Any], **metadata) -> 'DataResponse':
         """성공 응답 생성"""
+        # 데이터 소스 타입 자동 판단
+        data_source = metadata.get('data_source', 'api')
+        data_source_type = cls._determine_source_type(data_source, metadata)
+        stream_type = cls._determine_stream_type(metadata)
+
+        # 웹소켓 데이터인 경우 stream_type을 data에도 추가
+        if data_source_type == DataSourceType.WEBSOCKET and stream_type:
+            if isinstance(data, dict):
+                data = data.copy()  # 원본 수정 방지
+                data['stream_type'] = stream_type.value
+
         return cls(
             success=True,
             data=data,
             cache_hit=metadata.get('cache_hit', False),
             response_time_ms=metadata.get('response_time_ms', 0.0),
-            data_source=metadata.get('data_source', 'api')
+            data_source=data_source,
+            data_source_type=data_source_type,
+            stream_type=stream_type,
+            is_realtime=data_source_type == DataSourceType.WEBSOCKET,
+            data_timestamp=metadata.get('data_timestamp'),
+            server_timestamp=metadata.get('server_timestamp', datetime.now())
         )
 
     @classmethod
@@ -51,22 +108,121 @@ class DataResponse:
             error_message=error,
             cache_hit=metadata.get('cache_hit', False),
             response_time_ms=metadata.get('response_time_ms', 0.0),
-            data_source=metadata.get('data_source', 'error')
+            data_source=metadata.get('data_source', 'error'),
+            data_source_type=DataSourceType.ERROR,
+            server_timestamp=datetime.now()
         )
+
+    @classmethod
+    def _determine_source_type(cls, data_source: str, metadata: Dict[str, Any]) -> DataSourceType:
+        """데이터 소스 문자열에서 타입 판단"""
+        data_source_lower = data_source.lower()
+
+        if any(keyword in data_source_lower for keyword in ['websocket', 'ws', 'stream', 'realtime']):
+            return DataSourceType.WEBSOCKET
+        elif any(keyword in data_source_lower for keyword in ['cache', 'cached']):
+            return DataSourceType.CACHE
+        elif any(keyword in data_source_lower for keyword in ['database', 'db', 'local']):
+            return DataSourceType.DATABASE
+        elif any(keyword in data_source_lower for keyword in ['simulation', 'sim', 'mock']):
+            return DataSourceType.SIMULATION
+        elif any(keyword in data_source_lower for keyword in ['error', 'fail']):
+            return DataSourceType.ERROR
+        elif any(keyword in data_source_lower for keyword in ['hybrid', 'mixed']):
+            return DataSourceType.HYBRID
+        else:
+            return DataSourceType.REST_API
+
+    @classmethod
+    def _determine_stream_type(cls, metadata: Dict[str, Any]) -> Optional[StreamType]:
+        """메타데이터에서 스트림 타입 판단"""
+        # 명시적 스트림 타입 지정
+        if 'stream_type' in metadata:
+            stream_value = metadata['stream_type']
+            if isinstance(stream_value, StreamType):
+                return stream_value
+            elif isinstance(stream_value, str):
+                try:
+                    return StreamType(stream_value.lower())
+                except ValueError:
+                    return StreamType.UNKNOWN
+
+        # 데이터 타입에서 추론
+        data_type = metadata.get('data_type', '').lower()
+        if data_type:
+            if data_type == 'ticker':
+                return StreamType.TICKER
+            elif data_type == 'orderbook':
+                return StreamType.ORDERBOOK
+            elif data_type == 'trades' or data_type == 'trade':
+                return StreamType.TRADE
+            elif 'candle' in data_type:
+                if '1m' in data_type:
+                    return StreamType.CANDLE_1M
+                elif '5m' in data_type:
+                    return StreamType.CANDLE_5M
+                elif '15m' in data_type:
+                    return StreamType.CANDLE_15M
+                elif '1h' in data_type:
+                    return StreamType.CANDLE_1H
+                elif '4h' in data_type:
+                    return StreamType.CANDLE_4H
+                elif '1d' in data_type:
+                    return StreamType.CANDLE_1D
+
+        return None
 
     def get(self, key: Optional[str] = None) -> Any:
         """키별 데이터 반환 또는 전체 Dict 반환"""
+        if self.data is None:
+            return {} if key else None
         if key:
             return self.data.get(key, {})
         return self.data
 
     def get_single(self, symbol: str) -> Dict[str, Any]:
         """단일 심볼 데이터 반환"""
+        if self.data is None:
+            return {}
         return self.data.get(symbol, {})
 
     def get_all(self) -> Dict[str, Any]:
         """전체 Dict 데이터 반환"""
-        return self.data
+        return self.data if self.data is not None else {}
+
+    def is_websocket_data(self) -> bool:
+        """웹소켓 데이터 여부"""
+        return self.data_source_type == DataSourceType.WEBSOCKET
+
+    def is_cached_data(self) -> bool:
+        """캐시된 데이터 여부"""
+        return self.data_source_type == DataSourceType.CACHE
+
+    def is_api_data(self) -> bool:
+        """REST API 데이터 여부"""
+        return self.data_source_type == DataSourceType.REST_API
+
+    def get_data_age_seconds(self) -> Optional[float]:
+        """데이터 생성 후 경과 시간 (초)"""
+        if self.data_timestamp:
+            return (datetime.now() - self.data_timestamp).total_seconds()
+        return None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """딕셔너리 형태로 변환 (직렬화용)"""
+        return {
+            'success': self.success,
+            'data': self.data,
+            'error_message': self.error_message,
+            'cache_hit': self.cache_hit,
+            'response_time_ms': self.response_time_ms,
+            'data_source': self.data_source,
+            'data_source_type': self.data_source_type.value,
+            'stream_type': self.stream_type.value if self.stream_type else None,
+            'is_realtime': self.is_realtime,
+            'data_timestamp': self.data_timestamp.isoformat() if self.data_timestamp else None,
+            'server_timestamp': self.server_timestamp.isoformat() if self.server_timestamp else None
+        }
 
 
 class Priority(Enum):

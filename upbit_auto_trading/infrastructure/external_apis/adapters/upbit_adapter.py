@@ -253,3 +253,80 @@ class UpbitAdapter(ExchangeAdapter):
         """심볼에서 기준 통화 추출 (예: KRW-BTC → BTC)"""
         parts = symbol.split('-')
         return parts[1] if len(parts) >= 2 else symbol
+
+    # =====================================
+    # 🚀 3단계: REST API 응답 메타데이터 강화
+    # =====================================
+
+    def enhance_response_metadata(self, raw_response: Dict[str, Any], request_start_time: float) -> Dict[str, Any]:
+        """REST API 응답에 상세한 메타데이터 추가"""
+        from datetime import datetime
+        import time
+
+        current_time = time.time()
+        response_metadata = {
+            "source_type": "rest_api",
+            "request_timestamp": datetime.fromtimestamp(request_start_time).isoformat(),
+            "response_timestamp": datetime.now().isoformat(),
+            "network_latency_ms": (current_time - request_start_time) * 1000,
+            "exchange": "upbit",
+            "data_freshness": self._assess_rest_api_freshness(raw_response),
+            "reliability_indicators": self._extract_reliability_indicators(raw_response)
+        }
+
+        return response_metadata
+
+    def _assess_rest_api_freshness(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+        """REST API 데이터의 신선도 평가"""
+        from datetime import datetime
+
+        # 서버 타임스탬프 추출 시도
+        server_timestamp = None
+        if isinstance(raw_response, list) and len(raw_response) > 0:
+            # 티커 데이터의 경우
+            first_item = raw_response[0]
+            if isinstance(first_item, dict):
+                server_timestamp = first_item.get('timestamp')
+        elif isinstance(raw_response, dict):
+            server_timestamp = raw_response.get('timestamp')
+
+        freshness_info = {
+            "estimated_server_delay_ms": 50,  # 업비트 서버 기본 지연
+            "data_type": "rest_api_snapshot"
+        }
+
+        if server_timestamp:
+            # 서버 타임스탬프가 있으면 실제 지연 계산
+            try:
+                if isinstance(server_timestamp, (int, float)):
+                    server_time = datetime.fromtimestamp(server_timestamp / 1000)  # 밀리초 단위
+                    delay_ms = (datetime.now() - server_time).total_seconds() * 1000
+                    freshness_info["actual_delay_ms"] = max(0, delay_ms)
+                    freshness_info["server_timestamp"] = server_time.isoformat()
+            except Exception:
+                pass  # 타임스탬프 파싱 실패시 기본값 사용
+
+        return freshness_info
+
+    def _extract_reliability_indicators(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+        """응답에서 신뢰도 지표 추출"""
+        indicators = {
+            "has_complete_data": True,
+            "data_count": 0,
+            "missing_fields": []
+        }
+
+        if isinstance(raw_response, list):
+            indicators["data_count"] = len(raw_response)
+
+            # 첫 번째 항목에서 필수 필드 확인
+            if len(raw_response) > 0:
+                first_item = raw_response[0]
+                if isinstance(first_item, dict):
+                    required_fields = ['market', 'trade_price']  # 티커 기본 필드
+
+                    missing = [field for field in required_fields if field not in first_item]
+                    indicators["missing_fields"] = missing
+                    indicators["has_complete_data"] = len(missing) == 0
+
+        return indicators

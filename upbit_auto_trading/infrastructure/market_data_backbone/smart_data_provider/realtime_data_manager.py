@@ -19,7 +19,7 @@ from enum import Enum
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .market_data_models import (
-    SubscriptionStatus, DataResponse, Priority, CollectionStatusRecord
+    DataResponse, Priority, CollectionStatusRecord
 )
 
 logger = create_component_logger("RealtimeDataManager")
@@ -426,7 +426,7 @@ class RealtimeDataManager:
         self,
         subscription_id: str,
         symbols: List[str],
-        data_types: List[str] = None,
+        data_types: Optional[List[str]] = None,
         callback: Optional[Callable] = None
     ) -> bool:
         """심볼 구독"""
