@@ -23,6 +23,7 @@ import asyncio
 import json
 import uuid
 import websockets
+import websockets.exceptions
 import time
 import random
 from typing import Dict, List, Optional, Any, Callable, Set
@@ -169,7 +170,67 @@ class UnifiedSubscription:
         self.message_count = 0
 
     def add_subscription_type(self, data_type: str, symbols: List[str], **kwargs):
-        """구독 타입 추가"""
+        """구독 타입 추가 - 업비트 API 형식에 맞게 자동 변환 및 검증"""
+        # 캔들 타입 자동 변환 처리
+        if data_type == "candle":
+            unit = kwargs.get("unit", "1m")  # 기본값 1분봉
+
+            # 업비트 지원 타임프레임 (공식 문서 기준 - 숫자 값 직접 검증)
+            VALID_MINUTE_UNITS = [1, 3, 5, 10, 15, 30, 60, 240]
+            VALID_SECOND_UNITS = [1]  # 업비트는 1초봉만 지원
+
+            SUPPORTED_CANDLE_STRINGS = {
+                # 문자열 형태
+                "1s", "candle.1s",
+                "1m", "3m", "5m", "10m", "15m", "30m", "60m", "240m",
+                "candle.1m", "candle.3m", "candle.5m", "candle.10m",
+                "candle.15m", "candle.30m", "candle.60m", "candle.240m"
+            }            # 변환 로직
+            converted_type = None
+
+            if unit.endswith("m"):
+                # "5m" 형태
+                minute_str = unit[:-1]
+                if minute_str.isdigit():
+                    minute_val = int(minute_str)
+                    if minute_val in VALID_MINUTE_UNITS:
+                        converted_type = f"candle.{minute_val}m"
+
+            elif unit.endswith("s"):
+                # "1s" 형태
+                second_str = unit[:-1]
+                if second_str.isdigit():
+                    second_val = int(second_str)
+                    if second_val in VALID_SECOND_UNITS:
+                        converted_type = f"candle.{second_val}s"
+
+            elif unit.isdigit():
+                # "5" 형태 - 분봉으로 해석
+                unit_val = int(unit)
+                if unit_val == 0:
+                    # 특별 케이스: 0은 가장 짧은 간격인 1초봉으로 매핑
+                    converted_type = "candle.1s"
+                elif unit_val in VALID_MINUTE_UNITS:
+                    converted_type = f"candle.{unit_val}m"
+
+            elif unit.startswith("candle.") and unit in SUPPORTED_CANDLE_STRINGS:
+                # "candle.5m" 형태 - 이미 정확한 형식
+                converted_type = unit
+
+            # 검증 결과 처리
+            if converted_type:
+                data_type = converted_type
+            else:
+                # 지원하지 않는 타임프레임에 대한 에러 처리
+                supported_list = ["1s", "1m", "3m", "5m", "10m", "15m", "30m", "60m", "240m"]
+                raise ValueError(
+                    f"지원하지 않는 캔들 타임프레임: '{unit}'. "
+                    f"지원되는 형식: {supported_list}"
+                )
+
+            # unit 파라미터는 제거 (이미 type에 포함됨)
+            kwargs = {k: v for k, v in kwargs.items() if k != "unit"}
+
         self.types[data_type] = {
             "codes": symbols,
             **kwargs
@@ -471,20 +532,27 @@ class UpbitWebSocketPublicClient:
 
     def get_ticket_statistics(self) -> Dict[str, Any]:
         """티켓 사용 통계 반환"""
-        total_usage = sum(self._ticket_usage_count.values())
-        efficiency = (
-            (total_usage - len(self._shared_tickets)) / max(total_usage, 1) * 100
-            if total_usage > 0 else 0
-        )
+        # 통합 구독 방식 통계
+        unified_tickets = len(self._unified_subscriptions)
+        total_subscriptions = len(self.get_subscriptions())
+
+        # 효율성 계산: 전통적 방식(각 타입마다 1티켓) vs 통합 방식
+        traditional_tickets = max(total_subscriptions, 1)
+        actual_tickets = max(unified_tickets, 1)
+        efficiency = ((traditional_tickets - actual_tickets) / traditional_tickets) * 100 if traditional_tickets > 0 else 0
 
         return {
             "enable_ticket_reuse": self.enable_ticket_reuse,
             "max_tickets": self._max_tickets,
-            "total_tickets": len(self._shared_tickets),
-            "active_tickets": len(self._shared_tickets),
-            "ticket_assignments": {dt.value: ticket[:8] + "..." for dt, ticket in self._shared_tickets.items()},
-            "usage_counts": {ticket[:8] + "...": count for ticket, count in self._ticket_usage_count.items()},
-            "total_usage": total_usage,
+            "total_tickets": unified_tickets,
+            "active_tickets": unified_tickets,
+            "unified_subscriptions": unified_tickets,
+            "traditional_method_tickets": traditional_tickets,
+            "ticket_assignments": {
+                f"unified-{i}": list(sub.types.keys())
+                for i, sub in enumerate(self._unified_subscriptions.values())
+            },
+            "current_ticket": self._current_ticket[:8] + "..." if self._current_ticket else None,
             "reuse_efficiency": efficiency
         }
 
@@ -702,6 +770,96 @@ class UpbitWebSocketPublicClient:
         # 기본값
         return WebSocketDataType.TICKER
 
+    def _infer_stream_type(self, data: Dict[str, Any]) -> Optional[StreamType]:
+        """스트림 타입 추론 - 업비트 API stream_type 필드 직접 파싱"""
+        # 업비트 공식 API 응답에서 stream_type 필드 추출
+        stream_type_value = data.get("stream_type")
+
+        if stream_type_value == "SNAPSHOT":
+            return StreamType.SNAPSHOT
+        elif stream_type_value == "REALTIME":
+            return StreamType.REALTIME
+
+        # stream_type 필드가 없는 경우 (매우 드문 상황)
+        if stream_type_value is None:
+            # 실제 데이터인지 확인
+            has_price_data = data.get("trade_price") is not None
+            if has_price_data:
+                self.logger.debug(f"stream_type 없지만 유효한 데이터: {data.get('type', 'unknown')} - SNAPSHOT으로 처리")
+                return StreamType.SNAPSHOT  # 유효한 데이터면 스냅샷으로 처리
+            else:
+                # 메시지 내용을 더 자세히 로깅
+                msg_summary = {}
+                for key in ["type", "status", "error", "market", "code"]:
+                    if key in data:
+                        msg_summary[key] = data[key]
+
+                self.logger.debug(f"stream_type 없는 비데이터 메시지: {msg_summary} (전체 필드: {list(data.keys())})")
+                return None
+
+        # 예상치 못한 값인 경우만 경고
+        self.logger.warning(f"⚠️ 인식할 수 없는 stream_type: {stream_type_value}")
+        return None
+
+    def _is_error_message(self, data: Dict[str, Any]) -> bool:
+        """업비트 WebSocket 에러 메시지 감지"""
+        # 업비트 에러 메시지 구조: {"error": {"message": "...", "name": "..."}}
+        return "error" in data and isinstance(data.get("error"), dict)
+
+    async def _handle_error_message(self, data: Dict[str, Any], raw_message: str) -> None:
+        """업비트 WebSocket 에러 메시지 처리"""
+        try:
+            error_info = data.get("error", {})
+            error_name = error_info.get("name", "UNKNOWN_ERROR")
+            error_message = error_info.get("message", "알 수 없는 오류")
+
+            self.logger.error(f"🚨 업비트 WebSocket 에러: {error_name} - {error_message}")
+            self.logger.debug(f"   원본 메시지: {raw_message}")
+
+            # 에러 통계 업데이트
+            self._stats['errors_count'] += 1
+
+            # 특정 에러 유형별 처리
+            if error_name == "INVALID_PARAM":
+                await self._handle_invalid_param_error(error_message, data)
+            elif error_name == "TOO_MANY_SUBSCRIBE":
+                await self._handle_too_many_subscribe_error(error_message, data)
+            elif error_name == "AUTHENTICATION_ERROR":
+                await self._handle_authentication_error(error_message, data)
+            else:
+                self.logger.warning(f"   처리되지 않은 에러 유형: {error_name}")
+
+        except Exception as e:
+            self.logger.error(f"❌ 에러 메시지 처리 중 예외: {e}")
+
+    async def _handle_invalid_param_error(self, message: str, data: Dict[str, Any]) -> None:
+        """INVALID_PARAM 에러 처리 (잘못된 구독 파라미터)"""
+        self.logger.warning(f"🔧 잘못된 파라미터 감지: {message}")
+
+        # 캔들 타입 관련 에러인지 확인
+        if "지원하지 않는 타입" in message or "candle" in message.lower():
+            self.logger.info("   → 캔들 타입 오류로 판단, 구독 정리 시도")
+            # 현재 구독 정보를 로깅
+            current_subs = self.get_subscriptions()
+            self.logger.debug(f"   현재 구독: {current_subs}")
+
+            # 필요시 재구독 로직 추가 가능
+            # await self._attempt_resubscribe_with_valid_params()
+
+    async def _handle_too_many_subscribe_error(self, message: str, data: Dict[str, Any]) -> None:
+        """TOO_MANY_SUBSCRIBE 에러 처리 (구독 수 초과)"""
+        self.logger.warning(f"📊 구독 수 초과: {message}")
+        self.logger.info(f"   현재 활성 티켓: {len(self._unified_subscriptions)}개")
+
+        # 구독 최적화 제안
+        if len(self._unified_subscriptions) > self._max_tickets:
+            self.logger.info("   → 통합 구독 방식으로 티켓 수 최적화 권장")
+
+    async def _handle_authentication_error(self, message: str, data: Dict[str, Any]) -> None:
+        """인증 에러 처리"""
+        self.logger.error(f"🔐 인증 오류: {message}")
+        self.logger.warning("   → WebSocket 연결 상태 확인 필요")
+
     # ================================================================
     # 메시지 루프 관리
     # ================================================================
@@ -751,8 +909,16 @@ class UpbitWebSocketPublicClient:
 
                 data = json.loads(raw_message)
 
+                # 🚨 업비트 에러 메시지 우선 처리
+                if self._is_error_message(data):
+                    await self._handle_error_message(data, raw_message)
+                    continue
+
                 # 메시지 타입 추론
                 message_type = self._infer_message_type(data)
+
+                # 🔧 스트림 타입 추론 추가
+                stream_type = self._infer_stream_type(data)
 
                 # WebSocketMessage 생성
                 message = WebSocketMessage(
@@ -760,7 +926,8 @@ class UpbitWebSocketPublicClient:
                     market=data.get("market", data.get("code", "unknown")),
                     data=data,
                     timestamp=datetime.now(),
-                    raw_data=raw_message
+                    raw_data=raw_message,
+                    stream_type=stream_type  # 🔧 스트림 타입 설정
                 )
 
                 # 메시지 처리
@@ -770,14 +937,27 @@ class UpbitWebSocketPublicClient:
                 continue
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                self.logger.error(f"❌ 메시지 수신 오류: {e}")
-                self._errors_count += 1
-
-                if self.auto_reconnect:
-                    await self._attempt_reconnect()
+            except websockets.exceptions.ConnectionClosed as e:
+                # WebSocket 정상 종료 확인
+                if e.code == 1000:
+                    self.logger.debug("🔌 WebSocket 정상 종료 (코드 1000)")
                 else:
+                    self.logger.warning(f"🔌 WebSocket 연결 종료 (코드 {e.code}): {e.reason}")
+                break
+            except Exception as e:
+                # 기타 WebSocket 종료 관련 메시지 감지
+                error_msg = str(e).lower()
+                if "received 1000" in error_msg or "sent 1000" in error_msg:
+                    self.logger.debug("🔌 WebSocket 정상 종료 감지")
                     break
+                else:
+                    self.logger.error(f"❌ 메시지 수신 오류: {e}")
+                    self._stats['errors_count'] += 1
+
+                    if self.auto_reconnect:
+                        await self._attempt_reconnect()
+                    else:
+                        break
 
     # ================================================================
     # ================================================================

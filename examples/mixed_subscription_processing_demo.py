@@ -263,12 +263,9 @@ async def main():
     # 3. 티켓 최적화 비교
     await demo_ticket_optimization_comparison()
 
-    # 4. 실시간 테스트 (선택사항)
-    user_input = input("\n❓ 실시간 혼합 구독 테스트를 실행하시겠습니까? (y/N): ")
-    if user_input.lower() in ['y', 'yes']:
-        await demo_realtime_mixed_subscription()
-    else:
-        print("⏭️  실시간 테스트 건너뛰기")
+    # 4. 실시간 테스트 자동 실행
+    print("\n🚀 실시간 혼합 구독 테스트 자동 실행")
+    await demo_realtime_mixed_subscription()
 
     print("\n🎉 모든 데모 완료!")
     print("\n💡 핵심 요약:")
