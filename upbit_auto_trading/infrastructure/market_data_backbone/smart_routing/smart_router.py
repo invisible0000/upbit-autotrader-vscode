@@ -154,7 +154,7 @@ class SmartRouter:
             raise RuntimeError(f"REST 클라이언트 초기화 필수: {e}")
 
     async def _init_websocket_client(self) -> None:
-        """WebSocket 클라이언트 및 구독 매니저 지능적 초기화"""
+        """WebSocket 클라이언트 및 구독 매니저 지능적 초기화 (연결 안정성 개선)"""
         if self.websocket_client is not None:
             return
 
@@ -163,9 +163,14 @@ class SmartRouter:
                 UpbitWebSocketPublicClient
             )
 
-            # WebSocket 클라이언트 생성
-            self.websocket_client = UpbitWebSocketPublicClient()
-            logger.info("WebSocket 클라이언트 생성 완료")
+            # WebSocket 클라이언트 생성 - 지속적 연결 모드 활성화
+            self.websocket_client = UpbitWebSocketPublicClient(
+                persistent_connection=True,  # 지속적 연결 유지
+                auto_reconnect=True,
+                max_reconnect_attempts=10,
+                reconnect_delay=2.0
+            )
+            logger.info("WebSocket 클라이언트 생성 완료 (지속적 연결 모드)")
 
             # WebSocket 연결 시도
             try:
