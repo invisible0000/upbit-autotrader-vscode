@@ -136,7 +136,7 @@ class ChannelSelector:
         """WebSocket 연결 상태 업데이트"""
         self.websocket_status["connected"] = connected
         self.websocket_status["uptime"] = uptime
-        logger.debug(f"WebSocket 상태 업데이트 - 연결: {connected}, 업타임: {uptime:.2f}")
+        # DEBUG 로그 제거: WebSocket 상태 업데이트
 
     def record_websocket_error(self) -> None:
         """WebSocket 에러 기록"""
@@ -163,7 +163,7 @@ class ChannelSelector:
         failed = self.websocket_status["failed_requests"]
         self.websocket_status["error_rate"] = failed / total if total > 0 else 0.0
 
-        logger.debug(f"WebSocket 성공 기록 - 총 요청: {total}, 에러율: {self.websocket_status['error_rate']:.1%}")
+        # DEBUG 로그 제거: WebSocket 성공 기록
 
     def select_channel(self, request: DataRequest) -> ChannelDecision:
         """요청에 대한 최적 채널 결정
@@ -283,7 +283,7 @@ class ChannelSelector:
 
         confidence = scores[selected] / (ws_score + rest_score) if (ws_score + rest_score) > 0 else 0.5
 
-        logger.debug(f"스마트 선택 결과 - 채널: {selected.value}, WS점수: {ws_score:.2f}, REST점수: {rest_score:.2f}")
+        # DEBUG 로그 제거: 스마트 선택 결과 정보
 
         return ChannelDecision(
             channel=selected,
@@ -495,7 +495,7 @@ class ChannelSelector:
             self.rate_limits[channel]["current"] = total_usage
             self.rate_limits[channel]["last_updated"] = current_time
 
-            logger.debug(f"Rate Limit 업데이트 - {channel}: {total_usage}/{self.rate_limits[channel]['limit']}")
+            # DEBUG 로그 제거: Rate Limit 업데이트 정보
 
     def get_performance_summary(self) -> Dict[str, Any]:
         """성능 요약 조회"""

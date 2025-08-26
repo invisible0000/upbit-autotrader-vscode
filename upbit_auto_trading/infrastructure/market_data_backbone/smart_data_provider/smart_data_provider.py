@@ -107,6 +107,93 @@ class SmartDataProvider:
         """단일 심볼 티커 조회 (SmartRouter 호환)"""
         return self._get_single_data(symbol, "ticker", priority)
 
+    def invalidate_cache(self, symbol: Optional[str] = None, data_type: Optional[str] = None) -> None:
+        """캐시 무효화
+
+        Args:
+            symbol: 특정 심볼 캐시만 무효화 (None이면 모든 심볼)
+            data_type: 특정 데이터 타입만 무효화 (None이면 모든 타입)
+        """
+        if symbol and data_type:
+            # 특정 심볼의 특정 데이터 타입만 무효화
+            cache_key = f"{data_type}_{symbol}"
+            # FastCache는 delete 메서드가 없으므로 직접 삭제
+            if hasattr(self.cache_system.fast_cache, '_cache'):
+                with self.cache_system.fast_cache._lock:
+                    self.cache_system.fast_cache._cache.pop(cache_key, None)
+                    self.cache_system.fast_cache._timestamps.pop(cache_key, None)
+            logger.info(f"캐시 무효화: {cache_key}")
+        elif symbol:
+            # 특정 심볼의 모든 데이터 타입 무효화
+            data_types = ["ticker", "orderbook", "trades"]
+            for dt in data_types:
+                cache_key = f"{dt}_{symbol}"
+                if hasattr(self.cache_system.fast_cache, '_cache'):
+                    with self.cache_system.fast_cache._lock:
+                        self.cache_system.fast_cache._cache.pop(cache_key, None)
+                        self.cache_system.fast_cache._timestamps.pop(cache_key, None)
+            logger.info(f"심볼 {symbol}의 모든 캐시 무효화")
+        else:
+            # 전체 캐시 무효화
+            self.cache_system.fast_cache.clear()
+            logger.info("전체 캐시 무효화")
+
+    def _get_from_memory_cache_only(self, cache_key: str) -> Optional[dict]:
+        """메모리 캐시에서만 조회 (DB 조회 안함)
+
+        실시간 데이터(티커/호가/체결)는 메모리 캐시만 확인
+        """
+        # FastCache 먼저 확인 (가장 빠름)
+        cached_data = self.cache_system.fast_cache.get(cache_key)
+        if cached_data:
+            return cached_data
+
+        # MemoryRealtimeCache 확인
+        if hasattr(self.cache_system, 'memory_cache'):
+            cached_data = self.cache_system.memory_cache.get(cache_key)
+            if cached_data:
+                return cached_data
+
+        return None
+
+    def _store_in_memory_cache_only(self, cache_key: str, data: dict, data_type: str) -> None:
+        """메모리 캐시에만 저장 (DB 저장 안함)
+
+        실시간 데이터(티커/호가/체결)는 메모리 캐시만 사용
+        """
+        # FastCache에 저장 (200ms TTL)
+        self.cache_system.fast_cache.set(cache_key, data)
+
+        # MemoryRealtimeCache에 저장 (60초 TTL)
+        if hasattr(self.cache_system, 'memory_cache'):
+            ttl = 60.0 if data_type == "ticker" else 30.0  # 티커는 60초, 나머지는 30초
+            self.cache_system.memory_cache.set(cache_key, data, ttl)
+
+    def validate_data_integrity(self, data: dict, data_type: str) -> bool:
+        """데이터 무결성 검증
+
+        Args:
+            data: 검증할 데이터
+            data_type: 데이터 타입
+
+        Returns:
+            데이터가 유효한지 여부
+        """
+        if not isinstance(data, dict):
+            return False
+
+        if data_type == "ticker":
+            required_fields = ["market", "trade_price", "timestamp"]
+            return all(field in data for field in required_fields)
+        elif data_type == "orderbook":
+            required_fields = ["market", "orderbook_units"]
+            return all(field in data for field in required_fields)
+        elif data_type == "trades":
+            required_fields = ["market", "trade_price", "trade_volume"]
+            return all(field in data for field in required_fields)
+
+        return True  # 기타 데이터 타입은 기본적으로 유효하다고 가정
+
     def get_orderbook(self, symbol: str, priority: Priority = Priority.NORMAL) -> DataResponse:
         """단일 심볼 호가 조회"""
         return self._get_single_data(symbol, "orderbook", priority)
@@ -192,9 +279,16 @@ class SmartDataProvider:
         """단일 심볼 데이터 조회 (공통 로직)"""
         cache_key = f"{data_type}_{symbol}"
 
-        # 캐시 확인
+        # 🔧 데이터 타입별 캐시 조회 전략
         start_time = time.time()
-        cached_data = self.cache_system.get(cache_key, data_type)
+        cached_data = None
+
+        if data_type in ["ticker", "orderbook", "trades"]:
+            # 실시간 데이터는 메모리 캐시만 확인
+            cached_data = self._get_from_memory_cache_only(cache_key)
+        else:
+            # 캔들 데이터는 통합 캐시 확인 (DB + 메모리)
+            cached_data = self.cache_system.get(cache_key, data_type)
 
         if cached_data:
             cache_time_ms = (time.time() - start_time) * 1000
@@ -225,23 +319,59 @@ class SmartDataProvider:
 
             router_response = loop.run_until_complete(self.smart_router.get_data(data_request))
 
-            if router_response.get("success") and router_response.get("data"):
-                api_data = router_response["data"].get(symbol, {})
-                metadata = router_response.get("metadata", {})
-                data_source = metadata.get("channel", "unknown")
-
-                # 스트림 타입 설정 (웹소켓인 경우)
-                if data_source == "websocket":
-                    api_data["stream_type"] = data_type
-            else:
-                # 에러 처리
-                error_msg = router_response.get("error", "SmartRouter 응답 실패")
+            # 🔧 SmartRouter 응답 구조 검증 및 데이터 추출
+            if not router_response.get("success"):
+                error_msg = router_response.get("error", "SmartRouter 요청 실패")
                 raise Exception(error_msg)
+
+            # SmartRouter의 "data" 필드가 완전한 티커 데이터를 포함
+            # 심볼별 분리 구조가 아닌 직접 데이터 구조
+            router_data = router_response.get("data")
+            if not router_data:
+                raise Exception("SmartRouter에서 데이터를 반환하지 않음")
+
+            # 단일 심볼 요청의 경우 router_data가 직접 티커 데이터
+            # 다중 심볼의 경우 {symbol: data} 구조일 수 있음
+            if isinstance(router_data, dict):
+                # market 필드가 있으면 직접 티커 데이터
+                if 'market' in router_data or 'trade_price' in router_data:
+                    api_data = router_data
+                # 심볼을 키로 하는 구조인지 확인
+                elif symbol in router_data:
+                    api_data = router_data[symbol]
+                else:
+                    # 예상치 못한 구조 - 전체 데이터 사용
+                    logger.warning(f"예상치 못한 SmartRouter 데이터 구조: {list(router_data.keys())}")
+                    api_data = router_data
+            else:
+                api_data = router_data
+
+            # 메타데이터에서 데이터 소스 정보 추출
+            metadata = router_response.get("metadata", {})
+            data_source = metadata.get("channel", "unknown")
+
+            # 🔧 데이터 무결성 검증
+            if not self.validate_data_integrity(api_data, data_type):
+                logger.error(f"데이터 무결성 검증 실패 - symbol: {symbol}, data_type: {data_type}")
+                logger.error(f"유효하지 않은 데이터: {api_data}")
+                raise Exception(f"데이터 무결성 검증 실패: {data_type} 데이터가 필수 필드를 포함하지 않음")
 
             response_time_ms = (time.time() - start_time) * 1000
 
-            # 캐시 저장
-            self.cache_system.set(cache_key, api_data, data_type)
+            # 🔧 데이터 타입별 캐시 전략 적용
+            # 티커/호가/체결: 메모리 캐시만 사용 (DB 저장 안함)
+            # 캔들: DB + 메모리 캐시 사용 (데이터 원천)
+            try:
+                if data_type in ["ticker", "orderbook", "trades"]:
+                    # 실시간 데이터는 메모리 캐시만 사용
+                    self._store_in_memory_cache_only(cache_key, api_data, data_type)
+                    logger.debug(f"메모리 캐시 저장 성공: {cache_key} ({data_type})")
+                else:
+                    # 캔들 데이터는 DB + 메모리 캐시 모두 사용
+                    self.cache_system.set(cache_key, api_data, data_type)
+                    logger.debug(f"DB+메모리 캐시 저장 성공: {cache_key} ({data_type})")
+            except Exception as cache_error:
+                logger.warning(f"캐시 저장 실패: {cache_error} - 데이터는 반환됨")
 
             # 통계 업데이트
             with self._lock:

@@ -124,8 +124,14 @@ class SmartDataProvider:
             if result.get('success', False):
                 self._api_calls += 1
 
+                # 디버깅: SmartRouter 응답 구조 확인
+                logger.debug("SmartRouter 응답:")
+                logger.debug(f"  - result 키들: {list(result.keys())}")
+                logger.debug(f"  - result 내용: {result}")
+
                 # 캐시 저장
                 data = result.get('data', {})
+                logger.debug(f"캐시에 저장할 데이터: {data}")
                 self.cache.set(cache_key, data)
 
                 # 🚀 SmartRouter 응답에서 데이터 소스 정보 추출

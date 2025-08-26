@@ -841,10 +841,30 @@ class SmartRouter:
 
     def _unify_response_data(self, raw_data: Dict[str, Any], data_type: DataType, source: ChannelType) -> Dict[str, Any]:
         """응답 데이터 형식 통일"""
+        logger.debug("_unify_response_data 호출:")
+        logger.debug(f"  - data_type: {data_type}")
+        logger.debug(f"  - source: {source}")
+        logger.debug(f"  - raw_data 키들: {list(raw_data.keys())}")
+
+        # WebSocket 응답은 이미 _format_websocket_response에서 DataFormatUnifier로 처리됨
+        # 이중 처리를 방지하기 위해 WebSocket 응답은 data 필드만 추출
+        if source == ChannelType.WEBSOCKET and "data" in raw_data:
+            logger.debug("WebSocket 응답 - 이미 처리된 data 필드 반환 (이중 처리 방지)")
+            result = raw_data["data"]
+            logger.debug(f"WebSocket _unify_response_data 결과: {str(result)[:10]}...")
+            return result
+
+        # REST API 응답은 DataFormatUnifier로 처리
         if "data" in raw_data:
-            return self.data_unifier.unify_data(raw_data["data"], data_type, source)
+            logger.debug("REST API raw_data['data']를 DataFormatUnifier로 처리")
+            result = self.data_unifier.unify_data(raw_data["data"], data_type, source)
+            logger.debug(f"REST API _unify_response_data 결과: {result}")
+            return result
         else:
-            return self.data_unifier.unify_data(raw_data, data_type, source)
+            logger.debug("raw_data 전체를 DataFormatUnifier로 처리")
+            result = self.data_unifier.unify_data(raw_data, data_type, source)
+            logger.debug(f"_unify_response_data 결과: {result}")
+            return result
 
     def _format_symbols_for_log(self, symbols: List[str], max_display: int = 3) -> str:
         """로그용 심볼 표시 제한 (처음 3개 + ... + 마지막 3개)"""
@@ -1019,6 +1039,15 @@ class SmartRouter:
 
     def _create_websocket_data_with_stream_type(self, message) -> Dict[str, Any]:
         """WebSocket 메시지에서 스트림 타입 정보를 포함한 데이터 생성"""
+        # 디버깅: 메시지 구조 확인
+        logger.debug("WebSocket 메시지 구조 분석:")
+        logger.debug(f"  - message.type: {message.type}")
+        logger.debug(f"  - message.market: {message.market}")
+        logger.debug(f"  - message.data 타입: {type(message.data)}")
+        logger.debug(f"  - message.data 내용: {str(message.data)[:10]}...")
+        keys_str = str(list(message.data.keys()) if isinstance(message.data, dict) else 'N/A')
+        logger.debug(f"  - message.data 키들: {keys_str[:10]}...")
+
         # 메시지의 데이터를 기본으로 하되, 스트림 타입 정보 추가
         data = message.data.copy() if isinstance(message.data, dict) else {"raw_data": message.data}
 
@@ -1039,6 +1068,7 @@ class SmartRouter:
             "has_stream_type": hasattr(message, 'stream_type') and message.stream_type is not None
         }
 
+        logger.debug(f"최종 생성된 데이터: {str(data)[:10]}...")
         return data
 
     def _format_websocket_response(self, data: Dict[str, Any], request: DataRequest) -> Dict[str, Any]:

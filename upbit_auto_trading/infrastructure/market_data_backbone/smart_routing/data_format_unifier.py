@@ -66,8 +66,16 @@ class DataFormatUnifier:
                    source: ChannelType) -> Dict[str, Any]:
         """데이터 타입에 따른 자동 형식 통일"""
         try:
+            logger.debug("DataFormatUnifier.unify_data 호출:")
+            logger.debug(f"  - data_type: {data_type}")
+            logger.debug(f"  - source: {source}")
+            logger.debug(f"  - data 키들: {str(list(data.keys()) if isinstance(data, dict) else 'N/A')[:10]}...")
+            logger.debug(f"  - data 내용: {str(data)[:10]}...")
+
             if data_type == DataType.TICKER:
-                return self.unify_ticker_data(data, source)
+                result = self.unify_ticker_data(data, source)
+                logger.debug(f"unify_ticker_data 결과: {str(result)[:10]}...")
+                return result
             elif data_type == DataType.ORDERBOOK:
                 return self.unify_orderbook_data(data, source)
             elif data_type == DataType.TRADES:
@@ -205,6 +213,11 @@ class DataFormatUnifier:
         """
         start_time = time.time()
 
+        logger.debug("unify_ticker_data 호출:")
+        logger.debug(f"  - data 타입: {type(data)}")
+        logger.debug(f"  - source: {source}")
+        logger.debug(f"  - data 내용: {str(data)[:10]}...")
+
         try:
             # Dict 통일 정책: 모든 반환값은 Dict
             if isinstance(data, list):
@@ -212,12 +225,21 @@ class DataFormatUnifier:
                     return self._create_fast_empty_response(source, start_time)
 
                 # 다중 데이터 처리 - 성능 최적화
-                return self._process_ticker_list(data, source, start_time)
+                result = self._process_ticker_list(data, source, start_time)
+                logger.debug(f"_process_ticker_list 결과: {result}")
+                return result
             else:
                 # 단일 데이터 처리
-                result = self._fast_convert_websocket_ticker_to_rest(data)
-                result.update(self._add_source_metadata_fast(result, source, start_time))
-                return result
+                logger.debug("단일 데이터 처리 중...")
+                converted_result = self._fast_convert_websocket_ticker_to_rest(data)
+                logger.debug(f"_fast_convert_websocket_ticker_to_rest 결과: {str(converted_result)[:10]}...")
+
+                metadata = self._add_source_metadata_fast(converted_result, source, start_time)
+                logger.debug(f"_add_source_metadata_fast 결과: {str(metadata)[:10]}...")
+
+                converted_result.update(metadata)
+                logger.debug(f"최종 결과: {str(converted_result)[:10]}...")
+                return converted_result
 
         except Exception as e:
             logger.error(f"티커 데이터 형식 통일 실패: {e}")
