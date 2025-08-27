@@ -12,7 +12,9 @@ import json
 
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_public_client import (
     UpbitWebSocketPublicClient,
-    WebSocketDataType,
+    WebSocketDataType
+)
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_subscription_manager import (
     UnifiedSubscription
 )
 
@@ -127,11 +129,24 @@ async def demo_realtime_mixed_subscription():
         print(f"   티켓 효율성: {stats['reuse_efficiency']:.1f}%")
 
         # 구독 정보 확인
-        subscriptions = client.get_subscriptions()
-        print(f"\n📊 구독된 타입: {len(subscriptions)}개")
-        for data_type, info in subscriptions.items():
-            symbol_count = len(info.get('symbols', []))
-            print(f"   {data_type}: {symbol_count}개 심볼")
+        try:
+            subscription_info = client.get_subscriptions()
+            active_subs = client.get_active_subscriptions()
+
+            print(f"\n📊 구독된 타입: {len(active_subs)}개")
+            for data_type, info in active_subs.items():
+                if isinstance(info, dict):
+                    symbols = info.get('symbols', [])
+                    symbol_count = len(symbols) if isinstance(symbols, (list, tuple)) else 0
+                    print(f"   {data_type}: {symbol_count}개 심볼")
+
+            # 티켓 정보도 표시
+            total_tickets = subscription_info.get('total_tickets', 0)
+            print(f"   총 티켓 수: {total_tickets}개")
+
+        except Exception as e:
+            print(f"⚠️ 구독 정보 조회 중 오류: {e}")
+            print("   기본 통계로 대체합니다.")
 
         # 10초 동안 메시지 수신
         print("\n⏱️  10초 동안 혼합 메시지 수신 중...")
