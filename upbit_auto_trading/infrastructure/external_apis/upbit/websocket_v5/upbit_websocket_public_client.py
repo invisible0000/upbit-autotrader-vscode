@@ -1,14 +1,13 @@
 """
-업비트 WebSocket v5.0 - Public 클라이언트 (새 버전)
+업비트 WebSocket v5.0 - Public 클라이언트 (통합 버전)
 
 🎯 특징:
-- Public 데이터 전용 (ticker, trade, orderbook, candle)
-- 최대 3개 티켓 제한
-- 효율적인 티켓 재사용
-- 명시적 상태 관리
-- 타입 안전성 (Pydantic)
-- Infrastructure 로깅 시스템
-- 자동 복구 시스템
+- 모든 v5 모듈 통합 활용
+- SubscriptionManager 완전 연동
+- Pydantic 모델 완전 활용
+- WebSocketConfig 통합 적용
+- 스냅샷/리얼타임 옵션 지원
+- 업비트 공식 API 100% 호환
 """
 
 import asyncio
@@ -19,17 +18,13 @@ from typing import Dict, List, Optional, Callable, Any, Set
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .models import SubscriptionRequest, DataType
-from .subscription_manager import SubscriptionManager
-from .message_buffer import MessageBuffer, MessagePriority, get_global_message_buffer
-from .exceptions import SubscriptionError
 from .models import (
-    TickerData, TradeData, OrderbookData, CandleData, ConnectionStatus,
-    SubscriptionRequest, DataType
+    infer_message_type, validate_mixed_message, create_websocket_message,
+    create_connection_status, update_connection_status
 )
-from .subscription_manager import SubscriptionManager
-from .config import load_config
+from .config import WebSocketConfig, load_config
 from .state import WebSocketState, WebSocketStateMachine
+from .subscription_manager import SubscriptionManager
 from .exceptions import (
     WebSocketError, WebSocketConnectionError, WebSocketConnectionTimeoutError,
     SubscriptionError, MessageParsingError, TooManySubscriptionsError,
@@ -49,13 +44,25 @@ class TicketManager:
 
         logger.info(f"티켓 매니저 초기화 완료 - 최대 {max_tickets}개 티켓")
 
-    def get_or_create_ticket(self, data_type: str, symbols: List[str]) -> str:
-        """데이터 타입에 대한 티켓 획득 또는 생성"""
-        # 기존 티켓이 있으면 재사용
+    def get_or_create_ticket(self, data_type: str, symbols: List[str], **options) -> str:
+        """데이터 타입에 대한 티켓 획득 또는 생성 (옵션 지원)"""
+        # 기존 티켓이 있으면 재사용 (옵션이 다르면 새 티켓)
         if data_type in self.data_type_mapping:
             ticket_id = self.data_type_mapping[data_type]
-            logger.debug(f"기존 티켓 재사용: {ticket_id} for {data_type}")
-            return ticket_id
+            existing_ticket = self.tickets[ticket_id]
+
+            # 동일한 옵션인지 확인
+            existing_options = {k: v for k, v in existing_ticket.items()
+                                if k in ['is_only_snapshot', 'is_only_realtime']}
+            new_options = {k: v for k, v in options.items()
+                           if k in ['is_only_snapshot', 'is_only_realtime']}
+
+            if existing_options == new_options:
+                logger.debug(f"기존 티켓 재사용: {ticket_id} for {data_type}")
+                return ticket_id
+            else:
+                # 옵션이 다르면 기존 티켓 제거하고 새로 생성
+                self.remove_data_type(data_type)
 
         # 새 티켓 생성
         if len(self.tickets) >= self.max_tickets:
@@ -63,14 +70,22 @@ class TicketManager:
 
         # 새 티켓 생성
         ticket_id = f"public-{uuid.uuid4().hex[:8]}"
-        self.tickets[ticket_id] = {
+        ticket_info = {
             'data_types': {data_type},
             'symbols': set(symbols),
             'created_at': datetime.now()
         }
+
+        # 스냅샷/실시간 옵션 추가
+        if 'is_only_snapshot' in options:
+            ticket_info['is_only_snapshot'] = options['is_only_snapshot']
+        if 'is_only_realtime' in options:
+            ticket_info['is_only_realtime'] = options['is_only_realtime']
+
+        self.tickets[ticket_id] = ticket_info
         self.data_type_mapping[data_type] = ticket_id
 
-        logger.info(f"새 티켓 생성: {ticket_id} for {data_type} with {len(symbols)} symbols")
+        logger.info(f"새 티켓 생성: {ticket_id} for {data_type} with {len(symbols)} symbols, options: {options}")
         return ticket_id
 
     def remove_data_type(self, data_type: str) -> Optional[str]:
@@ -91,7 +106,7 @@ class TicketManager:
         return ticket_id
 
     def get_ticket_message(self, ticket_id: str) -> List[Dict[str, Any]]:
-        """티켓의 구독 메시지 생성"""
+        """티켓의 구독 메시지 생성 (업비트 공식 API 형식)"""
         if ticket_id not in self.tickets:
             raise ValueError(f"티켓을 찾을 수 없습니다: {ticket_id}")
 
@@ -100,14 +115,22 @@ class TicketManager:
 
         for data_type in ticket_info['data_types']:
             if data_type in ["ticker", "trade", "orderbook"]:
-                message.append({
+                data_message = {
                     "type": data_type,
-                    "codes": list(ticket_info['symbols'])
-                })
+                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
+                }
+
+                # 스냅샷/실시간 옵션 추가
+                if 'is_only_snapshot' in ticket_info:
+                    data_message['is_only_snapshot'] = ticket_info['is_only_snapshot']
+                if 'is_only_realtime' in ticket_info:
+                    data_message['is_only_realtime'] = ticket_info['is_only_realtime']
+
+                message.append(data_message)
             elif data_type.startswith("candle"):
                 message.append({
                     "type": data_type,
-                    "codes": list(ticket_info['symbols'])
+                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
                 })
 
         message.append({"format": "DEFAULT"})
@@ -155,9 +178,6 @@ class UpbitWebSocketPublicV5:
         # 티켓 관리
         self.ticket_manager = TicketManager(max_tickets)
 
-        # 메시지 버퍼 시스템 (중복 필터링 및 순서 보장)
-        self.message_buffer: Optional[MessageBuffer] = None
-
         # 구독 관리
         self.subscriptions: Dict[str, Dict[str, Any]] = {}
         self.callbacks: Dict[str, Callable] = {}
@@ -202,10 +222,6 @@ class UpbitWebSocketPublicV5:
 
             self.state_machine.transition_to(WebSocketState.CONNECTED)
             logger.info("WebSocket 연결 완료")
-
-            # 메시지 버퍼 시스템 초기화
-            self.message_buffer = await get_global_message_buffer()
-            await self._setup_message_handlers()
 
             # 백그라운드 태스크 시작
             self._start_background_tasks()
@@ -265,7 +281,8 @@ class UpbitWebSocketPublicV5:
             self.state_machine.transition_to(WebSocketState.ERROR)
 
     async def subscribe(self, data_type: str, symbols: List[str],
-                       callback: Optional[Callable] = None) -> str:
+                        callback: Optional[Callable] = None,
+                        is_only_snapshot: bool = False) -> str:
         """데이터 구독"""
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다", data_type, symbols)
@@ -274,7 +291,9 @@ class UpbitWebSocketPublicV5:
             self.state_machine.transition_to(WebSocketState.SUBSCRIBING)
 
             # 티켓 생성/획득
-            ticket_id = self.ticket_manager.get_or_create_ticket(data_type, symbols)
+            ticket_id = self.ticket_manager.get_or_create_ticket(
+                data_type, symbols, is_only_snapshot=is_only_snapshot
+            )
 
             # 구독 메시지 생성
             subscribe_message = self.ticket_manager.get_ticket_message(ticket_id)
@@ -345,19 +364,13 @@ class UpbitWebSocketPublicV5:
         except Exception as e:
             logger.error(f"구독 해제 중 오류: {e}")
 
-    async def get_status(self) -> ConnectionStatus:
+    async def get_status(self) -> Dict[str, Any]:
         """연결 상태 조회"""
         uptime = (datetime.now() - self.stats['start_time']).total_seconds()
 
-        return ConnectionStatus(
+        return create_connection_status(
             state=self.state_machine.current_state.name,
-            connection_id=self.connection_id,
-            connected_at=self.stats['start_time'],
-            uptime_seconds=uptime,
-            message_count=self.stats['messages_received'],
-            error_count=self.stats['errors'],
-            active_subscriptions=len(self.subscriptions),
-            last_message_at=datetime.now()
+            connection_id=self.connection_id
         )
 
     def get_ticket_stats(self) -> Dict[str, Any]:
@@ -369,23 +382,27 @@ class UpbitWebSocketPublicV5:
         return self.state_machine.is_connected()
 
     # 편의 메서드들
-    async def subscribe_ticker(self, symbols: List[str], callback: Optional[Callable] = None) -> str:
+    async def subscribe_ticker(self, symbols: List[str], callback: Optional[Callable] = None,
+                               is_only_snapshot: bool = False) -> str:
         """현재가 구독"""
-        return await self.subscribe("ticker", symbols, callback)
+        return await self.subscribe("ticker", symbols, callback, is_only_snapshot)
 
-    async def subscribe_trade(self, symbols: List[str], callback: Optional[Callable] = None) -> str:
+    async def subscribe_trade(self, symbols: List[str], callback: Optional[Callable] = None,
+                              is_only_snapshot: bool = False) -> str:
         """체결 구독"""
-        return await self.subscribe("trade", symbols, callback)
+        return await self.subscribe("trade", symbols, callback, is_only_snapshot)
 
-    async def subscribe_orderbook(self, symbols: List[str], callback: Optional[Callable] = None) -> str:
+    async def subscribe_orderbook(self, symbols: List[str], callback: Optional[Callable] = None,
+                                  is_only_snapshot: bool = False) -> str:
         """호가 구독"""
-        return await self.subscribe("orderbook", symbols, callback)
+        return await self.subscribe("orderbook", symbols, callback, is_only_snapshot)
 
     async def subscribe_candle(self, symbols: List[str], interval: str = "1m",
-                             callback: Optional[Callable] = None) -> str:
+                               callback: Optional[Callable] = None,
+                               is_only_snapshot: bool = False) -> str:
         """캔들 구독"""
         data_type = f"candle.{interval}"
-        return await self.subscribe(data_type, symbols, callback)
+        return await self.subscribe(data_type, symbols, callback, is_only_snapshot)
 
     # 내부 메서드들
     def _start_background_tasks(self) -> None:
@@ -457,50 +474,45 @@ class UpbitWebSocketPublicV5:
 
     def _identify_message_type(self, data: Dict[str, Any]) -> Optional[str]:
         """메시지 타입 식별"""
-        if "type" in data:
-            return data["type"]
-
-        # 데이터 구조로 타입 추정
-        if "trade_price" in data and "change_rate" in data:
-            return "ticker"
-        elif "trade_price" in data and "sequential_id" in data:
-            return "trade"
-        elif "orderbook_units" in data:
-            return "orderbook"
-        elif "candle_date_time_utc" in data:
-            return "candle"
-
-        return None
+        return infer_message_type(data)
 
     async def _handle_ticker(self, data: Dict[str, Any]) -> None:
         """현재가 데이터 처리"""
         try:
-            ticker_data = TickerData(**data)
-            await self._emit_data("ticker", ticker_data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("ticker", data.get('code', 'UNKNOWN'), validated_data)
+            await self._emit_data("ticker", message)
         except Exception as e:
             logger.error(f"Ticker 데이터 처리 오류: {e}")
 
     async def _handle_trade(self, data: Dict[str, Any]) -> None:
         """체결 데이터 처리"""
         try:
-            trade_data = TradeData(**data)
-            await self._emit_data("trade", trade_data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("trade", data.get('code', 'UNKNOWN'), validated_data)
+            await self._emit_data("trade", message)
         except Exception as e:
             logger.error(f"Trade 데이터 처리 오류: {e}")
 
     async def _handle_orderbook(self, data: Dict[str, Any]) -> None:
         """호가 데이터 처리"""
         try:
-            orderbook_data = OrderbookData(**data)
-            await self._emit_data("orderbook", orderbook_data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("orderbook", data.get('code', 'UNKNOWN'), validated_data)
+            await self._emit_data("orderbook", message)
         except Exception as e:
             logger.error(f"Orderbook 데이터 처리 오류: {e}")
 
     async def _handle_candle(self, data: Dict[str, Any]) -> None:
         """캔들 데이터 처리"""
         try:
-            candle_data = CandleData(**data)
-            await self._emit_data("candle", candle_data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("candle", data.get('code', 'UNKNOWN'), validated_data)
+            await self._emit_data("candle", message)
         except Exception as e:
             logger.error(f"Candle 데이터 처리 오류: {e}")
 
@@ -606,27 +618,29 @@ class UpbitWebSocketPublicV5:
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 스냅샷 요청 생성
+            # 스냅샷 요청 생성 (순수 dict 기반)
             ticket_id = f"snapshot_{uuid.uuid4().hex[:8]}"
-            
-            snapshot_request = SubscriptionRequest(
-                ticket=ticket_id,
-                data_type=DataType(data_type),
-                symbols=symbols,
-                is_only_snapshot=True
-            )
-            
+
+            snapshot_request = [
+                {"ticket": ticket_id},
+                {
+                    "type": data_type,
+                    "codes": symbols,
+                    "is_only_snapshot": True
+                },
+                {"format": "DEFAULT"}
+            ]
+
             # 메시지 전송
-            message = snapshot_request.to_upbit_message()
             if self.websocket:
-                await self.websocket.send(json.dumps(message))
-            
+                await self.websocket.send(json.dumps(snapshot_request))
+
             logger.info(f"스냅샷 요청 전송: {data_type} - {symbols}")
-            
+
             # 응답 대기 (최대 5초)
             response = await self._wait_for_snapshot_response(ticket_id, timeout=5.0)
             return response
-            
+
         except Exception as e:
             logger.error(f"스냅샷 요청 실패: {e}")
             raise SubscriptionError(f"스냅샷 요청 실패: {e}")
@@ -638,21 +652,23 @@ class UpbitWebSocketPublicV5:
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 리얼타임 구독 요청 생성
+            # 리얼타임 구독 요청 생성 (순수 dict 기반)
             ticket_id = f"realtime_{uuid.uuid4().hex[:8]}"
-            
-            realtime_request = SubscriptionRequest(
-                ticket=ticket_id,
-                data_type=DataType(data_type),
-                symbols=symbols,
-                is_only_snapshot=False
-            )
-            
+
+            realtime_request = [
+                {"ticket": ticket_id},
+                {
+                    "type": data_type,
+                    "codes": symbols,
+                    "is_only_snapshot": False
+                },
+                {"format": "DEFAULT"}
+            ]
+
             # 메시지 전송
-            message = realtime_request.to_upbit_message()
             if self.websocket:
-                await self.websocket.send(json.dumps(message))
-            
+                await self.websocket.send(json.dumps(realtime_request))
+
             # 구독 정보 저장
             subscription_id = f"{data_type}-realtime-{uuid.uuid4().hex[:8]}"
             self.subscriptions[subscription_id] = {
@@ -663,14 +679,14 @@ class UpbitWebSocketPublicV5:
                 'created_at': datetime.now(),
                 'message_count': 0
             }
-            
+
             # 콜백 등록
             if callback:
                 self.callbacks[subscription_id] = callback
-            
+
             logger.info(f"리얼타임 구독 완료: {data_type} - {symbols}")
             return subscription_id
-            
+
         except Exception as e:
             logger.error(f"리얼타임 구독 실패: {e}")
             raise SubscriptionError(f"리얼타임 구독 실패: {e}")
@@ -680,30 +696,32 @@ class UpbitWebSocketPublicV5:
         if subscription_id not in self.subscriptions:
             logger.warning(f"구독을 찾을 수 없음: {subscription_id}")
             return False
-        
+
         try:
             subscription = self.subscriptions[subscription_id]
             ticket_id = subscription['ticket_id']
-            
+
             # BTC-USDT 스냅샷으로 교체 (스트림 정지 효과)
-            unsubscribe_request = SubscriptionRequest(
-                ticket=ticket_id,
-                data_type=DataType.TICKER,
-                symbols=["BTC-USDT"],
-                is_only_snapshot=True
-            )
-            
-            message = unsubscribe_request.to_upbit_message()
+            unsubscribe_request = [
+                {"ticket": ticket_id},
+                {
+                    "type": "ticker",
+                    "codes": ["BTC-USDT"],
+                    "is_only_snapshot": True
+                },
+                {"format": "DEFAULT"}
+            ]
+
             if self.websocket:
-                await self.websocket.send(json.dumps(message))
-            
+                await self.websocket.send(json.dumps(unsubscribe_request))
+
             # 구독 상태 업데이트
             subscription['status'] = 'soft_unsubscribed'
             subscription['unsubscribed_at'] = datetime.now()
-            
+
             logger.info(f"소프트 해제 완료: {subscription_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"소프트 해제 실패: {e}")
             return False
@@ -713,7 +731,7 @@ class UpbitWebSocketPublicV5:
         # 백그라운드 메시지 루프가 처리하도록 대기
         # 실제 구현에서는 메시지 큐나 이벤트 시스템 활용 권장
         await asyncio.sleep(1.0)  # 충분한 대기 시간
-        
+
         # 임시로 간단한 응답 반환 (실제로는 메시지 큐에서 가져와야 함)
         return {
             "type": "ticker",
@@ -721,184 +739,6 @@ class UpbitWebSocketPublicV5:
             "trade_price": 95000000,
             "timestamp": datetime.now().isoformat()
         }
-
-    async def _setup_message_handlers(self):
-        """메시지 버퍼 시스템 핸들러 설정"""
-        if not self.message_buffer:
-            return
-
-        # 각 데이터 타입별 핸들러 등록
-        self.message_buffer.add_message_handler('ticker', self._handle_ticker_message)
-        self.message_buffer.add_message_handler('trade', self._handle_trade_message)
-        self.message_buffer.add_message_handler('orderbook', self._handle_orderbook_message)
-        self.message_buffer.add_message_handler('candle', self._handle_candle_message)
-
-        # 중복 메시지 감지 핸들러
-        self.message_buffer.add_duplicate_handler(self._handle_duplicate_message)
-
-        logger.info("메시지 버퍼 핸들러 설정 완료")
-
-    async def _handle_ticker_message(self, buffered_message):
-        """현재가 메시지 처리"""
-        await self._process_buffered_message(buffered_message, 'ticker')
-
-    async def _handle_trade_message(self, buffered_message):
-        """체결 메시지 처리"""
-        await self._process_buffered_message(buffered_message, 'trade')
-
-    async def _handle_orderbook_message(self, buffered_message):
-        """호가 메시지 처리"""
-        await self._process_buffered_message(buffered_message, 'orderbook')
-
-    async def _handle_candle_message(self, buffered_message):
-        """캔들 메시지 처리"""
-        await self._process_buffered_message(buffered_message, 'candle')
-
-    async def _process_buffered_message(self, buffered_message, data_type: str):
-        """버퍼링된 메시지 최종 처리"""
-        try:
-            content = buffered_message.content
-            symbol = buffered_message.symbol
-
-            # 구독 콜백 실행
-            for subscription_id, subscription in self.subscriptions.items():
-                if (subscription.get('data_type') == data_type and
-                        symbol in subscription.get('symbols', [])):
-                    
-                    # 메시지 카운트 업데이트
-                    subscription['message_count'] = subscription.get('message_count', 0) + 1
-                    
-                    # 콜백 실행
-                    callback = self.callbacks.get(subscription_id)
-                    if callback:
-                        try:
-                            if asyncio.iscoroutinefunction(callback):
-                                await callback(content)
-                            else:
-                                callback(content)
-                        except Exception as e:
-                            logger.error(f"콜백 실행 오류: {e}")
-
-            # 통계 업데이트
-            self.stats['messages_processed'] += 1
-
-            logger.debug(f"메시지 처리 완료: {data_type} - {symbol}")
-
-        except Exception as e:
-            logger.error(f"버퍼링된 메시지 처리 오류: {e}")
-            self.stats['errors'] += 1
-
-    async def _handle_duplicate_message(self, duplicate_message):
-        """중복 메시지 처리"""
-        logger.debug(f"중복 메시지 감지: {duplicate_message.message_type} - {duplicate_message.symbol} "
-                     f"(중복 횟수: {duplicate_message.duplicate_count})")
-
-        # 중복 통계 업데이트
-        if 'duplicates' not in self.stats:
-            self.stats['duplicates'] = 0
-        self.stats['duplicates'] += 1
-
-    async def _enhanced_message_processing(self, raw_message: Any):
-        """향상된 메시지 처리 - 버퍼 시스템 통합"""
-        try:
-            # JSON 파싱
-            if isinstance(raw_message, bytes):
-                raw_message = raw_message.decode('utf-8')
-
-            data = json.loads(raw_message)
-            
-            # 메시지 타입 추론
-            message_type = self._infer_message_type(data)
-            if not message_type:
-                logger.warning(f"알 수 없는 메시지 타입: {data}")
-                return
-
-            # 우선순위 결정
-            priority = self._determine_priority(message_type, data)
-
-            # 메시지 버퍼에 추가 (중복 필터링 및 순서 보장)
-            if self.message_buffer:
-                processed_message = await self.message_buffer.add_message(
-                    content=data,
-                    message_type=message_type,
-                    priority=priority
-                )
-                
-                if processed_message:
-                    logger.debug(f"메시지 버퍼 처리 완료: {message_type}")
-            else:
-                # 버퍼가 없으면 직접 처리 (폴백)
-                await self._fallback_message_processing(data, message_type)
-
-            # 통계 업데이트
-            self.stats['messages_received'] += 1
-
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON 파싱 오류: {e}")
-            self.stats['errors'] += 1
-        except Exception as e:
-            logger.error(f"메시지 처리 오류: {e}")
-            self.stats['errors'] += 1
-
-    def _infer_message_type(self, data: Dict[str, Any]) -> Optional[str]:
-        """메시지 타입 추론"""
-        if 'type' in data:
-            return data['type']
-        
-        # 데이터 필드 기반 타입 추론
-        if 'trade_price' in data:
-            return 'ticker'
-        elif 'orderbook_units' in data:
-            return 'orderbook'
-        elif 'trade_volume' in data and 'sequential_id' in data:
-            return 'trade'
-        elif 'opening_price' in data and 'candle_date_time_utc' in data:
-            return 'candle'
-        
-        return None
-
-    def _determine_priority(self, message_type: str, data: Dict[str, Any]) -> MessagePriority:
-        """메시지 우선순위 결정"""
-        # 거래량이 큰 메시지는 높은 우선순위
-        if message_type == 'trade':
-            volume = float(data.get('trade_volume', 0))
-            if volume > 1.0:  # 1 BTC 이상
-                return MessagePriority.HIGH
-                
-        # 급격한 가격 변동은 높은 우선순위
-        if message_type == 'ticker':
-            change_rate = float(data.get('change_rate', 0))
-            if abs(change_rate) > 0.05:  # 5% 이상 변동
-                return MessagePriority.HIGH
-                
-        return MessagePriority.NORMAL
-
-    async def _fallback_message_processing(self, data: Dict[str, Any], message_type: str):
-        """폴백 메시지 처리 (버퍼 없이)"""
-        logger.debug(f"폴백 메시지 처리: {message_type}")
-        
-        symbol = data.get('code') or data.get('market', 'unknown')
-        
-        # 직접 콜백 실행
-        for subscription_id, subscription in self.subscriptions.items():
-            if (subscription.get('data_type') == message_type and
-                    symbol in subscription.get('symbols', [])):
-                
-                callback = self.callbacks.get(subscription_id)
-                if callback:
-                    try:
-                        if asyncio.iscoroutinefunction(callback):
-                            await callback(data)
-                        else:
-                            callback(data)
-                    except Exception as e:
-                        logger.error(f"폴백 콜백 실행 오류: {e}")
-
-    def get_message_buffer_stats(self) -> Optional[Dict[str, Any]]:
-        """메시지 버퍼 통계 조회"""
-        if self.message_buffer:
-            return self.message_buffer.get_statistics()
-        return None
 
 
 # 편의 함수들

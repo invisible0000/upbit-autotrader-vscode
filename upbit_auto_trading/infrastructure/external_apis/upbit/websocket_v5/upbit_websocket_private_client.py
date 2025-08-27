@@ -21,7 +21,10 @@ from typing import Dict, List, Optional, Callable, Any, Set
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .models import ConnectionStatus
+from .models import (
+    infer_message_type, validate_mixed_message, create_websocket_message,
+    create_connection_status, update_connection_status
+)
 from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
 from .exceptions import (
@@ -362,19 +365,13 @@ class UpbitWebSocketPrivateV5:
         except Exception as e:
             logger.error(f"Private 구독 해제 중 오류: {e}")
 
-    async def get_status(self) -> ConnectionStatus:
+    async def get_status(self) -> Dict[str, Any]:
         """연결 상태 조회"""
         uptime = (datetime.now() - self.stats['start_time']).total_seconds()
 
-        return ConnectionStatus(
+        return create_connection_status(
             state=self.state_machine.current_state.name,
-            connection_id=self.connection_id,
-            connected_at=self.stats['start_time'],
-            uptime_seconds=uptime,
-            message_count=self.stats['messages_received'],
-            error_count=self.stats['errors'],
-            active_subscriptions=len(self.subscriptions),
-            last_message_at=datetime.now()
+            connection_id=self.connection_id
         )
 
     def get_ticket_stats(self) -> Dict[str, Any]:
@@ -465,14 +462,20 @@ class UpbitWebSocketPrivateV5:
     async def _handle_my_order(self, data: Dict[str, Any]) -> None:
         """내 주문 데이터 처리"""
         try:
-            await self._emit_data(PrivateDataType.MY_ORDER, data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("myOrder", "PRIVATE", validated_data)
+            await self._emit_data(PrivateDataType.MY_ORDER, message)
         except Exception as e:
             logger.error(f"MyOrder 데이터 처리 오류: {e}")
 
     async def _handle_my_asset(self, data: Dict[str, Any]) -> None:
         """내 자산 데이터 처리"""
         try:
-            await self._emit_data(PrivateDataType.MY_ASSET, data)
+            # 메시지 검증 및 정리
+            validated_data = validate_mixed_message(data)
+            message = create_websocket_message("myAsset", "PRIVATE", validated_data)
+            await self._emit_data(PrivateDataType.MY_ASSET, message)
         except Exception as e:
             logger.error(f"MyAsset 데이터 처리 오류: {e}")
 

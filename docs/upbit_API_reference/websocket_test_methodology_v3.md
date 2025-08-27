@@ -7,7 +7,7 @@
 
 ## 📁 파일 구조
 ```
-tests/infrastructure/external_apis/upbit/websocket_v5/
+tests\infrastructure\test_external_apis\upbit\test_websocket_v5
 ├── conftest.py                    # pytest 공통 설정
 ├── public/
 │   ├── test01_ticker.py             # 현재가 7테스트

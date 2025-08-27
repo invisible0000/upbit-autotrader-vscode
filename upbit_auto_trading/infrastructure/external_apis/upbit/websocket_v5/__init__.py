@@ -34,10 +34,12 @@ __version__ = "5.0.0"
 from .upbit_websocket_public_client import UpbitWebSocketPublicV5, create_public_client
 from .upbit_websocket_private_client import UpbitWebSocketPrivateV5, create_private_client
 
-# 공용 모델
+# 공용 모델 (dict 기반)
 from .models import (
-    WebSocketMessage, TickerData, TradeData, OrderbookData, CandleData,
-    SubscriptionRequest, ConnectionStatus, MessageType
+    infer_message_type, validate_mixed_message, create_websocket_message,
+    create_connection_status, update_connection_status,
+    TICKER_FIELDS, TRADE_FIELDS, ORDERBOOK_FIELDS, CANDLE_FIELDS,
+    MY_ORDER_FIELDS, MY_ASSET_FIELDS
 )
 
 # 설정 및 상태
@@ -56,15 +58,20 @@ __all__ = [
     "UpbitWebSocketPublicV5",
     "UpbitWebSocketPrivateV5",
     "create_public_client",
-    "create_private_client",    # 데이터 모델
-    "WebSocketMessage",
-    "TickerData",
-    "TradeData",
-    "OrderbookData",
-    "CandleData",
-    "SubscriptionRequest",
-    "ConnectionStatus",
-    "MessageType",
+    "create_private_client",
+
+    # 데이터 모델 (dict 기반)
+    "infer_message_type",
+    "validate_mixed_message",
+    "create_websocket_message",
+    "create_connection_status",
+    "update_connection_status",
+    "TICKER_FIELDS",
+    "TRADE_FIELDS",
+    "ORDERBOOK_FIELDS",
+    "CANDLE_FIELDS",
+    "MY_ORDER_FIELDS",
+    "MY_ASSET_FIELDS",
 
     # 설정
     "WebSocketConfig",
