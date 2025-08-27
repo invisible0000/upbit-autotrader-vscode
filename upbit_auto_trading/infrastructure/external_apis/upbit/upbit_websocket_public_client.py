@@ -386,48 +386,74 @@ class UpbitWebSocketPublicClient:
     # ================================================================
 
     async def connect(self) -> bool:
-        """WebSocket 연결 (Rate Limiter 통합)"""
-        try:
-            # Rate Limiter 적용하여 과도한 연결 요청 방지
-            if self.rate_limiter:
-                await self.rate_limiter.acquire()
+        """WebSocket 연결 (Rate Limiter 통합 + 재시도 로직)"""
+        max_retries = 3
+        base_delay = 1.0
 
-            self.logger.info("🔌 업비트 WebSocket 연결 시도...")
+        for attempt in range(max_retries):
+            try:
+                # Rate Limiter 적용하여 과도한 연결 요청 방지
+                if self.rate_limiter:
+                    await self.rate_limiter.acquire()
 
-            self.websocket = await websockets.connect(
-                self.url,
-                ping_interval=self.ping_interval if self.ping_interval > 0 else None,
-                ping_timeout=self.message_timeout if self.message_timeout > 0 else None,
-                compression=None  # 압축 비활성화로 성능 최적화
-            )
+                self.logger.info(f"🔌 업비트 WebSocket 연결 시도... (시도 {attempt + 1}/{max_retries})")
 
-            self.is_connected = True
-            self._stats['connection_start_time'] = datetime.now()
-            self.reconnect_attempts = 0
+                self.websocket = await websockets.connect(
+                    self.url,
+                    ping_interval=self.ping_interval if self.ping_interval > 0 else None,
+                    ping_timeout=self.message_timeout if self.message_timeout > 0 else None,
+                    compression=None  # 압축 비활성화로 성능 최적화
+                )
 
-            # PING 메시지로 연결 유지
-            if self.persistent_connection or self.ping_interval > 0:
-                try:
-                    loop = asyncio.get_running_loop()
-                    keep_alive_task = loop.create_task(self._keep_alive())
-                    self._background_tasks.add(keep_alive_task)
-                    keep_alive_task.add_done_callback(self._background_tasks.discard)
-                except RuntimeError:
-                    # 이벤트 루프가 없는 경우 백그라운드 태스크 없이 진행
-                    self.logger.warning("Event Loop가 없어 keep_alive 태스크를 시작할 수 없음")
+                self.is_connected = True
+                self._stats['connection_start_time'] = datetime.now()
+                self.reconnect_attempts = 0
 
-            # 메시지 루프 시작
-            if self.auto_start_message_loop:
-                await self._start_message_loop()
+                # PING 메시지로 연결 유지
+                if self.persistent_connection or self.ping_interval > 0:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        keep_alive_task = loop.create_task(self._keep_alive())
+                        self._background_tasks.add(keep_alive_task)
+                        keep_alive_task.add_done_callback(self._background_tasks.discard)
+                    except RuntimeError:
+                        # 이벤트 루프가 없는 경우 백그라운드 태스크 없이 진행
+                        self.logger.warning("Event Loop가 없어 keep_alive 태스크를 시작할 수 없음")
 
-            self.logger.info("✅ 업비트 WebSocket 연결 성공 (Rate Limiter 적용)")
-            return True
+                # 메시지 루프 시작
+                if self.auto_start_message_loop:
+                    await self._start_message_loop()
 
-        except Exception as e:
-            self.logger.error(f"❌ WebSocket 연결 실패: {e}")
-            self.is_connected = False
-            self._stats['errors_count'] += 1
-            return False
+                self.logger.info("✅ 업비트 WebSocket 연결 성공 (Rate Limiter 적용)")
+                return True
+
+            except Exception as e:
+                # HTTP 429 에러를 문자열로 감지
+                if "429" in str(e) or "Too Many Requests" in str(e):
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                    self.logger.warning(
+                        f"⚠️ HTTP 429 (Too Many Requests) - {delay:.1f}초 후 재시도 "
+                        f"(시도 {attempt + 1}/{max_retries})"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        self.logger.error("❌ WebSocket 연결 실패: HTTP 429 - 최대 재시도 횟수 초과")
+                        break
+                else:
+                    self.logger.error(f"❌ WebSocket 연결 실패: {e}")
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        self.logger.info(f"⏳ {delay:.1f}초 후 재연결 시도...")
+                        await asyncio.sleep(delay)
+                    else:
+                        break
+
+        # 모든 시도 실패
+        self.is_connected = False
+        self._stats['errors_count'] += 1
+        return False
 
     async def disconnect(self) -> None:
         """WebSocket 연결 해제 (개선된 안정성)"""
@@ -627,21 +653,53 @@ class UpbitWebSocketPublicClient:
     # 통합 구독 메서드 (5배 효율성)
     # ================================================================
 
-    async def subscribe_ticker(self, symbols: List[str]) -> bool:
+    async def subscribe_ticker(self, symbols: List[str], message_handler: Optional[Callable] = None, **kwargs) -> bool:
         """현재가 구독 (통합 방식)"""
-        return await self._subscribe_unified(WebSocketDataType.TICKER, symbols)
+        result = await self._subscribe_unified(WebSocketDataType.TICKER, symbols, **kwargs)
 
-    async def subscribe_trade(self, symbols: List[str]) -> bool:
+        # 핸들러가 제공된 경우 등록
+        if message_handler and result:
+            self.add_message_handler(WebSocketDataType.TICKER, message_handler)
+
+        return result
+
+    async def subscribe_trade(self, symbols: List[str], message_handler: Optional[Callable] = None, **kwargs) -> bool:
         """체결 구독 (통합 방식)"""
-        return await self._subscribe_unified(WebSocketDataType.TRADE, symbols)
+        result = await self._subscribe_unified(WebSocketDataType.TRADE, symbols, **kwargs)
 
-    async def subscribe_orderbook(self, symbols: List[str]) -> bool:
+        # 핸들러가 제공된 경우 등록
+        if message_handler and result:
+            self.add_message_handler(WebSocketDataType.TRADE, message_handler)
+
+        return result
+
+    async def subscribe_orderbook(self, symbols: List[str], message_handler: Optional[Callable] = None, **kwargs) -> bool:
         """호가 구독 (통합 방식)"""
-        return await self._subscribe_unified(WebSocketDataType.ORDERBOOK, symbols)
+        result = await self._subscribe_unified(WebSocketDataType.ORDERBOOK, symbols, **kwargs)
 
-    async def subscribe_candle(self, symbols: List[str], unit: str = "1m") -> bool:
+        # 핸들러가 제공된 경우 등록
+        if message_handler and result:
+            self.add_message_handler(WebSocketDataType.ORDERBOOK, message_handler)
+
+        return result
+
+    async def subscribe_candle(self, symbols: List[str], unit: str = "1m", timeframe: Optional[str] = None, **kwargs) -> bool:
         """캔들 구독 (통합 방식)"""
-        return await self._subscribe_unified(WebSocketDataType.CANDLE, symbols, unit=unit)
+        # timeframe 매개변수가 제공된 경우 unit 대신 사용
+        if timeframe:
+            unit = timeframe
+
+        # message_handler는 별도 처리하고 JSON 직렬화에서 제외
+        message_handler = kwargs.pop('message_handler', None)
+
+        # 구독 실행
+        result = await self._subscribe_unified(WebSocketDataType.CANDLE, symbols, unit=unit, **kwargs)
+
+        # 핸들러가 제공된 경우 등록
+        if message_handler and result:
+            self.add_message_handler(WebSocketDataType.CANDLE, message_handler)
+
+        return result
 
     async def _subscribe_unified(self, data_type: WebSocketDataType, symbols: List[str], **kwargs) -> bool:
         """통합 구독 실행"""
@@ -674,21 +732,209 @@ class UpbitWebSocketPublicClient:
             self._stats['errors_count'] += 1
             return False
 
+    async def switch_to_idle_mode(self, idle_symbol: str = "KRW-BTC",
+                                  ultra_quiet: bool = True) -> bool:
+        """
+        스마트 Idle 모드로 전환 - 기존 구독을 유지하면서 최소 활동 상태로 전환
+
+        ⚠️ 중요: 기존 구독을 해제하지 않고, 단순히 추가적인 idle 구독만 생성
+        업비트 API에서 빈 심볼로 구독 해제 시 연결이 완전히 끊어지는 것을 방지하기 위한 기능
+
+        Args:
+            idle_symbol: Idle 상태에서 유지할 심볼 (기본: KRW-BTC)
+            ultra_quiet: True면 240m 캔들 snapshot으로 초저활동, False면 ticker로 일반 idle
+
+        Returns:
+            bool: 전환 성공 여부
+        """
+        try:
+            if not self.is_connected or not self.websocket:
+                self.logger.warning("❌ Idle 모드 전환 실패: WebSocket 미연결")
+                return False
+
+            # 새로운 idle 전용 티켓 생성 (기존 구독과 분리)
+            idle_ticket = f"idle-{uuid.uuid4().hex[:8]}"
+
+            if ultra_quiet:
+                # 초저활동 모드: 240분 캔들 + snapshot only (4시간당 1개 메시지)
+                idle_message = [
+                    {"ticket": idle_ticket},
+                    {"type": "candle.240m", "codes": [idle_symbol], "isOnlySnapshot": True},
+                    {"format": "DEFAULT"}
+                ]
+                mode_desc = "240m 캔들 snapshot (4시간당 1개 메시지)"
+                idle_type = "candle.240m"
+            else:
+                # 일반 idle: ticker (초당 수십 개 메시지)
+                idle_message = [
+                    {"ticket": idle_ticket},
+                    {"type": "ticker", "codes": [idle_symbol]},
+                    {"format": "DEFAULT"}
+                ]
+                mode_desc = "ticker (실시간 메시지)"
+                idle_type = "ticker"
+
+            await self.websocket.send(json.dumps(idle_message))
+
+            # Idle 구독 정보 추가 (기존 구독은 유지)
+            idle_subscription = UnifiedSubscription(idle_ticket)
+            if ultra_quiet:
+                idle_subscription.add_subscription_type("candle.240m", [idle_symbol], isOnlySnapshot=True)
+            else:
+                idle_subscription.add_subscription_type("ticker", [idle_symbol])
+
+            self._unified_subscriptions[idle_ticket] = idle_subscription
+
+            # 테스트 호환성을 위한 구독 정보 추가 (기존 구독 유지)
+            if ultra_quiet:
+                self._subscription_manager.add_subscription(idle_type, [idle_symbol], isOnlySnapshot=True)
+            else:
+                self._subscription_manager.add_subscription(idle_type, [idle_symbol])
+
+            self.logger.info(f"✅ Idle 모드 전환 성공: {idle_symbol} {mode_desc} (기존 구독 유지)")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Idle 모드 전환 실패: {e}")
+            return False
+
+    async def smart_unsubscribe(self, data_type: WebSocketDataType, keep_connection: bool = True) -> bool:
+        """
+        스마트 구독 해제 - 연결 유지 또는 완전 해제 선택 가능
+
+        Args:
+            data_type: 해제할 데이터 타입
+            keep_connection: True면 Idle 모드로 전환, False면 완전 해제
+
+        Returns:
+            bool: 해제 성공 여부
+        """
+        try:
+            if keep_connection:
+                # Idle 모드로 전환 (연결 유지)
+                success = await self.switch_to_idle_mode()
+                if success:
+                    self.logger.info(f"✅ {data_type.value} 스마트 해제: Idle 모드로 전환")
+                    return True
+                else:
+                    self.logger.warning(f"⚠️ Idle 전환 실패, 일반 해제로 진행: {data_type.value}")
+                    return await self.unsubscribe(data_type)
+            else:
+                # 완전 해제 (연결 종료)
+                return await self.unsubscribe(data_type)
+
+        except Exception as e:
+            self.logger.error(f"❌ 스마트 구독 해제 실패: {e}")
+            return False
+
+    async def quick_switch(self, from_type: WebSocketDataType, to_type: WebSocketDataType,
+                           symbols: List[str], **kwargs) -> bool:
+        """
+        빠른 구독 타입 전환 - 연결 유지하면서 즉시 전환
+
+        Args:
+            from_type: 현재 구독 타입
+            to_type: 전환할 타입
+            symbols: 새로운 구독 심볼들
+            **kwargs: 추가 파라미터
+
+        Returns:
+            bool: 전환 성공 여부
+        """
+        try:
+            if not self.is_connected or not self.websocket:
+                self.logger.warning("❌ 빠른 전환 실패: WebSocket 미연결")
+                return False
+
+            # 새로운 타입으로 직접 전환 (업비트는 기존 구독을 자동으로 교체함)
+            success = await self._subscribe_unified(to_type, symbols, **kwargs)
+
+            if success:
+                self.logger.info(f"✅ 빠른 전환 성공: {from_type.value} → {to_type.value}")
+                return True
+            else:
+                self.logger.error(f"❌ 빠른 전환 실패: {from_type.value} → {to_type.value}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"❌ 빠른 전환 중 오류: {e}")
+            return False
+
     async def unsubscribe(self, data_type: WebSocketDataType) -> bool:
-        """구독 해제"""
+        """구독 해제 (업비트는 빈 구독 요청 시 연결을 종료함)"""
         try:
             if self._current_ticket and self._current_ticket in self._unified_subscriptions:
                 unified_sub = self._unified_subscriptions[self._current_ticket]
-                unified_sub.remove_subscription_type(data_type.value)
 
-                # 모든 타입이 제거되면 티켓 정리
+                # 디버그: 제거 전 상태 확인
+                self.logger.debug(f"🔍 구독 해제 전 타입들: {list(unified_sub.types.keys())}")
+
+                # 해당 데이터 타입과 일치하는 모든 키 찾기 (예: "candle" -> "candle.1m", "candle.5m" 등)
+                keys_to_remove = []
+                if data_type.value == "candle":
+                    # 캔들의 경우 "candle.XXX" 형태의 모든 키 찾기
+                    keys_to_remove = [key for key in unified_sub.types.keys() if key.startswith("candle.")]
+                else:
+                    # 다른 타입은 정확한 매칭
+                    if data_type.value in unified_sub.types:
+                        keys_to_remove = [data_type.value]
+
+                # 찾은 키들 제거
+                for key in keys_to_remove:
+                    unified_sub.remove_subscription_type(key)
+                    self.logger.debug(f"🗑️ 구독 타입 제거: {key}")
+
+                # 디버그: 제거 후 상태 확인
+                self.logger.debug(f"🔍 구독 해제 후 타입들: {list(unified_sub.types.keys())}")
+                self.logger.debug(f"🔍 is_empty() 결과: {unified_sub.is_empty()}")
+
+                # 모든 타입이 제거되면 빈 구독 메시지로 해제 요청 (연결 종료됨)
                 if unified_sub.is_empty():
+                    # 업비트 WebSocket 구독 해제: 빈 심볼 목록으로 메시지 전송 → 연결 종료
+                    # 제거된 키 중 첫 번째를 사용 (어차피 빈 codes로 전송)
+                    type_for_empty_message = keys_to_remove[0] if keys_to_remove else data_type.value
+                    empty_message = [
+                        {"ticket": self._current_ticket},
+                        {"type": type_for_empty_message, "codes": []},
+                        {"format": "DEFAULT"}
+                    ]
+                    if self.websocket:
+                        self.logger.info(f"🔄 빈 구독 메시지 전송 (업비트 서버가 연결을 종료할 예정): {json.dumps(empty_message)}")
+                        try:
+                            await self.websocket.send(json.dumps(empty_message))
+
+                            # 짧은 대기 후 연결 상태 확인
+                            await asyncio.sleep(0.5)
+
+                            # 연결 상태 확인 (websockets 라이브러리 호환성 고려)
+                            try:
+                                if hasattr(self.websocket, 'closed') and self.websocket.closed:
+                                    self.logger.info("✅ 업비트 서버가 빈 구독 요청으로 연결을 종료했습니다")
+                                    self.is_connected = False
+                                elif hasattr(self.websocket, 'close_code') and self.websocket.close_code is not None:
+                                    self.logger.info(f"✅ 업비트 서버가 연결을 종료했습니다 (코드: {self.websocket.close_code})")
+                                    self.is_connected = False
+                                elif not self.is_connected:
+                                    # is_connected 플래그가 이미 False로 설정된 경우 (에러 핸들러에서 설정)
+                                    self.logger.info("✅ 업비트 서버 연결이 종료되었습니다")
+                            except AttributeError as attr_error:
+                                # websockets 라이브러리 버전 호환성 문제
+                                self.logger.debug(f"🔧 WebSocket 속성 접근 오류 (정상): {attr_error}")
+                                # 연결 상태를 확실히 하기 위해 is_connected 플래그 사용
+                                if not self.is_connected:
+                                    self.logger.info("✅ 업비트 서버 연결이 종료되었습니다")
+
+                        except Exception as send_error:
+                            self.logger.info(f"📡 구독 해제 메시지 전송 중 연결 종료: {send_error}")
+                            self.is_connected = False
+
                     del self._unified_subscriptions[self._current_ticket]
                     self._current_ticket = None
                 else:
                     # 남은 타입들로 다시 구독
                     message = unified_sub.get_subscription_message()
                     if self.websocket:
+                        self.logger.debug(f"🔄 남은 타입들로 재구독: {json.dumps(message)}")
                         await self.websocket.send(json.dumps(message))
 
             # 테스트 호환성
@@ -721,11 +967,36 @@ class UpbitWebSocketPublicClient:
         self.message_handlers[data_type].append(handler)
         self.logger.debug(f"📝 {data_type.value} 핸들러 추가")
 
-    async def _handle_message(self, message: WebSocketMessage) -> None:
-        """메시지 처리"""
+    async def _handle_message(self, message) -> None:
+        """메시지 처리 - JSON 문자열 또는 WebSocketMessage 객체 모두 처리"""
         try:
+            # JSON 문자열인 경우 파싱하여 WebSocketMessage 객체로 변환
+            if isinstance(message, str):
+                try:
+                    data = json.loads(message)
+                    message_type = self._infer_message_type(data)
+                    stream_type = self._infer_stream_type(data)
+
+                    ws_message = WebSocketMessage(
+                        type=message_type,
+                        market=data.get('code', data.get('market', '')),
+                        data=data,
+                        timestamp=datetime.now(),
+                        raw_data=message,
+                        stream_type=stream_type
+                    )
+                    message = ws_message
+                except (json.JSONDecodeError, Exception) as e:
+                    self.logger.error(f"❌ 메시지 파싱 오류: {e}")
+                    return
+
+            # WebSocketMessage 객체가 아닌 경우 처리 중단
+            if not isinstance(message, WebSocketMessage):
+                self.logger.warning(f"❌ 지원되지 않는 메시지 타입: {type(message)}")
+                return
+
             self._stats['messages_processed'] += 1
-            self._last_message_time = datetime.now()
+            self._stats['last_message_time'] = datetime.now()
 
             # 해당 타입의 핸들러들 실행
             if message.type in self.message_handlers:
@@ -960,12 +1231,240 @@ class UpbitWebSocketPublicClient:
                         break
 
     # ================================================================
-    # ================================================================
     # 정보 조회 메서드 (테스트 호환성)
     # ================================================================
 
-    def get_subscriptions(self) -> Dict[str, Dict[str, Any]]:
-        """구독 정보 조회 (테스트 호환성)"""
+    def get_subscriptions(self) -> Dict[str, Any]:
+        """
+        티켓별 실제 업비트 API 요청 메시지 기반 구독 정보 조회
+
+        Returns:
+            Dict[str, Any]: {
+                'tickets': {
+                    'ticket_id': {
+                        'ticket': str,
+                        'raw_message': List[Dict],  # 실제 업비트 API 요청 메시지
+                        'subscription_types': List[str],
+                        'total_symbols': int,
+                        'stream_configs': Dict,  # SNAPSHOT/REALTIME 설정
+                        'created_at': datetime,
+                        'last_updated': datetime,
+                        'is_resendable': bool  # 재전송 가능 여부
+                    }
+                },
+                'consolidated_view': Dict,  # 기존 호환성을 위한 통합 뷰
+                'total_tickets': int,
+                'current_ticket': str,
+                'resubscribe_ready': bool  # 모든 티켓이 재구독 가능한지
+            }
+        """
+        # 티켓별 상세 정보 (실제 API 요청 메시지 포함)
+        tickets_info = {}
+
+        for ticket_id, unified_sub in self._unified_subscriptions.items():
+            # 실제 업비트 API 요청 메시지 생성 (재전송 가능)
+            raw_message = unified_sub.get_subscription_message()
+
+            # 스트림 설정 분석
+            stream_configs = {}
+            subscription_types = list(unified_sub.types.keys())
+
+            for sub_type, type_config in unified_sub.types.items():
+                stream_configs[sub_type] = {
+                    'codes': type_config.get('codes', []),
+                    'is_snapshot_only': type_config.get('isOnlySnapshot', False),
+                    'is_realtime': not type_config.get('isOnlySnapshot', False),
+                    'raw_config': type_config.copy()
+                }
+
+            tickets_info[ticket_id] = {
+                'ticket': unified_sub.ticket,
+                'raw_message': raw_message,  # 실제 재전송 가능한 메시지
+                'subscription_types': subscription_types,
+                'total_symbols': len(unified_sub.symbols),
+                'stream_configs': stream_configs,
+                'created_at': unified_sub.created_at,
+                'last_updated': unified_sub.last_updated,
+                'message_count': unified_sub.message_count,
+                'is_resendable': len(raw_message) > 0 and 'ticket' in (raw_message[0] if raw_message else {}),
+                'symbols_summary': self._format_symbols_for_log(list(unified_sub.symbols), max_display=3)
+            }
+
+        # 기존 호환성을 위한 통합 뷰 (레거시 테스트 지원)
+        consolidated_view = {}
+        for ticket_id, unified_sub in self._unified_subscriptions.items():
+            for subscription_type, type_config in unified_sub.types.items():
+                if subscription_type not in consolidated_view:
+                    consolidated_view[subscription_type] = {
+                        'symbols': set(),
+                        'created_at': unified_sub.created_at,
+                        'metadata': type_config.copy()
+                    }
+
+                # 심볼 통합 (중복 제거)
+                symbols = type_config.get('codes', [])
+                consolidated_view[subscription_type]['symbols'].update(symbols)
+
+                # 메타데이터 병합 (codes 제외)
+                metadata = {k: v for k, v in type_config.items() if k != 'codes'}
+                consolidated_view[subscription_type]['metadata'].update(metadata)
+
+        # set을 list로 변환
+        for sub_type, sub_data in consolidated_view.items():
+            consolidated_view[sub_type]['symbols'] = list(sub_data['symbols'])
+
+        # 재구독 준비 상태 확인
+        resubscribe_ready = all(
+            ticket_info['is_resendable']
+            for ticket_info in tickets_info.values()
+        )
+
+        return {
+            'tickets': tickets_info,
+            'consolidated_view': consolidated_view,
+            'total_tickets': len(self._unified_subscriptions),
+            'current_ticket': self._current_ticket,
+            'resubscribe_ready': resubscribe_ready
+        }
+
+    def get_active_subscriptions(self) -> Dict[str, Dict[str, Any]]:
+        """활성 구독 정보 조회 - 레거시 호환성을 위해 consolidated_view 반환"""
+        subscription_info = self.get_subscriptions()
+        return subscription_info.get('consolidated_view', {})
+
+    async def resubscribe_from_ticket(self, ticket_id: str) -> bool:
+        """
+        특정 티켓의 원본 요청 메시지로 재구독 실행
+
+        Args:
+            ticket_id: 재구독할 티켓 ID
+
+        Returns:
+            bool: 재구독 성공 여부
+        """
+        try:
+            subscription_info = self.get_subscriptions()
+
+            if ticket_id not in subscription_info['tickets']:
+                self.logger.error(f"❌ 티켓 {ticket_id}를 찾을 수 없음")
+                return False
+
+            ticket_info = subscription_info['tickets'][ticket_id]
+
+            if not ticket_info['is_resendable']:
+                self.logger.error(f"❌ 티켓 {ticket_id}는 재전송 불가능한 상태")
+                return False
+
+            raw_message = ticket_info['raw_message']
+
+            if not self.is_connected or not self.websocket:
+                self.logger.error("❌ WebSocket 연결이 필요함")
+                return False
+
+            # 원본 요청 메시지 그대로 재전송
+            await self.websocket.send(json.dumps(raw_message))
+
+            self.logger.info(f"✅ 티켓 {ticket_id} 재구독 성공 - {len(ticket_info['subscription_types'])}개 타입")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ 티켓 {ticket_id} 재구독 실패: {e}")
+            return False
+
+    async def resubscribe_all_tickets(self) -> Dict[str, bool]:
+        """
+        모든 티켓의 원본 요청 메시지로 일괄 재구독
+
+        Returns:
+            Dict[str, bool]: 티켓별 재구독 성공/실패 결과
+        """
+        results = {}
+        subscription_info = self.get_subscriptions()
+
+        for ticket_id in subscription_info['tickets'].keys():
+            success = await self.resubscribe_from_ticket(ticket_id)
+            results[ticket_id] = success
+
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+
+        self.logger.info(f"🔄 일괄 재구독 완료: {success_count}/{total_count} 성공")
+        return results
+
+    def extract_handlers_by_stream_type(self, stream_type: StreamType) -> Dict[str, List[str]]:
+        """
+        스트림 타입별 핸들러 추출 가능한 구독 정보 반환
+
+        Args:
+            stream_type: SNAPSHOT 또는 REALTIME
+
+        Returns:
+            Dict[str, List[str]]: {ticket_id: [applicable_subscription_types]}
+        """
+        applicable_tickets = {}
+        subscription_info = self.get_subscriptions()
+
+        for ticket_id, ticket_info in subscription_info['tickets'].items():
+            applicable_types = []
+
+            for sub_type, config in ticket_info['stream_configs'].items():
+                if stream_type == StreamType.SNAPSHOT and config['is_snapshot_only']:
+                    applicable_types.append(sub_type)
+                elif stream_type == StreamType.REALTIME and config['is_realtime']:
+                    applicable_types.append(sub_type)
+
+            if applicable_types:
+                applicable_tickets[ticket_id] = applicable_types
+
+        return applicable_tickets
+
+    def get_symbols_by_ticket_and_type(self, ticket_id: str, subscription_type: str) -> List[str]:
+        """
+        특정 티켓의 특정 구독 타입에서 심볼 목록 추출
+
+        Args:
+            ticket_id: 티켓 ID
+            subscription_type: 구독 타입 (예: 'ticker', 'candle.5m')
+
+        Returns:
+            List[str]: 해당 조건의 심볼 목록
+        """
+        subscription_info = self.get_subscriptions()
+
+        if ticket_id not in subscription_info['tickets']:
+            return []
+
+        ticket_info = subscription_info['tickets'][ticket_id]
+        stream_config = ticket_info['stream_configs'].get(subscription_type, {})
+
+        return stream_config.get('codes', [])
+
+    def get_all_tickets_info(self) -> Dict[str, Any]:
+        """모든 티켓의 상세 정보 조회 (디버깅용)"""
+        tickets_info = {}
+
+        for ticket_id, unified_sub in self._unified_subscriptions.items():
+            tickets_info[ticket_id] = {
+                'ticket': unified_sub.ticket,
+                'created_at': unified_sub.created_at,
+                'last_updated': unified_sub.last_updated,
+                'message_count': unified_sub.message_count,
+                'subscription_types': list(unified_sub.types.keys()),
+                'total_symbols': len(unified_sub.symbols),
+                'symbols_by_type': {
+                    sub_type: type_config.get('codes', [])
+                    for sub_type, type_config in unified_sub.types.items()
+                }
+            }
+
+        return {
+            'total_tickets': len(self._unified_subscriptions),
+            'current_ticket': self._current_ticket,
+            'tickets': tickets_info
+        }
+
+    def get_legacy_subscription_manager_info(self) -> Dict[str, Dict[str, Any]]:
+        """레거시 _subscription_manager 정보 조회 (테스트 호환성 확인용)"""
         return self._subscription_manager.get_subscriptions()
 
     def get_subscription_stats(self) -> Dict[str, Any]:
