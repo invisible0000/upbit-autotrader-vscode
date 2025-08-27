@@ -1,0 +1,37 @@
+# 업비트 WebSocket v5.0 설정 파일
+
+# 연결 설정
+connection:
+  url: "wss://api.upbit.com/websocket/v1"
+  connection_timeout: 10.0
+  ping_interval: 20.0
+  ping_timeout: 10.0
+  close_timeout: 10.0
+  heartbeat_interval: 30.0
+  heartbeat_timeout: 60.0
+
+# 재연결 설정
+reconnection:
+  enabled: true
+  max_attempts: 5
+  base_delay: 2.0
+  max_delay: 60.0
+  backoff_multiplier: 2.0
+
+# 구독 설정
+subscription:
+  max_subscriptions: 10
+  batch_size: 5
+  timeout: 30.0
+
+# 성능 설정
+performance:
+  message_buffer_size: 1000
+  max_memory_mb: 100.0
+  enable_compression: true
+
+# 로깅 설정
+logging:
+  level: "INFO"
+  enable_debug: false
+  log_messages: false
