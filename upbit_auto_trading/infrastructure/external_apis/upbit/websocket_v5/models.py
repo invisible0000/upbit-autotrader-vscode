@@ -34,19 +34,60 @@ class StreamType(str, Enum):
 
 
 class DataType(str, Enum):
-    """WebSocket 데이터 타입"""
-    TICKER = "ticker"
-    TRADE = "trade"
-    ORDERBOOK = "orderbook"
-    CANDLE_1S = "candle.1s"
-    CANDLE_1M = "candle.1m"
-    CANDLE_3M = "candle.3m"
-    CANDLE_5M = "candle.5m"
-    CANDLE_10M = "candle.10m"
-    CANDLE_15M = "candle.15m"
-    CANDLE_30M = "candle.30m"
-    CANDLE_1H = "candle.60m"
-    CANDLE_4H = "candle.240m"
+    """업비트 웹소켓 지원 데이터 타입 - 공식 API 기준"""
+    # Public 데이터 타입
+    TICKER = "ticker"           # 현재가
+    TRADE = "trade"             # 체결
+    ORDERBOOK = "orderbook"     # 호가
+
+    # 캔들 데이터 (업비트 공식 형식)
+    CANDLE_1S = "candle.1s"     # 초봉
+    CANDLE_1M = "candle.1m"     # 1분봉
+    CANDLE_3M = "candle.3m"     # 3분봉
+    CANDLE_5M = "candle.5m"     # 5분봉
+    CANDLE_10M = "candle.10m"   # 10분봉
+    CANDLE_15M = "candle.15m"   # 15분봉
+    CANDLE_30M = "candle.30m"   # 30분봉
+    CANDLE_60M = "candle.60m"   # 60분봉 (1시간)
+    CANDLE_240M = "candle.240m"  # 240분봉 (4시간)
+
+    # Private 데이터 타입
+    MYORDER = "myOrder"         # 내 주문 및 체결
+    MYASSET = "myAsset"         # 내 자산
+
+    @classmethod
+    def get_public_types(cls) -> List['DataType']:
+        """Public 연결용 데이터 타입들"""
+        return [
+            cls.TICKER, cls.TRADE, cls.ORDERBOOK,
+            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
+            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
+        ]
+
+    @classmethod
+    def get_private_types(cls) -> List['DataType']:
+        """Private 연결용 데이터 타입들"""
+        return [cls.MYORDER, cls.MYASSET]
+
+    @classmethod
+    def get_candle_types(cls) -> List['DataType']:
+        """캔들 데이터 타입들"""
+        return [
+            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
+            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
+        ]
+
+    def is_public(self) -> bool:
+        """Public 연결용 데이터인지 확인"""
+        return self in self.get_public_types()
+
+    def is_private(self) -> bool:
+        """Private 연결용 데이터인지 확인"""
+        return self in self.get_private_types()
+
+    def is_candle(self) -> bool:
+        """캔들 데이터인지 확인"""
+        return self in self.get_candle_types()
 
 
 # ================================================================

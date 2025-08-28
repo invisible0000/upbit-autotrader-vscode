@@ -462,131 +462,6 @@ class UpbitWebSocketPrivateV5:
 
         return results
 
-    async def smart_unsubscribe(self, data_type: Optional[str] = None,
-                                keep_connection: bool = True) -> int:
-        """스마트 구독 해제 - 조건부 해제 및 최적화
-
-        Args:
-            data_type: 해제할 데이터 타입 (None이면 모든 구독 해제)
-                      "myOrder", "myAsset" 중 하나
-            keep_connection: 연결 유지 여부
-
-        Returns:
-            int: 해제된 구독 수
-        """
-        logger.info(f"🧹 스마트 구독 해제 시작 - 타입: {data_type or '전체'}")
-
-        try:
-            unsubscribed_count = 0
-
-            # 현재 활성 구독 목록 가져오기
-            active_subscriptions = self.subscription_manager.get_active_subscriptions()
-
-            if not active_subscriptions:
-                logger.info("해제할 구독이 없습니다")
-                return 0
-
-            # 구독 해제 대상 필터링
-            targets_to_unsubscribe = []
-
-            for sub_id, sub_info in active_subscriptions.items():
-                # Private 클라이언트는 myOrder, myAsset만 처리
-                sub_data_types = sub_info.get('data_types', [])
-
-                if data_type is None:
-                    # 모든 Private 구독 해제
-                    if any(dt in [PrivateDataType.MY_ORDER, PrivateDataType.MY_ASSET] for dt in sub_data_types):
-                        targets_to_unsubscribe.append(sub_id)
-                else:
-                    # 특정 데이터 타입만 해제
-                    if data_type in sub_data_types:
-                        targets_to_unsubscribe.append(sub_id)
-
-            # 구독 해제 실행
-            for sub_id in targets_to_unsubscribe:
-                try:
-                    success = await self.unsubscribe(sub_id)
-                    if success:
-                        unsubscribed_count += 1
-                        logger.debug(f"구독 해제 완료: {sub_id}")
-                except Exception as e:
-                    logger.error(f"구독 해제 실패 {sub_id}: {e}")
-
-            logger.info(f"✅ 스마트 해제 완료: {unsubscribed_count}개 구독 해제")
-
-            # 연결 유지하지 않는 경우 연결 종료
-            if not keep_connection and unsubscribed_count > 0:
-                logger.info("🔌 연결 유지하지 않음 - 연결 종료")
-                await self.disconnect()
-
-            # 이벤트 발송
-            await self._emit_event("websocket.private.smart_unsubscribed", {
-                "data_type": data_type,
-                "unsubscribed_count": unsubscribed_count,
-                "connection_kept": keep_connection
-            })
-
-            return unsubscribed_count
-
-        except Exception as e:
-            logger.error(f"스마트 구독 해제 실패: {e}")
-            return 0
-
-    async def switch_to_idle_mode(self, ultra_quiet: bool = False) -> str:
-        """유휴 모드 전환 - 최소한의 연결 유지
-
-        Args:
-            ultra_quiet: True이면 울트라 조용 모드 (최소한의 시스템 메시지만)
-
-        Returns:
-            str: 유휴 모드 구독 ID 또는 "idle_mode_failed"
-        """
-        logger.info(f"💤 유휴 모드 전환 시작 {'(울트라 조용)' if ultra_quiet else '(일반)'}")
-
-        try:
-            # 1. 모든 활성 Private 구독 해제
-            unsubscribed_count = await self.smart_unsubscribe(keep_connection=True)
-            logger.info(f"기존 구독 해제: {unsubscribed_count}개")
-
-            # 2. JWT 토큰 상태 확인 및 갱신
-            try:
-                await self._refresh_token_if_needed()
-                logger.info("JWT 토큰 상태 확인 완료")
-            except Exception as e:
-                logger.warning(f"JWT 토큰 갱신 실패 (유휴 모드 계속 진행): {e}")
-
-            # 3. 유휴 상태 설정
-            if ultra_quiet:
-                # 울트라 조용 모드: 토큰 갱신만 유지, 데이터 구독 없음
-                logger.info("🔇 울트라 조용 모드: 토큰 갱신만 유지")
-                idle_subscription_id = "ultra_quiet_mode"
-            else:
-                # 일반 유휴 모드: 최소한의 myAsset 스냅샷 (연결 유지용)
-                try:
-                    idle_subscription_id = await self.subscribe_my_assets(
-                        callback=None,
-                        mode=RequestMode.SNAPSHOT_ONLY
-                    )
-                    logger.info("💤 일반 유휴 모드: myAsset 스냅샷으로 최소 연결 유지")
-                except Exception as e:
-                    logger.error(f"유휴 모드 구독 실패: {e}")
-                    idle_subscription_id = "idle_mode_failed"
-
-            # 4. 이벤트 발송
-            await self._emit_event("websocket.private.idle_mode", {
-                "ultra_quiet": ultra_quiet,
-                "unsubscribed_count": unsubscribed_count,
-                "idle_subscription_id": idle_subscription_id,
-                "jwt_auto_refresh_active": self._token_refresh_task is not None and not self._token_refresh_task.done()
-            })
-
-            logger.info(f"✅ 유휴 모드 전환 완료: {idle_subscription_id}")
-            return idle_subscription_id
-
-        except Exception as e:
-            logger.error(f"유휴 모드 전환 실패: {e}")
-            return "idle_mode_failed"
-
     # ========== Private 전용 보안 기능 ==========
 
     async def rotate_jwt_token(self, force: bool = False) -> bool:
@@ -817,10 +692,21 @@ class UpbitWebSocketPrivateV5:
             return False
 
 
-# ========== Phase 2 사용 예시 ==========
+# ========== Phase 2 사용 예시 (정리된 버전) ==========
 
 async def demo_phase2_features():
-    """Phase 2 고급 기능들의 사용 예시"""
+    """Phase 2 고급 기능들의 사용 예시 (정리된 버전)
+
+    제거된 기능들:
+    - smart_unsubscribe: 기존 unsubscribe와 기능 중복
+    - switch_to_idle_mode: 스냅샷 모드로 대체 가능
+
+    현재 핵심 기능들:
+    - batch_subscribe: 일괄 구독 처리
+    - rotate_jwt_token: JWT 토큰 순환 갱신
+    - validate_api_permissions: API 권한 검증
+    - get_auth_status: 종합 인증 상태
+    """
 
     private_client = UpbitWebSocketPrivateV5()
 
@@ -857,18 +743,7 @@ async def demo_phase2_features():
         # 5. 데이터 수신 대기
         await asyncio.sleep(30)
 
-        # 6. 스마트 해제 (myOrder만)
-        unsubscribed = await private_client.smart_unsubscribe(
-            data_type="myOrder",
-            keep_connection=True
-        )
-        print(f"myOrder 구독 해제: {unsubscribed}개")
-
-        # 7. 유휴 모드 전환
-        idle_id = await private_client.switch_to_idle_mode(ultra_quiet=False)
-        print(f"유휴 모드: {idle_id}")
-
-        # 8. JWT 토큰 순환
+        # 6. JWT 토큰 순환
         rotated = await private_client.rotate_jwt_token(force=True)
         print(f"토큰 순환: {'성공' if rotated else '실패'}")
 

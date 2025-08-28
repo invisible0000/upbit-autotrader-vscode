@@ -866,54 +866,6 @@ class UpbitWebSocketPublicV5:
                 results.append("")
         return results
 
-    async def smart_unsubscribe(self, data_type: Optional[str] = None, keep_connection: bool = True) -> int:
-        """스마트 구독 해제 - v3.0 통합"""
-        try:
-            # v3.0에서는 soft_mode 매개변수 없음
-            if data_type:
-                # 특정 데이터 타입만 해제하는 기능은 구독 매니저에 추가 필요
-                # 임시로 전체 해제 사용
-                unsubscribed_count = 0  # TODO: 특정 타입 해제 구현 필요
-            else:
-                unsubscribed_count = 0  # TODO: unsubscribe_all 구현 필요
-
-            logger.info(f"스마트 해제 완료 (v3.0): {unsubscribed_count}개 구독")
-
-            # 연결 유지하지 않는 경우 종료
-            if not keep_connection and unsubscribed_count > 0:
-                await self.disconnect()
-
-            return unsubscribed_count
-
-        except Exception as e:
-            logger.error(f"스마트 해제 실패: {e}")
-            return 0
-
-    async def switch_to_idle_mode(self, symbol: str = "KRW-BTC", ultra_quiet: bool = False) -> str:
-        """유휴 모드 전환 - v3.0 통합"""
-        try:
-            # 모든 활성 구독 해제
-            await self.smart_unsubscribe(keep_connection=True)
-
-            # v3.0 subscribe 사용하여 최소 활동 구독
-            if ultra_quiet:
-                # 4시간 캔들 스냅샷
-                idle_subscription = await self.subscribe(
-                    "candle.240m", [symbol], is_only_snapshot=True
-                )
-            else:
-                # 1일 캔들 스냅샷
-                idle_subscription = await self.subscribe(
-                    "candle.1d", [symbol], is_only_snapshot=True
-                )
-
-            logger.info(f"유휴 모드 전환 완료 (v3.0): {symbol} ({'울트라 조용' if ultra_quiet else '일반'})")
-            return idle_subscription or "idle_mode_failed"
-
-        except Exception as e:
-            logger.error(f"유휴 모드 전환 실패: {e}")
-            return "idle_mode_failed"
-
     def get_subscription_stats(self) -> Dict[str, Any]:
         """구독 통계 조회 - v3.0 통합"""
         stats = self.subscription_manager.get_stats()
