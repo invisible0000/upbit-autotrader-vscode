@@ -25,9 +25,11 @@ class DataType(str, Enum):
     TICKER = "ticker"
     TRADE = "trade"
     ORDERBOOK = "orderbook"
+    CANDLE_1S = "candle.1s"
     CANDLE_1M = "candle.1m"
     CANDLE_3M = "candle.3m"
     CANDLE_5M = "candle.5m"
+    CANDLE_10M = "candle.10m"
     CANDLE_15M = "candle.15m"
     CANDLE_30M = "candle.30m"
     CANDLE_1H = "candle.60m"
@@ -453,7 +455,7 @@ def infer_message_type(data: Dict[str, Any]) -> str:
         elif msg_type == 'orderbook':
             return 'orderbook'
         elif msg_type.startswith('candle'):
-            return 'candle'
+            return msg_type  # 전체 캔들 타입 반환 (candle.1s, candle.1m 등)
         elif msg_type == 'myOrder':
             return 'myOrder'
         elif msg_type == 'myAsset':
@@ -469,7 +471,7 @@ def infer_message_type(data: Dict[str, Any]) -> str:
         elif msg_type == 'orderbook':
             return 'orderbook'
         elif msg_type.startswith('candle'):
-            return 'candle'
+            return msg_type  # 전체 캔들 타입 반환 (candle.1s, candle.1m 등)
 
     # 3. 필드 조합으로 추론 (type 필드가 없는 경우)
     if 'trade_price' in data and 'change_rate' in data and 'acc_trade_volume_24h' in data:
@@ -588,8 +590,8 @@ def create_connection_status(state: str, connection_id: str) -> Dict[str, Any]:
 
 
 def update_connection_status(status: Dict[str, Any],
-                           message_received: bool = False,
-                           error_occurred: bool = False) -> Dict[str, Any]:
+                             message_received: bool = False,
+                             error_occurred: bool = False) -> Dict[str, Any]:
     """연결 상태 업데이트"""
     now = datetime.now()
     updated = status.copy()
@@ -674,7 +676,7 @@ if __name__ == "__main__":
 
     # 메시지 타입 추론 테스트
     ticker_example = example_ticker_message()
-    print(f"\n🔍 메시지 타입 추론 테스트")
+    print("\n🔍 메시지 타입 추론 테스트")
     print(f"추론 결과: {infer_message_type(ticker_example)}")
 
     # 검증 테스트

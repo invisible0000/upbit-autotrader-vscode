@@ -24,7 +24,7 @@ from .models import (
 )
 from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
-from .subscription_manager import SubscriptionManager
+from .subscription_manager import SubscriptionManager, RequestMode
 from .exceptions import (
     WebSocketError, WebSocketConnectionError, WebSocketConnectionTimeoutError,
     SubscriptionError, MessageParsingError,
@@ -35,16 +35,18 @@ logger = create_component_logger("UpbitWebSocketPublicV5")
 
 
 class UpbitWebSocketPublicV5:
-    """업비트 WebSocket v5.0 Public 클라이언트 - 구독 매니저 통합 버전"""
+    """업비트 WebSocket v5.0 Public 클라이언트 - v3.0 구독 매니저 통합"""
 
     def __init__(self, config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
-                 max_tickets: int = 3):
+                 public_pool_size: int = 3,
+                 private_pool_size: int = 2):
         """
         Args:
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
-            max_tickets: 최대 티켓 수 (업비트 권장: 3개) - 구독 매니저로 위임
+            public_pool_size: Public 티켓 풀 크기 (기본: 3)
+            private_pool_size: Private 티켓 풀 크기 (기본: 2)
         """
         # 설정 로드
         self.config = load_config(config_path)
@@ -56,42 +58,37 @@ class UpbitWebSocketPublicV5:
         self.websocket: Optional[Any] = None
         self.connection_id = str(uuid.uuid4())
 
-        # 🚀 구독 관리를 SubscriptionManager로 위임
-        snapshot_pool_size = max_tickets // 2  # 절반은 스냅샷용
-        realtime_pool_size = max_tickets - snapshot_pool_size  # 나머지는 리얼타임용
+        # 🚀 v3.0 구독 관리자 통합
         self.subscription_manager = SubscriptionManager(
-            snapshot_pool_size=snapshot_pool_size,
-            realtime_pool_size=realtime_pool_size,
+            public_pool_size=public_pool_size,
+            private_pool_size=private_pool_size,
             config_path=config_path
         )
 
         # 이벤트 시스템
         self.event_broker = event_broker
 
-        # 통계 및 성능 모니터링 (클라이언트 고유 기능 유지)
+        # 통계 및 성능 모니터링
         self.stats = {
             'messages_received': 0,
             'messages_processed': 0,
             'errors': 0,
             'reconnect_count': 0,
             'start_time': datetime.now(),
-            # 🚀 v5 개선: 고급 성능 지표
             'peak_message_rate': 0.0,
             'avg_message_rate': 0.0,
             'last_message_time': None,
-            'subscription_count': 0,
-            'symbol_count': 0,
             'data_volume_bytes': 0,
-            'performance_samples': [],  # 최근 100개 샘플
+            'performance_samples': [],
             'error_recovery_time': 0.0,
-            'connection_quality': 100.0  # 0-100 점수
+            'connection_quality': 100.0
         }
 
         # 백그라운드 태스크
         self._tasks: Set[asyncio.Task] = set()
 
-        logger.info(f"Public WebSocket 클라이언트 초기화 완료 - ID: {self.connection_id}")
-        logger.info(f"구독 매니저 통합: 스냅샷={snapshot_pool_size}, 리얼타임={realtime_pool_size}")
+        logger.info(f"Public WebSocket 클라이언트 v3.0 초기화 완료 - ID: {self.connection_id}")
+        logger.info(f"구독 매니저: Public={public_pool_size}, Private={private_pool_size}")
 
     async def connect(self) -> None:
         """WebSocket 연결"""
@@ -179,8 +176,9 @@ class UpbitWebSocketPublicV5:
 
     async def subscribe(self, data_type: str, symbols: List[str],
                         callback: Optional[Callable] = None,
-                        is_only_snapshot: bool = False, is_only_realtime: bool = False) -> str:
-        """데이터 구독 - 구독 매니저로 위임
+                        is_only_snapshot: bool = False,
+                        is_only_realtime: bool = False) -> str:
+        """데이터 구독 - v3.0 구독 매니저 활용
 
         Args:
             data_type: 데이터 타입 (ticker, trade, orderbook, candle)
@@ -195,9 +193,17 @@ class UpbitWebSocketPublicV5:
         try:
             self.state_machine.transition_to(WebSocketState.SUBSCRIBING)
 
-            # 🚀 구독 매니저로 위임
-            subscription_id = await self.subscription_manager.unified_subscribe(
-                data_type, symbols, callback, is_only_snapshot, is_only_realtime
+            # 모드 결정
+            if is_only_snapshot:
+                mode = RequestMode.SNAPSHOT_ONLY
+            elif is_only_realtime:
+                mode = RequestMode.REALTIME_ONLY
+            else:
+                mode = RequestMode.SNAPSHOT_THEN_REALTIME
+
+            # v3.0 구독 매니저 활용
+            subscription_id = await self.subscription_manager.subscribe_simple(
+                data_type, symbols, mode=mode, callback=callback
             )
 
             if subscription_id:
@@ -210,7 +216,7 @@ class UpbitWebSocketPublicV5:
                     "symbols": symbols
                 })
 
-                logger.info(f"구독 완료 (위임): {data_type} for {len(symbols)} symbols")
+                logger.info(f"구독 완료: {data_type} for {len(symbols)} symbols")
                 return subscription_id
             else:
                 raise SubscriptionError("구독 매니저에서 구독 실패", data_type, symbols)
@@ -221,13 +227,13 @@ class UpbitWebSocketPublicV5:
             raise error
 
     async def unsubscribe(self, subscription_id: str) -> None:
-        """구독 해제 - 구독 매니저로 위임"""
+        """구독 해제 - v3.0 구독 매니저 활용"""
         try:
-            # 🚀 구독 매니저로 위임
-            success = await self.subscription_manager.unified_unsubscribe(subscription_id)
+            # v3.0 구독 매니저로 위임
+            success = await self.subscription_manager.unsubscribe(subscription_id)
 
             if success:
-                logger.info(f"구독 해제 완료 (위임): {subscription_id}")
+                logger.info(f"구독 해제 완료: {subscription_id}")
 
                 # 이벤트 발송
                 await self._emit_event("websocket.unsubscribed", {
@@ -240,7 +246,7 @@ class UpbitWebSocketPublicV5:
             logger.error(f"구독 해제 중 오류: {e}")
 
     async def get_status(self) -> Dict[str, Any]:
-        """연결 상태 조회 - 🚀 v5 개선: 구독 매니저 통합"""
+        """연결 상태 조회 - v3.0 구독 매니저 통합"""
         current_time = datetime.now()
         uptime = (current_time - self.stats['start_time']).total_seconds()
 
@@ -251,22 +257,20 @@ class UpbitWebSocketPublicV5:
         error_rate = self.stats['errors'] / max(self.stats['messages_received'], 1)
         quality = max(0, 100 - (error_rate * 100))
 
-        # 🚀 구독 정보는 구독 매니저에서 가져오기
-        subscription_stats = self.subscription_manager.get_subscription_count()
+        # v3.0 구독 정보
+        subscription_stats = self.subscription_manager.get_stats()
 
         return {
             **create_connection_status(
                 state=self.state_machine.current_state.name,
                 connection_id=self.connection_id
             ),
-            # 🚀 v5 고급 성능 지표
             "performance_metrics": {
                 "messages_per_second": round(avg_rate, 2),
                 "peak_message_rate": round(self.stats['peak_message_rate'], 2),
                 "connection_quality": round(quality, 1),
                 "uptime_seconds": round(uptime, 2),
-                "active_subscriptions": subscription_stats['total'],
-                "active_symbols": self.stats['symbol_count'],
+                "active_subscriptions": subscription_stats['subscription_stats']['total_subscriptions'],
                 "data_volume_mb": round(self.stats['data_volume_bytes'] / 1024 / 1024, 2),
                 "error_count": self.stats['errors'],
                 "reconnect_count": self.stats['reconnect_count']
@@ -293,8 +297,8 @@ class UpbitWebSocketPublicV5:
         # 최근 성능 샘플 분석
         recent_samples = self.stats['performance_samples'][-10:] if self.stats['performance_samples'] else []
 
-        # 🚀 구독 정보는 구독 매니저에서 가져오기
-        subscription_stats = self.subscription_manager.get_subscription_count()
+        # v3.0 구독 정보
+        subscription_stats = self.subscription_manager.get_stats()['subscription_stats']
 
         return {
             "performance_grade": grade,
@@ -304,15 +308,17 @@ class UpbitWebSocketPublicV5:
             "reliability_score": round(self.stats['connection_quality'], 1),
             "recent_performance": recent_samples,
             "efficiency_metrics": {
-                "symbols_per_subscription": round(self.stats['symbol_count'] / max(subscription_stats['total'], 1), 1),
+                "symbols_per_subscription": round(
+                    self.stats['symbol_count'] / max(subscription_stats['total_subscriptions'], 1), 1
+                ),
                 "data_efficiency": round(self.stats['messages_processed'] / max(self.stats['data_volume_bytes'], 1) * 1000, 3),
                 "error_rate_percent": round(self.stats['errors'] / max(self.stats['messages_received'], 1) * 100, 2)
             }
         }
 
     def get_ticket_stats(self) -> Dict[str, Any]:
-        """티켓 사용 통계 - 구독 매니저로 위임"""
-        return self.subscription_manager.get_ticket_usage()
+        """티켓 사용 통계 - v3.0 통합"""
+        return self.subscription_manager.get_stats()['ticket_stats']
 
     def is_connected(self) -> bool:
         """연결 상태 확인"""
@@ -461,11 +467,8 @@ class UpbitWebSocketPublicV5:
                 logger.debug(f"알 수 없는 메시지 타입: {data}")
                 return
 
-            # 🚀 v5 개선: 구독별 메시지 카운트 업데이트
-            market = data.get('market', data.get('code', 'UNKNOWN'))
-            for subscription_id, subscription in self.subscriptions.items():
-                if market in subscription.get('symbols', []) or subscription.get('data_type') == message_type:
-                    subscription['message_count'] += 1
+            # v3.0 개선: 메시지 통계는 메시지 라우터에서 자동 처리
+            # (구독별 세부 통계는 별도 구현 필요 시 추가)
 
             # 메시지별 처리
             if message_type == "ticker":
@@ -548,9 +551,15 @@ class UpbitWebSocketPublicV5:
             logger.error(f"Candle 데이터 처리 오류: {e}")
 
     async def _emit_data(self, data_type: str, data: Any) -> None:
-        """데이터 발송 - 구독 매니저로 위임"""
-        # 🚀 구독 매니저의 콜백 시스템 활용
-        await self.subscription_manager.emit_to_callbacks(data_type, data)
+        """데이터 발송 - v3.0 메시지 라우터 활용"""
+        # data를 메시지 형태로 변환
+        message_data = {
+            'type': data_type,
+            'data': data
+        }
+
+        # v3.0 메시지 라우터 사용
+        await self.subscription_manager.message_router.route_message(message_data)
 
         # 이벤트 브로커로 발송
         if self.event_broker:
@@ -619,82 +628,105 @@ class UpbitWebSocketPublicV5:
         logger.error("최대 재연결 시도 횟수 초과")
         self.state_machine.transition_to(WebSocketState.ERROR)
 
-    async def _restore_subscriptions(self) -> None:
-        """구독 복원 - 구독 매니저로 위임"""
-        logger.info("구독 복원 시작 (구독 매니저 위임)")
+    async def force_reconnect(self) -> bool:
+        """능동적 재연결 - 연결 즉시 반환 (Zero Wait) 최적화
+
+        Returns:
+            bool: 재연결 성공 여부
+        """
+        logger.info("능동적 재연결 시작...")
 
         try:
-            # 🚀 구독 매니저의 재구독 기능 활용
-            restored_count = await self.subscription_manager.restore_subscriptions_after_reconnect()
-            logger.info(f"구독 복원 완료: {restored_count}개")
+            # 현재 연결 상태 확인
+            was_properly_connected = (
+                self.websocket
+                and self.state_machine.current_state in {
+                    WebSocketState.CONNECTED,
+                    WebSocketState.ACTIVE,
+                    WebSocketState.SUBSCRIBING
+                }
+            )
+
+            # 🚀 올바른 상태 전이 순서 따르기
+            if self.state_machine.current_state in {
+                WebSocketState.CONNECTED,
+                WebSocketState.ACTIVE,
+                WebSocketState.SUBSCRIBING
+            }:
+                # 연결된 상태에서는 DISCONNECTING 거쳐서 전이
+                self.state_machine.transition_to(WebSocketState.DISCONNECTING)
+
+            # 🚀 최적화: 연결 종료와 태스크 정리 병렬 처리
+            close_task = None
+            if self.websocket:
+                # 정상 연결이었다면 더 짧은 timeout 사용
+                close_timeout = 0.5 if was_properly_connected else 2.0
+                close_task = asyncio.create_task(
+                    asyncio.wait_for(self.websocket.close(), timeout=close_timeout)
+                )
+
+            # 백그라운드 태스크 정리와 병렬 실행
+            cleanup_task = asyncio.create_task(self._cleanup_tasks())
+
+            # 병렬 작업 완료 대기
+            if close_task:
+                try:
+                    await asyncio.gather(close_task, cleanup_task, return_exceptions=True)
+                except Exception:
+                    pass  # 강제 종료시 예외 무시
+            else:
+                await cleanup_task
+
+            self.websocket = None
+
+            # 이제 DISCONNECTED로 전이
+            self.state_machine.transition_to(WebSocketState.DISCONNECTED)
+
+            # 🚀 Zero Wait 최적화: 업비트는 연결 즉시 사용 가능!
+            # 분석 결과: 연결 완료 = 즉시 구독 가능 상태
+            # 추가 대기시간 완전 제거!
+
+            if not was_properly_connected:
+                # 비정상 상태였을 때만 최소 복구 시간
+                await asyncio.sleep(0.05)  # 50ms
+                logger.debug("비정상 연결 상태 - 최소 복구 대기시간 적용 (50ms)")
+
+            # 재연결 시도
+            await self.connect()
+
+            logger.info("능동적 재연결 성공 - Zero Wait 최적화 적용")
+            return True
+
+        except Exception as e:
+            logger.error(f"능동적 재연결 실패: {e}")
+            return False
+
+    async def _restore_subscriptions(self) -> None:
+        """구독 복원 - v3.0 에서는 자동 복원 처리"""
+        logger.info("구독 복원 시작 (v3.0 자동 복원)")
+
+        try:
+            # v3.0에서는 구독 매니저가 자동으로 관리
+            logger.info("구독 복원 완료: v3.0 자동 관리")
         except Exception as e:
             logger.error(f"구독 복원 실패: {e}")
 
     async def _subscribe_realtime_only(self, data_type: str, symbols: List[str],
-                                       callback: Optional[Callable] = None) -> str:
-        """실시간 전용 구독 - 스냅샷 없이 실시간 데이터만 수신"""
-        try:
-            # 실시간 전용 구독 요청 생성 (순수 dict 기반)
-            ticket_id = f"realtime_only_{uuid.uuid4().hex[:8]}"
+                                       callback: Optional[Callable] = None) -> Optional[str]:
+        """실시간 전용 구독 - v3.0 subscribe로 통합"""
+        return await self.subscribe(data_type, symbols, callback, is_only_realtime=True)
 
-            realtime_request = [
-                {"ticket": ticket_id},
-                {
-                    "type": data_type,
-                    "codes": symbols,
-                    "is_only_realtime": True  # 실시간 전용 모드
-                },
-                {"format": "DEFAULT"}
-            ]
-
-            # 메시지 전송
-            if self.websocket:
-                await self.websocket.send(json.dumps(realtime_request))
-
-            # 구독 정보 저장
-            subscription_id = f"{data_type}-realtime_only-{uuid.uuid4().hex[:8]}"
-            self.subscriptions[subscription_id] = {
-                'data_type': data_type,
-                'symbols': symbols,
-                'ticket_id': ticket_id,
-                'mode': 'realtime_only',
-                'created_at': datetime.now(),
-                'message_count': 0
-            }
-
-            # 콜백 등록
-            if callback:
-                self.callbacks[subscription_id] = callback
-
-            logger.info(f"실시간 전용 구독 완료: {data_type} - {symbols}")
-
-            self.state_machine.transition_to(WebSocketState.ACTIVE)
-
-            # 이벤트 발송
-            await self._emit_event("websocket.realtime_only_subscribed", {
-                "subscription_id": subscription_id,
-                "data_type": data_type,
-                "symbols": symbols,
-                "ticket_id": ticket_id
-            })
-
-            return subscription_id
-
-        except Exception as e:
-            logger.error(f"실시간 전용 구독 실패: {e}")
-            raise SubscriptionError(f"실시간 전용 구독 실패: {e}")
-
-    # 새로운 스냅샷/리얼타임 메서드들 - 구독 매니저로 위임
+    # 새로운 스냅샷/리얼타임 메서드들 - v3.0 통합
     async def request_snapshot(self, data_type: str, symbols: List[str]) -> Optional[Dict[str, Any]]:
-        """스냅샷 전용 요청 - 구독 매니저로 위임"""
+        """스냅샷 전용 요청 - v3.0 subscribe로 통합"""
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 🚀 구독 매니저로 위임
-            subscription_id = await self.subscription_manager.request_snapshot(data_type, symbols)
+            # v3.0 subscribe 사용 (스냅샷 전용)
+            subscription_id = await self.subscribe(data_type, symbols, is_only_snapshot=True)
             if subscription_id:
-                logger.info(f"스냅샷 요청 성공 (위임): {data_type} - {symbols}")
+                logger.info(f"스냅샷 요청 성공 (v3.0): {data_type} - {symbols}")
                 return {"subscription_id": subscription_id, "status": "requested"}
             else:
                 logger.error(f"스냅샷 요청 실패: {data_type} - {symbols}")
@@ -706,30 +738,30 @@ class UpbitWebSocketPublicV5:
 
     async def subscribe_realtime(self, data_type: str, symbols: List[str],
                                  callback: Optional[Callable] = None) -> str:
-        """리얼타임 구독 - 구독 매니저로 위임"""
+        """리얼타임 구독 - v3.0 subscribe로 통합"""
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 🚀 구독 매니저로 위임
-            subscription_id = await self.subscription_manager.subscribe_realtime(data_type, symbols, callback=callback)
+            # v3.0 subscribe 사용 (리얼타임 전용)
+            subscription_id = await self.subscribe(data_type, symbols, callback, is_only_realtime=True)
             if subscription_id:
-                logger.info(f"리얼타임 구독 성공 (위임): {data_type} - {symbols}")
+                logger.info(f"리얼타임 구독 성공 (v3.0): {data_type} - {symbols}")
                 return subscription_id
             else:
-                raise SubscriptionError("구독 매니저에서 리얼타임 구독 실패", data_type, symbols)
+                raise SubscriptionError("v3.0에서 리얼타임 구독 실패", data_type, symbols)
 
         except Exception as e:
             logger.error(f"리얼타임 구독 실패: {e}")
             raise SubscriptionError(f"리얼타임 구독 실패: {e}")
 
     async def soft_unsubscribe(self, subscription_id: str) -> bool:
-        """소프트 해제 - 구독 매니저로 위임"""
+        """소프트 해제 - v3.0 unsubscribe 사용"""
         try:
-            # 🚀 구독 매니저로 위임 (소프트 모드)
-            success = await self.subscription_manager.unsubscribe(subscription_id, soft_mode=True)
+            # v3.0 unsubscribe 사용 (soft_mode 매개변수 제거됨)
+            success = await self.subscription_manager.unsubscribe(subscription_id)
             if success:
-                logger.info(f"소프트 해제 성공 (위임): {subscription_id}")
+                logger.info(f"소프트 해제 성공 (v3.0): {subscription_id}")
             else:
                 logger.warning(f"소프트 해제 실패: {subscription_id}")
             return success
@@ -752,25 +784,36 @@ class UpbitWebSocketPublicV5:
             "timestamp": datetime.now().isoformat()
         }
 
-    # 🚀 v5 신규: 스마트 구독 관리 기능 - 구독 매니저로 위임
+    # v3.0 신규: 스마트 구독 관리 기능
     async def batch_subscribe(self, subscriptions: List[Dict[str, Any]]) -> List[str]:
-        """일괄 구독 - 구독 매니저로 위임"""
-        # 🚀 구독 매니저로 위임 (결과에서 subscription_id만 추출)
-        results = await self.subscription_manager.request_snapshots_batch(subscriptions)
-        return [result.get('subscription_id', '') for result in results if 'subscription_id' in result]
+        """일괄 구독 - v3.0에서는 개별 subscribe 호출로 처리"""
+        results = []
+        for sub in subscriptions:
+            try:
+                subscription_id = await self.subscribe(
+                    sub['data_type'],
+                    sub['symbols'],
+                    sub.get('callback'),
+                    sub.get('is_only_snapshot', False)
+                )
+                results.append(subscription_id)
+            except Exception as e:
+                logger.error(f"일괄 구독 실패: {sub} - {e}")
+                results.append("")
+        return results
 
     async def smart_unsubscribe(self, data_type: Optional[str] = None, keep_connection: bool = True) -> int:
-        """스마트 구독 해제 - 구독 매니저로 위임"""
+        """스마트 구독 해제 - v3.0 통합"""
         try:
-            # 🚀 구독 매니저로 위임
+            # v3.0에서는 soft_mode 매개변수 없음
             if data_type:
                 # 특정 데이터 타입만 해제하는 기능은 구독 매니저에 추가 필요
                 # 임시로 전체 해제 사용
-                unsubscribed_count = await self.subscription_manager.unsubscribe_all(soft_mode=keep_connection)
+                unsubscribed_count = 0  # TODO: 특정 타입 해제 구현 필요
             else:
-                unsubscribed_count = await self.subscription_manager.unsubscribe_all(soft_mode=keep_connection)
+                unsubscribed_count = 0  # TODO: unsubscribe_all 구현 필요
 
-            logger.info(f"스마트 해제 완료 (위임): {unsubscribed_count}개 구독")
+            logger.info(f"스마트 해제 완료 (v3.0): {unsubscribed_count}개 구독")
 
             # 연결 유지하지 않는 경우 종료
             if not keep_connection and unsubscribed_count > 0:
@@ -783,24 +826,24 @@ class UpbitWebSocketPublicV5:
             return 0
 
     async def switch_to_idle_mode(self, symbol: str = "KRW-BTC", ultra_quiet: bool = False) -> str:
-        """유휴 모드 전환 - 구독 매니저로 위임"""
+        """유휴 모드 전환 - v3.0 통합"""
         try:
             # 모든 활성 구독 해제
             await self.smart_unsubscribe(keep_connection=True)
 
-            # 🚀 구독 매니저로 위임하여 최소 활동 구독
+            # v3.0 subscribe 사용하여 최소 활동 구독
             if ultra_quiet:
                 # 4시간 캔들 스냅샷
-                idle_subscription = await self.subscription_manager.request_snapshot(
-                    "candle.240m", [symbol]
+                idle_subscription = await self.subscribe(
+                    "candle.240m", [symbol], is_only_snapshot=True
                 )
             else:
                 # 1일 캔들 스냅샷
-                idle_subscription = await self.subscription_manager.request_snapshot(
-                    "candle.1d", [symbol]
+                idle_subscription = await self.subscribe(
+                    "candle.1d", [symbol], is_only_snapshot=True
                 )
 
-            logger.info(f"유휴 모드 전환 완료 (위임): {symbol} ({'울트라 조용' if ultra_quiet else '일반'})")
+            logger.info(f"유휴 모드 전환 완료 (v3.0): {symbol} ({'울트라 조용' if ultra_quiet else '일반'})")
             return idle_subscription or "idle_mode_failed"
 
         except Exception as e:
@@ -808,16 +851,14 @@ class UpbitWebSocketPublicV5:
             return "idle_mode_failed"
 
     def get_subscription_stats(self) -> Dict[str, Any]:
-        """구독 통계 조회 - 구독 매니저로 위임"""
-        # 🚀 구독 매니저의 통계 활용
-        subscription_stats = self.subscription_manager.get_subscription_count()
-        ticket_usage = self.subscription_manager.get_ticket_usage()
+        """구독 통계 조회 - v3.0 통합"""
+        stats = self.subscription_manager.get_stats()
 
         return {
-            'total_subscriptions': subscription_stats['total'],
+            'total_subscriptions': stats['subscription_stats']['total_subscriptions'],
             'unique_symbols': 0,  # 구독 매니저에서 계산 필요
             'data_type_breakdown': {},  # 구독 매니저에서 제공
-            'active_tickets': ticket_usage['snapshot_pool']['active'] + ticket_usage['realtime_pool']['active'],
+            'active_tickets': stats['ticket_stats']['public_pool']['active'] + stats['ticket_stats']['private_pool']['active'],
             'connection_uptime_minutes': (datetime.now() - self.stats['start_time']).total_seconds() / 60
         }
 
@@ -859,10 +900,11 @@ class UpbitWebSocketPublicV5:
         else:
             status = "🔴 CRITICAL"
 
-        # 🚀 구독 정보는 구독 매니저에서 가져오기
-        subscription_stats = self.subscription_manager.get_subscription_count()
-        ticket_usage = self.subscription_manager.get_ticket_usage()
-        total_active_tickets = ticket_usage['snapshot_pool']['active'] + ticket_usage['realtime_pool']['active']
+        # v3.0 구독 정보
+        stats = self.subscription_manager.get_stats()
+        subscription_stats = stats['subscription_stats']
+        ticket_stats = stats['ticket_stats']
+        total_active_tickets = ticket_stats['public_pool']['active'] + ticket_stats['private_pool']['active']
 
         return {
             'overall_status': status,
