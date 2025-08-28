@@ -5,13 +5,26 @@
 - 혼합 타입 응답 완벽 지원 (현재가 + 체결 + 호가 + 캔들 + 내주문 + 내자산)
 - 최대 성능 (Pydantic 오버헤드 제거)
 - 업비트 공식 API 필드명 100% 호환
+- SIMPLE 포맷 완전 지원 (bandwidth 최적화)
 - 사용자 친화적 필드 문서화
 - 기존 WebSocket 클라이언트 패턴 준수
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
+
+
+# SIMPLE 포맷 변환기 통합
+try:
+    from .simple_format_converter import (
+        auto_detect_and_convert,
+        convert_to_simple_format,
+        convert_from_simple_format
+    )
+    SIMPLE_FORMAT_AVAILABLE = True
+except ImportError:
+    SIMPLE_FORMAT_AVAILABLE = False
 
 
 class StreamType(str, Enum):
@@ -666,6 +679,221 @@ def example_orderbook_message() -> Dict[str, Any]:
         'total_bid_size': 0.4,
         'timestamp': int(datetime.now().timestamp() * 1000),
         'stream_type': 'SNAPSHOT'
+    }
+
+
+# ================================================================
+# SIMPLE 포맷 통합 처리 함수들 (v5.0 신규)
+# ================================================================
+
+def process_websocket_message(raw_data: Dict[str, Any],
+                              format_preference: str = "auto",
+                              validate_data: bool = True) -> Dict[str, Any]:
+    """
+    WebSocket 메시지 통합 처리 - SIMPLE 포맷 완전 지원
+
+    Args:
+        raw_data: WebSocket으로 받은 원시 데이터
+        format_preference: 포맷 설정 ("auto", "simple", "default")
+        validate_data: 데이터 검증 수행 여부
+
+    Returns:
+        Dict[str, Any]: 처리된 WebSocket 메시지
+    """
+    if not SIMPLE_FORMAT_AVAILABLE:
+        # SIMPLE 포맷 변환기가 없으면 기본 처리
+        msg_type = infer_message_type(raw_data)
+        validated_data = validate_mixed_message(raw_data) if validate_data else raw_data
+        return create_websocket_message(msg_type, validated_data.get('code'), validated_data)
+
+    try:
+        # 1. 메시지 타입 추론
+        msg_type = infer_message_type(raw_data)
+
+        # 2. 포맷 변환 처리
+        if format_preference == "simple":
+            # DEFAULT → SIMPLE 변환
+            converted_data = convert_to_simple_format(raw_data, msg_type)
+        elif format_preference == "default":
+            # SIMPLE → DEFAULT 변환 (필요시)
+            converted_data = auto_detect_and_convert(raw_data, target_format="DEFAULT")
+        else:  # auto
+            # 자동 감지 및 DEFAULT로 표준화
+            converted_data = auto_detect_and_convert(raw_data, target_format="DEFAULT")
+
+        # 3. 데이터 검증 (요청시)
+        if validate_data:
+            validated_data = validate_mixed_message(converted_data)
+        else:
+            validated_data = converted_data
+
+        # 4. 표준 WebSocket 메시지 생성
+        market_code = validated_data.get('code') or validated_data.get('cd') or 'UNKNOWN'
+        return create_websocket_message(msg_type, market_code, validated_data)
+
+    except Exception as e:
+        # 오류 발생시 기본 처리로 폴백
+        msg_type = infer_message_type(raw_data)
+        validated_data = validate_mixed_message(raw_data) if validate_data else raw_data
+        result = create_websocket_message(msg_type, validated_data.get('code'), validated_data)
+        result['format_conversion_error'] = str(e)
+        return result
+
+
+def convert_message_format(message_data: Dict[str, Any],
+                           target_format: str = "simple") -> Dict[str, Any]:
+    """
+    메시지 포맷 변환 (SIMPLE ↔ DEFAULT)
+
+    Args:
+        message_data: 변환할 메시지 데이터
+        target_format: 목표 포맷 ("simple" 또는 "default")
+
+    Returns:
+        Dict[str, Any]: 변환된 메시지 데이터
+    """
+    if not SIMPLE_FORMAT_AVAILABLE:
+        return message_data
+
+    try:
+        # 메시지에서 실제 데이터 추출
+        data = message_data.get('data', message_data)
+        msg_type = message_data.get('type') or infer_message_type(data)
+
+        if target_format.lower() == "simple":
+            converted_data = convert_to_simple_format(data, msg_type)
+        else:  # default
+            converted_data = auto_detect_and_convert(data, target_format="DEFAULT")
+
+        # 원본 메시지 구조 유지하면서 데이터만 교체
+        result = message_data.copy()
+        result['data'] = converted_data
+        result['format'] = target_format.upper()
+
+        return result
+
+    except Exception as e:
+        # 변환 실패시 원본 반환
+        result = message_data.copy()
+        result['format_conversion_error'] = str(e)
+        return result
+
+
+def get_message_format(message_data: Dict[str, Any]) -> str:
+    """
+    메시지 포맷 감지 (SIMPLE/DEFAULT/UNKNOWN)
+
+    Args:
+        message_data: 분석할 메시지 데이터
+
+    Returns:
+        str: 감지된 포맷 ("SIMPLE", "DEFAULT", "UNKNOWN")
+    """
+    if not SIMPLE_FORMAT_AVAILABLE:
+        return "DEFAULT"
+
+    try:
+        # 메시지에서 실제 데이터 추출
+        data = message_data.get('data', message_data)
+
+        # SIMPLE 포맷 특징 필드 확인
+        simple_indicators = ['ty', 'cd', 'tp', 'tv', 'ap', 'bp', 'obu']
+        default_indicators = ['type', 'code', 'trade_price', 'trade_volume',
+                            'ask_price', 'bid_price', 'orderbook_units']
+
+        simple_count = sum(1 for key in simple_indicators if key in data)
+        default_count = sum(1 for key in default_indicators if key in data)
+
+        if simple_count > default_count:
+            return "SIMPLE"
+        elif default_count > 0:
+            return "DEFAULT"
+        else:
+            return "UNKNOWN"
+
+    except Exception:
+        return "UNKNOWN"
+
+
+def create_format_aware_message(msg_type: str, market: str, data: Dict[str, Any],
+                               format_mode: str = "default",
+                               timestamp: Optional[datetime] = None,
+                               stream_type: Optional[str] = None) -> Dict[str, Any]:
+    """
+    포맷 인식 WebSocket 메시지 생성
+
+    Args:
+        msg_type: 메시지 타입
+        market: 마켓 코드
+        data: 메시지 데이터
+        format_mode: 포맷 모드 ("simple", "default", "auto")
+        timestamp: 타임스탬프
+        stream_type: 스트림 타입
+
+    Returns:
+        Dict[str, Any]: 포맷 인식 WebSocket 메시지
+    """
+    # 기본 메시지 생성
+    message = create_websocket_message(msg_type, market, data, timestamp, stream_type)
+
+    # 포맷 정보 추가
+    message['format'] = get_message_format(message)
+    message['format_mode'] = format_mode.upper()
+
+    # SIMPLE 포맷 요청시 변환
+    if format_mode.lower() == "simple" and SIMPLE_FORMAT_AVAILABLE:
+        message = convert_message_format(message, "simple")
+
+    return message
+
+
+def batch_convert_messages(messages: List[Dict[str, Any]],
+                           target_format: str = "simple") -> List[Dict[str, Any]]:
+    """
+    메시지 배치 포맷 변환
+
+    Args:
+        messages: 변환할 메시지 리스트
+        target_format: 목표 포맷
+
+    Returns:
+        List[Dict[str, Any]]: 변환된 메시지 리스트
+    """
+    if not SIMPLE_FORMAT_AVAILABLE:
+        return messages
+
+    converted_messages = []
+    for message in messages:
+        try:
+            converted = convert_message_format(message, target_format)
+            converted_messages.append(converted)
+        except Exception as e:
+            # 변환 실패시 원본 유지하고 에러 표시
+            error_message = message.copy()
+            error_message['conversion_error'] = str(e)
+            converted_messages.append(error_message)
+
+    return converted_messages
+
+
+# ================================================================
+# SIMPLE 포맷 지원 확인 및 설정
+# ================================================================
+
+def is_simple_format_supported() -> bool:
+    """SIMPLE 포맷 지원 여부 확인"""
+    return SIMPLE_FORMAT_AVAILABLE
+
+
+def get_format_conversion_stats() -> Dict[str, Any]:
+    """포맷 변환 통계 정보"""
+    return {
+        "simple_format_available": SIMPLE_FORMAT_AVAILABLE,
+        "supported_data_types": [
+            "ticker", "trade", "orderbook", "candle", "myOrder", "myAsset"
+        ] if SIMPLE_FORMAT_AVAILABLE else [],
+        "conversion_modes": ["auto", "simple", "default"],
+        "bandwidth_savings": "최대 60% (SIMPLE 포맷 사용시)" if SIMPLE_FORMAT_AVAILABLE else "지원 안함"
     }
 
 

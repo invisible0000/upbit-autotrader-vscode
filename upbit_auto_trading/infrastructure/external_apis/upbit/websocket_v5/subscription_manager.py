@@ -24,7 +24,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .models import infer_message_type
+from .models import process_websocket_message
 from .config import load_config
 
 logger = create_component_logger("SubscriptionManagerV3")
@@ -398,9 +398,13 @@ class SubscriptionManager:
     def __init__(self,
                  public_pool_size: int = 3,
                  private_pool_size: int = 2,
-                 config_path: Optional[str] = None):
+                 config_path: Optional[str] = None,
+                 format_preference: str = "auto"):
         # 설정 로드
         self.config = load_config(config_path)
+
+        # 🚀 v5 신규: SIMPLE 포맷 설정
+        self.format_preference = format_preference.lower()
 
         # 핵심 컴포넌트
         self.ticket_manager = TicketManager(public_pool_size, private_pool_size)
@@ -584,15 +588,23 @@ class SubscriptionManager:
     # =================================================================
 
     async def process_message(self, raw_message: str) -> None:
-        """수신 메시지 처리"""
+        """수신 메시지 처리 - 🚀 v5 SIMPLE 포맷 통합"""
         try:
             data = json.loads(raw_message)
             if not isinstance(data, dict):
                 return
 
-            # 메시지 타입과 심볼 추출
-            message_type = infer_message_type(data)
-            symbol = data.get("code", data.get("market", "UNKNOWN"))
+            # 🚀 v5 신규: SIMPLE 포맷 통합 처리
+            processed_message = process_websocket_message(
+                raw_data=data,
+                format_preference=self.format_preference,
+                validate_data=True
+            )
+
+            # 처리된 메시지에서 정보 추출
+            message_data = processed_message['data']
+            message_type = processed_message['type']
+            symbol = message_data.get("code", message_data.get("cd", "UNKNOWN"))
 
             # 해당 메시지를 처리할 구독 찾기
             handling_subscriptions = []
@@ -601,8 +613,12 @@ class SubscriptionManager:
                     subscription.update_message_stats()
                     handling_subscriptions.append(sub_id)
 
-            # 메시지 라우팅
-            await self.message_router.route_message(data, handling_subscriptions)
+            # 메시지 라우팅 (포맷 정보 포함)
+            enhanced_data = message_data.copy()
+            enhanced_data['_format'] = processed_message.get('format', 'UNKNOWN')
+            enhanced_data['_format_mode'] = self.format_preference
+
+            await self.message_router.route_message(enhanced_data, handling_subscriptions)
 
         except Exception as e:
             logger.error(f"메시지 처리 오류: {e}")

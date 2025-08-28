@@ -12,6 +12,7 @@
 
 import asyncio
 import json
+import logging
 import uuid
 import websockets
 from typing import Dict, List, Optional, Callable, Any, Set
@@ -20,7 +21,8 @@ from datetime import datetime
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .models import (
     infer_message_type, validate_mixed_message, create_websocket_message,
-    create_connection_status
+    create_connection_status, process_websocket_message,
+    convert_message_format, get_message_format
 )
 from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
@@ -40,16 +42,26 @@ class UpbitWebSocketPublicV5:
     def __init__(self, config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
                  public_pool_size: int = 3,
-                 private_pool_size: int = 2):
+                 private_pool_size: int = 2,
+                 enable_compression: bool = True,
+                 format_preference: str = "auto"):
         """
         Args:
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
             public_pool_size: Public 티켓 풀 크기 (기본: 3)
             private_pool_size: Private 티켓 풀 크기 (기본: 2)
+            enable_compression: WebSocket 압축 활성화 (기본: True)
+            format_preference: 메시지 포맷 설정 ("auto", "simple", "default")
         """
         # 설정 로드
         self.config = load_config(config_path)
+
+        # 압축 설정
+        self.enable_compression = enable_compression
+
+        # 🚀 v5 신규: SIMPLE 포맷 설정
+        self.format_preference = format_preference.lower()
 
         # 상태 관리
         self.state_machine = WebSocketStateMachine()
@@ -58,11 +70,12 @@ class UpbitWebSocketPublicV5:
         self.websocket: Optional[Any] = None
         self.connection_id = str(uuid.uuid4())
 
-        # 🚀 v3.0 구독 관리자 통합
+        # 🚀 v3.0 구독 관리자 통합 + v5 SIMPLE 포맷 지원
         self.subscription_manager = SubscriptionManager(
             public_pool_size=public_pool_size,
             private_pool_size=private_pool_size,
-            config_path=config_path
+            config_path=config_path,
+            format_preference=self.format_preference
         )
 
         # 이벤트 시스템
@@ -100,16 +113,30 @@ class UpbitWebSocketPublicV5:
             self.state_machine.transition_to(WebSocketState.CONNECTING)
             logger.info(f"WebSocket 연결 시도: {self.config.connection.url}")
 
-            # WebSocket 연결
-            self.websocket = await asyncio.wait_for(
-                websockets.connect(
-                    self.config.connection.url,
-                    ping_interval=self.config.connection.ping_interval,
-                    ping_timeout=self.config.connection.ping_timeout,
-                    close_timeout=self.config.connection.close_timeout
-                ),
-                timeout=self.config.connection.connect_timeout
-            )
+            # WebSocket 연결 (압축 옵션 포함)
+            if self.enable_compression:
+                logger.debug("WebSocket 압축 기능 활성화 (deflate)")
+                self.websocket = await asyncio.wait_for(
+                    websockets.connect(
+                        self.config.connection.url,
+                        ping_interval=self.config.connection.ping_interval,
+                        ping_timeout=self.config.connection.ping_timeout,
+                        close_timeout=self.config.connection.close_timeout,
+                        compression="deflate"
+                    ),
+                    timeout=self.config.connection.connect_timeout
+                )
+            else:
+                logger.debug("WebSocket 압축 기능 비활성화")
+                self.websocket = await asyncio.wait_for(
+                    websockets.connect(
+                        self.config.connection.url,
+                        ping_interval=self.config.connection.ping_interval,
+                        ping_timeout=self.config.connection.ping_timeout,
+                        close_timeout=self.config.connection.close_timeout
+                    ),
+                    timeout=self.config.connection.connect_timeout
+                )
 
             self.state_machine.transition_to(WebSocketState.CONNECTED)
             logger.info("WebSocket 연결 완료")
@@ -177,8 +204,9 @@ class UpbitWebSocketPublicV5:
     async def subscribe(self, data_type: str, symbols: List[str],
                         callback: Optional[Callable] = None,
                         is_only_snapshot: bool = False,
-                        is_only_realtime: bool = False) -> str:
-        """데이터 구독 - v3.0 구독 매니저 활용
+                        is_only_realtime: bool = False,
+                        format_mode: Optional[str] = None) -> str:
+        """데이터 구독 - v3.0 구독 매니저 활용 + 🚀 v5 SIMPLE 포맷 지원
 
         Args:
             data_type: 데이터 타입 (ticker, trade, orderbook, candle)
@@ -186,9 +214,15 @@ class UpbitWebSocketPublicV5:
             callback: 데이터 수신 콜백
             is_only_snapshot: True이면 스냅샷만 수신 후 종료
             is_only_realtime: True이면 실시간 데이터만 수신 (스냅샷 제외)
+            format_mode: 포맷 모드 ("simple", "default", None=클라이언트 기본값 사용)
         """
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다", data_type, symbols)
+
+        # 🚀 v5 신규: 구독별 포맷 설정 (임시 변경)
+        original_format = self.format_preference
+        if format_mode:
+            self.format_preference = format_mode.lower()
 
         try:
             self.state_machine.transition_to(WebSocketState.SUBSCRIBING)
@@ -225,6 +259,10 @@ class UpbitWebSocketPublicV5:
             error = SubscriptionError(f"구독 실패: {str(e)}", data_type, symbols)
             await self._handle_error(error)
             raise error
+        finally:
+            # 🚀 v5 신규: 포맷 설정 복원
+            if format_mode:
+                self.format_preference = original_format
 
     async def unsubscribe(self, subscription_id: str) -> None:
         """구독 해제 - v3.0 구독 매니저 활용"""
@@ -326,28 +364,32 @@ class UpbitWebSocketPublicV5:
 
     # 편의 메서드들
     async def subscribe_ticker(self, symbols: List[str], callback: Optional[Callable] = None,
-                               is_only_snapshot: bool = False, is_only_realtime: bool = False) -> str:
-        """현재가 구독
+                               is_only_snapshot: bool = False, is_only_realtime: bool = False,
+                               format_mode: Optional[str] = None) -> str:
+        """현재가 구독 - 🚀 v5 SIMPLE 포맷 지원
 
         Args:
             symbols: 구독할 심볼 리스트
             callback: 데이터 수신 콜백
             is_only_snapshot: True이면 스냅샷만 수신 후 종료
             is_only_realtime: True이면 실시간 데이터만 수신 (스냅샷 제외)
+            format_mode: 포맷 모드 ("simple", "default", None=클라이언트 기본값)
         """
-        return await self.subscribe("ticker", symbols, callback, is_only_snapshot, is_only_realtime)
+        return await self.subscribe("ticker", symbols, callback, is_only_snapshot, is_only_realtime, format_mode)
 
     async def subscribe_trade(self, symbols: List[str], callback: Optional[Callable] = None,
-                              is_only_snapshot: bool = False, is_only_realtime: bool = False) -> str:
-        """체결 구독
+                              is_only_snapshot: bool = False, is_only_realtime: bool = False,
+                              format_mode: Optional[str] = None) -> str:
+        """체결 구독 - 🚀 v5 SIMPLE 포맷 지원
 
         Args:
             symbols: 구독할 심볼 리스트
             callback: 데이터 수신 콜백
             is_only_snapshot: True이면 스냅샷만 수신 후 종료
             is_only_realtime: True이면 실시간 데이터만 수신 (스냅샷 제외)
+            format_mode: 포맷 모드 ("simple", "default", None=클라이언트 기본값)
         """
-        return await self.subscribe("trade", symbols, callback, is_only_snapshot, is_only_realtime)
+        return await self.subscribe("trade", symbols, callback, is_only_snapshot, is_only_realtime, format_mode)
 
     async def subscribe_orderbook(self, symbols: List[str], callback: Optional[Callable] = None,
                                   is_only_snapshot: bool = False, is_only_realtime: bool = False) -> str:
@@ -455,26 +497,37 @@ class UpbitWebSocketPublicV5:
             ))
 
     async def _process_message(self, raw_message: str) -> None:
-        """메시지 처리 - 🚀 v5 개선: 성능 추적 및 콜백 실행"""
+        """메시지 처리 - 🚀 v5 SIMPLE 포맷 통합"""
         processing_start = datetime.now()
 
         try:
             data = json.loads(raw_message)
 
-            # 메시지 타입 식별
-            message_type = self._identify_message_type(data)
-            if not message_type:
-                logger.debug(f"알 수 없는 메시지 타입: {data}")
-                return
+            # 🚀 v5 신규: SIMPLE 포맷 통합 처리
+            processed_message = process_websocket_message(
+                raw_data=data,
+                format_preference=self.format_preference,
+                validate_data=True
+            )
+
+            # 처리된 메시지에서 데이터 추출
+            message_data = processed_message['data']
+            message_type = processed_message['type']
+
+            # 포맷 정보 로깅 (디버그)
+            if logger.isEnabledFor(logging.DEBUG):
+                original_format = get_message_format(data)
+                result_format = processed_message.get('format', 'UNKNOWN')
+                logger.debug(f"메시지 처리: {message_type} ({original_format} → {result_format})")
 
             # v3.0 개선: 메시지 통계는 메시지 라우터에서 자동 처리
             # (구독별 세부 통계는 별도 구현 필요 시 추가)
 
-            # 메시지별 처리
+            # 메시지별 처리 (SIMPLE 포맷 고려)
             if message_type == "ticker":
-                await self._handle_ticker(data)
+                await self._handle_ticker(message_data)
             elif message_type == "trade":
-                await self._handle_trade(data)
+                await self._handle_trade(message_data)
             elif message_type == "orderbook":
                 await self._handle_orderbook(data)
             elif message_type.startswith("candle"):
