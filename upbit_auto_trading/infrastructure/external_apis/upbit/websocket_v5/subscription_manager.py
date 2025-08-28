@@ -10,23 +10,25 @@
 - WebSocketConfig 통합 지원
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from datetime import datetime
 import uuid
+import json
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .config import WebSocketConfig, load_config
+from .config import load_config
 
 logger = create_component_logger("SubscriptionManager")
 
 
 class TicketPool:
-    """티켓 풀 관리"""
+    """티켓 풀 관리 - 클라이언트 TicketManager 기능 통합"""
 
     def __init__(self, pool_name: str, max_size: int):
         self.pool_name = pool_name
         self.max_size = max_size
         self.active_tickets: Dict[str, Dict[str, Any]] = {}
+        self.data_type_mapping: Dict[str, str] = {}  # data_type -> ticket_id
         self.created_at = datetime.now()
 
     def acquire_ticket(self, purpose: str = "general") -> Optional[str]:
@@ -39,15 +41,117 @@ class TicketPool:
         self.active_tickets[ticket_id] = {
             "purpose": purpose,
             "created_at": datetime.now(),
-            "subscriptions": []
+            "subscriptions": [],
+            "data_types": set(),
+            "symbols": set()
         }
 
         logger.debug(f"티켓 획득: {ticket_id} (목적: {purpose})")
         return ticket_id
 
+    def get_or_create_ticket(self, data_type: str, symbols: List[str], **options) -> Optional[str]:
+        """데이터 타입에 대한 티켓 획득 또는 생성 (클라이언트 TicketManager 통합)"""
+        # 기존 티켓이 있으면 재사용 (옵션이 다르면 새 티켓)
+        if data_type in self.data_type_mapping:
+            ticket_id = self.data_type_mapping[data_type]
+            existing_ticket = self.active_tickets[ticket_id]
+
+            # 동일한 옵션인지 확인
+            existing_options = {k: v for k, v in existing_ticket.items()
+                                if k in ['is_only_snapshot', 'is_only_realtime']}
+            new_options = {k: v for k, v in options.items()
+                           if k in ['is_only_snapshot', 'is_only_realtime']}
+
+            if existing_options == new_options:
+                logger.debug(f"기존 티켓 재사용: {ticket_id} for {data_type}")
+                # 심볼 추가
+                existing_ticket['symbols'].update(symbols)
+                return ticket_id
+            else:
+                # 옵션이 다르면 기존 티켓 제거하고 새로 생성
+                self.remove_data_type(data_type)
+
+        # 새 티켓 생성
+        ticket_id = self.acquire_ticket(f"{data_type}_subscription")
+        if not ticket_id:
+            return None
+
+        ticket_info = self.active_tickets[ticket_id]
+        ticket_info['data_types'].add(data_type)
+        ticket_info['symbols'].update(symbols)
+
+        # 스냅샷/실시간 옵션 추가
+        if 'is_only_snapshot' in options:
+            ticket_info['is_only_snapshot'] = options['is_only_snapshot']
+        if 'is_only_realtime' in options:
+            ticket_info['is_only_realtime'] = options['is_only_realtime']
+
+        self.data_type_mapping[data_type] = ticket_id
+
+        logger.info(f"새 티켓 생성: {ticket_id} for {data_type} with {len(symbols)} symbols, options: {options}")
+        return ticket_id
+
+    def remove_data_type(self, data_type: str) -> Optional[str]:
+        """데이터 타입 제거"""
+        if data_type not in self.data_type_mapping:
+            logger.warning(f"데이터 타입 {data_type}을 찾을 수 없습니다")
+            return None
+
+        ticket_id = self.data_type_mapping[data_type]
+        self.active_tickets[ticket_id]['data_types'].discard(data_type)
+        del self.data_type_mapping[data_type]
+
+        # 티켓이 비어있으면 제거
+        if not self.active_tickets[ticket_id]['data_types']:
+            del self.active_tickets[ticket_id]
+            logger.info(f"빈 티켓 제거: {ticket_id}")
+
+        return ticket_id
+
+    def get_ticket_message(self, ticket_id: str) -> List[Dict[str, Any]]:
+        """티켓의 구독 메시지 생성 (업비트 공식 API 형식) - 클라이언트에서 이전"""
+        if ticket_id not in self.active_tickets:
+            raise ValueError(f"티켓을 찾을 수 없습니다: {ticket_id}")
+
+        ticket_info = self.active_tickets[ticket_id]
+        message = [{"ticket": ticket_id}]
+
+        for data_type in ticket_info['data_types']:
+            if data_type in ["ticker", "trade", "orderbook"]:
+                data_message = {
+                    "type": data_type,
+                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
+                }
+
+                # 스냅샷/실시간 옵션 추가
+                if 'is_only_snapshot' in ticket_info:
+                    data_message['is_only_snapshot'] = ticket_info['is_only_snapshot']
+                if 'is_only_realtime' in ticket_info:
+                    data_message['is_only_realtime'] = ticket_info['is_only_realtime']
+
+                message.append(data_message)
+            elif data_type.startswith("candle"):
+                candle_message: Dict[str, Any] = {
+                    "type": data_type,
+                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
+                }
+                message.append(candle_message)
+
+        message.append({"format": "DEFAULT"})
+        return message
+
     def release_ticket(self, ticket_id: str) -> bool:
         """티켓 해제"""
         if ticket_id in self.active_tickets:
+            # data_type_mapping에서도 제거
+            data_types_to_remove = []
+            for data_type, tid in self.data_type_mapping.items():
+                if tid == ticket_id:
+                    data_types_to_remove.append(data_type)
+
+            for data_type in data_types_to_remove:
+                del self.data_type_mapping[data_type]
+
             del self.active_tickets[ticket_id]
             logger.debug(f"티켓 해제: {ticket_id}")
             return True
@@ -120,7 +224,7 @@ class SmartUnsubscriber:
         ]
 
     @classmethod
-    def create_hard_unsubscribe_request(cls, ticket_id: str) -> Dict[str, Any]:
+    def create_hard_unsubscribe_request(cls, ticket_id: str) -> List[Dict[str, Any]]:
         """하드 해제 요청 생성 - 완전 종료"""
         return [
             {"ticket": ticket_id},
@@ -133,7 +237,7 @@ class SmartUnsubscriber:
 
 
 class SubscriptionManager:
-    """WebSocket v5 구독 관리자 (Dict 기반, Config 통합)"""
+    """WebSocket v5 구독 관리자 (Dict 기반, Config 통합) - 클라이언트 기능 통합"""
 
     def __init__(self,
                  snapshot_pool_size: Optional[int] = None,
@@ -164,6 +268,12 @@ class SubscriptionManager:
         self.active_subscriptions: Dict[str, Dict[str, Any]] = {}
         self.backup_subscriptions: List[Dict[str, Any]] = []
 
+        # 🚀 클라이언트에서 이전: 콜백 관리 시스템
+        self.callbacks: Dict[str, Callable] = {}
+
+        # WebSocket 연결 참조 (클라이언트에서 설정)
+        self.websocket_connection: Optional[Any] = None
+
         # 설정 기반 옵션 적용
         self.enable_ticket_reuse = self.config.subscription.enable_ticket_reuse
         self.default_format = self.config.subscription.default_format
@@ -171,6 +281,167 @@ class SubscriptionManager:
 
         logger.info(f"구독 관리자 초기화 - 스냅샷:{snapshot_size}, 리얼타임:{realtime_size}")
         logger.info(f"Config 설정 - 티켓재사용:{self.enable_ticket_reuse}, 포맷:{self.default_format}")
+
+    def set_websocket_connection(self, websocket) -> None:
+        """WebSocket 연결 설정 (클라이언트에서 호출)"""
+        self.websocket_connection = websocket
+
+    # =====================================================================
+    # 🚀 클라이언트에서 이전: 콜백 관리 시스템
+    # =====================================================================
+
+    def register_callback(self, subscription_id: str, callback: Optional[Callable]) -> None:
+        """콜백 등록"""
+        if callback:
+            self.callbacks[subscription_id] = callback
+            logger.debug(f"콜백 등록: {subscription_id}")
+
+    def unregister_callback(self, subscription_id: str) -> None:
+        """콜백 해제"""
+        if subscription_id in self.callbacks:
+            del self.callbacks[subscription_id]
+            logger.debug(f"콜백 해제: {subscription_id}")
+
+    async def emit_to_callbacks(self, data_type: str, data: Any) -> None:
+        """콜백 실행 - 클라이언트에서 이전된 기능"""
+        for subscription_id, callback in self.callbacks.items():
+            if subscription_id in self.active_subscriptions:
+                subscription = self.active_subscriptions[subscription_id]
+                if subscription['data_type'] == data_type:
+                    try:
+                        if hasattr(callback, '__call__'):
+                            if hasattr(callback, '_is_coroutine') or hasattr(callback, '__aenter__'):
+                                await callback(data)
+                            else:
+                                callback(data)
+                    except Exception as e:
+                        logger.error(f"콜백 실행 오류: {e}")
+
+    # =====================================================================
+    # 🚀 클라이언트에서 이전: 통합 구독 API
+    # =====================================================================
+
+    async def unified_subscribe(self, data_type: str, symbols: List[str],
+                                callback: Optional[Callable] = None,
+                                is_only_snapshot: bool = False,
+                                is_only_realtime: bool = False) -> Optional[str]:
+        """통합 구독 API - 클라이언트 subscribe() 기능 통합"""
+        if not self.websocket_connection:
+            logger.error("WebSocket 연결이 설정되지 않았습니다")
+            return None
+
+        # 파라미터 검증
+        if is_only_snapshot and is_only_realtime:
+            raise ValueError("is_only_snapshot과 is_only_realtime은 동시에 True일 수 없습니다")
+
+        try:
+            # 스냅샷 전용 모드
+            if is_only_snapshot:
+                return await self.request_snapshot(data_type, symbols, callback=callback)
+
+            # 리얼타임 전용 모드
+            elif is_only_realtime:
+                return await self._subscribe_realtime_only(data_type, symbols, callback)
+
+            # 기본 모드 (스냅샷 + 리얼타임)
+            else:
+                # 적절한 풀에서 티켓 획득
+                pool = self.realtime_pool  # 기본적으로 리얼타임 풀 사용
+                ticket_id = pool.get_or_create_ticket(
+                    data_type, symbols,
+                    is_only_snapshot=is_only_snapshot,
+                    is_only_realtime=is_only_realtime
+                )
+
+                if not ticket_id:
+                    logger.error("티켓 획득 실패")
+                    return None
+
+                # 구독 메시지 생성
+                subscribe_message = pool.get_ticket_message(ticket_id)
+
+                # 구독 요청 전송
+                await self.websocket_connection.send(json.dumps(subscribe_message))
+
+                # 구독 정보 저장
+                subscription_id = f"{data_type}-{uuid.uuid4().hex[:8]}"
+                self.active_subscriptions[subscription_id] = {
+                    'data_type': data_type,
+                    'symbols': symbols,
+                    'ticket_id': ticket_id,
+                    'mode': 'realtime',
+                    'created_at': datetime.now(),
+                    'message_count': 0
+                }
+
+                # 콜백 등록
+                self.register_callback(subscription_id, callback)
+
+                logger.info(f"통합 구독 완료: {data_type} for {len(symbols)} symbols")
+                return subscription_id
+
+        except Exception as e:
+            logger.error(f"통합 구독 실패: {e}")
+            return None
+
+    async def unified_unsubscribe(self, subscription_id: str, soft_mode: bool = True) -> bool:
+        """통합 구독 해제 API - 클라이언트 unsubscribe() 기능 통합"""
+        if subscription_id not in self.active_subscriptions:
+            logger.warning(f"구독을 찾을 수 없음: {subscription_id}")
+            return False
+
+        try:
+            # 콜백 해제
+            self.unregister_callback(subscription_id)
+
+            # 기존 unsubscribe 로직 활용
+            return await self.unsubscribe(subscription_id, soft_mode)
+
+        except Exception as e:
+            logger.error(f"통합 구독 해제 실패: {e}")
+            return False
+
+    async def _subscribe_realtime_only(self, data_type: str, symbols: List[str],
+                                       callback: Optional[Callable] = None) -> Optional[str]:
+        """실시간 전용 구독 - 클라이언트에서 이전"""
+        try:
+            # 실시간 전용 구독 요청 생성
+            ticket_id = f"realtime_only_{uuid.uuid4().hex[:8]}"
+
+            realtime_request = [
+                {"ticket": ticket_id},
+                {
+                    "type": data_type,
+                    "codes": symbols,
+                    "is_only_realtime": True
+                },
+                {"format": "DEFAULT"}
+            ]
+
+            # 메시지 전송
+            if self.websocket_connection:
+                await self.websocket_connection.send(json.dumps(realtime_request))
+
+            # 구독 정보 저장
+            subscription_id = f"{data_type}-realtime_only-{uuid.uuid4().hex[:8]}"
+            self.active_subscriptions[subscription_id] = {
+                'data_type': data_type,
+                'symbols': symbols,
+                'ticket_id': ticket_id,
+                'mode': 'realtime_only',
+                'created_at': datetime.now(),
+                'message_count': 0
+            }
+
+            # 콜백 등록
+            self.register_callback(subscription_id, callback)
+
+            logger.info(f"실시간 전용 구독 완료: {data_type} - {symbols}")
+            return subscription_id
+
+        except Exception as e:
+            logger.error(f"실시간 전용 구독 실패: {e}")
+            return None
 
     def get_config_info(self) -> Dict[str, Any]:
         """현재 적용된 설정 정보"""
@@ -183,7 +454,10 @@ class SubscriptionManager:
         }
 
     async def request_snapshot(self, data_type: str, symbols: List[str], **options) -> Optional[str]:
-        """스냅샷 요청 (1회성)"""
+        """스냅샷 요청 (1회성) - 콜백 지원 추가"""
+        # 콜백 추출
+        callback = options.pop('callback', None)
+
         ticket_id = self.snapshot_pool.acquire_ticket("snapshot")
         if not ticket_id:
             logger.error("스냅샷 티켓 부족")
@@ -201,6 +475,9 @@ class SubscriptionManager:
         if self.snapshot_pool.add_subscription(ticket_id, subscription):
             subscription_id = f"snapshot_{uuid.uuid4().hex[:8]}"
             self.active_subscriptions[subscription_id] = subscription
+
+            # 콜백 등록
+            self.register_callback(subscription_id, callback)
 
             logger.info(f"스냅샷 구독 생성: {data_type} - {len(symbols)} symbols")
             return subscription_id
@@ -244,14 +521,18 @@ class SubscriptionManager:
         try:
             if soft_mode:
                 # 소프트 해제 - 스냅샷으로 교체
-                request = SmartUnsubscriber.create_soft_unsubscribe_request(
+                unsubscribe_request = SmartUnsubscriber.create_soft_unsubscribe_request(
                     ticket_id, subscription["symbols"]
                 )
                 logger.info(f"소프트 해제: {subscription_id}")
             else:
                 # 하드 해제 - 완전 종료
-                request = SmartUnsubscriber.create_hard_unsubscribe_request(ticket_id)
+                unsubscribe_request = SmartUnsubscriber.create_hard_unsubscribe_request(ticket_id)
                 logger.info(f"하드 해제: {subscription_id}")
+
+            # WebSocket을 통해 해제 요청 전송
+            if self.websocket_connection:
+                await self.websocket_connection.send(json.dumps(unsubscribe_request))
 
             # 구독 정보 백업 후 제거
             self.backup_subscriptions.append(subscription.copy())
@@ -500,9 +781,9 @@ class SubscriptionManager:
     def get_subscription_count(self) -> Dict[str, int]:
         """구독 개수 통계"""
         snapshot_count = sum(1 for sub in self.active_subscriptions.values()
-                           if sub["mode"] == "snapshot")
+                             if sub["mode"] == "snapshot")
         realtime_count = sum(1 for sub in self.active_subscriptions.values()
-                           if sub["mode"] == "realtime")
+                             if sub["mode"] == "realtime")
 
         return {
             "total": len(self.active_subscriptions),
@@ -536,8 +817,8 @@ class SubscriptionManager:
     def validate_subscription(self, data_type: str, symbols: List[str]) -> bool:
         """구독 중복 검증"""
         for subscription_id, info in self.active_subscriptions.items():
-            if (info["data_type"] == data_type and
-                set(info["symbols"]) == set(symbols)):
+            if (info["data_type"] == data_type
+                    and set(info["symbols"]) == set(symbols)):
                 logger.warning(f"중복 구독 감지: {data_type} - {symbols}")
                 return False
         return True
@@ -576,7 +857,7 @@ class SubscriptionManager:
 
 # 편의 함수들
 def create_subscription_manager_dict(snapshot_pool_size: int = 2,
-                                   realtime_pool_size: int = 2) -> SubscriptionManager:
+                                     realtime_pool_size: int = 2) -> SubscriptionManager:
     """구독 관리자 생성"""
     return SubscriptionManager(snapshot_pool_size, realtime_pool_size)
 
@@ -596,8 +877,8 @@ async def start_price_monitoring(manager: SubscriptionManager, symbol: str) -> O
 
 
 async def bulk_market_snapshot(manager: SubscriptionManager,
-                              krw_markets: List[str],
-                              major_markets: List[str]) -> List[Dict[str, Any]]:
+                               krw_markets: List[str],
+                               major_markets: List[str]) -> List[Dict[str, Any]]:
     """패턴 3: 일괄 초기화 - 전체 마켓 현재 상태 수집"""
     batch_requests = [
         {"data_type": "ticker", "symbols": krw_markets},
@@ -619,8 +900,8 @@ async def hybrid_data_collection(manager: SubscriptionManager, symbol: str) -> D
 
 
 async def smart_unsubscribe_pattern(manager: SubscriptionManager,
-                                  subscription_id: str,
-                                  force_hard: bool = False) -> bool:
+                                    subscription_id: str,
+                                    force_hard: bool = False) -> bool:
     """패턴 5: 스마트 해제 사용"""
     if force_hard:
         # 완전 리셋이 필요한 경우 (하드 해제)

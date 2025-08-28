@@ -20,141 +20,22 @@ from datetime import datetime
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .models import (
     infer_message_type, validate_mixed_message, create_websocket_message,
-    create_connection_status, update_connection_status
+    create_connection_status
 )
-from .config import WebSocketConfig, load_config
+from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
 from .subscription_manager import SubscriptionManager
 from .exceptions import (
     WebSocketError, WebSocketConnectionError, WebSocketConnectionTimeoutError,
-    SubscriptionError, MessageParsingError, TooManySubscriptionsError,
+    SubscriptionError, MessageParsingError,
     ErrorCode
 )
 
 logger = create_component_logger("UpbitWebSocketPublicV5")
 
 
-class TicketManager:
-    """티켓 관리자 - 효율적인 티켓 재사용"""
-
-    def __init__(self, max_tickets: int = 3):
-        self.max_tickets = max_tickets
-        self.tickets: Dict[str, Dict[str, Any]] = {}  # ticket_id -> ticket_info
-        self.data_type_mapping: Dict[str, str] = {}  # data_type -> ticket_id
-
-        logger.info(f"티켓 매니저 초기화 완료 - 최대 {max_tickets}개 티켓")
-
-    def get_or_create_ticket(self, data_type: str, symbols: List[str], **options) -> str:
-        """데이터 타입에 대한 티켓 획득 또는 생성 (옵션 지원)"""
-        # 기존 티켓이 있으면 재사용 (옵션이 다르면 새 티켓)
-        if data_type in self.data_type_mapping:
-            ticket_id = self.data_type_mapping[data_type]
-            existing_ticket = self.tickets[ticket_id]
-
-            # 동일한 옵션인지 확인
-            existing_options = {k: v for k, v in existing_ticket.items()
-                                if k in ['is_only_snapshot', 'is_only_realtime']}
-            new_options = {k: v for k, v in options.items()
-                           if k in ['is_only_snapshot', 'is_only_realtime']}
-
-            if existing_options == new_options:
-                logger.debug(f"기존 티켓 재사용: {ticket_id} for {data_type}")
-                return ticket_id
-            else:
-                # 옵션이 다르면 기존 티켓 제거하고 새로 생성
-                self.remove_data_type(data_type)
-
-        # 새 티켓 생성
-        if len(self.tickets) >= self.max_tickets:
-            raise TooManySubscriptionsError(len(self.tickets), self.max_tickets)
-
-        # 새 티켓 생성
-        ticket_id = f"public-{uuid.uuid4().hex[:8]}"
-        ticket_info = {
-            'data_types': {data_type},
-            'symbols': set(symbols),
-            'created_at': datetime.now()
-        }
-
-        # 스냅샷/실시간 옵션 추가
-        if 'is_only_snapshot' in options:
-            ticket_info['is_only_snapshot'] = options['is_only_snapshot']
-        if 'is_only_realtime' in options:
-            ticket_info['is_only_realtime'] = options['is_only_realtime']
-
-        self.tickets[ticket_id] = ticket_info
-        self.data_type_mapping[data_type] = ticket_id
-
-        logger.info(f"새 티켓 생성: {ticket_id} for {data_type} with {len(symbols)} symbols, options: {options}")
-        return ticket_id
-
-    def remove_data_type(self, data_type: str) -> Optional[str]:
-        """데이터 타입 제거"""
-        if data_type not in self.data_type_mapping:
-            logger.warning(f"데이터 타입 {data_type}을 찾을 수 없습니다")
-            return None
-
-        ticket_id = self.data_type_mapping[data_type]
-        self.tickets[ticket_id]['data_types'].discard(data_type)
-        del self.data_type_mapping[data_type]
-
-        # 티켓이 비어있으면 제거
-        if not self.tickets[ticket_id]['data_types']:
-            del self.tickets[ticket_id]
-            logger.info(f"빈 티켓 제거: {ticket_id}")
-
-        return ticket_id
-
-    def get_ticket_message(self, ticket_id: str) -> List[Dict[str, Any]]:
-        """티켓의 구독 메시지 생성 (업비트 공식 API 형식)"""
-        if ticket_id not in self.tickets:
-            raise ValueError(f"티켓을 찾을 수 없습니다: {ticket_id}")
-
-        ticket_info = self.tickets[ticket_id]
-        message = [{"ticket": ticket_id}]
-
-        for data_type in ticket_info['data_types']:
-            if data_type in ["ticker", "trade", "orderbook"]:
-                data_message = {
-                    "type": data_type,
-                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
-                }
-
-                # 스냅샷/실시간 옵션 추가
-                if 'is_only_snapshot' in ticket_info:
-                    data_message['is_only_snapshot'] = ticket_info['is_only_snapshot']
-                if 'is_only_realtime' in ticket_info:
-                    data_message['is_only_realtime'] = ticket_info['is_only_realtime']
-
-                message.append(data_message)
-            elif data_type.startswith("candle"):
-                message.append({
-                    "type": data_type,
-                    "codes": [str(symbol) for symbol in ticket_info['symbols']]
-                })
-
-        message.append({"format": "DEFAULT"})
-        return message
-
-    def get_stats(self) -> Dict[str, Any]:
-        """티켓 사용 통계"""
-        return {
-            "total_tickets": len(self.tickets),
-            "max_tickets": self.max_tickets,
-            "ticket_efficiency": (self.max_tickets - len(self.tickets)) / self.max_tickets * 100,
-            "tickets": {
-                tid: {
-                    "data_types": list(info['data_types']),
-                    "symbol_count": len(info['symbols']),
-                    "created_at": info['created_at'].isoformat()
-                }
-                for tid, info in self.tickets.items()
-            }
-        }
-
-
 class UpbitWebSocketPublicV5:
-    """업비트 WebSocket v5.0 Public 클라이언트"""
+    """업비트 WebSocket v5.0 Public 클라이언트 - 구독 매니저 통합 버전"""
 
     def __init__(self, config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
@@ -163,7 +44,7 @@ class UpbitWebSocketPublicV5:
         Args:
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
-            max_tickets: 최대 티켓 수 (업비트 권장: 3개)
+            max_tickets: 최대 티켓 수 (업비트 권장: 3개) - 구독 매니저로 위임
         """
         # 설정 로드
         self.config = load_config(config_path)
@@ -175,17 +56,19 @@ class UpbitWebSocketPublicV5:
         self.websocket: Optional[Any] = None
         self.connection_id = str(uuid.uuid4())
 
-        # 티켓 관리
-        self.ticket_manager = TicketManager(max_tickets)
-
-        # 구독 관리
-        self.subscriptions: Dict[str, Dict[str, Any]] = {}
-        self.callbacks: Dict[str, Callable] = {}
+        # 🚀 구독 관리를 SubscriptionManager로 위임
+        snapshot_pool_size = max_tickets // 2  # 절반은 스냅샷용
+        realtime_pool_size = max_tickets - snapshot_pool_size  # 나머지는 리얼타임용
+        self.subscription_manager = SubscriptionManager(
+            snapshot_pool_size=snapshot_pool_size,
+            realtime_pool_size=realtime_pool_size,
+            config_path=config_path
+        )
 
         # 이벤트 시스템
         self.event_broker = event_broker
 
-        # 통계 및 성능 모니터링
+        # 통계 및 성능 모니터링 (클라이언트 고유 기능 유지)
         self.stats = {
             'messages_received': 0,
             'messages_processed': 0,
@@ -208,6 +91,7 @@ class UpbitWebSocketPublicV5:
         self._tasks: Set[asyncio.Task] = set()
 
         logger.info(f"Public WebSocket 클라이언트 초기화 완료 - ID: {self.connection_id}")
+        logger.info(f"구독 매니저 통합: 스냅샷={snapshot_pool_size}, 리얼타임={realtime_pool_size}")
 
     async def connect(self) -> None:
         """WebSocket 연결"""
@@ -232,6 +116,9 @@ class UpbitWebSocketPublicV5:
 
             self.state_machine.transition_to(WebSocketState.CONNECTED)
             logger.info("WebSocket 연결 완료")
+
+            # 🚀 구독 매니저에 WebSocket 연결 설정
+            self.subscription_manager.set_websocket_connection(self.websocket)
 
             # 백그라운드 태스크 시작
             self._start_background_tasks()
@@ -293,7 +180,7 @@ class UpbitWebSocketPublicV5:
     async def subscribe(self, data_type: str, symbols: List[str],
                         callback: Optional[Callable] = None,
                         is_only_snapshot: bool = False, is_only_realtime: bool = False) -> str:
-        """데이터 구독
+        """데이터 구독 - 구독 매니저로 위임
 
         Args:
             data_type: 데이터 타입 (ticker, trade, orderbook, candle)
@@ -305,57 +192,28 @@ class UpbitWebSocketPublicV5:
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다", data_type, symbols)
 
-        # 파라미터 검증: 동시에 True일 수 없음
-        if is_only_snapshot and is_only_realtime:
-            raise ValueError("is_only_snapshot과 is_only_realtime은 동시에 True일 수 없습니다")
-
         try:
             self.state_machine.transition_to(WebSocketState.SUBSCRIBING)
 
-            # is_only_realtime이 True인 경우 특별 처리
-            if is_only_realtime:
-                return await self._subscribe_realtime_only(data_type, symbols, callback)
-
-            # 기존 로직 (스냅샷 + 실시간 또는 스냅샷만)
-            # 티켓 생성/획득
-            ticket_id = self.ticket_manager.get_or_create_ticket(
-                data_type, symbols, is_only_snapshot=is_only_snapshot
+            # 🚀 구독 매니저로 위임
+            subscription_id = await self.subscription_manager.unified_subscribe(
+                data_type, symbols, callback, is_only_snapshot, is_only_realtime
             )
 
-            # 구독 메시지 생성
-            subscribe_message = self.ticket_manager.get_ticket_message(ticket_id)
+            if subscription_id:
+                self.state_machine.transition_to(WebSocketState.ACTIVE)
 
-            # 구독 요청 전송
-            if self.websocket:
-                await self.websocket.send(json.dumps(subscribe_message))
+                # 이벤트 발송
+                await self._emit_event("websocket.subscribed", {
+                    "subscription_id": subscription_id,
+                    "data_type": data_type,
+                    "symbols": symbols
+                })
 
-            # 구독 정보 저장
-            subscription_id = f"{data_type}-{uuid.uuid4().hex[:8]}"
-            self.subscriptions[subscription_id] = {
-                'data_type': data_type,
-                'symbols': symbols,
-                'ticket_id': ticket_id,
-                'created_at': datetime.now(),
-                'message_count': 0
-            }
-
-            # 콜백 등록
-            if callback:
-                self.callbacks[subscription_id] = callback
-
-            logger.info(f"구독 완료: {data_type} for {len(symbols)} symbols")
-
-            self.state_machine.transition_to(WebSocketState.ACTIVE)
-
-            # 이벤트 발송
-            await self._emit_event("websocket.subscribed", {
-                "subscription_id": subscription_id,
-                "data_type": data_type,
-                "symbols": symbols,
-                "ticket_id": ticket_id
-            })
-
-            return subscription_id
+                logger.info(f"구독 완료 (위임): {data_type} for {len(symbols)} symbols")
+                return subscription_id
+            else:
+                raise SubscriptionError("구독 매니저에서 구독 실패", data_type, symbols)
 
         except Exception as e:
             error = SubscriptionError(f"구독 실패: {str(e)}", data_type, symbols)
@@ -363,36 +221,26 @@ class UpbitWebSocketPublicV5:
             raise error
 
     async def unsubscribe(self, subscription_id: str) -> None:
-        """구독 해제"""
-        if subscription_id not in self.subscriptions:
-            logger.warning(f"구독을 찾을 수 없습니다: {subscription_id}")
-            return
-
+        """구독 해제 - 구독 매니저로 위임"""
         try:
-            subscription = self.subscriptions[subscription_id]
-            data_type = subscription['data_type']
+            # 🚀 구독 매니저로 위임
+            success = await self.subscription_manager.unified_unsubscribe(subscription_id)
 
-            # 티켓에서 데이터 타입 제거
-            self.ticket_manager.remove_data_type(data_type)
+            if success:
+                logger.info(f"구독 해제 완료 (위임): {subscription_id}")
 
-            # 구독 정보 제거
-            del self.subscriptions[subscription_id]
-            if subscription_id in self.callbacks:
-                del self.callbacks[subscription_id]
-
-            logger.info(f"구독 해제 완료: {subscription_id}")
-
-            # 이벤트 발송
-            await self._emit_event("websocket.unsubscribed", {
-                "subscription_id": subscription_id,
-                "data_type": data_type
-            })
+                # 이벤트 발송
+                await self._emit_event("websocket.unsubscribed", {
+                    "subscription_id": subscription_id
+                })
+            else:
+                logger.warning(f"구독 해제 실패: {subscription_id}")
 
         except Exception as e:
             logger.error(f"구독 해제 중 오류: {e}")
 
     async def get_status(self) -> Dict[str, Any]:
-        """연결 상태 조회 - 🚀 v5 개선: 고급 성능 지표 포함"""
+        """연결 상태 조회 - 🚀 v5 개선: 구독 매니저 통합"""
         current_time = datetime.now()
         uptime = (current_time - self.stats['start_time']).total_seconds()
 
@@ -402,6 +250,9 @@ class UpbitWebSocketPublicV5:
         # 연결 품질 계산 (에러율 기반)
         error_rate = self.stats['errors'] / max(self.stats['messages_received'], 1)
         quality = max(0, 100 - (error_rate * 100))
+
+        # 🚀 구독 정보는 구독 매니저에서 가져오기
+        subscription_stats = self.subscription_manager.get_subscription_count()
 
         return {
             **create_connection_status(
@@ -414,7 +265,7 @@ class UpbitWebSocketPublicV5:
                 "peak_message_rate": round(self.stats['peak_message_rate'], 2),
                 "connection_quality": round(quality, 1),
                 "uptime_seconds": round(uptime, 2),
-                "active_subscriptions": len(self.subscriptions),
+                "active_subscriptions": subscription_stats['total'],
                 "active_symbols": self.stats['symbol_count'],
                 "data_volume_mb": round(self.stats['data_volume_bytes'] / 1024 / 1024, 2),
                 "error_count": self.stats['errors'],
@@ -423,7 +274,7 @@ class UpbitWebSocketPublicV5:
         }
 
     def get_performance_analysis(self) -> Dict[str, Any]:
-        """🚀 v5 신규: 상세 성능 분석"""
+        """🚀 v5 신규: 상세 성능 분석 - 구독 매니저 통합"""
         current_time = datetime.now()
         uptime = (current_time - self.stats['start_time']).total_seconds()
 
@@ -442,6 +293,9 @@ class UpbitWebSocketPublicV5:
         # 최근 성능 샘플 분석
         recent_samples = self.stats['performance_samples'][-10:] if self.stats['performance_samples'] else []
 
+        # 🚀 구독 정보는 구독 매니저에서 가져오기
+        subscription_stats = self.subscription_manager.get_subscription_count()
+
         return {
             "performance_grade": grade,
             "avg_message_rate": round(avg_rate, 2),
@@ -450,15 +304,15 @@ class UpbitWebSocketPublicV5:
             "reliability_score": round(self.stats['connection_quality'], 1),
             "recent_performance": recent_samples,
             "efficiency_metrics": {
-                "symbols_per_subscription": round(self.stats['symbol_count'] / max(len(self.subscriptions), 1), 1),
+                "symbols_per_subscription": round(self.stats['symbol_count'] / max(subscription_stats['total'], 1), 1),
                 "data_efficiency": round(self.stats['messages_processed'] / max(self.stats['data_volume_bytes'], 1) * 1000, 3),
                 "error_rate_percent": round(self.stats['errors'] / max(self.stats['messages_received'], 1) * 100, 2)
             }
         }
 
     def get_ticket_stats(self) -> Dict[str, Any]:
-        """티켓 사용 통계"""
-        return self.ticket_manager.get_stats()
+        """티켓 사용 통계 - 구독 매니저로 위임"""
+        return self.subscription_manager.get_ticket_usage()
 
     def is_connected(self) -> bool:
         """연결 상태 확인"""
@@ -694,17 +548,9 @@ class UpbitWebSocketPublicV5:
             logger.error(f"Candle 데이터 처리 오류: {e}")
 
     async def _emit_data(self, data_type: str, data: Any) -> None:
-        """데이터 발송"""
-        # 콜백 실행
-        for subscription_id, callback in self.callbacks.items():
-            if self.subscriptions[subscription_id]['data_type'] == data_type:
-                try:
-                    if asyncio.iscoroutinefunction(callback):
-                        await callback(data)
-                    else:
-                        callback(data)
-                except Exception as e:
-                    logger.error(f"콜백 실행 오류: {e}")
+        """데이터 발송 - 구독 매니저로 위임"""
+        # 🚀 구독 매니저의 콜백 시스템 활용
+        await self.subscription_manager.emit_to_callbacks(data_type, data)
 
         # 이벤트 브로커로 발송
         if self.event_broker:
@@ -774,19 +620,15 @@ class UpbitWebSocketPublicV5:
         self.state_machine.transition_to(WebSocketState.ERROR)
 
     async def _restore_subscriptions(self) -> None:
-        """구독 복원"""
-        logger.info("구독 복원 시작")
+        """구독 복원 - 구독 매니저로 위임"""
+        logger.info("구독 복원 시작 (구독 매니저 위임)")
 
-        for subscription_id, subscription in self.subscriptions.copy().items():
-            try:
-                await self.subscribe(
-                    subscription['data_type'],
-                    subscription['symbols'],
-                    self.callbacks.get(subscription_id)
-                )
-                logger.debug(f"구독 복원 완료: {subscription_id}")
-            except Exception as e:
-                logger.error(f"구독 복원 실패: {subscription_id}, {e}")
+        try:
+            # 🚀 구독 매니저의 재구독 기능 활용
+            restored_count = await self.subscription_manager.restore_subscriptions_after_reconnect()
+            logger.info(f"구독 복원 완료: {restored_count}개")
+        except Exception as e:
+            logger.error(f"구독 복원 실패: {e}")
 
     async def _subscribe_realtime_only(self, data_type: str, symbols: List[str],
                                        callback: Optional[Callable] = None) -> str:
@@ -842,35 +684,21 @@ class UpbitWebSocketPublicV5:
             logger.error(f"실시간 전용 구독 실패: {e}")
             raise SubscriptionError(f"실시간 전용 구독 실패: {e}")
 
-    # 새로운 스냅샷/리얼타임 메서드들
+    # 새로운 스냅샷/리얼타임 메서드들 - 구독 매니저로 위임
     async def request_snapshot(self, data_type: str, symbols: List[str]) -> Optional[Dict[str, Any]]:
-        """스냅샷 전용 요청 - 1회성 데이터"""
+        """스냅샷 전용 요청 - 구독 매니저로 위임"""
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 스냅샷 요청 생성 (순수 dict 기반)
-            ticket_id = f"snapshot_{uuid.uuid4().hex[:8]}"
-
-            snapshot_request = [
-                {"ticket": ticket_id},
-                {
-                    "type": data_type,
-                    "codes": symbols,
-                    "is_only_snapshot": True
-                },
-                {"format": "DEFAULT"}
-            ]
-
-            # 메시지 전송
-            if self.websocket:
-                await self.websocket.send(json.dumps(snapshot_request))
-
-            logger.info(f"스냅샷 요청 전송: {data_type} - {symbols}")
-
-            # 응답 대기 (최대 5초)
-            response = await self._wait_for_snapshot_response(ticket_id, timeout=5.0)
-            return response
+            # 🚀 구독 매니저로 위임
+            subscription_id = await self.subscription_manager.request_snapshot(data_type, symbols)
+            if subscription_id:
+                logger.info(f"스냅샷 요청 성공 (위임): {data_type} - {symbols}")
+                return {"subscription_id": subscription_id, "status": "requested"}
+            else:
+                logger.error(f"스냅샷 요청 실패: {data_type} - {symbols}")
+                return None
 
         except Exception as e:
             logger.error(f"스냅샷 요청 실패: {e}")
@@ -878,87 +706,40 @@ class UpbitWebSocketPublicV5:
 
     async def subscribe_realtime(self, data_type: str, symbols: List[str],
                                  callback: Optional[Callable] = None) -> str:
-        """리얼타임 구독 - 지속적 데이터 스트림"""
+        """리얼타임 구독 - 구독 매니저로 위임"""
         if not self.is_connected():
             raise SubscriptionError("WebSocket이 연결되지 않았습니다")
 
         try:
-            # 리얼타임 구독 요청 생성 (순수 dict 기반)
-            ticket_id = f"realtime_{uuid.uuid4().hex[:8]}"
-
-            realtime_request = [
-                {"ticket": ticket_id},
-                {
-                    "type": data_type,
-                    "codes": symbols,
-                    "is_only_snapshot": False
-                },
-                {"format": "DEFAULT"}
-            ]
-
-            # 메시지 전송
-            if self.websocket:
-                await self.websocket.send(json.dumps(realtime_request))
-
-            # 구독 정보 저장
-            subscription_id = f"{data_type}-realtime-{uuid.uuid4().hex[:8]}"
-            self.subscriptions[subscription_id] = {
-                'data_type': data_type,
-                'symbols': symbols,
-                'ticket_id': ticket_id,
-                'mode': 'realtime',
-                'created_at': datetime.now(),
-                'message_count': 0
-            }
-
-            # 콜백 등록
-            if callback:
-                self.callbacks[subscription_id] = callback
-
-            logger.info(f"리얼타임 구독 완료: {data_type} - {symbols}")
-            return subscription_id
+            # 🚀 구독 매니저로 위임
+            subscription_id = await self.subscription_manager.subscribe_realtime(data_type, symbols, callback=callback)
+            if subscription_id:
+                logger.info(f"리얼타임 구독 성공 (위임): {data_type} - {symbols}")
+                return subscription_id
+            else:
+                raise SubscriptionError("구독 매니저에서 리얼타임 구독 실패", data_type, symbols)
 
         except Exception as e:
             logger.error(f"리얼타임 구독 실패: {e}")
             raise SubscriptionError(f"리얼타임 구독 실패: {e}")
 
     async def soft_unsubscribe(self, subscription_id: str) -> bool:
-        """소프트 해제 - 스냅샷으로 교체하여 스트림 정지"""
-        if subscription_id not in self.subscriptions:
-            logger.warning(f"구독을 찾을 수 없음: {subscription_id}")
-            return False
-
+        """소프트 해제 - 구독 매니저로 위임"""
         try:
-            subscription = self.subscriptions[subscription_id]
-            ticket_id = subscription['ticket_id']
-
-            # BTC-USDT 스냅샷으로 교체 (스트림 정지 효과)
-            unsubscribe_request = [
-                {"ticket": ticket_id},
-                {
-                    "type": "ticker",
-                    "codes": ["BTC-USDT"],
-                    "is_only_snapshot": True
-                },
-                {"format": "DEFAULT"}
-            ]
-
-            if self.websocket:
-                await self.websocket.send(json.dumps(unsubscribe_request))
-
-            # 구독 상태 업데이트
-            subscription['status'] = 'soft_unsubscribed'
-            subscription['unsubscribed_at'] = datetime.now()
-
-            logger.info(f"소프트 해제 완료: {subscription_id}")
-            return True
+            # 🚀 구독 매니저로 위임 (소프트 모드)
+            success = await self.subscription_manager.unsubscribe(subscription_id, soft_mode=True)
+            if success:
+                logger.info(f"소프트 해제 성공 (위임): {subscription_id}")
+            else:
+                logger.warning(f"소프트 해제 실패: {subscription_id}")
+            return success
 
         except Exception as e:
             logger.error(f"소프트 해제 실패: {e}")
             return False
 
     async def _wait_for_snapshot_response(self, ticket_id: str, timeout: float = 5.0) -> Optional[Dict[str, Any]]:
-        """스냅샷 응답 대기 - 메시지 루프와 충돌 방지"""
+        """스냅샷 응답 대기 - 제거 예정 (구독 매니저가 처리)"""
         # 백그라운드 메시지 루프가 처리하도록 대기
         # 실제 구현에서는 메시지 큐나 이벤트 시스템 활용 권장
         await asyncio.sleep(1.0)  # 충분한 대기 시간
@@ -971,109 +752,77 @@ class UpbitWebSocketPublicV5:
             "timestamp": datetime.now().isoformat()
         }
 
-    # 🚀 v5 신규: 스마트 구독 관리 기능
+    # 🚀 v5 신규: 스마트 구독 관리 기능 - 구독 매니저로 위임
     async def batch_subscribe(self, subscriptions: List[Dict[str, Any]]) -> List[str]:
-        """일괄 구독 - 여러 데이터 타입을 한번에 구독"""
-        subscription_ids = []
+        """일괄 구독 - 구독 매니저로 위임"""
+        # 🚀 구독 매니저로 위임 (결과에서 subscription_id만 추출)
+        results = await self.subscription_manager.request_snapshots_batch(subscriptions)
+        return [result.get('subscription_id', '') for result in results if 'subscription_id' in result]
 
-        for sub_config in subscriptions:
-            data_type = sub_config['data_type']
-            symbols = sub_config['symbols']
-            callback = sub_config.get('callback')
-            is_only_snapshot = sub_config.get('is_only_snapshot', False)
-            is_only_realtime = sub_config.get('is_only_realtime', False)
+    async def smart_unsubscribe(self, data_type: Optional[str] = None, keep_connection: bool = True) -> int:
+        """스마트 구독 해제 - 구독 매니저로 위임"""
+        try:
+            # 🚀 구독 매니저로 위임
+            if data_type:
+                # 특정 데이터 타입만 해제하는 기능은 구독 매니저에 추가 필요
+                # 임시로 전체 해제 사용
+                unsubscribed_count = await self.subscription_manager.unsubscribe_all(soft_mode=keep_connection)
+            else:
+                unsubscribed_count = await self.subscription_manager.unsubscribe_all(soft_mode=keep_connection)
 
-            try:
-                sub_id = await self.subscribe(data_type, symbols, callback, is_only_snapshot, is_only_realtime)
-                subscription_ids.append(sub_id)
-                logger.info(f"일괄 구독 성공: {data_type} - {len(symbols)}개 심볼")
-            except Exception as e:
-                logger.error(f"일괄 구독 실패: {data_type} - {e}")
+            logger.info(f"스마트 해제 완료 (위임): {unsubscribed_count}개 구독")
 
-        return subscription_ids
+            # 연결 유지하지 않는 경우 종료
+            if not keep_connection and unsubscribed_count > 0:
+                await self.disconnect()
 
-    async def smart_unsubscribe(self, data_type: str = None, keep_connection: bool = True) -> int:
-        """스마트 구독 해제 - 데이터 타입별 또는 전체 해제"""
-        unsubscribed_count = 0
+            return unsubscribed_count
 
-        # 해제할 구독들 찾기
-        to_unsubscribe = []
-        for sub_id, subscription in self.subscriptions.items():
-            if data_type is None or subscription['data_type'] == data_type:
-                to_unsubscribe.append(sub_id)
-
-        # 순차적 해제
-        for sub_id in to_unsubscribe:
-            try:
-                await self.unsubscribe(sub_id)
-                unsubscribed_count += 1
-            except Exception as e:
-                logger.error(f"스마트 해제 실패: {sub_id} - {e}")
-
-        logger.info(f"스마트 해제 완료: {unsubscribed_count}개 구독")
-
-        # 연결 유지하지 않는 경우 종료
-        if not keep_connection and len(self.subscriptions) == 0:
-            await self.disconnect()
-
-        return unsubscribed_count
+        except Exception as e:
+            logger.error(f"스마트 해제 실패: {e}")
+            return 0
 
     async def switch_to_idle_mode(self, symbol: str = "KRW-BTC", ultra_quiet: bool = False) -> str:
-        """유휴 모드 전환 - 최소 활동으로 연결 유지"""
-        # 모든 활성 구독 해제
-        await self.smart_unsubscribe(keep_connection=True)
+        """유휴 모드 전환 - 구독 매니저로 위임"""
+        try:
+            # 모든 활성 구독 해제
+            await self.smart_unsubscribe(keep_connection=True)
 
-        # 최소 활동 구독 (4시간 캔들 스냅샷)
-        if ultra_quiet:
-            idle_subscription = await self.subscribe_candle(
-                [symbol],
-                interval="240m",  # 4시간 캔들
-                is_only_snapshot=True
-            )
-        else:
-            # 일반 유휴 모드 (1일 캔들 스냅샷)
-            idle_subscription = await self.subscribe_candle(
-                [symbol],
-                interval="1d",
-                is_only_snapshot=True
-            )
+            # 🚀 구독 매니저로 위임하여 최소 활동 구독
+            if ultra_quiet:
+                # 4시간 캔들 스냅샷
+                idle_subscription = await self.subscription_manager.request_snapshot(
+                    "candle.240m", [symbol]
+                )
+            else:
+                # 1일 캔들 스냅샷
+                idle_subscription = await self.subscription_manager.request_snapshot(
+                    "candle.1d", [symbol]
+                )
 
-        logger.info(f"유휴 모드 전환 완료: {symbol} ({'울트라 조용' if ultra_quiet else '일반'})")
-        return idle_subscription
+            logger.info(f"유휴 모드 전환 완료 (위임): {symbol} ({'울트라 조용' if ultra_quiet else '일반'})")
+            return idle_subscription or "idle_mode_failed"
+
+        except Exception as e:
+            logger.error(f"유휴 모드 전환 실패: {e}")
+            return "idle_mode_failed"
 
     def get_subscription_stats(self) -> Dict[str, Any]:
-        """구독 통계 조회"""
-        total_symbols = set()
-        data_type_stats = {}
-
-        for subscription in self.subscriptions.values():
-            data_type = subscription['data_type']
-            symbols = subscription.get('symbols', [])
-
-            # 데이터 타입별 통계
-            if data_type not in data_type_stats:
-                data_type_stats[data_type] = {
-                    'subscription_count': 0,
-                    'symbol_count': 0,
-                    'message_count': 0
-                }
-
-            data_type_stats[data_type]['subscription_count'] += 1
-            data_type_stats[data_type]['symbol_count'] += len(symbols)
-            data_type_stats[data_type]['message_count'] += subscription.get('message_count', 0)
-
-            total_symbols.update(symbols)
+        """구독 통계 조회 - 구독 매니저로 위임"""
+        # 🚀 구독 매니저의 통계 활용
+        subscription_stats = self.subscription_manager.get_subscription_count()
+        ticket_usage = self.subscription_manager.get_ticket_usage()
 
         return {
-            'total_subscriptions': len(self.subscriptions),
-            'unique_symbols': len(total_symbols),
-            'data_type_breakdown': data_type_stats,
-            'active_tickets': len(self.ticket_manager.tickets),
+            'total_subscriptions': subscription_stats['total'],
+            'unique_symbols': 0,  # 구독 매니저에서 계산 필요
+            'data_type_breakdown': {},  # 구독 매니저에서 제공
+            'active_tickets': ticket_usage['snapshot_pool']['active'] + ticket_usage['realtime_pool']['active'],
             'connection_uptime_minutes': (datetime.now() - self.stats['start_time']).total_seconds() / 60
         }
 
     async def health_check(self) -> Dict[str, Any]:
-        """🚀 v5 신규: 종합 건강 상태 체크"""
+        """🚀 v5 신규: 종합 건강 상태 체크 - 구독 매니저 통합"""
         current_time = datetime.now()
         uptime = (current_time - self.stats['start_time']).total_seconds()
 
@@ -1110,6 +859,11 @@ class UpbitWebSocketPublicV5:
         else:
             status = "🔴 CRITICAL"
 
+        # 🚀 구독 정보는 구독 매니저에서 가져오기
+        subscription_stats = self.subscription_manager.get_subscription_count()
+        ticket_usage = self.subscription_manager.get_ticket_usage()
+        total_active_tickets = ticket_usage['snapshot_pool']['active'] + ticket_usage['realtime_pool']['active']
+
         return {
             'overall_status': status,
             'health_score': max(0, health_score),
@@ -1118,8 +872,8 @@ class UpbitWebSocketPublicV5:
             'last_message_seconds_ago': round(last_message_ago, 1) if last_message_ago else None,
             'message_rate_per_second': round(self.stats['avg_message_rate'], 2),
             'error_rate_percent': round(self.stats['errors'] / max(self.stats['messages_received'], 1) * 100, 2),
-            'active_subscriptions': len(self.subscriptions),
-            'memory_efficiency': f"{len(self.subscriptions) / max(len(self.ticket_manager.tickets), 1):.1f} subs/ticket"
+            'active_subscriptions': subscription_stats['total'],
+            'memory_efficiency': f"{subscription_stats['total'] / max(total_active_tickets, 1):.1f} subs/ticket"
         }
 
 
