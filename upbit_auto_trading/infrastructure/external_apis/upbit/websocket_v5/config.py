@@ -75,13 +75,23 @@ class SubscriptionConfig:
     max_tickets: int = 5
     enable_ticket_reuse: bool = True
     default_format: str = "DEFAULT"
+    format_preference: str = "auto"  # "auto", "simple", "default"
     auto_subscribe_on_connect: bool = False
     subscription_timeout: float = 10.0
+    # 티켓 풀 크기 설정
+    public_pool_size: int = 3
+    private_pool_size: int = 2
 
     def __post_init__(self):
         """설정 유효성 검증"""
         if self.max_tickets <= 0 or self.max_tickets > 10:
             raise ValueError("max_tickets는 1-10 사이여야 합니다")
+        if self.format_preference not in ["auto", "simple", "default"]:
+            raise ValueError("format_preference는 'auto', 'simple', 'default' 중 하나여야 합니다")
+        if self.public_pool_size <= 0 or self.public_pool_size > 10:
+            raise ValueError("public_pool_size는 1-10 사이여야 합니다")
+        if self.private_pool_size <= 0 or self.private_pool_size > 5:
+            raise ValueError("private_pool_size는 1-5 사이여야 합니다")
 
 
 @dataclass
@@ -146,7 +156,7 @@ class PerformanceConfig:
     """성능 설정"""
     message_buffer_size: int = 1000
     worker_thread_count: int = 2
-    enable_message_compression: bool = False
+    enable_message_compression: bool = False  # WebSocket 압축 (성능 우선으로 비활성화)
     memory_limit_mb: int = 100
 
 

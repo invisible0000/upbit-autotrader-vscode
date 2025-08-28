@@ -125,14 +125,14 @@ class UpbitWebSocketPrivateV5:
                  secret_key: Optional[str] = None,
                  config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
-                 max_tickets: int = 2):
+                 max_tickets: Optional[int] = None):
         """
         Args:
             access_key: 업비트 API Access Key (None이면 UpbitAuthenticator에서 자동 로드)
             secret_key: 업비트 API Secret Key (None이면 UpbitAuthenticator에서 자동 로드)
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
-            max_tickets: 최대 티켓 수 (업비트 권장: 2개)
+            max_tickets: 최대 티켓 수 (None이면 config의 private_pool_size 사용)
         """
         # UpbitAuthenticator를 통한 API 키 로드
         self.auth = UpbitAuthenticator(access_key, secret_key)
@@ -144,6 +144,11 @@ class UpbitWebSocketPrivateV5:
         # 설정 로드
         self.config = load_config(config_path)
 
+        # max_tickets 결정 (매개변수 우선, 없으면 config의 private_pool_size 사용)
+        effective_max_tickets = (max_tickets
+                                 if max_tickets is not None
+                                 else self.config.subscription.private_pool_size)
+
         # 상태 관리
         self.state_machine = WebSocketStateMachine()
 
@@ -152,7 +157,7 @@ class UpbitWebSocketPrivateV5:
         self.connection_id = str(uuid.uuid4())
 
         # 티켓 관리
-        self.ticket_manager = PrivateTicketManager(max_tickets)
+        self.ticket_manager = PrivateTicketManager(effective_max_tickets)
 
         # 구독 관리
         self.subscriptions: Dict[str, Dict[str, Any]] = {}

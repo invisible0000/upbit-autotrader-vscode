@@ -396,18 +396,29 @@ class SubscriptionManager:
     """통합 구독 관리자 v3.0"""
 
     def __init__(self,
-                 public_pool_size: int = 3,
-                 private_pool_size: int = 2,
+                 public_pool_size: Optional[int] = None,
+                 private_pool_size: Optional[int] = None,
                  config_path: Optional[str] = None,
-                 format_preference: str = "auto"):
+                 format_preference: Optional[str] = None):
         # 설정 로드
         self.config = load_config(config_path)
 
+        # 설정값 결정 (매개변수 우선, 없으면 config 사용)
+        pool_size_public = (public_pool_size
+                            if public_pool_size is not None
+                            else self.config.subscription.public_pool_size)
+
+        pool_size_private = (private_pool_size
+                             if private_pool_size is not None
+                             else self.config.subscription.private_pool_size)
+
         # 🚀 v5 신규: SIMPLE 포맷 설정
-        self.format_preference = format_preference.lower()
+        self.format_preference = (format_preference
+                                  if format_preference is not None
+                                  else self.config.subscription.format_preference).lower()
 
         # 핵심 컴포넌트
-        self.ticket_manager = TicketManager(public_pool_size, private_pool_size)
+        self.ticket_manager = TicketManager(pool_size_public, pool_size_private)
         self.message_router = MessageRouter()
 
         # 구독 관리
@@ -417,7 +428,7 @@ class SubscriptionManager:
         # WebSocket 연결
         self.websocket_connection: Optional[Any] = None
 
-        logger.info(f"구독 관리자 v3.0 초기화 - Public: {public_pool_size}, Private: {private_pool_size}")
+        logger.info(f"구독 관리자 v3.0 초기화 - Public: {pool_size_public}, Private: {pool_size_private}")
 
     def set_websocket_connection(self, websocket) -> None:
         """WebSocket 연결 설정"""

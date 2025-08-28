@@ -41,27 +41,38 @@ class UpbitWebSocketPublicV5:
 
     def __init__(self, config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
-                 public_pool_size: int = 3,
-                 private_pool_size: int = 2,
-                 enable_compression: bool = True,
-                 format_preference: str = "auto"):
+                 public_pool_size: Optional[int] = None,
+                 private_pool_size: Optional[int] = None,
+                 enable_compression: Optional[bool] = None,
+                 format_preference: Optional[str] = None):
         """
         Args:
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
-            public_pool_size: Public 티켓 풀 크기 (기본: 3)
-            private_pool_size: Private 티켓 풀 크기 (기본: 2)
-            enable_compression: WebSocket 압축 활성화 (기본: True)
-            format_preference: 메시지 포맷 설정 ("auto", "simple", "default")
+            public_pool_size: Public 티켓 풀 크기 (None이면 config에서 로드)
+            private_pool_size: Private 티켓 풀 크기 (None이면 config에서 로드)
+            enable_compression: WebSocket 압축 활성화 (None이면 config에서 로드)
+            format_preference: 메시지 포맷 설정 (None이면 config에서 로드)
         """
         # 설정 로드
         self.config = load_config(config_path)
 
-        # 압축 설정
-        self.enable_compression = enable_compression
+        # 설정값 결정 (매개변수 우선, 없으면 config 사용)
+        self.enable_compression = (enable_compression
+                                   if enable_compression is not None
+                                   else self.config.performance.enable_message_compression)
 
-        # 🚀 v5 신규: SIMPLE 포맷 설정
-        self.format_preference = format_preference.lower()
+        self.format_preference = (format_preference
+                                  if format_preference is not None
+                                  else self.config.subscription.format_preference).lower()
+
+        pool_size_public = (public_pool_size
+                            if public_pool_size is not None
+                            else self.config.subscription.public_pool_size)
+
+        pool_size_private = (private_pool_size
+                             if private_pool_size is not None
+                             else self.config.subscription.private_pool_size)
 
         # 상태 관리
         self.state_machine = WebSocketStateMachine()
@@ -72,8 +83,8 @@ class UpbitWebSocketPublicV5:
 
         # 🚀 v3.0 구독 관리자 통합 + v5 SIMPLE 포맷 지원
         self.subscription_manager = SubscriptionManager(
-            public_pool_size=public_pool_size,
-            private_pool_size=private_pool_size,
+            public_pool_size=pool_size_public,
+            private_pool_size=pool_size_private,
             config_path=config_path,
             format_preference=self.format_preference
         )

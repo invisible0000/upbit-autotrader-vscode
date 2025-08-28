@@ -23,12 +23,15 @@ subscription:
   max_subscriptions: 10
   batch_size: 5
   timeout: 30.0
+  format_preference: "auto"  # "auto", "simple", "default"
+  public_pool_size: 3
+  private_pool_size: 2
 
 # 성능 설정
 performance:
   message_buffer_size: 1000
   max_memory_mb: 100.0
-  enable_compression: true
+  enable_compression: false
 
 # 로깅 설정
 logging:
