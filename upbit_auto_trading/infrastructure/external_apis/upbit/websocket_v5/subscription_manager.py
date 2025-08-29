@@ -202,14 +202,20 @@ class AutoLifecycleManager:
         self.logger = create_component_logger("AutoLifecycleManager")
 
     async def start_background_cleanup(self, subscription_manager):
-        """백그라운드 정리 작업 시작"""
+        """백그라운드 정리 작업 시작 (비동기 태스크로 실행)"""
         self.is_running = True
         self.logger.info(f"자동 정리 시작: {self.cleanup_interval}초 간격")
 
-        while self.is_running:
-            await asyncio.sleep(5)  # 5초마다 체크
-            await self._cleanup_unused_subscriptions(subscription_manager)
-            await self._monitor_performance(subscription_manager)
+        # 🚨 백그라운드 태스크로 실행 (메인 스레드 블록킹 방지)
+        async def cleanup_loop():
+            while self.is_running:
+                await asyncio.sleep(5)  # 5초마다 체크
+                await self._cleanup_unused_subscriptions(subscription_manager)
+                await self._monitor_performance(subscription_manager)
+
+        # 백그라운드 태스크로 시작하고 즉시 반환
+        asyncio.create_task(cleanup_loop())
+        self.logger.debug("백그라운드 정리 태스크 시작됨")
 
     def stop_background_cleanup(self):
         """백그라운드 정리 작업 중단"""
@@ -727,8 +733,11 @@ class SubscriptionManager:
         connection_state = self._get_connection_state(connection_type)
 
         if connection_state.websocket is not None and connection_state.is_connected:
-            await connection_state.websocket.send(json.dumps(message))
+            message_json = json.dumps(message)
+            await connection_state.websocket.send(message_json)
             self.logger.debug(f"{connection_type.value} 메시지 전송: {len(message)} 항목")
+            # 🔍 디버그: 실제 전송 메시지 내용 로깅
+            self.logger.debug(f"실제 전송 메시지: {message_json}")
         else:
             self.logger.error(f"{connection_type.value} 연결이 없어 메시지 전송 실패")
 
@@ -767,10 +776,13 @@ class SubscriptionManager:
         self.logger.info("백그라운드 서비스 중단 완료")
 
     def on_data_received(self, symbol: str, data_type: str, data: dict):
-        """데이터 수신시 호출 - 사용량 추적"""
+        """데이터 수신시 호출 - 사용량 추적 + 스냅샷 Future 완료"""
         try:
             dt = DataType(data_type)
             self.lifecycle_manager.mark_data_received(symbol, dt)
+
+            # 🎯 스냅샷 Future 완료 처리
+            self._complete_snapshot_futures(symbol, data_type, data)
 
             # 해당 구독 의도의 콜백 호출
             for intent in self.realtime_intents.values():
@@ -782,6 +794,31 @@ class SubscriptionManager:
 
         except Exception as e:
             self.logger.error(f"데이터 수신 처리 실패: {e}")
+            # 추가 디버깅 정보
+            self.logger.error(f"  심볼: {symbol}, 데이터타입: {data_type}")
+            self.logger.error(f"  데이터 샘플: {str(data)[:100]}...")
+            import traceback
+            self.logger.error(f"  스택 트레이스: {traceback.format_exc()}")
+
+    def _complete_snapshot_futures(self, symbol: str, data_type: str, data: dict):
+        """스냅샷 요청 Future들을 완료 처리"""
+        # 완료할 Future들을 찾기
+        completed_requests = []
+
+        for request_id, future in self.snapshot_requests.items():
+            if not future.done():
+                # 스냅샷 데이터를 Future에 설정
+                try:
+                    result = {symbol: {data_type: data}}
+                    future.set_result(result)
+                    completed_requests.append(request_id)
+                    self.logger.debug(f"스냅샷 Future 완료: {request_id} - {symbol}:{data_type}")
+                except Exception as e:
+                    self.logger.error(f"스냅샷 Future 완료 실패: {e}")
+
+        # 완료된 요청들 정리
+        for request_id in completed_requests:
+            self.snapshot_requests.pop(request_id, None)
 
     # ==========================================
     # 디버깅 및 모니터링
@@ -841,7 +878,7 @@ class SubscriptionManager:
                     client_id=client_id
                 )
             else:
-                self.logger.warning(f"잘못된 subscription_id 형식: {subscription_id}")
+                self.logger.debug(f"스냅샷 구독 ID는 실시간 해제 대상이 아님: {subscription_id}")
 
         except Exception as e:
             self.logger.error(f"구독 해제 실패: {e}")

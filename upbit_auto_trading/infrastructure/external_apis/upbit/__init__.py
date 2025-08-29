@@ -28,8 +28,8 @@ await private_client.close()
 
 from .upbit_public_client import UpbitPublicClient, create_upbit_public_client
 from .upbit_private_client import UpbitPrivateClient
-from .upbit_websocket_public_client import UpbitWebSocketPublicClient
-from .upbit_websocket_private_client import UpbitWebSocketPrivateClient
+from .websocket_v5.upbit_websocket_public_client import UpbitWebSocketPublicV5 as UpbitWebSocketPublicClient
+from .websocket_v5.upbit_websocket_private_client import UpbitWebSocketPrivateV5 as UpbitWebSocketPrivateClient
 from .upbit_auth import UpbitAuthenticator
 
 __all__ = [

@@ -430,10 +430,20 @@ class UpbitWebSocketPublicV5:
                 error_code=ErrorCode.CONNECTION_FAILED
             ))
 
-    async def _process_message(self, raw_message: str) -> None:
+    async def _process_message(self, raw_message) -> None:
         """메시지 처리 - v4.0 단순화 + SIMPLE 포맷 변환"""
+        message_str = ""
         try:
-            data = json.loads(raw_message)
+            # 🔧 bytes 객체를 문자열로 변환
+            if isinstance(raw_message, bytes):
+                message_str = raw_message.decode('utf-8')
+            else:
+                message_str = raw_message
+
+            # 🔍 디버그: 수신된 원본 메시지 로깅
+            logger.debug(f"수신된 메시지: {message_str[:200]}{'...' if len(message_str) > 200 else ''}")
+
+            data = json.loads(message_str)
 
             # SIMPLE 포맷 변환 처리
             if hasattr(self, 'enable_simple_format') and self.enable_simple_format:
@@ -464,7 +474,7 @@ class UpbitWebSocketPublicV5:
 
         except json.JSONDecodeError as e:
             self.stats['errors'] += 1
-            error = MessageParsingError(raw_message, str(e))
+            error = MessageParsingError(message_str or str(raw_message), str(e))
             await self._handle_error(error)
         except Exception as e:
             self.stats['errors'] += 1
@@ -477,11 +487,14 @@ class UpbitWebSocketPublicV5:
     async def _handle_ticker(self, data: Dict[str, Any]) -> None:
         """현재가 데이터 처리"""
         try:
+            logger.debug(f"Ticker 데이터 처리 시작: {data.get('code', 'UNKNOWN')}")
             validated_data = validate_mixed_message(data)
             message = create_websocket_message("ticker", data.get('code', 'UNKNOWN'), validated_data)
             await self._emit_data("ticker", message)
+            logger.debug(f"Ticker 데이터 처리 완료: {data.get('code', 'UNKNOWN')}")
         except Exception as e:
             logger.error(f"Ticker 데이터 처리 오류: {e}")
+            logger.error(f"문제 데이터: {data}")
 
     async def _handle_trade(self, data: Dict[str, Any]) -> None:
         """체결 데이터 처리"""
@@ -512,13 +525,25 @@ class UpbitWebSocketPublicV5:
 
     async def _emit_data(self, data_type: str, data: Any) -> None:
         """데이터 발송 - v4.0 직접 처리"""
-        # v4.0에서는 on_data_received로 직접 처리
-        symbol = data.get('code', 'UNKNOWN') if isinstance(data, dict) else 'UNKNOWN'
-        self.subscription_manager.on_data_received(symbol, data_type, data)
+        try:
+            # 심볼 추출 방법 개선
+            if isinstance(data, dict):
+                # message 객체에서 market 필드를 우선적으로 사용
+                symbol = data.get('market', data.get('code', data.get('symbol', 'UNKNOWN')))
+            else:
+                symbol = getattr(data, 'market', getattr(data, 'symbol', getattr(data, 'code', 'UNKNOWN')))
 
-        # 이벤트 브로커로 발송
-        if self.event_broker:
-            await self._emit_event(f"websocket.{data_type}", data)
+            logger.debug(f"데이터 발송: {data_type}, 심볼: {symbol}")
+            self.subscription_manager.on_data_received(symbol, data_type, data)
+            logger.debug(f"on_data_received 호출 완료: {symbol}")
+
+            # 이벤트 브로커로 발송
+            if self.event_broker:
+                await self._emit_event(f"websocket.{data_type}", data)
+
+        except Exception as e:
+            logger.error(f"데이터 발송 오류: {e}")
+            logger.error(f"문제 데이터: {data}")
 
     async def _emit_event(self, event_type: str, data: Any) -> None:
         """이벤트 발송"""
