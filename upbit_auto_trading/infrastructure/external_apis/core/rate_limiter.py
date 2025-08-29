@@ -15,7 +15,6 @@ class ExchangeRateLimitConfig:
     """거래소별 Rate Limit 설정"""
     requests_per_second: int
     requests_per_minute: int
-    burst_limit: int
     exchange_name: str
     header_parser: Optional[Callable[[Dict[str, str]], Dict[str, Any]]] = None
 
@@ -25,7 +24,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=10,  # Quotation 그룹: 초당 10회
             requests_per_minute=600,  # 분당 600회 (안전 마진)
-            burst_limit=30,  # 버스트 제한 (공식 문서 기준)
             exchange_name='upbit_public',
             header_parser=cls._parse_upbit_headers
         )
@@ -36,7 +34,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=8,   # Exchange order 그룹: 초당 8회 (주문 생성)
             requests_per_minute=200,  # 분당 200회 (안전 마진)
-            burst_limit=20,  # 버스트 제한
             exchange_name='upbit_private',
             header_parser=cls._parse_upbit_headers
         )
@@ -47,7 +44,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=30,  # Exchange default 그룹: 초당 30회
             requests_per_minute=1800,  # 분당 1800회
-            burst_limit=50,
             exchange_name='upbit_exchange_default',
             header_parser=cls._parse_upbit_headers
         )
@@ -58,7 +54,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=5,   # WebSocket 연결: 초당 5회
             requests_per_minute=100,  # 분당 100회 (안전 마진)
-            burst_limit=10,
             exchange_name='upbit_websocket_connect',
             header_parser=cls._parse_upbit_headers
         )
@@ -69,7 +64,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=5,   # WebSocket 메시지: 초당 5회
             requests_per_minute=100,  # WebSocket 메시지: 분당 100회
-            burst_limit=15,
             exchange_name='upbit_websocket_message',
             header_parser=cls._parse_upbit_headers
         )
@@ -80,7 +74,6 @@ class ExchangeRateLimitConfig:
         return cls(
             requests_per_second=20,
             requests_per_minute=1200,
-            burst_limit=100,
             exchange_name='binance',
             header_parser=cls._parse_binance_headers
         )
@@ -300,8 +293,7 @@ class UniversalRateLimiter:
             'exchange': self.config.exchange_name,
             'config': {
                 'requests_per_second': self.config.requests_per_second,
-                'requests_per_minute': self.config.requests_per_minute,
-                'burst_limit': self.config.burst_limit
+                'requests_per_minute': self.config.requests_per_minute
             },
             'current_usage': {
                 'second': second_count,

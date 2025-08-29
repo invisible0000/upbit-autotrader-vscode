@@ -67,6 +67,9 @@ class ConnectionState:
         self.active_subscription: Optional[ActiveSubscription] = None
         self.websocket: Optional[Any] = None  # WebSocket 연결 객체
         self.is_connected = False
+        # 티켓 재사용을 위한 고정 티켓 ID (메모리 절약)
+        self.unified_ticket = f"unified_{connection_type.value}"
+        self.snapshot_ticket = f"snapshot_{connection_type.value}"
 
     def update_subscription(self, ticket_id: str, symbols: Set[str], data_types: Set[DataType]):
         """활성 구독 업데이트"""
@@ -113,8 +116,12 @@ class SubscriptionOptimizer:
         if not all_symbols:
             return None
 
-        # 하나의 통합 메시지 생성
-        ticket_id = f"unified_{connection_state.connection_type.value}_{int(time.time())}"
+        # 🚀 티켓 재사용 시스템: 연결당 고정 티켓 사용
+        if not hasattr(connection_state, 'unified_ticket'):
+            # 최초 1회만 생성: 연결 타입 + 고유 ID
+            connection_state.unified_ticket = f"unified_{connection_state.connection_type.value}_main_001"
+
+        ticket_id = connection_state.unified_ticket
 
         message: List[Dict[str, Any]] = [
             {"ticket": ticket_id}
@@ -157,7 +164,7 @@ class SubscriptionOptimizer:
         snapshot_only_symbols = snapshot_symbols - current_realtime
 
         # 스냅샷 메시지 생성
-        ticket_id = f"snapshot_{connection_state.connection_type.value}_{int(time.time())}"
+        ticket_id = connection_state.snapshot_ticket
 
         snapshot_message: List[Dict[str, Any]] = [
             {"ticket": ticket_id}
@@ -365,7 +372,7 @@ class SubscriptionManager:
     - 극단적 클라이언트 단순성
     """
 
-    def __init__(self, cleanup_interval: int = 30):
+    def __init__(self, cleanup_interval: int = 30, config=None):
         self.logger = create_component_logger("SubscriptionManager")
 
         # 연결 상태 관리
@@ -380,6 +387,25 @@ class SubscriptionManager:
         self.optimizer = SubscriptionOptimizer()
         self.lifecycle_manager = AutoLifecycleManager(cleanup_interval)
         self.debugger = SubscriptionDebugger(self)
+
+        # 🚀 Rate Limiter 통합
+        self.rate_limiter = None
+        if config and hasattr(config, 'get_rate_limiter'):
+            self.rate_limiter = config.get_rate_limiter()
+            if self.rate_limiter:
+                self.logger.info("통합 Rate Limiter 활성화")
+            else:
+                self.logger.info("기존 Rate Limiting 방식 사용")
+        else:
+            # config가 없을 때 기본 WebSocket Rate Limiter 생성
+            try:
+                from .config import WebSocketConfig
+                default_config = WebSocketConfig()
+                self.rate_limiter = default_config.get_rate_limiter()
+                self.logger.info("기본 WebSocket Rate Limiter 생성")
+            except Exception as e:
+                self.logger.warning(f"기본 Rate Limiter 생성 실패: {e}")
+                self.rate_limiter = None
 
         self.logger.info("SubscriptionManager v4.0 초기화 완료")
 
@@ -729,12 +755,33 @@ class SubscriptionManager:
                 else self.private_state)
 
     async def _send_message(self, connection_type: ConnectionType, message: List[Dict[str, Any]]):
-        """웹소켓 메시지 전송"""
+        """
+        웹소켓 메시지 전송 (Rate Limiting 적용)
+
+        🚀 통합 Rate Limiter 지원:
+        - config.use_core_rate_limiter=True: core/rate_limiter.py 사용
+        - 기존 방식: 단순 전송
+        """
+        # 🚀 Rate Limiting 적용
+        if self.rate_limiter:
+            try:
+                await self.rate_limiter.acquire()
+                self.logger.debug(f"{connection_type.value} Rate Limiting 통과")
+            except Exception as e:
+                self.logger.warning(f"Rate Limiting 오류: {e}, 기본 전송 진행")
+
         connection_state = self._get_connection_state(connection_type)
 
         if connection_state.websocket is not None and connection_state.is_connected:
             message_json = json.dumps(message)
             await connection_state.websocket.send(message_json)
+
+            # 🚀 Rate Limiter 성공 알림
+            if self.rate_limiter:
+                # Rate Limiter가 헤더 파싱을 지원하지만 WebSocket은 헤더가 없으므로 성공만 알림
+                # 실제 성공/실패 피드백은 WebSocket 응답에서 처리
+                pass
+
             self.logger.debug(f"{connection_type.value} 메시지 전송: {len(message)} 항목")
             # 🔍 디버그: 실제 전송 메시지 내용 로깅
             self.logger.debug(f"실제 전송 메시지: {message_json}")

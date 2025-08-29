@@ -6,6 +6,10 @@
 - 환경별 설정 분리
 - 타입 안전성 보장
 - 설정 유효성 검증
+
+⚠️ Rate Limiting 통합:
+- Rate Limiting은 core/rate_limiter.py로 통합됨
+- ExchangeRateLimitConfig.for_upbit_websocket_message() 사용 권장
 """
 
 from pathlib import Path
@@ -13,6 +17,9 @@ from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 import yaml
 from enum import Enum
+
+# Rate Limiting은 core/rate_limiter.py로 통합됨
+# from ..core.rate_limiter import ExchangeRateLimitConfig 사용 권장
 
 
 class LogLevel(str, Enum):
@@ -96,14 +103,30 @@ class SubscriptionConfig:
 
 @dataclass
 class RateLimitConfig:
-    """Rate Limit 설정"""
-    requests_per_second: int = 10
-    requests_per_minute: int = 600
+    """
+    [DEPRECATED] Rate Limit 설정
+
+    ⚠️ 이 클래스는 core/rate_limiter.py로 통합되었습니다.
+    새로운 코드에서는 다음을 사용하세요:
+
+    from ..core.rate_limiter import ExchangeRateLimitConfig
+    config = ExchangeRateLimitConfig.for_upbit_websocket_message()
+    """
+    requests_per_second: int = 5     # 업비트 공식: 초당 5회
+    requests_per_minute: int = 100   # 업비트 공식: 분당 100회
     burst_limit: int = 10
     enable_rate_limiting: bool = True
 
     def __post_init__(self):
         """설정 유효성 검증"""
+        import warnings
+        warnings.warn(
+            "RateLimitConfig는 deprecated입니다. "
+            "core/rate_limiter.ExchangeRateLimitConfig.for_upbit_websocket_message()를 사용하세요.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         if self.requests_per_second <= 0:
             raise ValueError("requests_per_second는 0보다 커야 합니다")
         if self.requests_per_minute <= 0:
@@ -162,7 +185,13 @@ class PerformanceConfig:
 
 @dataclass
 class WebSocketConfig:
-    """통합 WebSocket 설정"""
+    """
+    통합 WebSocket 설정
+
+    🔄 Rate Limiting 통합:
+    - rate_limit: 기존 RateLimitConfig (deprecated)
+    - use_core_rate_limiter: True 설정 시 core/rate_limiter.py 사용
+    """
     environment: Environment = Environment.DEVELOPMENT
     connection: ConnectionConfig = field(default_factory=ConnectionConfig)
     reconnection: ReconnectionConfig = field(default_factory=ReconnectionConfig)
@@ -172,6 +201,9 @@ class WebSocketConfig:
     event: EventConfig = field(default_factory=EventConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
+
+    # 🚀 Rate Limiter 통합 옵션
+    use_core_rate_limiter: bool = True  # 기본값: 통합된 Rate Limiter 사용
 
     @classmethod
     def from_yaml(cls, config_path: str) -> 'WebSocketConfig':
@@ -216,8 +248,34 @@ class WebSocketConfig:
             logging=logging,
             event=event,
             security=security,
-            performance=performance
+            performance=performance,
+            use_core_rate_limiter=config_dict.get('use_core_rate_limiter', True)
         )
+
+    def get_rate_limiter(self):
+        """
+        Rate Limiter 인스턴스 생성
+
+        use_core_rate_limiter=True: core/rate_limiter.py 사용 (권장)
+        use_core_rate_limiter=False: 기존 로컬 설정 사용 (deprecated)
+        """
+        if self.use_core_rate_limiter:
+            try:
+                from ...core.rate_limiter import ExchangeRateLimitConfig, UniversalRateLimiter
+                config = ExchangeRateLimitConfig.for_upbit_websocket_message()
+                return UniversalRateLimiter(config, f"websocket_{id(self)}")
+            except ImportError:
+                # core/rate_limiter를 찾을 수 없으면 기존 설정 사용
+                import warnings
+                warnings.warn(
+                    "core.rate_limiter를 찾을 수 없어 기존 RateLimitConfig를 사용합니다.",
+                    ImportWarning,
+                    stacklevel=2
+                )
+                return None
+        else:
+            # 기존 로컬 Rate Limit 설정 사용 (deprecated)
+            return None
 
     def to_yaml(self, output_path: str) -> None:
         """설정을 YAML 파일로 저장"""
@@ -287,7 +345,8 @@ class WebSocketConfig:
                 'worker_thread_count': self.performance.worker_thread_count,
                 'enable_message_compression': self.performance.enable_message_compression,
                 'memory_limit_mb': self.performance.memory_limit_mb
-            }
+            },
+            'use_core_rate_limiter': self.use_core_rate_limiter
         }
 
     def get_connection_params(self) -> Dict[str, Any]:

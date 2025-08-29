@@ -22,7 +22,7 @@ class BaseExchangeClient(ABC):
     통일된 인터페이스를 제공
     """
 
-    def __init__(self, adapter: Any, rate_limiter: UniversalRateLimiter,
+    def __init__(self, adapter: Any, rate_limiter: Any,
                  timeout: int = 2, max_retries: int = 1):
         self.adapter = adapter
         self.rate_limiter = rate_limiter
@@ -207,8 +207,13 @@ class BaseExchangeClient(ABC):
         """기본 HTTP 요청"""
         url = f"{self.adapter.get_base_url()}{endpoint}"
 
-        # Rate limiting
-        await self.rate_limiter.acquire()
+        # Rate limiting - 엔드포인트별 세밀한 제어
+        try:
+            # EndpointRateLimiter 사용 시도 (엔드포인트와 메서드 전달)
+            await self.rate_limiter.acquire(endpoint, method)
+        except TypeError:
+            # 기존 UniversalRateLimiter 사용 (호환성 유지)
+            await self.rate_limiter.acquire()
 
         for attempt in range(self.max_retries + 1):
             try:

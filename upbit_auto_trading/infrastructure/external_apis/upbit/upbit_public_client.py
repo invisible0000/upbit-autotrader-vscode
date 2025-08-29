@@ -22,7 +22,7 @@ class UpbitPublicClient(BaseExchangeClient):
     """
 
     def __init__(self, adapter: Optional[UpbitAdapter] = None,
-                 rate_limiter: Optional[UniversalRateLimiter] = None):
+                 rate_limiter: Optional[Any] = None):
         """
         업비트 공개 API 클라이언트 초기화
 

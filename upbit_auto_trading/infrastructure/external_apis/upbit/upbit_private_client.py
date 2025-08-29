@@ -25,7 +25,7 @@ class UpbitPrivateClient(BaseExchangeClient):
 
     def __init__(self, access_key: Optional[str] = None, secret_key: Optional[str] = None,
                  adapter: Optional[UpbitAdapter] = None,
-                 rate_limiter: Optional[UniversalRateLimiter] = None):
+                 rate_limiter: Optional[Any] = None):
         """
         업비트 프라이빗 API 클라이언트 초기화
 
