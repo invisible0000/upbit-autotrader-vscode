@@ -7,7 +7,6 @@
 - JWT 인증 자동 처리 및 토큰 갱신
 - Private 데이터 전용 (myOrder, myAsset)
 - 보안 강화 및 자동 생명주기 관리
-- 압축 지원 (deflate) 및 SIMPLE 포맷 지원
 """
 import asyncio
 import json
@@ -26,11 +25,6 @@ from .models import (
 from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
 from .subscription_manager import SubscriptionManager
-from .simple_format_converter import (
-    auto_detect_and_convert,
-    convert_to_simple_format,
-    convert_from_simple_format,
-)
 from .exceptions import (
     WebSocketError, WebSocketConnectionError, WebSocketConnectionTimeoutError,
     SubscriptionError, MessageParsingError, InvalidAPIKeysError,
@@ -173,15 +167,8 @@ class UpbitWebSocketPrivateV5:
         self._tasks.add(self._token_refresh_task)
         self._token_refresh_task.add_done_callback(self._tasks.discard)
 
-    async def connect(self, enable_compression: Optional[bool] = None,
-                      enable_simple_format: bool = False) -> None:
-        """
-        WebSocket 연결 - JWT 인증 포함
-
-        Args:
-            enable_compression: WebSocket 압축 활성화 (None이면 config에서 로드)
-            enable_simple_format: SIMPLE 포맷 사용 여부
-        """
+    async def connect(self) -> None:
+        """WebSocket 연결 - JWT 인증 포함"""
         if self.state_machine.current_state != WebSocketState.DISCONNECTED:
             logger.warning(f"이미 연결된 상태입니다: {self.state_machine.current_state}")
             return
@@ -190,37 +177,21 @@ class UpbitWebSocketPrivateV5:
             self.state_machine.transition_to(WebSocketState.CONNECTING)
             logger.info(f"Private WebSocket 연결 시도: {self.config.connection.url}")
 
-            # 압축 설정
-            compression_enabled = (enable_compression
-                                   if enable_compression is not None
-                                   else self.config.performance.enable_message_compression)
-
-            # SIMPLE 포맷 설정 저장
-            self.enable_simple_format = enable_simple_format
-
             # JWT 토큰 생성
             jwt_token = self._generate_jwt_token()
 
-            # WebSocket 연결 옵션 구성
-            connection_kwargs = {
-                "extra_headers": {'Authorization': f'Bearer {jwt_token}'},
-                "ping_interval": self.config.connection.ping_interval,
-                "ping_timeout": self.config.connection.ping_timeout,
-                "close_timeout": self.config.connection.close_timeout,
+            # WebSocket 연결 (Authorization 헤더 포함)
+            headers = {
+                'Authorization': f'Bearer {jwt_token}'
             }
 
-            if compression_enabled:
-                logger.debug("Private WebSocket 압축 기능 활성화 (deflate)")
-                connection_kwargs["compression"] = "deflate"
-
-            if enable_simple_format:
-                logger.debug("Private WebSocket SIMPLE 포맷 활성화")
-
-            # WebSocket 연결
             self.websocket = await asyncio.wait_for(
                 websockets.connect(
                     self.config.connection.url,
-                    **connection_kwargs
+                    extra_headers=headers,
+                    ping_interval=self.config.connection.ping_interval,
+                    ping_timeout=self.config.connection.ping_timeout,
+                    close_timeout=self.config.connection.close_timeout
                 ),
                 timeout=self.config.connection.connect_timeout
             )
@@ -545,18 +516,9 @@ class UpbitWebSocketPrivateV5:
             ))
 
     async def _process_message(self, raw_message: str) -> None:
-        """메시지 처리 - v4.0 단순화 + SIMPLE 포맷 변환"""
+        """메시지 처리 - v4.0 단순화"""
         try:
             data = json.loads(raw_message)
-
-            # SIMPLE 포맷 변환 처리
-            if hasattr(self, 'enable_simple_format') and self.enable_simple_format:
-                try:
-                    # SIMPLE 포맷을 DEFAULT 포맷으로 변환
-                    data = auto_detect_and_convert(data)
-                    logger.debug("Private SIMPLE 포맷을 DEFAULT 포맷으로 변환 완료")
-                except Exception as e:
-                    logger.warning(f"Private SIMPLE 포맷 변환 실패, 원본 데이터 사용: {e}")
 
             # 메시지 타입 식별
             message_type = self._identify_data_type(data)

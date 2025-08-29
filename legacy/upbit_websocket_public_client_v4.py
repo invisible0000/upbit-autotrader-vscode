@@ -6,7 +6,6 @@
 - 레거시 호환성 제거, 순수 v4.0 API
 - 지능적 구독 최적화 및 자동 생명주기 관리
 - 스냅샷/리얼타임 단순화된 인터페이스
-- 압축 지원 (deflate) 및 SIMPLE 포맷 지원
 - 업비트 공식 API 100% 호환
 """
 import asyncio
@@ -25,11 +24,6 @@ from .models import (
 from .config import load_config
 from .state import WebSocketState, WebSocketStateMachine
 from .subscription_manager import SubscriptionManager
-from .simple_format_converter import (
-    auto_detect_and_convert,
-    convert_to_simple_format,
-    convert_from_simple_format,
-)
 from .exceptions import (
     WebSocketError, WebSocketConnectionError, WebSocketConnectionTimeoutError,
     SubscriptionError, MessageParsingError,
@@ -88,15 +82,8 @@ class UpbitWebSocketPublicV5:
         """기본 콜백 함수"""
         logger.debug(f"Public 기본 콜백: {symbol} {data_type} 데이터 수신")
 
-    async def connect(self, enable_compression: Optional[bool] = None,
-                      enable_simple_format: bool = False) -> None:
-        """
-        WebSocket 연결
-
-        Args:
-            enable_compression: WebSocket 압축 활성화 (None이면 config에서 로드)
-            enable_simple_format: SIMPLE 포맷 사용 여부
-        """
+    async def connect(self) -> None:
+        """WebSocket 연결"""
         if self.state_machine.current_state != WebSocketState.DISCONNECTED:
             logger.warning(f"이미 연결된 상태입니다: {self.state_machine.current_state}")
             return
@@ -105,33 +92,13 @@ class UpbitWebSocketPublicV5:
             self.state_machine.transition_to(WebSocketState.CONNECTING)
             logger.info(f"WebSocket 연결 시도: {self.config.connection.url}")
 
-            # 압축 설정
-            compression_enabled = (enable_compression
-                                   if enable_compression is not None
-                                   else self.config.performance.enable_message_compression)
-
-            # SIMPLE 포맷 설정 저장
-            self.enable_simple_format = enable_simple_format
-
-            # WebSocket 연결 옵션 구성
-            connection_kwargs = {
-                "ping_interval": self.config.connection.ping_interval,
-                "ping_timeout": self.config.connection.ping_timeout,
-                "close_timeout": self.config.connection.close_timeout,
-            }
-
-            if compression_enabled:
-                logger.debug("Public WebSocket 압축 기능 활성화 (deflate)")
-                connection_kwargs["compression"] = "deflate"
-
-            if enable_simple_format:
-                logger.debug("Public WebSocket SIMPLE 포맷 활성화")
-
             # WebSocket 연결
             self.websocket = await asyncio.wait_for(
                 websockets.connect(
                     self.config.connection.url,
-                    **connection_kwargs
+                    ping_interval=self.config.connection.ping_interval,
+                    ping_timeout=self.config.connection.ping_timeout,
+                    close_timeout=self.config.connection.close_timeout
                 ),
                 timeout=self.config.connection.connect_timeout
             )
@@ -151,9 +118,7 @@ class UpbitWebSocketPublicV5:
             # 이벤트 발송
             await self._emit_event("websocket.connected", {
                 "connection_id": self.connection_id,
-                "timestamp": datetime.now().isoformat(),
-                "compression_enabled": compression_enabled,
-                "simple_format_enabled": enable_simple_format
+                "timestamp": datetime.now().isoformat()
             })
 
         except asyncio.TimeoutError:
@@ -229,7 +194,7 @@ class UpbitWebSocketPublicV5:
 
             if is_only_snapshot:
                 # v4.0 스냅샷 요청
-                await self.subscription_manager.request_snapshot_data(
+                result = await self.subscription_manager.request_snapshot_data(
                     symbols=symbols,
                     data_type=data_type,
                     connection_type="public",
@@ -431,18 +396,9 @@ class UpbitWebSocketPublicV5:
             ))
 
     async def _process_message(self, raw_message: str) -> None:
-        """메시지 처리 - v4.0 단순화 + SIMPLE 포맷 변환"""
+        """메시지 처리 - v4.0 단순화"""
         try:
             data = json.loads(raw_message)
-
-            # SIMPLE 포맷 변환 처리
-            if hasattr(self, 'enable_simple_format') and self.enable_simple_format:
-                try:
-                    # SIMPLE 포맷을 DEFAULT 포맷으로 변환
-                    data = auto_detect_and_convert(data)
-                    logger.debug("SIMPLE 포맷을 DEFAULT 포맷으로 변환 완료")
-                except Exception as e:
-                    logger.warning(f"SIMPLE 포맷 변환 실패, 원본 데이터 사용: {e}")
 
             # 메시지 타입 식별
             message_type = self._identify_message_type(data)
