@@ -1,7 +1,7 @@
 """Upbit API 클라이언트 모듈
 
 이 모듈은 Upbit 거래소 API와의 연동을 담당하는 Infrastructure Layer 컴포넌트입니다.
-새로운 다중 거래소 아키텍처를 적용하여 확장 가능하고 견고한 구조를 제공합니다.
+업비트 전용으로 최적화된 단순하고 견고한 구조를 제공합니다.
 
 주요 클래스:
 - UpbitPublicClient: 공개 API 클라이언트 (인증 불필요)
@@ -9,6 +9,7 @@
 - UpbitWebSocketPublicClient: 공개 WebSocket 클라이언트 (시세 데이터)
 - UpbitWebSocketPrivateClient: 프라이빗 WebSocket 클라이언트 (계좌/주문)
 - UpbitAuthenticator: JWT 인증 관리
+- UpbitRateLimiter: 업비트 전용 Rate Limiter
 
 사용 예시:
 ```python
@@ -27,10 +28,14 @@ await private_client.close()
 """
 
 from .upbit_public_client import UpbitPublicClient, create_upbit_public_client
-from .upbit_private_client import UpbitPrivateClient
+from .upbit_private_client import UpbitPrivateClient, create_upbit_private_client
 from .websocket_v5.upbit_websocket_public_client import UpbitWebSocketPublicV5 as UpbitWebSocketPublicClient
 from .websocket_v5.upbit_websocket_private_client import UpbitWebSocketPrivateV5 as UpbitWebSocketPrivateClient
 from .upbit_auth import UpbitAuthenticator
+from .upbit_rate_limiter import (
+    UpbitRateLimiter, create_upbit_rate_limiter,
+    create_upbit_public_limiter, create_upbit_private_limiter
+)
 
 __all__ = [
     'UpbitPublicClient',
@@ -38,5 +43,10 @@ __all__ = [
     'UpbitWebSocketPublicClient',
     'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
-    'create_upbit_public_client'
+    'UpbitRateLimiter',
+    'create_upbit_public_client',
+    'create_upbit_private_client',
+    'create_upbit_rate_limiter',
+    'create_upbit_public_limiter',
+    'create_upbit_private_limiter'
 ]

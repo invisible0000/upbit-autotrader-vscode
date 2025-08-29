@@ -328,7 +328,7 @@ class ApiKeyService(IApiKeyService):
                     try:
                         async def test_connection():
                             async with client:
-                                return await client.get_accounts()
+                                return await client.get_accounts()  # Dict 형식 사용
                         return new_loop.run_until_complete(test_connection())
                     finally:
                         new_loop.close()
@@ -354,13 +354,13 @@ class ApiKeyService(IApiKeyService):
 
                 if result_container:
                     accounts = result_container[0]
-                    # 계좌 정보 처리
+                    # 계좌 정보 처리 (Dict 형식)
                     account_info = {}
                     total_krw = 0.0
 
-                    if isinstance(accounts, list):
-                        for account in accounts:
-                            currency = account.get('currency', '')
+                    if isinstance(accounts, dict):
+                        # 새로운 Dict 형식 처리: {currency: account_data}
+                        for currency, account in accounts.items():
                             balance = float(account.get('balance', 0))
                             locked = float(account.get('locked', 0))
 
@@ -391,34 +391,37 @@ class ApiKeyService(IApiKeyService):
 
                 async def test_connection():
                     async with client:
-                        return await client.get_accounts()
+                        return await client.get_accounts()  # Dict 형식 사용
 
                 accounts = asyncio.run(test_connection())
 
-                # 계좌 정보 처리
+                # 계좌 정보 처리 (Dict 형식)
                 account_info = {}
                 total_krw = 0.0
 
-                for account in accounts:
-                    currency = account.get('currency', '')
-                    balance = float(account.get('balance', 0))
-                    locked = float(account.get('locked', 0))
+                if isinstance(accounts, dict):
+                    # 새로운 Dict 형식 처리: {currency: account_data}
+                    for currency, account in accounts.items():
+                        balance = float(account.get('balance', 0))
+                        locked = float(account.get('locked', 0))
 
-                    if currency == 'KRW':
-                        total_krw = balance + locked
+                        if currency == 'KRW':
+                            total_krw = balance + locked
 
-                    account_info[currency] = {
-                        'balance': balance,
-                        'locked': locked,
-                        'total': balance + locked
+                        account_info[currency] = {
+                            'balance': balance,
+                            'locked': locked,
+                            'total': balance + locked
+                        }
+
+                    self.logger.info("✅ API 연결 테스트 성공")
+                    return True, "연결 성공", {
+                        'accounts': account_info,
+                        'total_krw': total_krw,
+                        'currencies_count': len(account_info)
                     }
-
-                self.logger.info("✅ API 연결 테스트 성공")
-                return True, "연결 성공", {
-                    'accounts': account_info,
-                    'total_krw': total_krw,
-                    'currencies_count': len(account_info)
-                }
+                else:
+                    return False, "계좌 정보 형식 오류", {}
 
         except Exception as e:
             mark_api_failure()  # API 실패 기록

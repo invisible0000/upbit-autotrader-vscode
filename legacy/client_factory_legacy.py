@@ -1,15 +1,13 @@
 """
-업비트 클라이언트 팩토리 - 엔드포인트별 Rate Limiting 지원
+업비트 클라이언트 팩토리 - 단순화 버전
 
-기존 클라이언트와 호환성을 유지하면서 새로운 엔드포인트별
-세밀한 Rate Limiting을 선택적으로 사용할 수 있습니다.
+업비트 전용 클라이언트 생성을 위한 팩토리
 """
-from typing import Optional, Union
-from ..core.rate_limiter import UniversalRateLimiter, ExchangeRateLimitConfig
-from ..core.endpoint_rate_limiter import EndpointRateLimiter, create_upbit_endpoint_limiter
-from ..adapters.upbit_adapter import UpbitAdapter
+from typing import Optional
+
 from .upbit_public_client import UpbitPublicClient
 from .upbit_private_client import UpbitPrivateClient
+from .upbit_rate_limiter import UpbitRateLimiter
 
 
 class UpbitClientFactory:
@@ -17,8 +15,7 @@ class UpbitClientFactory:
 
     @staticmethod
     def create_public_client(
-        adapter: Optional[UpbitAdapter] = None,
-        use_endpoint_limiter: bool = True,
+        rate_limiter: Optional[UpbitRateLimiter] = None
         rate_limiter: Optional[Union[UniversalRateLimiter, EndpointRateLimiter]] = None
     ) -> UpbitPublicClient:
         """

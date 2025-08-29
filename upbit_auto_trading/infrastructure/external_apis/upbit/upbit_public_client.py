@@ -1,404 +1,462 @@
 """
-업비트 공개 API 클라이언트 - 어댑터 패턴 적용
+업비트 공개 API 클라이언트 - 업비트 전용 단순화 버전
 
-새로운 아키텍처를 적용한 확장 가능한 구현
+업비트 전용으로 최적화된 구현
 """
+import asyncio
+import aiohttp
+import logging
 from typing import List, Dict, Any, Optional, Union
 
-from ..core.base_client import BaseExchangeClient
-from ..core.rate_limiter import UniversalRateLimiter, ExchangeRateLimitConfig
-from ..adapters.upbit_adapter import UpbitAdapter
+from .upbit_rate_limiter import UpbitRateLimiter, create_upbit_public_limiter
 
 
-class UpbitPublicClient(BaseExchangeClient):
+class UpbitPublicClient:
     """
-    업비트 공개 API 클라이언트
+    업비트 전용 공개 API 클라이언트
 
     특징:
-    - 어댑터 패턴 적용으로 업비트 로직 분리
-    - 거래소 중립적 베이스 클라이언트 상속
-    - Union[str, List[str]] 패턴 완전 지원
-    - 기존 클라이언트와 호환 가능한 인터페이스
+    - 업비트 전용 최적화
+    - 업비트 Rate Limiter 사용
+    - 간단하고 직관적인 구조
+    - 기존 인터페이스 호환성 유지
     """
 
-    def __init__(self, adapter: Optional[UpbitAdapter] = None,
-                 rate_limiter: Optional[Any] = None):
+    BASE_URL = "https://api.upbit.com/v1"
+
+    def __init__(self, rate_limiter: Optional[UpbitRateLimiter] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
         Args:
-            adapter: 업비트 어댑터 (기본값: 자동 생성)
-            rate_limiter: Rate Limiter (기본값: 자동 생성)
+            rate_limiter: 업비트 Rate Limiter (기본값: 자동 생성)
         """
-        if adapter is None:
-            adapter = UpbitAdapter()
-        if rate_limiter is None:
-            config = ExchangeRateLimitConfig.for_upbit_public()
-            rate_limiter = UniversalRateLimiter(config)
+        self.rate_limiter = rate_limiter or create_upbit_public_limiter("upbit_public")
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._logger = logging.getLogger("UpbitPublicClient")
 
-        super().__init__(adapter, rate_limiter)
+    async def __aenter__(self):
+        await self._ensure_session()
+        return self
 
-    def _prepare_headers(self, method: str, endpoint: str,
-                         params: Optional[Dict], data: Optional[Dict]) -> Dict[str, str]:
-        """업비트 공개 API용 헤더 준비 (인증 불필요)"""
-        return {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        }
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
-    # ================================================================
-    # 핵심 API 메서드들 - Union 패턴 지원
-    # ================================================================
+    async def _ensure_session(self) -> None:
+        """HTTP 세션 확보"""
+        if not self._session or self._session.closed:
+            connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            self._session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=timeout,
+                headers={'Accept': 'application/json'}
+            )
 
-    async def get_ticker(self, symbol: Union[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+    async def close(self) -> None:
+        """리소스 정리"""
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    async def _make_request(
+        self,
+        endpoint: str,
+        method: str = 'GET',
+        params: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> Any:
         """
-        현재가 정보 조회 - Dict 통일
+        업비트 API 요청 실행
 
         Args:
-            symbol: 마켓 코드 또는 마켓 코드 리스트
+            endpoint: API 엔드포인트
+            method: HTTP 메서드
+            params: 쿼리 파라미터
 
         Returns:
-            Dict[str, Dict]: {
-                'KRW-BTC': {'market': 'KRW-BTC', 'trade_price': 83000000, ...},
-                'KRW-ETH': {'market': 'KRW-ETH', 'trade_price': 3200000, ...}
-            }
+            API 응답 데이터
         """
-        response = await self._make_unified_request('/ticker', symbol)
+        await self._ensure_session()
 
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"현재가 조회 실패: {response.error}")
+        url = f"{self.BASE_URL}{endpoint}"
 
-        return response.get_all()  # 항상 Dict 반환
+        if not self._session:
+            raise Exception("세션이 초기화되지 않았습니다")
 
-    async def get_orderbook(self, symbol: Union[str, List[str]]) -> Dict[str, Dict[str, Any]]:
-        """
-        호가 정보 조회 - Dict 통일
+        # Rate Limiter와 HTTP 요청을 원자적으로 처리
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Rate Limit 적용
+            await self.rate_limiter.acquire(endpoint, method)
 
-        Args:
-            symbol: 마켓 코드 또는 마켓 코드 리스트
+            try:
+                async with self._session.request(method, url, params=params, **kwargs) as response:
+                    # Rate Limit 헤더 업데이트
+                    self.rate_limiter.update_from_upbit_headers(dict(response.headers))
 
-        Returns:
-            Dict[str, Dict]: {
-                'KRW-BTC': {'market': 'KRW-BTC', 'orderbook_units': [...], ...},
-                'KRW-ETH': {'market': 'KRW-ETH', 'orderbook_units': [...], ...}
-            }
-        """
-        response = await self._make_unified_request('/orderbook', symbol)
-
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"호가 조회 실패: {response.error}")
-
-        return response.get_all()  # 항상 Dict 반환
-
-    async def get_candle(self, symbol: str, timeframe: str = '1d',
-                         count: int = 200, to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        캔들 정보 조회 - Dict 통일 (단일 심볼)
-
-        Args:
-            symbol: 마켓 코드 (단일만 지원)
-            timeframe: 시간프레임 ('1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M', '1Y')
-            count: 조회할 캔들 개수 (최대 200)
-            to: 마지막 캔들 시각 (ISO 8601 형식)
-
-        Returns:
-            Dict[str, List]: {
-                'KRW-BTC': [캔들 데이터 리스트]
-            }
-        """
-        if isinstance(symbol, list):
-            raise ValueError("캔들 API는 단일 심볼만 지원합니다.")
-
-        # 어댑터를 통한 엔드포인트 결정
-        if hasattr(self.adapter, 'get_candle_endpoint'):
-            endpoint = getattr(self.adapter, 'get_candle_endpoint')(timeframe)
-        else:
-            # 폴백: 업비트 API 문서 기반 완전한 엔드포인트 매핑
-            endpoint_map = {
-                # 초 캔들
-                '1s': '/candles/seconds',
-                # 분(Minute) 캔들
-                '1m': '/candles/minutes/1',
-                '3m': '/candles/minutes/3',
-                '5m': '/candles/minutes/5',
-                '10m': '/candles/minutes/10',
-                '15m': '/candles/minutes/15',
-                '30m': '/candles/minutes/30',
-                '60m': '/candles/minutes/60',    # 60분 추가
-                '240m': '/candles/minutes/240',  # 240분 추가
-                '1h': '/candles/minutes/60',
-                '4h': '/candles/minutes/240',
-                # 일/주/월/년 캔들 (표준 표기법)
-                '1d': '/candles/days',
-                '1w': '/candles/weeks',
-                '1M': '/candles/months',  # 월은 대문자 (분과 구분)
-                '1y': '/candles/years'    # 년은 소문자 (표준)
-            }
-            endpoint = endpoint_map.get(timeframe)
-            if not endpoint:
-                raise ValueError(f"지원하지 않는 시간프레임: {timeframe}")
-
-        response = await self._make_unified_request(
-            endpoint, symbol,
-            timeframe=timeframe, count=count, to=to
-        )
-
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"캔들 조회 실패: {response.error}")
-
-        # Dict 형태로 반환 (심볼을 키로 사용)
-        candle_data = response.get()
-        if isinstance(candle_data, list):
-            return {symbol: candle_data}
-        return candle_data if candle_data else {symbol: []}
-
-    async def get_trade(self, symbol: str, count: int = 200) -> Dict[str, List[Dict[str, Any]]]:
-        """체결 내역 조회 - Dict 통일 (단일 심볼)
-
-        Returns:
-            Dict[str, List]: {
-                'KRW-BTC': [체결 데이터 리스트]
-            }
-        """
-        if isinstance(symbol, list):
-            raise ValueError("체결 API는 단일 심볼만 지원합니다.")
-
-        response = await self._make_unified_request(
-            '/trades/ticks', symbol, count=count
-        )
-
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"체결 조회 실패: {response.error}")
-
-        # Dict 형태로 반환
-        trade_data = response.get()
-        if isinstance(trade_data, list):
-            return {symbol: trade_data}
-        return trade_data if trade_data else {symbol: []}
-
-    async def get_candle_minutes(self, symbol: str, unit: int = 1, count: int = 200,
-                                 to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """분 캔들 조회 (API 문서: /candles/minutes/{unit}) - Dict 통일"""
-        return await self.get_candle(symbol, f'{unit}m', count, to)
-
-    async def get_candle_days(self, symbol: str, count: int = 200,
-                              to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """일 캔들 조회 (API 문서: /candles/days) - Dict 통일"""
-        return await self.get_candle(symbol, '1d', count, to)
-
-    async def get_trades(self, symbol: str, count: int = 200) -> Dict[str, List[Dict[str, Any]]]:
-        """체결 내역 조회 (API 문서: /trades/ticks) - Dict 통일"""
-        return await self.get_trade(symbol, count)
-
-    async def get_candle_seconds(self, symbol: str, count: int = 200,
-                                 to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """초 캔들 조회 (API 문서: /candles/seconds) - Dict 통일"""
-        candle_result = await self.get_candle(symbol, '1s', count, to)
-        return candle_result
-
-    async def get_candle_weeks(self, symbol: str, count: int = 200,
-                               to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """주 캔들 조회 (API 문서: /candles/weeks) - Dict 통일"""
-        candle_result = await self.get_candle(symbol, '1w', count, to)
-        return candle_result
-
-    async def get_candle_months(self, symbol: str, count: int = 200,
-                                to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """월 캔들 조회 (API 문서: /candles/months) - Dict 통일"""
-        return await self.get_candle(symbol, '1M', count, to)
-
-    async def get_candle_years(self, symbol: str, count: int = 200,
-                               to: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """년 캔들 조회 (API 문서: /candles/years) - Dict 통일"""
-        return await self.get_candle(symbol, '1y', count, to)
+                    if response.status == 200:
+                        data = await response.json()
+                        return data
+                    elif response.status == 429:
+                        # 429 오류 시 지수 백오프로 재시도
+                        retry_number = attempt + 1
+                        if attempt < max_retries - 1:
+                            wait_time = (2 ** attempt) * 0.5  # 0.5, 1.0, 2.0초
+                            self._logger.warning(
+                                f"[{endpoint}] 429 오류로 재시도 {retry_number}/{max_retries}, "
+                                f"{wait_time:.1f}초 대기 후 재시도"
+                            )
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            error_text = await response.text()
+                            self._logger.error(f"[{endpoint}] 429 오류 최대 재시도 초과 {max_retries}/{max_retries}: {error_text}")
+                            # 429 전용 예외로 명확히 구분
+                            raise Exception(f"Rate Limit 초과 (429): {endpoint} - 최대 재시도 {max_retries}회 초과")
+                    else:
+                        error_text = await response.text()
+                        self._logger.error(f"[{endpoint}] API 오류 {response.status}: {error_text}")
+                        raise Exception(f"업비트 API 오류 {response.status}: {error_text}")
+            except aiohttp.ClientError as e:
+                retry_number = attempt + 1
+                self._logger.error(f"[{endpoint}] 네트워크 오류: {e}")
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 0.5
+                    self._logger.warning(f"[{endpoint}] 네트워크 재시도 {retry_number}/{max_retries}, {wait_time:.1f}초 대기")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise Exception(f"네트워크 오류: {e}")
+            except Exception as e:
+                # 이미 처리된 429 예외는 그대로 전파
+                if "Rate Limit 초과 (429)" in str(e):
+                    raise
+                # 기타 예외는 재시도 없이 바로 전파
+                raise
 
     # ================================================================
-    # 유틸리티 메서드들
+    # 시세 조회 API
     # ================================================================
 
-    async def get_market(self, is_details: bool = False) -> Dict[str, Dict[str, Any]]:
-        """마켓 정보 조회 (API 문서: /market/all) - Dict 통일"""
-        params = {'isDetails': 'true' if is_details else 'false'}
-
-        # 마켓 목록 API는 심볼이 필요하지 않으므로 직접 호출
-        response = await self._make_request('GET', '/market/all', params=params)
-
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"마켓 조회 실패: {response.error_message}")
-
-        # List를 Dict로 변환 (market을 키로 사용)
-        data = response.data or []
-        result = {}
-        for market_info in data:
-            market_code = market_info.get('market', '')
-            if market_code:
-                result[market_code] = market_info
-
-        return result
-
-    async def get_orderbook_instruments(self, markets: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    async def get_market_all(self, is_details: bool = False) -> Dict[str, Dict[str, Any]]:
         """
-        호가 정책 조회 (API 문서: /orderbook/instruments)
-
-        각 마켓의 호가 단위(tick_size) 정보를 조회합니다.
-
-        Args:
-            markets: 조회하고자 하는 페어(거래쌍) 목록. 쉼표로 구분. 예: "KRW-BTC,KRW-ETH"
-                    None일 경우 모든 원화 마켓을 조회합니다.
+        마켓 코드 목록 조회
 
         Returns:
-            Dict[str, Dict]: {
+            Dict[market_code, market_info]: 마켓 코드를 키로 하는 딕셔너리
+            예: {
                 'KRW-BTC': {
                     'market': 'KRW-BTC',
-                    'tick_size': '1000',
-                    'quote_currency': 'KRW',
-                    'supported_levels': [0, 10000, ...],
-                    ...
+                    'korean_name': '비트코인',
+                    'english_name': 'Bitcoin'
                 },
                 ...
             }
         """
         params = {}
-        if markets:
-            params['markets'] = markets
-        else:
-            # 기본값: 주요 원화 마켓들
-            params['markets'] = 'KRW-BTC,KRW-ETH,KRW-XRP,KRW-ADA,KRW-DOT'
+        if is_details:
+            params['isDetails'] = 'true'
 
-        response = await self._make_request('GET', '/orderbook/instruments', params=params)
+        # 원본 API 응답 (리스트 형태)
+        markets_list = await self._make_request('/market/all', params=params)
 
-        if not response.success:
-            from ..core.data_models import ExchangeApiError
-            raise ExchangeApiError(f"호가 정책 조회 실패: {response.error_message}")
-
-        # List를 Dict로 변환 (market을 키로 사용)
-        data = response.data or []
-        result = {}
-        for instrument_info in data:
-            market_code = instrument_info.get('market', '')
+        # Dict 형태로 변환 (market 코드를 키로 사용)
+        markets_dict = {}
+        for market_info in markets_list:
+            market_code = market_info.get('market')
             if market_code:
-                result[market_code] = instrument_info
+                markets_dict[market_code] = market_info
 
-        return result
+        return markets_dict
 
-    async def get_krw_market_list(self) -> List[str]:
-        """KRW 마켓 목록 조회 - Dict 통일 호환"""
-        markets = await self.get_market()
+    async def get_candle_seconds(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1
+    ) -> List[Dict[str, Any]]:
+        """초 캔들 조회 (1초 고정)"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+
+        return await self._make_request('/candles/seconds', params=params)
+
+    async def get_candle_minutes(
+        self,
+        market: str,
+        unit: int = 1,
+        to: Optional[str] = None,
+        count: int = 1
+    ) -> List[Dict[str, Any]]:
+        """분 캔들 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+
+        return await self._make_request(f'/candles/minutes/{unit}', params=params)
+
+    async def get_candle_days(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1,
+        converting_price_unit: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """일 캔들 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+        if converting_price_unit:
+            params['convertingPriceUnit'] = converting_price_unit
+
+        return await self._make_request('/candles/days', params=params)
+
+    async def get_candle_weeks(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1
+    ) -> List[Dict[str, Any]]:
+        """주 캔들 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+
+        return await self._make_request('/candles/weeks', params=params)
+
+    async def get_candle_months(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1
+    ) -> List[Dict[str, Any]]:
+        """월 캔들 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+
+        return await self._make_request('/candles/months', params=params)
+
+    async def get_candle_years(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1
+    ) -> List[Dict[str, Any]]:
+        """연 캔들 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+
+        return await self._make_request('/candles/years', params=params)
+
+    async def get_trades_ticks(
+        self,
+        market: str,
+        to: Optional[str] = None,
+        count: int = 1,
+        cursor: Optional[str] = None,
+        days_ago: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """최근 체결 내역 조회"""
+        params = {
+            'market': market,
+            'count': count
+        }
+        if to:
+            params['to'] = to
+        if cursor:
+            params['cursor'] = cursor
+        if days_ago:
+            params['daysAgo'] = days_ago
+
+        return await self._make_request('/trades/ticks', params=params)
+
+    async def get_ticker(self, markets: Union[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+        """
+        현재가 정보 조회
+
+        Returns:
+            Dict[market_code, ticker_info]: 마켓 코드를 키로 하는 딕셔너리
+            예: {
+                'KRW-BTC': {
+                    'market': 'KRW-BTC',
+                    'trade_price': 145831000,
+                    'change': 'RISE',
+                    'change_rate': 0.0234,
+                    ...
+                },
+                ...
+            }
+        """
+        if isinstance(markets, str):
+            markets_param = markets
+        else:
+            markets_param = ','.join(markets)
+
+        params = {'markets': markets_param}
+        result = await self._make_request('/ticker', params=params)
+
+        # Dict 형태로 변환 (market 코드를 키로 사용)
+        ticker_dict = {}
+        for ticker_info in result:
+            market_code = ticker_info.get('market')
+            if market_code:
+                ticker_dict[market_code] = ticker_info
+
+        return ticker_dict
+
+    async def get_orderbook(self, markets: Union[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+        """
+        호가 정보 조회
+
+        Returns:
+            Dict[market_code, orderbook_info]: 마켓 코드를 키로 하는 딕셔너리
+            예: {
+                'KRW-BTC': {
+                    'market': 'KRW-BTC',
+                    'timestamp': 1625097600000,
+                    'orderbook_units': [
+                        {
+                            'ask_price': 50000000,
+                            'bid_price': 49950000,
+                            'ask_size': 0.1,
+                            'bid_size': 0.2
+                        },
+                        ...
+                    ]
+                },
+                ...
+            }
+        """
+        if isinstance(markets, str):
+            markets_param = markets
+        else:
+            markets_param = ','.join(markets)
+
+        params = {'markets': markets_param}
+        result = await self._make_request('/orderbook', params=params)
+
+        # Dict 형태로 변환 (market 코드를 키로 사용)
+        orderbook_dict = {}
+        for orderbook_info in result:
+            market_code = orderbook_info.get('market')
+            if market_code:
+                orderbook_dict[market_code] = orderbook_info
+
+        return orderbook_dict
+
+    # ================================================================
+    # 편의 메서드들
+    # ================================================================
+
+    async def get_single_ticker(self, market: str) -> Dict[str, Any]:
+        """단일 마켓 현재가 조회"""
+        result = await self.get_ticker(market)
+        return result.get(market, {})
+
+    async def get_single_orderbook(self, market: str) -> Dict[str, Any]:
+        """단일 마켓 호가 조회"""
+        result = await self.get_orderbook(market)
+        return result.get(market, {})
+
+    async def get_krw_markets(self) -> List[str]:
+        """KRW 마켓 목록 조회"""
+        markets = await self.get_market_all()
         return [market_code for market_code in markets.keys() if market_code.startswith('KRW-')]
 
+    async def get_btc_markets(self) -> List[str]:
+        """BTC 마켓 목록 조회"""
+        markets = await self.get_market_all()
+        return [market_code for market_code in markets.keys() if market_code.startswith('BTC-')]
+
+    async def get_usdt_markets(self) -> List[str]:
+        """USDT 마켓 목록 조회"""
+        markets = await self.get_market_all()
+        return [market_code for market_code in markets.keys() if market_code.startswith('USDT-')]
+
+    def get_rate_limit_status(self) -> Dict[str, Any]:
+        """Rate Limit 상태 조회"""
+        return self.rate_limiter.get_status()
+
     # ================================================================
-    # 고급 기능
+    # 편의 메서드들 - 캔들 데이터 처리
     # ================================================================
 
-    async def get_market_snapshot(self, symbol: Union[str, List[str]]) -> Dict[str, Any]:
+    def convert_candles_to_dict(self, candles: List[Dict[str, Any]],
+                                key_field: str = "candle_date_time_utc") -> Dict[str, Dict[str, Any]]:
         """
-        마켓 스냅샷 조회 (티커 + 호가 통합) - Dict 통일
+        캔들 List를 Dict로 변환 (필요한 경우)
 
-        어댑터 패턴을 활용한 효율적인 병렬 처리
+        Args:
+            candles: 캔들 데이터 리스트
+            key_field: Dict의 키로 사용할 필드명
+
+        Returns:
+            Dict[time_key, candle_data]: 시간을 키로 하는 딕셔너리
+
+        Example:
+            candles_list = await client.get_candle_minutes("KRW-BTC", count=5)
+            candles_dict = client.convert_candles_to_dict(candles_list)
+            specific_candle = candles_dict["2025-07-01T12:00:00"]
         """
-        # 입력 타입 처리
-        from ..adapters.base_adapter import InputTypeHandler
-        symbols_list, was_single = InputTypeHandler.normalize_symbol_input(symbol)
+        candles_dict = {}
+        for candle in candles:
+            key = candle.get(key_field)
+            if key:
+                candles_dict[key] = candle
+        return candles_dict
 
-        # 효율적인 병렬 처리 (API 문서 기반 최적화)
-        import asyncio
-        batch_size = 10  # 업비트 권장 배치 크기
+    def get_latest_candle(self, candles: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        최신 캔들 데이터 조회
 
-        if len(symbols_list) <= batch_size:
-            # 배치 크기 이하면 병렬 처리
-            ticker_task = self.get_ticker(symbols_list)
-            orderbook_task = self.get_orderbook(symbols_list)
-            ticker_data, orderbook_data = await asyncio.gather(ticker_task, orderbook_task)
-        else:
-            # 배치 크기 초과시 순차 처리 (Rate Limit 준수)
-            ticker_data = await self.get_ticker(symbols_list)
-            orderbook_data = {}
+        Args:
+            candles: 캔들 데이터 리스트 (최신순 정렬됨)
 
-            # 배치 단위로 호가 조회
-            for i in range(0, len(symbols_list), batch_size):
-                batch = symbols_list[i:i + batch_size]
-                batch_orderbook = await self.get_orderbook(batch)
-                if isinstance(batch_orderbook, dict):
-                    orderbook_data.update(batch_orderbook)
+        Returns:
+            Dict: 최신 캔들 데이터 (없으면 None)
+        """
+        return candles[0] if candles else None
 
-        # 응답 구성 (Dict 통일)
-        if was_single:
-            symbol_key = symbols_list[0]
-            return {
-                symbol_key: {
-                    'ticker': ticker_data.get(symbol_key, {}),
-                    'orderbook': orderbook_data.get(symbol_key, {}),
-                    'timestamp': self._get_current_timestamp(),
-                    'exchange': 'upbit'
-                }
-            }
-        else:
-            result = {}
-            for sym in symbols_list:
-                result[sym] = {
-                    'ticker': ticker_data.get(sym, {}),
-                    'orderbook': orderbook_data.get(sym, {}),
-                    'timestamp': self._get_current_timestamp(),
-                    'exchange': 'upbit'
-                }
-            return result
+    def filter_candles_by_time_range(self, candles: List[Dict[str, Any]],
+                                     start_time: str, end_time: str) -> List[Dict[str, Any]]:
+        """
+        시간 범위로 캔들 데이터 필터링
 
-    def _get_current_timestamp(self) -> str:
-        """현재 타임스탬프 반환"""
-        from datetime import datetime
-        return datetime.now().isoformat()
+        Args:
+            candles: 캔들 데이터 리스트
+            start_time: 시작 시간 (ISO 형식)
+            end_time: 종료 시간 (ISO 형식)
 
-    # ================================================================
-    # 레거시 호환성 메서드들 (Deprecated)
-    # ================================================================
-
-    async def get_tickers(self, markets: List[str]) -> Dict[str, Dict[str, Any]]:
-        """[DEPRECATED] get_ticker()를 사용하세요 - Dict 통일"""
-        import warnings
-        warnings.warn(
-            "get_tickers()는 deprecated입니다. get_ticker()를 사용하세요.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return await self.get_ticker(markets)
-
-    async def get_orderbooks(self, markets: List[str]) -> Dict[str, Dict[str, Any]]:
-        """[DEPRECATED] get_orderbook()를 사용하세요 - Dict 통일"""
-        import warnings
-        warnings.warn(
-            "get_orderbooks()는 deprecated입니다. get_orderbook()를 사용하세요.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return await self.get_orderbook(markets)
-
-    async def get_markets(self, is_details: bool = False) -> Dict[str, Dict[str, Any]]:
-        """[DEPRECATED] get_market()를 사용하세요 - Dict 통일"""
-        import warnings
-        warnings.warn(
-            "get_markets()는 deprecated입니다. get_market()를 사용하세요.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return await self.get_market(is_details)
-
-    async def cleanup(self) -> None:
-        """클라이언트 정리 (세션 닫기)"""
-        if hasattr(self, '_session') and self._session:
-            await self._session.close()
-
-    async def __aenter__(self):
-        """async with 지원"""
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """async with 종료 시 정리"""
-        await self.cleanup()
+        Returns:
+            List: 필터링된 캔들 데이터
+        """
+        filtered_candles = []
+        for candle in candles:
+            candle_time = candle.get("candle_date_time_utc", "")
+            if start_time <= candle_time <= end_time:
+                filtered_candles.append(candle)
+        return filtered_candles
 
 
 # ================================================================
@@ -407,8 +465,4 @@ class UpbitPublicClient(BaseExchangeClient):
 
 def create_upbit_public_client() -> UpbitPublicClient:
     """업비트 공개 API 클라이언트 생성 (편의 함수)"""
-    from ..core.rate_limiter import RateLimiterFactory
-
-    adapter = UpbitAdapter()
-    rate_limiter = RateLimiterFactory.create_for_exchange('upbit', 'public')
-    return UpbitPublicClient(adapter, rate_limiter)
+    return UpbitPublicClient()

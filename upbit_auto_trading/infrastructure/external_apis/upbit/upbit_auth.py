@@ -6,7 +6,10 @@ from typing import Dict, Optional
 import os
 import logging
 
-from ..core.exceptions import AuthenticationError
+
+class AuthenticationError(Exception):
+    """인증 관련 오류"""
+    pass
 
 
 class UpbitAuthenticator:
