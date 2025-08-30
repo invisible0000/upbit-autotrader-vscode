@@ -1,0 +1,39 @@
+base_delay_model:
+  learning_rate: 0.06
+  momentum: 0.9
+  bias: 28.167843514257175
+  weights:
+    request_index_weight: 5.19374733733864
+    recent_429_weight: 24.044776720490564
+    rps_stability_weight: 10.371142185997662
+    consecutive_success_weight: 4.754658377250587
+    server_response_time_weight: 11.893607289203871
+warmup_config:
+  requests: 15
+  start_delay_ms: 150.0
+  target_delay_ms: 15.0
+  curve_type: exponential
+  curve_factor: 3.0
+safety_config:
+  error_threshold: 1
+  cooldown_seconds: 5.0
+  max_delay_ms: 50.0
+  min_delay_ms: 10.0
+  emergency_multiplier: 2.0
+learning_config:
+  prediction_learning_rate: 0.04
+  momentum: 0.95
+  snapshot_window_size: 35
+  learning_window_size: 20
+  learning_frequency: 3
+performance_thresholds:
+  min_rps: 2.5
+  max_rps: 6.5
+  min_stability: 0.7
+  target_429_errors: 3
+  max_429_errors: 5
+auto_tuning:
+  enabled: true
+  adaptation_rate: 0.05
+  performance_window: 20
+  tuning_frequency: 10

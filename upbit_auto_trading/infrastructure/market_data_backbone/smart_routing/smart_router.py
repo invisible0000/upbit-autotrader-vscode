@@ -145,8 +145,9 @@ class SmartRouter:
             return
 
         try:
-            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
-            self.rest_client = UpbitPublicClient()
+            # 🌍 글로벌 Rate Limiter 적용을 위해 팩토리 함수 사용
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import create_upbit_public_client
+            self.rest_client = create_upbit_public_client()
             logger.info("REST 클라이언트 초기화 완료")
         except Exception as e:
             logger.error(f"REST 클라이언트 초기화 실패: {e}")
@@ -257,8 +258,9 @@ class SmartRouter:
         if self.rest_client is None:
             try:
                 # 필요할 때만 import하고 초기화
-                from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
-                self.rest_client = UpbitPublicClient()
+                # 🌍 글로벌 Rate Limiter 적용을 위해 팩토리 함수 사용
+                from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import create_upbit_public_client
+                self.rest_client = create_upbit_public_client()
                 logger.info("REST 클라이언트 초기화 완료")
             except Exception as e:
                 logger.warning(f"REST 클라이언트 초기화 실패: {e}")

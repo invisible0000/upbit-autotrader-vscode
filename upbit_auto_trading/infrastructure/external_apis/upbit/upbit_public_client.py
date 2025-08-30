@@ -6,6 +6,7 @@
 import asyncio
 import aiohttp
 import logging
+import time
 from typing import List, Dict, Any, Optional, Union
 
 from .upbit_rate_limiter import UpbitRateLimiter, create_upbit_public_limiter
@@ -35,6 +36,15 @@ class UpbitPublicClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self._logger = logging.getLogger("UpbitPublicClient")
 
+        # 429 재시도 통계
+        self.retry_stats = {
+            'total_429_retries': 0,
+            'last_request_429_retries': 0
+        }
+
+        # 📊 순수 HTTP 응답 시간 추적 (Rate Limiter 대기 시간 제외)
+        self._last_http_response_time: float = 0.0
+
     async def __aenter__(self):
         await self._ensure_session()
         return self
@@ -58,6 +68,15 @@ class UpbitPublicClient:
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
+
+    def get_last_http_response_time(self) -> float:
+        """
+        마지막 HTTP 요청의 순수 서버 응답 시간 조회 (Rate Limiter 대기 시간 제외)
+
+        Returns:
+            float: 응답 시간 (밀리초)
+        """
+        return self._last_http_response_time
 
     async def _make_request(
         self,
@@ -86,19 +105,40 @@ class UpbitPublicClient:
 
         # Rate Limiter와 HTTP 요청을 원자적으로 처리
         max_retries = 3
+
+        # 요청별 429 재시도 카운터 초기화
+        self.retry_stats['last_request_429_retries'] = 0
+
         for attempt in range(max_retries):
             # Rate Limit 적용
             await self.rate_limiter.acquire(endpoint, method)
 
             try:
+                # 🎯 순수 HTTP 요청 시간 측정 시작
+                http_start_time = time.perf_counter()
+
                 async with self._session.request(method, url, params=params, **kwargs) as response:
+                    http_end_time = time.perf_counter()
+
+                    # 순수 HTTP 응답 시간 저장 (Rate Limiter 대기 시간 제외)
+                    self._last_http_response_time = (http_end_time - http_start_time) * 1000  # ms 단위
+
                     # Rate Limit 헤더 업데이트
                     self.rate_limiter.update_from_upbit_headers(dict(response.headers))
 
                     if response.status == 200:
+                        # 성공 응답을 Rate Limiter에 피드백
+                        self.rate_limiter.update_response_timing(http_end_time, 200)
                         data = await response.json()
                         return data
                     elif response.status == 429:
+                        # 429 응답을 Rate Limiter에 피드백 (중요!)
+                        self.rate_limiter.update_response_timing(http_end_time, 429)
+
+                        # 429 재시도 카운터 업데이트
+                        self.retry_stats['last_request_429_retries'] += 1
+                        self.retry_stats['total_429_retries'] += 1
+
                         # 429 오류 시 지수 백오프로 재시도
                         retry_number = attempt + 1
                         if attempt < max_retries - 1:
@@ -464,5 +504,12 @@ class UpbitPublicClient:
 # ================================================================
 
 def create_upbit_public_client() -> UpbitPublicClient:
-    """업비트 공개 API 클라이언트 생성 (편의 함수)"""
-    return UpbitPublicClient()
+    """
+    업비트 공개 API 클라이언트 생성 (편의 함수)
+
+    자동으로 글로벌 공유 Rate Limiter 적용
+    서브시스템에서는 반드시 이 함수를 사용해야 함
+    """
+    # 🌍 글로벌 공유 Rate Limiter 사용 (IP 기반 10 RPS 제한 준수)
+    rate_limiter = create_upbit_public_limiter(use_shared=True)
+    return UpbitPublicClient(rate_limiter=rate_limiter)
