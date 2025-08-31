@@ -84,6 +84,7 @@ class CloudflareSlidingWindow:
             Tuple[bool, float]: (허용 여부, 대기 시간)
         """
         max_wait_needed = 0.0
+        debug_info = []
 
         for window_id, window in enumerate(self.windows):
             counter = self.window_counters[window_id]
@@ -96,6 +97,8 @@ class CloudflareSlidingWindow:
             # 윈도우가 완전히 지났는지 확인하고 업데이트
             if elapsed_in_current >= window_seconds:
                 full_windows_passed = int(elapsed_in_current // window_seconds)
+                old_current = counter['current_count']
+
                 if full_windows_passed == 1:
                     counter['previous_count'] = counter['current_count']
                 else:
@@ -104,15 +107,23 @@ class CloudflareSlidingWindow:
                 counter['current_window_start'] += full_windows_passed * window_seconds
                 elapsed_in_current = now - counter['current_window_start']
 
+                debug_info.append(f"윈도우 {window_id} 리셋: {old_current}->{counter['current_count']}")
+
             # Cloudflare 선형 보간 계산
             remaining_weight = (window_seconds - elapsed_in_current) / window_seconds
             estimated_rate = counter['previous_count'] * remaining_weight + counter['current_count']
+
+            debug_info.append(f"윈도우 {window_id}: 예상률={estimated_rate:.2f}/{max_requests}")
 
             # 제한 확인
             if estimated_rate + 1 > max_requests:
                 time_to_allow = (estimated_rate + 1 - max_requests) / max_requests * window_seconds
                 max_wait_needed = max(max_wait_needed, time_to_allow)
+                debug_info.append(f"윈도우 {window_id} 제한 초과: 대기={time_to_allow:.3f}s")
                 continue
+
+        # 디버그 정보를 limiter 객체에 저장 (추후 조회 가능)
+        self.last_debug_info = debug_info
 
         if max_wait_needed > 0:
             return False, max_wait_needed
@@ -171,6 +182,10 @@ class CloudflareSlidingWindow:
             }
 
         return usage_info
+
+    def get_debug_info(self) -> List[str]:
+        """마지막 check_limit 호출의 디버그 정보 반환"""
+        return getattr(self, 'last_debug_info', [])
 
 
 class UpbitRateLimiterV2Simple:
@@ -362,12 +377,14 @@ class UpbitRateLimiterV2Simple:
 
             # 주요 윈도우 정보
             main_window = usage.get('window_0', {})
+            strictest_rps = rule.get_strictest_rps()
+
             status[category.value] = {
                 'current': main_window.get('current', 0),
                 'limit': main_window.get('limit', 0),
                 'usage_percent': main_window.get('usage_percent', 0),
                 'rule_name': rule.name,
-                'strictest_rps': rule.get_strictest_rps()
+                'strictest_rps': f"{strictest_rps:.2f}"  # 소수점 2자리 표시
             }
 
         return {
