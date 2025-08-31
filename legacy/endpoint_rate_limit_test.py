@@ -131,24 +131,38 @@ async def test_mixed_endpoint_scenario():
 
     tester = EndpointRateLimitTester()
 
-    # 테스트 시나리오 정의
+    # 테스트 시나리오 정의 (업비트 공식 문서 기준)
     test_scenarios = [
-        # Public API (높은 제한)
-        ("/market/all", "GET", 30.0, "QUOTATION"),
-        ("/ticker", "GET", 30.0, "QUOTATION"),
-        ("/candles/minutes/1", "GET", 30.0, "QUOTATION"),
+        # Public API - Quotation 그룹 (10 RPS)
+        ("/market/all", "GET", 10.0, "QUOTATION"),
+        ("/ticker", "GET", 10.0, "QUOTATION"),
+        ("/tickers", "GET", 10.0, "QUOTATION"),
+        ("/candles/minutes/1", "GET", 10.0, "QUOTATION"),
+        ("/candles/days", "GET", 10.0, "QUOTATION"),
+        ("/trades/ticks", "GET", 10.0, "QUOTATION"),
+        ("/orderbook", "GET", 10.0, "QUOTATION"),
 
         # Private API - Exchange Default (30 RPS)
         ("/accounts", "GET", 30.0, "EXCHANGE_DEFAULT"),
         ("/orders/chance", "GET", 30.0, "EXCHANGE_DEFAULT"),
         ("/orders", "GET", 30.0, "EXCHANGE_DEFAULT"),  # GET은 30 RPS
+        ("/order", "GET", 30.0, "EXCHANGE_DEFAULT"),  # 단일 주문 조회
+        ("/orders/uuids", "GET", 30.0, "EXCHANGE_DEFAULT"),  # UUID 기반 주문 조회
+        ("/orders/open", "GET", 30.0, "EXCHANGE_DEFAULT"),  # 체결 대기 주문 조회
+        ("/orders/closed", "GET", 30.0, "EXCHANGE_DEFAULT"),  # 종료 주문 조회
 
         # Private API - Order (8 RPS)
         ("/orders", "POST", 8.0, "ORDER"),              # POST는 8 RPS
         ("/orders", "DELETE", 8.0, "ORDER"),            # DELETE는 8 RPS
+        ("/orders/cancel_and_new", "POST", 8.0, "ORDER"),  # 취소 후 재주문
+
+        # Private API - Exchange Default DELETE (30 RPS)
+        ("/order", "DELETE", 30.0, "EXCHANGE_DEFAULT"),  # 단일 주문 취소
+        ("/orders/uuids", "DELETE", 30.0, "EXCHANGE_DEFAULT"),  # UUID 기반 주문 취소
 
         # Private API - Order Cancel All (0.5 RPS)
         ("/orders/cancel_all", "DELETE", 0.5, "ORDER_CANCEL_ALL"),
+        ("/orders/open", "DELETE", 0.5, "ORDER_CANCEL_ALL"),  # 대기 주문 일괄 취소
     ]
 
     results = []
@@ -294,7 +308,13 @@ async def test_concurrent_mixed_endpoints():
         "/orders/cancel_all": 0.5,
         "/orders": 8.0,  # POST/DELETE
         "/accounts": 30.0,
-        "/ticker": 30.0
+        "/ticker": 10.0,  # 업비트 공식 문서: Quotation 10 RPS
+        "/tickers": 10.0,
+        "/market/all": 10.0,
+        "/candles/minutes/1": 10.0,
+        "/candles/days": 10.0,
+        "/trades/ticks": 10.0,
+        "/orderbook": 10.0,
     }
 
     for result in results:

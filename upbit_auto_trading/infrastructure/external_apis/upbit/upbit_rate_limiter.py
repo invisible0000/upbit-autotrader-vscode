@@ -68,11 +68,11 @@ class UpbitRateLimiter:
             requests_per_minute=600
         ),
         UpbitRateLimitGroup.QUOTATION: UpbitRateLimitRule(
-            requests_per_second=30,
-            requests_per_minute=1800
+            requests_per_second=10,  # 업비트 공식 문서: 시세조회 10 RPS
+            requests_per_minute=600
         ),
         UpbitRateLimitGroup.EXCHANGE_DEFAULT: UpbitRateLimitRule(
-            requests_per_second=30,
+            requests_per_second=30,  # 업비트 공식 문서: 거래소 default 30 RPS
             requests_per_minute=1800
         ),
         UpbitRateLimitGroup.ORDER: UpbitRateLimitRule(
@@ -97,20 +97,26 @@ class UpbitRateLimiter:
 
     # 엔드포인트별 그룹 매핑 (업비트 공식 문서 기준)
     _ENDPOINT_MAPPINGS = {
-        # Quotation 그룹 (시세 조회) - 30 RPS
+        # Quotation 그룹 (시세 조회) - 10 RPS
         '/ticker': UpbitRateLimitGroup.QUOTATION,
         '/tickers': UpbitRateLimitGroup.QUOTATION,
         '/orderbook': UpbitRateLimitGroup.QUOTATION,
         '/trades': UpbitRateLimitGroup.QUOTATION,
+        '/trades/ticks': UpbitRateLimitGroup.QUOTATION,  # 체결 이력 조회
         '/candles/minutes': UpbitRateLimitGroup.QUOTATION,
         '/candles/days': UpbitRateLimitGroup.QUOTATION,
         '/candles/weeks': UpbitRateLimitGroup.QUOTATION,
         '/candles/months': UpbitRateLimitGroup.QUOTATION,
+        '/candles/seconds': UpbitRateLimitGroup.QUOTATION,  # 초 캔들 조회
         '/market/all': UpbitRateLimitGroup.QUOTATION,
 
         # Exchange Default 그룹 (계좌/자산 조회) - 30 RPS
         '/accounts': UpbitRateLimitGroup.EXCHANGE_DEFAULT,
         '/orders/chance': UpbitRateLimitGroup.EXCHANGE_DEFAULT,
+        '/order': UpbitRateLimitGroup.EXCHANGE_DEFAULT,  # 단일 주문 조회/취소
+        '/orders/uuids': UpbitRateLimitGroup.EXCHANGE_DEFAULT,  # UUID 기반 주문 조회/취소
+        '/orders/open': UpbitRateLimitGroup.EXCHANGE_DEFAULT,  # 체결 대기 주문 조회
+        '/orders/closed': UpbitRateLimitGroup.EXCHANGE_DEFAULT,  # 종료 주문 조회
         '/withdraws': UpbitRateLimitGroup.EXCHANGE_DEFAULT,
         '/deposits': UpbitRateLimitGroup.EXCHANGE_DEFAULT,
         '/deposits/coin_addresses': UpbitRateLimitGroup.EXCHANGE_DEFAULT,
@@ -122,6 +128,29 @@ class UpbitRateLimiter:
 
         # Order Cancel All 그룹 (전체 주문 취소) - 0.5 RPS (2초당 1회)
         '/orders/cancel_all': UpbitRateLimitGroup.ORDER_CANCEL_ALL,
+    }
+
+    # 특별 케이스: 메서드와 엔드포인트 조합별 매핑
+    _SPECIAL_METHOD_MAPPINGS = {
+        # Orders 엔드포인트의 특별 케이스들
+        ('/orders', 'POST'): UpbitRateLimitGroup.ORDER,           # 주문 생성 - 8 RPS
+        ('/orders', 'DELETE'): UpbitRateLimitGroup.ORDER,         # 주문 취소 - 8 RPS
+        ('/orders', 'GET'): UpbitRateLimitGroup.EXCHANGE_DEFAULT, # 주문 조회 - 30 RPS
+
+        # Cancel and New - Order 그룹
+        ('/orders/cancel_and_new', 'POST'): UpbitRateLimitGroup.ORDER,  # 취소 후 재주문 - 8 RPS
+
+        # Open orders DELETE는 특별히 ORDER_CANCEL_ALL (0.5 RPS)
+        ('/orders/open', 'DELETE'): UpbitRateLimitGroup.ORDER_CANCEL_ALL,
+        ('/orders/open', 'GET'): UpbitRateLimitGroup.EXCHANGE_DEFAULT,
+
+        # UUID 기반 주문 - GET은 30 RPS, DELETE는 30 RPS (일반 취소)
+        ('/orders/uuids', 'GET'): UpbitRateLimitGroup.EXCHANGE_DEFAULT,
+        ('/orders/uuids', 'DELETE'): UpbitRateLimitGroup.EXCHANGE_DEFAULT,
+
+        # 단일 주문 - GET은 30 RPS, DELETE는 30 RPS (일반 취소)
+        ('/order', 'GET'): UpbitRateLimitGroup.EXCHANGE_DEFAULT,
+        ('/order', 'DELETE'): UpbitRateLimitGroup.EXCHANGE_DEFAULT,
     }
 
     def __init__(self, client_id: Optional[str] = None,
@@ -204,36 +233,41 @@ class UpbitRateLimiter:
             # 3. 엔드포인트별 그룹 결정
             group = self._get_endpoint_group(endpoint, method)
 
-            # 4. 제한 확인 먼저 (레거시 방식)
-            if group != UpbitRateLimitGroup.GLOBAL:
-                await self._enforce_group_limit(group)
-            await self._enforce_global_limit()
+            # 🚨 4. 업비트 계층적 제한 적용: 전역 AND 그룹
+            # 업비트는 전역 10 RPS + 그룹별 제한을 동시에 적용함
+            await self._enforce_global_limit()     # 전역 10 RPS 제한
+            await self._enforce_group_limit(group)  # 그룹별 제한
 
-            # 5. 제한 통과 후 요청 기록 (레거시 방식)
+            # 5. 제한 통과 후 요청 기록
             self._record_request(group)
 
             # 6. 성공적인 acquire - 백오프 상태 리셋
             self._consecutive_limits = 0
             self._backoff_multiplier = 1.0
 
-            self._logger.debug(f"Rate limit 획득: {endpoint} [{method}] -> {group.value}")
+            self._logger.debug(f"Rate limit 획득: {endpoint} [{method}] -> {group.value} "
+                               f"(전역: 10 RPS, 그룹: {self._RATE_RULES[group].requests_per_second} RPS)")
 
     def _get_endpoint_group(self, endpoint: str, method: str) -> UpbitRateLimitGroup:
         """엔드포인트와 메서드를 기반으로 Rate Limit 그룹 결정"""
-        # 특별 케이스: /orders는 메서드에 따라 다른 그룹
-        if endpoint == '/orders':
-            if method.upper() in ['POST', 'DELETE']:
-                return UpbitRateLimitGroup.ORDER
-            else:  # GET
-                return UpbitRateLimitGroup.EXCHANGE_DEFAULT
+        # 1. 특별 케이스: 메서드와 엔드포인트 조합별 매핑 우선 확인
+        method_upper = method.upper()
+        special_key = (endpoint, method_upper)
 
-        # 일반적인 매핑
+        if special_key in self._SPECIAL_METHOD_MAPPINGS:
+            return self._SPECIAL_METHOD_MAPPINGS[special_key]
+
+        # 2. 일반적인 엔드포인트 매핑 확인 (정확히 일치하는 것 우선)
+        if endpoint in self._ENDPOINT_MAPPINGS:
+            return self._ENDPOINT_MAPPINGS[endpoint]
+
+        # 3. 패턴 매칭 (startswith)
         for pattern, group in self._ENDPOINT_MAPPINGS.items():
             if endpoint.startswith(pattern):
                 return group
 
-        # 기본값: 전역 제한
-        return UpbitRateLimitGroup.GLOBAL
+        # 4. 기본값: QUOTATION (공개 API 기본)
+        return UpbitRateLimitGroup.QUOTATION
 
     async def _wait_if_throttled(self) -> None:
         """스로틀링 상태면 대기"""
