@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, Literal
 from decimal import Decimal
 
 from .upbit_auth import UpbitAuthenticator
-from .upbit_rate_limiter import UpbitRateLimiter, create_upbit_private_limiter
+from .upbit_rate_limiter import UpbitGCRARateLimiter, get_global_rate_limiter
 
 
 class UpbitPrivateClient:

@@ -1,12 +1,7 @@
 """
-업비트 공개 API 클라이언트 V2 - 단일 사용자 최적화 버전
+업비트 공개 API 클라이언트 - 업비트 전용 단순화 버전
 
-특징:
-- 단일 사용자 환경 최적화
-- 새로운 UpbitRateLimiterV2Simple 사용
-- access_key 없어도 완전 동작
-- 간단하고 직관적인 구조
-- 기존 인터페이스 100% 호환성
+업비트 전용으로 최적화된 구현
 """
 import asyncio
 import aiohttp
@@ -14,36 +9,32 @@ import logging
 import time
 from typing import List, Dict, Any, Optional, Union
 
-from .upbit_rate_limiter_v2_simple import (
-    UpbitRateLimiterV2Simple,
-    create_upbit_public_limiter,
-    RateLimitExceededException
-)
+from .upbit_rate_limiter import UpbitGCRARateLimiter, get_global_rate_limiter
 
 
-class UpbitPublicClientV2:
+class UpbitPublicClient:
     """
-    업비트 공개 API 클라이언트 V2 - 단일 사용자 최적화
+    업비트 전용 공개 API 클라이언트
 
-    핵심 개선사항:
-    - UpbitRateLimiterV2Simple 사용으로 복잡성 대폭 감소
-    - access_key 독립적 동작
-    - 엔드포인트 자동 카테고리 매핑
-    - 효율적인 Rate Limiting
+    특징:
+    - 업비트 전용 최적화
+    - 업비트 Rate Limiter 사용
+    - 간단하고 직관적인 구조
+    - 기존 인터페이스 호환성 유지
     """
 
     BASE_URL = "https://api.upbit.com/v1"
 
-    def __init__(self, rate_limiter: Optional[UpbitRateLimiterV2Simple] = None):
+    def __init__(self, rate_limiter: Optional[UpbitGCRARateLimiter] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
         Args:
-            rate_limiter: Rate Limiter (기본값: 자동 생성)
+            rate_limiter: 업비트 GCRA Rate Limiter (기본값: 전역 공유 사용)
         """
-        self.rate_limiter = rate_limiter or create_upbit_public_limiter()
+        self.rate_limiter = rate_limiter  # 전역 공유는 팩토리 함수에서 처리
         self._session: Optional[aiohttp.ClientSession] = None
-        self._logger = logging.getLogger("UpbitPublicClientV2")
+        self._logger = logging.getLogger("UpbitPublicClient")
 
         # 429 재시도 통계
         self.retry_stats = {
@@ -53,6 +44,12 @@ class UpbitPublicClientV2:
 
         # 📊 순수 HTTP 응답 시간 추적 (Rate Limiter 대기 시간 제외)
         self._last_http_response_time: float = 0.0
+
+    async def _ensure_rate_limiter(self) -> UpbitGCRARateLimiter:
+        """Rate Limiter 확보 (없으면 전역 공유 사용)"""
+        if self.rate_limiter is None:
+            self.rate_limiter = await get_global_rate_limiter()
+        return self.rate_limiter
 
     async def __aenter__(self):
         await self._ensure_session()
@@ -95,7 +92,7 @@ class UpbitPublicClientV2:
         **kwargs
     ) -> Any:
         """
-        업비트 API 요청 실행 (V2 최적화)
+        업비트 API 요청 실행
 
         Args:
             endpoint: API 엔드포인트
@@ -114,13 +111,14 @@ class UpbitPublicClientV2:
 
         # Rate Limiter와 HTTP 요청을 원자적으로 처리
         max_retries = 3
+
+        # 요청별 429 재시도 카운터 초기화
         self.retry_stats['last_request_429_retries'] = 0
 
         for attempt in range(max_retries):
-            try:
-                # 🎯 V2 Rate Limiter 사용 - 단순하고 효율적
-                await self.rate_limiter.acquire(endpoint, method)
-
+        # Rate Limit 적용
+        rate_limiter = await self._ensure_rate_limiter()
+        await rate_limiter.acquire(endpoint, method)            try:
                 # 🎯 순수 HTTP 요청 시간 측정 시작
                 http_start_time = time.perf_counter()
 
@@ -130,7 +128,7 @@ class UpbitPublicClientV2:
                     # 순수 HTTP 응답 시간 저장 (Rate Limiter 대기 시간 제외)
                     self._last_http_response_time = (http_end_time - http_start_time) * 1000  # ms 단위
 
-                    # Rate Limit 헤더 업데이트 (V2 최적화)
+                    # Rate Limit 헤더 업데이트
                     self.rate_limiter.update_from_upbit_headers(dict(response.headers))
 
                     if response.status == 200:
@@ -139,7 +137,7 @@ class UpbitPublicClientV2:
                         data = await response.json()
                         return data
                     elif response.status == 429:
-                        # 429 응답을 Rate Limiter에 피드백
+                        # 429 응답을 Rate Limiter에 피드백 (중요!)
                         self.rate_limiter.update_response_timing(http_end_time, 429)
 
                         # 429 재시도 카운터 업데이트
@@ -159,27 +157,12 @@ class UpbitPublicClientV2:
                         else:
                             error_text = await response.text()
                             self._logger.error(f"[{endpoint}] 429 오류 최대 재시도 초과 {max_retries}/{max_retries}: {error_text}")
+                            # 429 전용 예외로 명확히 구분
                             raise Exception(f"Rate Limit 초과 (429): {endpoint} - 최대 재시도 {max_retries}회 초과")
                     else:
                         error_text = await response.text()
                         self._logger.error(f"[{endpoint}] API 오류 {response.status}: {error_text}")
                         raise Exception(f"업비트 API 오류 {response.status}: {error_text}")
-
-            except RateLimitExceededException as e:
-                # V2 Rate Limiter 예외 처리
-                retry_number = attempt + 1
-                if attempt < max_retries - 1:
-                    wait_time = e.retry_after
-                    self._logger.warning(
-                        f"[{endpoint}] Rate Limit 초과로 재시도 {retry_number}/{max_retries}, "
-                        f"{wait_time:.1f}초 대기 후 재시도"
-                    )
-                    await asyncio.sleep(wait_time)
-                    continue
-                else:
-                    self._logger.error(f"[{endpoint}] Rate Limit 최대 재시도 초과: {e}")
-                    raise Exception(f"Rate Limit 초과: {endpoint} - {e}")
-
             except aiohttp.ClientError as e:
                 retry_number = attempt + 1
                 self._logger.error(f"[{endpoint}] 네트워크 오류: {e}")
@@ -189,16 +172,15 @@ class UpbitPublicClientV2:
                     await asyncio.sleep(wait_time)
                     continue
                 raise Exception(f"네트워크 오류: {e}")
-
             except Exception as e:
-                # 이미 처리된 예외는 그대로 전파
+                # 이미 처리된 429 예외는 그대로 전파
                 if "Rate Limit 초과 (429)" in str(e):
                     raise
                 # 기타 예외는 재시도 없이 바로 전파
                 raise
 
     # ================================================================
-    # 시세 조회 API - 기존 인터페이스 100% 호환
+    # 시세 조회 API
     # ================================================================
 
     async def get_market_all(self, is_details: bool = False) -> Dict[str, Dict[str, Any]]:
@@ -429,7 +411,7 @@ class UpbitPublicClientV2:
         return orderbook_dict
 
     # ================================================================
-    # 편의 메서드들 - 기존 인터페이스 100% 호환
+    # 편의 메서드들
     # ================================================================
 
     async def get_single_ticker(self, market: str) -> Dict[str, Any]:
@@ -458,7 +440,7 @@ class UpbitPublicClientV2:
         return [market_code for market_code in markets.keys() if market_code.startswith('USDT-')]
 
     def get_rate_limit_status(self) -> Dict[str, Any]:
-        """Rate Limit 상태 조회 (V2 최적화)"""
+        """Rate Limit 상태 조회"""
         return self.rate_limiter.get_status()
 
     # ================================================================
@@ -476,6 +458,11 @@ class UpbitPublicClientV2:
 
         Returns:
             Dict[time_key, candle_data]: 시간을 키로 하는 딕셔너리
+
+        Example:
+            candles_list = await client.get_candle_minutes("KRW-BTC", count=5)
+            candles_dict = client.convert_candles_to_dict(candles_list)
+            specific_candle = candles_dict["2025-07-01T12:00:00"]
         """
         candles_dict = {}
         for candle in candles:
@@ -518,18 +505,16 @@ class UpbitPublicClientV2:
 
 
 # ================================================================
-# 편의 팩토리 함수 - V2 최적화
+# 편의 팩토리 함수
 # ================================================================
 
-def create_upbit_public_client_v2() -> UpbitPublicClientV2:
+def create_upbit_public_client() -> UpbitPublicClient:
     """
-    업비트 공개 API 클라이언트 V2 생성 (편의 함수)
+    업비트 공개 API 클라이언트 생성 (편의 함수)
 
-    단일 사용자 최적화된 Rate Limiter 자동 적용
-    access_key 없어도 완전 동작
-
-    Returns:
-        UpbitPublicClientV2: 최적화된 공개 API 클라이언트
+    자동으로 글로벌 공유 Rate Limiter 적용
+    서브시스템에서는 반드시 이 함수를 사용해야 함
     """
-    rate_limiter = create_upbit_public_limiter()
-    return UpbitPublicClientV2(rate_limiter=rate_limiter)
+    # 🌍 글로벌 공유 Rate Limiter 사용 (IP 기반 10 RPS 제한 준수)
+    rate_limiter = create_upbit_public_limiter(use_shared=True)
+    return UpbitPublicClient(rate_limiter=rate_limiter)

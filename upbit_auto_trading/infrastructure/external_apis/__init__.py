@@ -26,11 +26,11 @@ async with UpbitPublicClient() as client:
 # 현재는 Upbit만 제공
 from .upbit import (
     UpbitPublicClient,
-    UpbitPrivateClient,
+    # UpbitPrivateClient,
     UpbitWebSocketPublicClient,
     UpbitWebSocketPrivateClient,
     UpbitAuthenticator,
-    UpbitRateLimiter
+    UpbitGCRARateLimiter
 )
 
 # 공통 예외 클래스는 필요시 추가 예정
@@ -38,9 +38,9 @@ from .upbit import (
 __all__ = [
     # Upbit API
     'UpbitPublicClient',
-    'UpbitPrivateClient',
+    # 'UpbitPrivateClient',
     'UpbitWebSocketPublicClient',
     'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
-    'UpbitRateLimiter'
+    'UpbitGCRARateLimiter'
 ]
