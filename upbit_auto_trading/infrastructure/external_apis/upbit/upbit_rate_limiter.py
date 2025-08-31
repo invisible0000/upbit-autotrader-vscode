@@ -152,31 +152,94 @@ class UpbitGCRARateLimiter:
         ]
     }
 
-    # 엔드포인트 → 그룹 매핑
+    # 엔드포인트 → 그룹 매핑 (업비트 공식 문서 기준)
     _ENDPOINT_MAPPINGS = {
-        # Public REST
+        # ============================================
+        # PUBLIC API (REST_PUBLIC) - 10 RPS
+        # ============================================
+        # 현재가 정보
         '/ticker': UpbitRateLimitGroup.REST_PUBLIC,
         '/tickers': UpbitRateLimitGroup.REST_PUBLIC,
-        '/orderbook': UpbitRateLimitGroup.REST_PUBLIC,
-        '/trades': UpbitRateLimitGroup.REST_PUBLIC,
-        '/candles': UpbitRateLimitGroup.REST_PUBLIC,
 
-        # Private REST - Default
+        # 호가 정보
+        '/orderbook': UpbitRateLimitGroup.REST_PUBLIC,
+
+        # 체결 정보
+        '/trades': UpbitRateLimitGroup.REST_PUBLIC,
+        '/trades/ticks': UpbitRateLimitGroup.REST_PUBLIC,
+
+        # 캔들 정보 (모든 종류)
+        '/candles': UpbitRateLimitGroup.REST_PUBLIC,
+        '/candles/minutes': UpbitRateLimitGroup.REST_PUBLIC,
+        '/candles/days': UpbitRateLimitGroup.REST_PUBLIC,
+        '/candles/weeks': UpbitRateLimitGroup.REST_PUBLIC,
+        '/candles/months': UpbitRateLimitGroup.REST_PUBLIC,
+        '/candles/seconds': UpbitRateLimitGroup.REST_PUBLIC,
+
+        # 마켓 코드
+        '/market/all': UpbitRateLimitGroup.REST_PUBLIC,
+
+        # ============================================
+        # PRIVATE API - DEFAULT (REST_PRIVATE_DEFAULT) - 30 RPS
+        # ============================================
+        # 계좌 정보
         '/accounts': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
         '/account_info': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
-        '/orders': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
 
-        # Private REST - Order
-        '/order': UpbitRateLimitGroup.REST_PRIVATE_ORDER,
-        '/order_new': UpbitRateLimitGroup.REST_PRIVATE_ORDER,
-        '/order_cancel': UpbitRateLimitGroup.REST_PRIVATE_ORDER,
+        # 주문 조회 (GET 요청들)
+        '/orders': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,  # GET만 (POST/DELETE는 별도)
+        '/order': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,   # GET만 (DELETE는 별도)
+        '/orders/chance': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/orders/uuids': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,  # GET만
+        '/orders/open': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,   # GET만
+        '/orders/closed': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
 
-        # Private REST - Cancel All
-        '/order_cancel_all': UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL,
+        # 입출금 관련
+        '/withdraws': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/deposits': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/deposits/coin_addresses': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/deposits/generate_coin_address': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/deposits/coin_address': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/withdraws/chance': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/withdraws/coin': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        '/withdraws/krw': UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
 
-        # WebSocket
+        # ============================================
+        # PRIVATE API - ORDER (REST_PRIVATE_ORDER) - 8 RPS
+        # ============================================
+        # 주문 생성/취소는 메서드별 매핑에서 처리
+        # ('/orders', 'POST'): ORDER 그룹
+        # ('/orders', 'DELETE'): ORDER 그룹
+        # ('/order', 'DELETE'): ORDER 그룹
+
+        # ============================================
+        # PRIVATE API - CANCEL ALL (REST_PRIVATE_CANCEL_ALL) - 0.5 RPS
+        # ============================================
+        '/orders/cancel_all': UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL,
+
+        # ============================================
+        # WEBSOCKET (WEBSOCKET) - 5 RPS + 100 RPM
+        # ============================================
         'websocket_connect': UpbitRateLimitGroup.WEBSOCKET,
         'websocket_message': UpbitRateLimitGroup.WEBSOCKET,
+    }
+
+    # 메서드별 특별 매핑 (엔드포인트 + HTTP 메서드 조합)
+    _METHOD_SPECIFIC_MAPPINGS = {
+        # 주문 생성/취소 - ORDER 그룹 (8 RPS)
+        ('/orders', 'POST'): UpbitRateLimitGroup.REST_PRIVATE_ORDER,     # 주문 생성
+        ('/orders', 'DELETE'): UpbitRateLimitGroup.REST_PRIVATE_ORDER,   # 주문 취소
+        ('/order', 'DELETE'): UpbitRateLimitGroup.REST_PRIVATE_ORDER,    # 단일 주문 취소
+        ('/orders/uuids', 'DELETE'): UpbitRateLimitGroup.REST_PRIVATE_ORDER,  # UUID 기반 취소
+
+        # 전체 주문 취소 - CANCEL_ALL 그룹 (0.5 RPS)
+        ('/orders/open', 'DELETE'): UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL,
+
+        # 주문 조회는 DEFAULT 그룹 (30 RPS) - 이미 기본 매핑에 있음
+        ('/orders', 'GET'): UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        ('/order', 'GET'): UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        ('/orders/uuids', 'GET'): UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
+        ('/orders/open', 'GET'): UpbitRateLimitGroup.REST_PRIVATE_DEFAULT,
     }
 
     def __init__(self, client_id: Optional[str] = None):
@@ -219,8 +282,8 @@ class UpbitGCRARateLimiter:
             TimeoutError: max_wait 시간 초과
             ValueError: 알 수 없는 엔드포인트
         """
-        # 엔드포인트 → 그룹 매핑
-        group = self._get_rate_limit_group(endpoint)
+        # 엔드포인트 → 그룹 매핑 (메서드 포함)
+        group = self._get_rate_limit_group(endpoint, method)
 
         # WebSocket 그룹의 경우 더 넉넉한 max_wait 적용 (전문가 제안)
         if group == UpbitRateLimitGroup.WEBSOCKET and max_wait < 15.0:
@@ -266,19 +329,24 @@ class UpbitGCRARateLimiter:
 
             await asyncio.sleep(max(0.0, wait_time))
 
-    def _get_rate_limit_group(self, endpoint: str) -> UpbitRateLimitGroup:
-        """엔드포인트를 Rate Limit 그룹으로 매핑"""
-        # 정확한 매핑 우선 확인
+    def _get_rate_limit_group(self, endpoint: str, method: str = 'GET') -> UpbitRateLimitGroup:
+        """엔드포인트와 메서드를 기반으로 Rate Limit 그룹 매핑"""
+        # 1. 메서드별 특별 매핑 우선 확인
+        method_key = (endpoint, method.upper())
+        if method_key in self._METHOD_SPECIFIC_MAPPINGS:
+            return self._METHOD_SPECIFIC_MAPPINGS[method_key]
+
+        # 2. 정확한 엔드포인트 매핑 확인
         if endpoint in self._ENDPOINT_MAPPINGS:
             return self._ENDPOINT_MAPPINGS[endpoint]
 
-        # 패턴 매핑 (부분 일치)
+        # 3. 패턴 매핑 (부분 일치)
         for pattern, group in self._ENDPOINT_MAPPINGS.items():
             if pattern in endpoint:
                 return group
 
-        # 기본값: PUBLIC 그룹 (가장 엄격한 제한)
-        self.logger.warning(f"알 수 없는 엔드포인트, PUBLIC 그룹 적용: {endpoint}")
+        # 4. 기본값: PUBLIC 그룹 (가장 엄격한 제한)
+        self.logger.warning(f"알 수 없는 엔드포인트, PUBLIC 그룹 적용: {endpoint} [{method}]")
         return UpbitRateLimitGroup.REST_PUBLIC
 
     def handle_429_response(self,
