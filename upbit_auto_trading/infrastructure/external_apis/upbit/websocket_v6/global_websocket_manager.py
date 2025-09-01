@@ -18,8 +18,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 # Rate Limiter 연동 (선택적)
 try:
     from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
-        get_global_rate_limiter,
-        UpbitRateLimitGroup
+        get_global_rate_limiter
     )
     RATE_LIMITER_AVAILABLE = True
 except ImportError:
@@ -34,7 +33,7 @@ from .types import (
     get_data_type_from_message
 )
 from .exceptions import SubscriptionError, RecoveryError
-from .config import get_config, is_compression_enabled, is_simple_format_enabled
+from .config import get_config
 from .subscription_state_manager import SubscriptionStateManager
 from .data_routing_engine import DataRoutingEngine
 from .native_websocket_client import NativeWebSocketClient, create_public_client, create_private_client
@@ -97,6 +96,7 @@ class ConnectionMetrics:
 
         return max(0.0, min(1.0, score))
 
+
 class EpochManager:
     """재연결 시 데이터 순서 보장을 위한 Epoch 관리"""
 
@@ -124,6 +124,8 @@ class EpochManager:
     def reset_epoch(self, connection_type: WebSocketType) -> None:
         """Epoch 리셋 (테스트용)"""
         self._current_epochs[connection_type] = 0
+
+
 class GlobalWebSocketManager:
     """
     WebSocket v6.0 전역 관리자 (싱글톤)
@@ -404,12 +406,16 @@ class GlobalWebSocketManager:
                     market=message_data.get('market', ''),
                     created_at=message_data.get('created_at', ''),
                     volume=safe_decimal(message_data.get('volume')) if message_data.get('volume') else None,
-                    remaining_volume=safe_decimal(message_data.get('remaining_volume')) if message_data.get('remaining_volume') else None,
-                    reserved_fee=safe_decimal(message_data.get('reserved_fee')) if message_data.get('reserved_fee') else None,
-                    remaining_fee=safe_decimal(message_data.get('remaining_fee')) if message_data.get('remaining_fee') else None,
+                    remaining_volume=(safe_decimal(message_data.get('remaining_volume'))
+                                      if message_data.get('remaining_volume') else None),
+                    reserved_fee=(safe_decimal(message_data.get('reserved_fee'))
+                                  if message_data.get('reserved_fee') else None),
+                    remaining_fee=(safe_decimal(message_data.get('remaining_fee'))
+                                   if message_data.get('remaining_fee') else None),
                     paid_fee=safe_decimal(message_data.get('paid_fee')) if message_data.get('paid_fee') else None,
                     locked=safe_decimal(message_data.get('locked')) if message_data.get('locked') else None,
-                    executed_volume=safe_decimal(message_data.get('executed_volume')) if message_data.get('executed_volume') else None,
+                    executed_volume=(safe_decimal(message_data.get('executed_volume'))
+                                     if message_data.get('executed_volume') else None),
                     trades_count=message_data.get('trades_count')
                 )
             elif msg_type in ['myasset', 'my_asset']:
@@ -421,7 +427,8 @@ class GlobalWebSocketManager:
                     currency=message_data.get('currency', ''),
                     balance=Decimal(str(message_data.get('balance', 0))),
                     locked=Decimal(str(message_data.get('locked', 0))),
-                    avg_buy_price=Decimal(str(message_data.get('avg_buy_price', 0))) if message_data.get('avg_buy_price') else None,
+                    avg_buy_price=(Decimal(str(message_data.get('avg_buy_price', 0)))
+                                   if message_data.get('avg_buy_price') else None),
                     avg_buy_price_modified=message_data.get('avg_buy_price_modified'),
                     unit_currency=message_data.get('unit_currency')
                 )
@@ -571,8 +578,8 @@ class GlobalWebSocketManager:
                 for connection_type, metrics in self._connection_metrics.items():
                     if metrics.is_connected:
                         # 마지막 메시지 시간 체크
-                        if (metrics.last_message_time and
-                            time.time() - metrics.last_message_time > 60):
+                        last_msg_time = metrics.last_message_time
+                        if last_msg_time and time.time() - last_msg_time > 60:
                             self.logger.warning(
                                 f"{connection_type} 연결: 60초간 메시지 없음"
                             )
@@ -683,7 +690,7 @@ class GlobalWebSocketManager:
             # Private 구독 적용
             private_changes = {
                 data_type: change for data_type, change in changes.items()
-                if data_type in [DataType.MY_ORDER, DataType.MY_ASSET]
+                if data_type in [DataType.MYORDER, DataType.MYASSET]
             }
             if private_changes and self._private_client:
                 await self._apply_private_subscriptions()
@@ -742,7 +749,7 @@ class GlobalWebSocketManager:
             subscription_messages = []
 
             for data_type, subscription in active_subscriptions.items():
-                if data_type == DataType.MY_ORDER:
+                if data_type == DataType.MYORDER:
                     message = {
                         "ticket": f"ws_myorder_{int(time.time())}",
                         "type": "myOrder",
@@ -751,7 +758,7 @@ class GlobalWebSocketManager:
                     }
                     subscription_messages.append(message)
 
-                elif data_type == DataType.MY_ASSET:
+                elif data_type == DataType.MYASSET:
                     message = {
                         "ticket": f"ws_myasset_{int(time.time())}",
                         "type": "myAsset",

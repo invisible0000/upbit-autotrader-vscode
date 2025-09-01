@@ -33,11 +33,17 @@
   - 구독 상태 통합 관리
   - 컴포넌트 등록/해제 및 WeakRef 기반 자동 정리
   - Epoch 기반 재연결 처리
+  - **백그라운드 모니터링 시스템** (v6.1 추가)
+    - `_health_monitor_task()`: 30초마다 연결 상태 및 WeakRef 정리
+    - `_metrics_collector_task()`: 10초마다 성능 메트릭스 자동 업데이트
+    - `_cleanup_monitor_task()`: 1분마다 죽은 참조 자동 정리
+  - **Rate Limiter 통합**: 업비트 API 429 오류 방지
 - **의존성**:
   - ← `SubscriptionStateManager` (구독 상태 관리)
   - ← `DataRoutingEngine` (데이터 분배)
   - ← `NativeWebSocketClient` (실제 연결)
   - ← `EpochManager` (재연결 순서 보장)
+  - ← `UpbitRateLimiter` (선택적, 요청 제한 관리)
 
 #### `WebSocketClientProxy` (websocket_client_proxy.py)
 **역할**: 사용자 친화적 인터페이스 제공
@@ -97,10 +103,13 @@
 #### `types.py`
 **역할**: 전체 시스템의 타입 정의
 - **핵심 타입**:
-  - 이벤트: `TickerEvent`, `OrderbookEvent`, `TradeEvent`
+  - 이벤트: `TickerEvent`, `OrderbookEvent`, `TradeEvent`, `CandleEvent`
+  - Private 이벤트: `MyOrderEvent`, `MyAssetEvent` (DataType.MYORDER, DataType.MYASSET)
+  - 캔들 데이터: `DataType.CANDLE_1M`, `CANDLE_3M`, `CANDLE_5M`, `CANDLE_15M`, `CANDLE_30M`, `CANDLE_60M`, `CANDLE_240M`
   - 구독: `SubscriptionSpec`, `ComponentSubscription`
   - 상태: `ConnectionState`, `WebSocketType`, `DataType`
-  - 성능: `PerformanceMetrics`, `HealthStatus`
+  - 성능: `PerformanceMetrics`, `HealthStatus`, `ConnectionMetrics`
+  - 관리자: `GlobalManagerState` (IDLE, ACTIVE, SHUTTING_DOWN, ERROR)
 
 #### `models.py`
 **역할**: v5 모델 통합 및 메시지 처리
@@ -190,9 +199,13 @@ from websocket_v6 import WebSocketClientProxy
 async def my_callback(event):
     print(f"받은 데이터: {event.symbol} = {event.trade_price}")
 
+async def candle_callback(event):
+    print(f"캔들 데이터: {event.symbol} - 시가: {event.opening_price}, 종가: {event.trade_price}")
+
 # 컨텍스트 매니저 사용 (권장)
 async with WebSocketClientProxy("my_component") as ws:
     await ws.subscribe_ticker(["KRW-BTC"], my_callback)
+    await ws.subscribe_candle(["KRW-BTC"], candle_callback, unit=5)  # 5분봉
     # 자동으로 정리됨
 ```
 
@@ -203,16 +216,25 @@ from websocket_v6 import get_global_websocket_manager
 manager = await get_global_websocket_manager()
 health = await manager.get_health_status()
 metrics = await manager.get_performance_metrics()
+
+# 백그라운드 모니터링 상태 확인
+print(f"Background tasks: {len(manager._background_tasks)}")
+print(f"Uptime: {manager.uptime_seconds:.2f}s")
 ```
 
 ## 📊 성능 특징
 
 ### 메모리 관리
 - **WeakRef 기반**: 컴포넌트 자동 정리로 메모리 누수 방지
+- **백그라운드 모니터링**: 3개의 백그라운드 태스크가 자동으로 시스템 상태 관리
+  - 헬스 모니터링 (30초 주기)
+  - 성능 메트릭스 수집 (10초 주기)
+  - 죽은 참조 정리 (1분 주기)
 - **백프레셔 제어**: 큐 크기 제한으로 메모리 사용량 제어
 
 ### 네트워크 효율성
 - **연결 재사용**: 중앙 집중식 관리로 연결 수 최소화
+- **Rate Limiter 통합**: 업비트 API 429 오류 자동 방지 및 백오프
 - **SIMPLE 포맷**: 선택적 압축으로 대역폭 절약
 
 ### 확장성
@@ -222,10 +244,11 @@ metrics = await manager.get_performance_metrics()
 ## 🔧 확장 포인트
 
 ### 새로운 데이터 타입 추가
-1. `types.py`에 `DataType` enum 추가
-2. 해당 이벤트 클래스 정의
+1. `types.py`에 `DataType` enum 추가 (예: `CANDLE_1D = "candle.1d"`)
+2. 해당 이벤트 클래스 정의 (또는 기존 `CandleEvent` 확장)
 3. `GlobalWebSocketManager._convert_to_event()` 확장
-4. `WebSocketClientProxy`에 전용 메서드 추가
+4. `WebSocketClientProxy`에 전용 메서드 추가 (예: `subscribe_daily_candle()`)
+5. `SubscriptionStateManager`에서 이벤트 타입 매핑 추가
 
 ### 새로운 백프레셔 전략
 1. `types.py`에 `BackpressureStrategy` 추가
@@ -244,8 +267,10 @@ metrics = await manager.get_performance_metrics()
 
 ### 성능 튜닝
 - **백프레셔 설정**: 환경에 맞는 큐 크기 조정 필요
+- **Rate Limiter 통합**: 자동으로 최적화되어 수동 조정 불필요
+- **모니터링 주기**: 백그라운드 태스크 주기는 운영 환경에 최적화됨
 - **재연결 정책**: 네트워크 환경에 맞는 백오프 전략 설정
 
 ---
 
-**WebSocket v6.0은 안정성과 성능, 개발자 경험을 모두 고려하여 설계된 차세대 WebSocket 시스템입니다.**
+**WebSocket v6.0은 안정성과 성능, 개발자 경험, 자동 모니터링을 모두 고려하여 설계된 차세대 WebSocket 시스템입니다.**

@@ -18,7 +18,6 @@ import json
 import time
 import gzip
 from typing import Dict, List, Optional, Any, Callable, Set
-from dataclasses import dataclass
 
 try:
     import websockets
@@ -33,7 +32,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 # Rate Limiter 연동 (필수)
 try:
     from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
-        get_global_rate_limiter, gate_websocket
+        get_global_rate_limiter
     )
     from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
         get_dynamic_rate_limiter, DynamicConfig, AdaptiveStrategy
@@ -306,7 +305,7 @@ class NativeWebSocketClient:
                         # 압축된 데이터 처리
                         try:
                             raw_message = gzip.decompress(raw_message).decode('utf-8')
-                        except:
+                        except (OSError, UnicodeDecodeError):
                             raw_message = raw_message.decode('utf-8')
 
                     self._bytes_received += len(raw_message.encode('utf-8'))
@@ -357,8 +356,8 @@ class NativeWebSocketClient:
                     break
 
                 # 메시지 수신 타임아웃 체크
-                if (self._last_message_time and
-                    time.time() - self._last_message_time > 120):  # 2분간 메시지 없음
+                last_msg_time = self._last_message_time
+                if last_msg_time and time.time() - last_msg_time > 120:  # 2분간 메시지 없음
                     self.logger.warning("장시간 메시지 수신 없음")
 
         except asyncio.CancelledError:
@@ -373,8 +372,8 @@ class NativeWebSocketClient:
                 await asyncio.sleep(300)  # 5분마다 체크
 
                 # 토큰 만료 80% 시점에 갱신
-                if (self._token_expires_at and
-                    time.time() > self._token_expires_at * 0.8):
+                token_expires = self._token_expires_at
+                if token_expires and time.time() > token_expires * 0.8:
                     self.logger.info("JWT 토큰 갱신 시도")
                     await self._refresh_jwt_token()
 

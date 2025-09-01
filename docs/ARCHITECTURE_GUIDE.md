@@ -175,8 +175,40 @@ strategy_rules          -- 전략 규칙
 backtest_results        -- 백테스팅 결과
 
 -- market_data.sqlite3
-candle_data             -- 캔들 데이터
+candle_data             -- 캔들 데이터 (1초~240분봉 지원)
 calculated_indicators   -- 계산된 지표
+```
+
+## 📡 WebSocket v6 시스템
+
+### 지원 데이터 타입
+- **Public 데이터**: ticker, trade, orderbook
+- **캔들 데이터**: candle.1s(1초봉), candle.1m(1분봉), candle.3m(3분봉), candle.5m(5분봉), candle.10m(10분봉), candle.15m(15분봉), candle.30m(30분봉), candle.60m(60분봉), candle.240m(240분봉)
+- **Private 데이터**: myorder, myasset
+
+### 주요 구성 요소
+- **NativeWebSocketClient**: 저수준 WebSocket 연결 관리
+- **SubscriptionStateManager**: 구독 상태 및 콜백 관리
+- **JWTManager**: Private WebSocket 인증 토큰 관리
+- **Models**: v5 호환성 레이어 및 메시지 변환
+
+### 캔들 데이터 구독 예시
+```python
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket_v6 import *
+
+# 1초봉 구독
+await client.subscribe(
+    data_type=DataType.CANDLE_1S,
+    symbols=["KRW-BTC", "KRW-ETH"],
+    callback=candle_handler
+)
+
+# 5분봉 구독
+await client.subscribe(
+    data_type=DataType.CANDLE_5M,
+    symbols=["KRW-BTC"],
+    callback=candle_handler
+)
 ```
 
 ## 🔄 데이터 흐름

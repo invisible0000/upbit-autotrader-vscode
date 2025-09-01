@@ -24,7 +24,6 @@ from .types import (
     DataType, SubscriptionSpec, ComponentSubscription, WebSocketType,
     BaseWebSocketEvent, PerformanceMetrics
 )
-from .exceptions import SubscriptionError, SubscriptionConflictError
 
 
 @dataclass
@@ -301,7 +300,7 @@ class SubscriptionStateManager:
         self._private_subscriptions.clear()
 
         for data_type, subscription in self._active_subscriptions.items():
-            if data_type in [DataType.MY_ORDER, DataType.MY_ASSET]:
+            if data_type in [DataType.MYORDER, DataType.MYASSET]:
                 self._private_subscriptions[data_type] = subscription
             else:
                 self._public_subscriptions[data_type] = subscription
@@ -425,11 +424,35 @@ class SubscriptionStateManager:
         elif isinstance(event, TradeEvent):
             return DataType.TRADE
         elif isinstance(event, CandleEvent):
-            return DataType.CANDLE
+            # 캔들 이벤트는 unit 필드로 타입 결정
+            unit = getattr(event, 'unit', 1)
+
+            # 1초봉의 경우 unit 값 확인 필요 (업비트 문서상 candle.1s 지원)
+            # 실제 응답에서 unit 값이 0 또는 다른 특별한 값일 가능성 고려
+            if unit == 0:
+                return DataType.CANDLE_1S   # 1초봉
+            elif unit == 1:
+                return DataType.CANDLE_1M   # 1분봉
+            elif unit == 3:
+                return DataType.CANDLE_3M
+            elif unit == 5:
+                return DataType.CANDLE_5M
+            elif unit == 15:
+                return DataType.CANDLE_15M
+            elif unit == 30:
+                return DataType.CANDLE_30M
+            elif unit == 60:
+                return DataType.CANDLE_60M
+            elif unit == 240:
+                return DataType.CANDLE_240M
+            else:
+                # 알 수 없는 unit 값인 경우 로깅하고 기본값 반환
+                self.logger.warning(f"알 수 없는 캔들 unit 값: {unit}")
+                return DataType.CANDLE_1M  # 기본값
         elif isinstance(event, MyOrderEvent):
-            return DataType.MY_ORDER
+            return DataType.MYORDER
         elif isinstance(event, MyAssetEvent):
-            return DataType.MY_ASSET
+            return DataType.MYASSET
 
         return None
 

@@ -29,7 +29,7 @@ except ImportError:
     AUTH_AVAILABLE = False
     AuthenticatorClass = None
 
-from .exceptions import WebSocketException, AuthenticationError
+from .exceptions import AuthenticationError
 
 
 # AuthenticationError는 이미 exceptions.py에 정의되어 있음

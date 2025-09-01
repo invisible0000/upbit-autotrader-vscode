@@ -38,8 +38,7 @@ from .types import (
 try:
     from .simple_format_converter import (
         auto_detect_and_convert,
-        convert_to_simple_format,
-        convert_from_simple_format
+        convert_to_simple_format
     )
     SIMPLE_FORMAT_AVAILABLE = True
 except ImportError:
@@ -247,6 +246,7 @@ def create_compatible_message(
 # ================================================================
 # 기본 WebSocket 메시지 유틸리티 (기존 클라이언트 패턴)
 # ================================================================
+
 
 def create_websocket_message(msg_type: str, market: str, data: Dict[str, Any],
                              timestamp: Optional[datetime] = None,

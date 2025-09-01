@@ -231,7 +231,7 @@ class CandleEvent(BaseWebSocketEvent):
     trade_price: Decimal = field(default_factory=lambda: Decimal('0'))         # 종가
     candle_acc_trade_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 누적 거래 대금
     candle_acc_trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))  # 누적 거래량
-    unit: int = 1                    # 분봉 (1, 3, 5, 15, 30, 60, 240)
+    unit: int = 1                    # 시간 단위 (0:초봉, 1,3,5,15,30,60,240:분봉)
     candle_timestamp: int = 0        # 캔들 시각 (업비트 timestamp)
 
 
