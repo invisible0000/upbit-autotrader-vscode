@@ -463,6 +463,67 @@ class UpbitPublicClient:
         self._logger.debug(f"📋 호가 정보 조회 완료: {len(markets)}개 마켓")
         return response
 
+    async def get_orderbook_instruments(self, markets: Union[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+        """
+        호가 단위 정보 조회
+
+        지정한 마켓들의 호가 단위(tick_size)와 호가 모아보기 단위(supported_levels) 정보를 조회합니다.
+
+        Args:
+            markets: 마켓 코드 또는 마켓 코드 리스트
+                    (예: 'KRW-BTC' 또는 ['KRW-BTC', 'KRW-ETH'])
+
+        Returns:
+            Dict[str, Dict[str, Any]]: 마켓별 호가 단위 정보
+                {
+                    'KRW-BTC': {
+                        'market': 'KRW-BTC',
+                        'quote_currency': 'KRW',
+                        'tick_size': 1000,                # 호가 단위
+                        'supported_levels': [0, 10000, 100000, ...]  # 호가 모아보기 단위
+                    },
+                    'KRW-ETH': {
+                        'market': 'KRW-ETH',
+                        'quote_currency': 'KRW',
+                        'tick_size': 1000,
+                        'supported_levels': [0, 10000, 100000, ...]
+                    }
+                }
+
+        Examples:
+            # 단일 마켓 호가 단위 조회
+            instruments = await client.get_orderbook_instruments('KRW-BTC')
+            btc_tick_size = instruments['KRW-BTC']['tick_size']
+
+            # 여러 마켓 호가 단위 조회
+            instruments = await client.get_orderbook_instruments(['KRW-BTC', 'KRW-ETH'])
+
+        Raises:
+            ValueError: 마켓 코드가 비어있는 경우
+            Exception: API 오류
+
+        Note:
+            이 API는 호가 그룹 내에서 초당 최대 10회 호출 제한이 있습니다.
+        """
+        if isinstance(markets, str):
+            markets = [markets]
+
+        if not markets:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        params = {'markets': ','.join(markets)}
+        response = await self._make_request('/orderbook/instruments', params=params)
+
+        # List를 Dict으로 변환 (마켓별 빠른 접근을 위해)
+        instruments_dict = {}
+        for item in response:
+            market = item.get('market')
+            if market:
+                instruments_dict[market] = item
+
+        self._logger.debug(f"📏 호가 단위 정보 조회 완료: {len(instruments_dict)}개 마켓")
+        return instruments_dict
+
     async def get_trades(self, market: str, count: int = 100) -> List[Dict[str, Any]]:
         """
         최근 체결 내역 조회

@@ -267,6 +267,11 @@ class DynamicUpbitRateLimiter:
         """동적 조정 상태 반환"""
         now = time.monotonic()
 
+        # 디버깅: config 상태 확인
+        if not hasattr(self, 'config') or self.config is None:
+            print("⚠️ DynamicUpbitRateLimiter.config가 None입니다!")
+            return {'config': {}, 'groups': {}}
+
         return {
             'config': {
                 'strategy': self.config.strategy.value,

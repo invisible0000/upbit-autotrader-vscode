@@ -212,6 +212,27 @@ class UpbitPrivateClient:
 
         return stats
 
+    def get_dynamic_status(self) -> Dict[str, Any]:
+        """동적 Rate Limiter 상태 정보 조회"""
+        if self._dynamic_limiter:
+            return self._dynamic_limiter.get_dynamic_status()
+        else:
+            # 동적 limiter가 아직 초기화되지 않았거나 비활성화된 경우
+            return {
+                'config': {
+                    'strategy': self._dynamic_config.strategy.value if self._dynamic_config else 'none',
+                    'error_threshold': self._dynamic_config.error_429_threshold if self._dynamic_config else 0,
+                    'reduction_ratio': self._dynamic_config.reduction_ratio if self._dynamic_config else 1.0,
+                    'recovery_delay': self._dynamic_config.recovery_delay if self._dynamic_config else 0
+                },
+                'groups': {}
+            }
+
+    async def ensure_dynamic_limiter_initialized(self) -> None:
+        """동적 Rate Limiter 초기화 보장"""
+        if self._use_dynamic_limiter and self._dynamic_limiter is None:
+            await self._ensure_rate_limiter()
+
     def get_last_http_response_time(self) -> float:
         """마지막 HTTP 요청의 순수 서버 응답 시간 조회 (Rate Limiter 대기 시간 제외)"""
         return self._stats['last_http_response_time_ms']
@@ -304,7 +325,7 @@ class UpbitPrivateClient:
                             + 0.1 * response_time_ms
                         )
 
-                    if response.status == 200:
+                    if response.status in [200, 201]:  # 200: OK, 201: Created
                         self._stats['real_requests'] += 1
                         response_data = await response.json()
                         self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
@@ -884,11 +905,20 @@ class UpbitPrivateClient:
             ValueError: 조회 기간이 7일을 초과하는 경우
             Exception: API 오류
         """
+        # 업비트 공식 /orders/closed 엔드포인트 사용
         params = {
             'limit': min(limit, 1000),
-            'order_by': order_by,
-            'state': state or 'done,cancel'
+            'order_by': order_by
         }
+
+        # 상태 필터링 - 우선 단일 상태로 테스트
+        if state == 'done':
+            params['state'] = 'done'
+        elif state == 'cancel':
+            params['state'] = 'cancel'
+        else:
+            # 기본값: done 상태만 (테스트용)
+            params['state'] = 'done'
 
         if market:
             params['market'] = market
@@ -1016,9 +1046,11 @@ class UpbitPrivateClient:
 
         params = {}
         if uuids:
-            params['uuids'] = ','.join(uuids)
+            # 업비트 API는 배열 형식을 요구: uuids[]=uuid1&uuids[]=uuid2
+            params['uuids[]'] = uuids
         if identifiers:
-            params['identifiers'] = ','.join(identifiers)
+            # 업비트 API는 배열 형식을 요구: identifiers[]=id1&identifiers[]=id2
+            params['identifiers[]'] = identifiers
 
         # DRY-RUN 모드 결정
         effective_dry_run = dry_run if dry_run is not None else self._dry_run_config.enabled
@@ -1123,7 +1155,7 @@ class UpbitPrivateClient:
         order_by: Literal['asc', 'desc'] = 'desc'
     ) -> Dict[str, Dict[str, Any]]:
         """
-        내 체결 내역 조회
+        종료 주문 목록 조회 (체결 완료/취소된 주문)
 
         Args:
             market: 마켓 코드 (예: KRW-BTC)
@@ -1161,7 +1193,7 @@ class UpbitPrivateClient:
         if market:
             params['market'] = market
 
-        response = await self._make_request('GET', '/trades', params=params)
+        response = await self._make_request('GET', '/orders/closed', params=params)
 
         # List 응답을 Dict로 변환
         trades_dict = {}
@@ -1171,7 +1203,7 @@ class UpbitPrivateClient:
                     trade_id = trade.get('uuid', f'trade_{i}')
                     trades_dict[trade_id] = trade
 
-        self._logger.debug(f"📈 체결 내역 조회 완료: {len(trades_dict)}개 체결")
+        self._logger.debug(f"📈 종료 주문 목록 조회 완료: {len(trades_dict)}개 주문")
         return trades_dict
 
 

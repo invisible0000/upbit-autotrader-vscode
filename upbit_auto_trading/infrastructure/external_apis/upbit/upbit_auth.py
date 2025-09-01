@@ -32,6 +32,8 @@ class UpbitAuthenticator:
     def _load_keys_from_service(self):
         """ApiKeyService에서 API 키 로드"""
         try:
+            self._logger.debug("🔄 ApiKeyService에서 API 키 로드 시도 중...")
+
             from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
             from upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository import SqliteSecureKeysRepository
             from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
@@ -46,8 +48,14 @@ class UpbitAuthenticator:
             repository = SqliteSecureKeysRepository(db_manager)
             api_key_service = ApiKeyService(repository)
 
+            self._logger.debug("🔧 ApiKeyService 인스턴스 생성 완료")
+
             # 저장된 키 로드
             access_key, secret_key, trade_permission = api_key_service.load_api_keys()
+            access_status = '존재' if access_key else '없음'
+            secret_status = '존재' if secret_key else '없음'
+            self._logger.debug(f"🔍 로드된 키 상태: access_key={access_status}, secret_key={secret_status}")
+
             if access_key and secret_key:
                 self._access_key = access_key
                 self._secret_key = secret_key
@@ -56,7 +64,8 @@ class UpbitAuthenticator:
                 self._logger.warning("⚠️ ApiKeyService에서 유효한 API 키를 찾을 수 없습니다")
 
         except Exception as e:
-            self._logger.warning(f"⚠️ ApiKeyService에서 키 로드 실패: {e}")
+            self._logger.error(f"❌ ApiKeyService에서 키 로드 실패: {e}")
+            self._logger.debug(f"❌ 상세 오류: {str(e)}", exc_info=True)
             # 환경변수 fallback (기존 동작 유지)
             self._access_key = self._access_key or os.getenv('UPBIT_ACCESS_KEY')
             self._secret_key = self._secret_key or os.getenv('UPBIT_SECRET_KEY')
@@ -73,6 +82,11 @@ class UpbitAuthenticator:
         """JWT 토큰 생성 - 업비트 공식 예제 방식"""
         if not self.is_authenticated():
             raise AuthenticationError("API 키가 설정되지 않았습니다")
+
+        # 강제 콘솔 출력으로 JWT 요청 추적
+        self._logger.debug("JWT 생성 요청:")
+        self._logger.debug(f"   query_params: {query_params}")
+        self._logger.debug(f"   request_body: {request_body}")
 
         payload = {
             'access_key': self._access_key,
@@ -92,11 +106,29 @@ class UpbitAuthenticator:
 
         # 쿼리스트링이 있으면 해시 생성
         if query_string_data:
-            query_string = urlencode(query_string_data, doseq=True).encode()
+            # 업비트 JWT 검증 이슈 해결: []를 URL 인코딩하지 않고 직접 구성
+            query_string = urlencode(query_string_data, doseq=True)
+
+            # []가 %5B%5D로 인코딩된 경우 원래대로 복원
+            query_string = query_string.replace('%5B%5D', '[]')
+            query_string = query_string.encode()
+
+            # JWT 검증을 위한 URL 인코딩에서 []를 제외하고 처리
+            self._logger.debug("JWT Debug - 요청 분석:")
+            self._logger.debug(f"   query_string_data: {query_string_data}")
+            self._logger.debug(f"   encoded query_string: {query_string.decode('utf-8')}")
+
             m = hashlib.sha512()
             m.update(query_string)
             payload['query_hash'] = m.hexdigest()
             payload['query_hash_alg'] = 'SHA512'
+
+            # JWT 해시 값 로깅
+            self._logger.debug(f"   query_hash: {payload['query_hash'][:32]}...")
+
+        else:
+            # 쿼리 파라미터가 없는 경우
+            self._logger.debug("JWT Debug - 쿼리 파라미터 없음")
 
         try:
             # 타입 안전성 확인

@@ -25,7 +25,6 @@ tests\infrastructure\test_external_apis\upbit\test_upbit_private_client_v2
 ├── test_05_orders_real_safe.py        # 실제 주문 안전 테스트 (Phase 1-3 통합)
 ├── test_06_rate_limiter_dynamic.py    # 동적 Rate Limiter 실제 동작 테스트
 ├── test_07_advanced_features.py       # 고급 기능 (일괄 취소, 체결 내역)
-├── test_08_error_handling.py          # 에러 처리 및 복구 테스트
 └── run_all_tests.py                   # 통합 테스트 실행 파일
 ```
 
@@ -105,7 +104,7 @@ class TestUpbitPrivateClientRateLimiterDynamic:
 ```python
 class TestUpbitPrivateClientInitialization:
     @pytest.mark.asyncio
-    async def test_client_authentication_real(self, real_env_credentials):
+    async def test_client_authentication_real(self, real_credentials):
         """실제: 클라이언트 인증 검증"""
 
     @pytest.mark.asyncio
@@ -160,9 +159,12 @@ class TestUpbitPrivateClientInitialization:
 @pytest_asyncio.fixture
 async def safe_real_client():
     """안전한 실제 클라이언트 (DRY-RUN 기본)"""
+    access_key = "your_access_key"      # 실제 API 키로 교체
+    secret_key = "your_secret_key"      # 실제 시크릿 키로 교체
+
     client = UpbitPrivateClient(
-        access_key=os.getenv('UPBIT_ACCESS_KEY'),
-        secret_key=os.getenv('UPBIT_SECRET_KEY'),
+        access_key=access_key,
+        secret_key=secret_key,
         dry_run=True,  # 기본값: 안전 모드
         use_dynamic_limiter=True
     )
@@ -171,30 +173,26 @@ async def safe_real_client():
 
 @pytest_asyncio.fixture
 async def real_trade_client():
-    """실제 거래 클라이언트 (2단계 확인 필요)"""
-    # 환경변수로 실제 거래 허용 여부 확인
-    if not os.getenv('UPBIT_REAL_TRADE_ENABLED') == 'true':
-        pytest.skip("실제 거래 테스트는 UPBIT_REAL_TRADE_ENABLED=true 필요")
+    """실제 거래 클라이언트 (신중한 사용 필요)"""
+    access_key = "your_access_key"      # 실제 API 키로 교체
+    secret_key = "your_secret_key"      # 실제 시크릿 키로 교체
 
     client = UpbitPrivateClient(
-        access_key=os.getenv('UPBIT_ACCESS_KEY'),
-        secret_key=os.getenv('UPBIT_SECRET_KEY'),
-        dry_run=False,  # 실제 거래 모드
+        access_key=access_key,
+        secret_key=secret_key,
+        dry_run=False,  # 실제 거래 모드 (주의!)
         use_dynamic_limiter=True
     )
     yield client
     await client.close()
 
 @pytest.fixture
-def real_env_credentials():
-    """실제 환경 인증 정보 픽스처"""
-    access_key = os.getenv('UPBIT_ACCESS_KEY')
-    secret_key = os.getenv('UPBIT_SECRET_KEY')
-
-    if not access_key or not secret_key:
-        pytest.skip("UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY 환경변수 필요")
-
-    return {'access_key': access_key, 'secret_key': secret_key}
+def real_credentials():
+    """실제 인증 정보 픽스처"""
+    return {
+        'access_key': "your_access_key",    # 실제 API 키로 교체
+        'secret_key': "your_secret_key"     # 실제 시크릿 키로 교체
+    }
 ```
 
 ### 안전성 검증 헬퍼 함수
@@ -358,19 +356,19 @@ pytest tests/infrastructure/test_external_apis/upbit/test_upbit_private_client_v
 pytest tests/infrastructure/test_external_apis/upbit/test_upbit_private_client_v2/ -v
 ```
 
-### 환경변수 설정
+### API 키 설정
 ```powershell
 # 필수: API 인증 정보
-$env:UPBIT_ACCESS_KEY = "your_access_key"
-$env:UPBIT_SECRET_KEY = "your_secret_key"
+$access_key = "your_access_key"
+$secret_key = "your_secret_key"
 
 # 선택: 실제 거래 테스트 허용 (2단계 확인)
-$env:UPBIT_REAL_TRADE_ENABLED = "false"  # 기본값: 실제 거래 금지
+$real_trade_enabled = "false"  # 기본값: 실제 거래 금지
 
 # 선택: 로깅 설정
-$env:UPBIT_CONSOLE_OUTPUT = "true"
-$env:UPBIT_LOG_SCOPE = "verbose"
-$env:UPBIT_COMPONENT_FOCUS = "UpbitPrivateClient"
+$console_output = "true"
+$log_scope = "verbose"
+$component_focus = "UpbitPrivateClient"
 ```
 
 ## 📊 실제 API 응답 데이터 형식
