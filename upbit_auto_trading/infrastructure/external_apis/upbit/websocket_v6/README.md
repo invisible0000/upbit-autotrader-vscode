@@ -1,218 +1,271 @@
-# 📡 업비트 WebSocket v6.0 - 전역 통합 관리 시스템
+# 🚀 WebSocket v6.0 개발 가이드
 
-## 🎯 **프로젝트 개요**
-
-WebSocket v6.0은 업비트 자동매매 시스템의 **전역 WebSocket 관리 솔루션**입니다.
-기존 v5의 개별 클라이언트 방식에서 **전역 단일 관리 방식**으로 진화하여
-업비트 WebSocket의 덮어쓰기 특성에 완벽 대응하고 다중 컴포넌트 사용 시 발생하는 구독 충돌을 근본적으로 해결합니다.
-
-### 🚀 **핵심 목표**
-- **전역 구독 관리**: 모든 서브시스템의 WebSocket 요청을 중앙에서 통합 관리
-- **API 키 선택적 지원**: Public 기능은 API 키 없이도 완전 동작, Private 기능은 API 키 있을 때만 활성화
-- **무중단 서비스**: 베이스 WebSocket 연결 상시 유지로 안정적인 실시간 데이터 제공
-- **개발자 친화적**: 기존 v5 사용 패턴과 유사한 직관적인 인터페이스
-
-## 📂 **파일 구조 및 책임**
-
+## 📁 아키텍처 개요
 ```
-websocket_v6/
-├── README.md                                    # 📚 프로젝트 문서 (이 파일)
-├── DESIGN_PRINCIPLES.md                         # 🎯 설계 원칙 및 아키텍처
-├── API_REFERENCE.md                             # 📖 API 사용법 가이드
-├── MIGRATION_GUIDE.md                           # 🔄 v5 → v6 마이그레이션 가이드
-│
-├── __init__.py                                  # 📦 패키지 초기화 (50줄)
-├── global_websocket_manager.py                  # ⭐ 전역 WebSocket 관리자 (400줄)
-├── websocket_client_proxy.py                   # 🔗 서브시스템용 프록시 (250줄)
-├── upbit_websocket_public_client.py             # 🌐 Public 전용 클라이언트 (300줄)
-├── upbit_websocket_private_client.py            # 🔒 Private 전용 클라이언트 (350줄)
-├── data_routing_engine.py                      # 📊 데이터 라우팅 시스템 (200줄)
-├── subscription_state_manager.py               # 📋 구독 상태 관리 (300줄)
-├── connection_manager.py                       # 🔌 연결 관리 (180줄)
-├── config.py                                   # ⚙️ v6 설정 (100줄)
-├── models.py                                   # 📄 v6 데이터 모델 (150줄)
-├── exceptions.py                               # ⚠️ v6 예외 처리 (80줄)
-└── websocket_v6_config.yaml                    # 🔧 설정 파일
-
-**공통 인프라 컴포넌트 (기존 재사용):**
-- `../upbit_auth.py` - JWT 인증 시스템 (전역 관리자에서만 사용)
-- `../upbit_rate_limiter.py` - GCRA 기반 Rate Limiter
-- `../dynamic_rate_limiter_wrapper.py` - 동적 Rate Limiter
+Global Management (Singleton) → Component Proxy → Application Layer
+     ↓                              ↓                    ↓
+전역 구독 상태 관리              프록시 인터페이스      GUI 컴포넌트들
 ```
 
-**총 예상 코드: ~2,360줄** (v5 대비 30% 코드 감소, 100% 기능 향상)
-
-## 🏗️ **핵심 아키텍처**
-
-### 1. **전역 관리자 (Singleton)**
-```python
-GlobalWebSocketManager (400줄)
-├── Public WebSocket Client   # API 키 불필요, 항상 활성화
-├── Private WebSocket Client  # API 키 필요, 선택적 활성화
-├── Subscription State        # 전역 구독 상태 추적
-├── Data Routing Engine       # 수신 데이터 멀티캐스트 분배
-└── Connection Monitor        # 연결 상태 감시 및 자동 복구
-```
-
-### 2. **서브시스템 인터페이스**
-```python
-WebSocketClientProxy (250줄)
-├── Public API Methods        # subscribe_ticker(), get_snapshot() 등
-├── Private API Methods       # subscribe_my_orders(), subscribe_my_assets() 등
-├── Lifecycle Management      # 자동 구독 해제, 메모리 관리
-└── Error Handling           # 세밀한 오류 처리 및 복구
-```
-
-### 3. **API 키 기반 적응형 초기화**
-```python
-# API 키 없음: Public 기능만 활성화
-await global_manager.initialize()
-→ 차트, 시장 데이터, 코인 목록 등 완전 동작
-
-# API 키 있음: Public + Private 기능 모두 활성화
-await global_manager.initialize(access_key, secret_key)
-→ 주문 모니터링, 자산 관리까지 실시간 처리
-```
-
-## 🔧 **사용법 예시**
-
-### **간단한 차트 컴포넌트 (Public 전용)**
-```python
-class ChartComponent:
-    def __init__(self):
-        # API 키 없어도 완전 동작
-        self.ws = WebSocketClientProxy("chart", "ui_component")
-
-    async def start_chart(self, symbol: str):
-        # 실시간 현재가 구독
-        await self.ws.subscribe_ticker([symbol], self.on_price_update)
-
-        # 초기 스냅샷 조회
-        snapshot = await self.ws.get_ticker_snapshot([symbol])
-        self.init_chart(snapshot)
-```
-
-### **주문 모니터링 시스템 (Private 기능)**
-```python
-class OrderMonitor:
-    def __init__(self):
-        self.ws = WebSocketClientProxy("orders", "trading_system")
-
-    async def start_monitoring(self):
-        if self.ws.is_private_available():
-            # API 키 있으면 실시간 모니터링
-            await self.ws.subscribe_my_orders(self.on_order_update)
-        else:
-            # API 키 없으면 REST API 폴링으로 대체
-            await self.start_polling_fallback()
-```
-
-## 🎯 **주요 특징**
-
-### ✅ **업비트 WebSocket 완벽 대응**
-- **덮어쓰기 방식**: 새 구독 시 기존 실시간 구독 자동 포함
-- **스냅샷 최적화**: 기존 실시간 + 요청 심볼 통합 요청으로 효율성 극대화
-- **구독 충돌 방지**: 다중 컴포넌트 사용 시에도 안정적인 데이터 수신
-
-### ✅ **개발자 경험 최적화**
-- **직관적 API**: `subscribe_ticker()`, `get_snapshot()` 등 명확한 메서드명
-- **자동 정리**: 컴포넌트 종료 시 관련 구독 자동 해제
-- **에러 복구**: 연결 끊김, Rate Limit 등 자동 처리
-
-### ✅ **Enterprise급 안정성**
-- **무중단 서비스**: 베이스 연결 상시 유지
-- **장애 복구**: 자동 재연결 및 구독 상태 복원
-- **메모리 최적화**: WeakRef 기반 자동 메모리 관리
-
-### ✅ **확장성**
-- **모듈형 설계**: 새로운 데이터 타입 쉽게 추가 가능
-- **플러그인 아키텍처**: 커스텀 데이터 처리기 등록 가능
-- **성능 모니터링**: 상세한 메트릭 및 헬스체크 제공
-
-## 📊 **성능 지표**
-
-| 항목 | v5 (기존) | v6 (신규) | 개선율 |
-|------|-----------|-----------|---------|
-| 동시 구독 처리 | 제한적 | 무제한 | ∞ |
-| 메모리 사용량 | 클라이언트당 증가 | 일정함 | -70% |
-| 연결 안정성 | 개별 관리 | 통합 관리 | +90% |
-| 개발 복잡도 | 높음 | 낮음 | -50% |
-| API 호출 효율성 | 중복 요청 | 통합 요청 | +80% |
-
-## 🛠️ **기술 스택**
-
-- **WebSocket**: `websockets` 라이브러리 기반
-- **비동기 처리**: `asyncio` 완전 지원
-- **인증**: `upbit_auth.py` 전역 JWT 토큰 관리 (Private)
-- **Rate Limiting**: `upbit_rate_limiter.py` + `dynamic_rate_limiter_wrapper.py` 통합
-- **로깅**: Infrastructure 통합 로깅 시스템
-- **설정 관리**: YAML 기반 유연한 설정
-
-## 🔄 **v5에서 v6로 마이그레이션**
-
-### Before (v5)
-```python
-# 각 컴포넌트마다 개별 WebSocket 클라이언트
-public_client = UpbitWebSocketPublicV5()
-await public_client.connect()
-await public_client.subscribe_ticker(["KRW-BTC"], callback)
-```
-
-### After (v6)
-```python
-# 전역 관리자를 통한 통합 사용
-ws = WebSocketClientProxy("my_component")
-await ws.subscribe_ticker(["KRW-BTC"], callback)  # 자동으로 최적화됨
-```
-
-**마이그레이션 시간: 컴포넌트당 평균 10분**
-
-## 📋 **개발 로드맵**
-
-### Phase 1: 핵심 시스템 (1주)
-- [x] `global_websocket_manager.py` - 전역 관리자
-- [x] `subscription_state_manager.py` - 구독 상태 관리
-- [x] `connection_manager.py` - 연결 관리
-
-### Phase 2: 클라이언트 인터페이스 (4일)
-- [ ] `websocket_client_proxy.py` - 서브시스템 인터페이스
-- [ ] `upbit_websocket_public_client.py` - Public 클라이언트
-- [ ] `upbit_websocket_private_client.py` - Private 클라이언트
-
-### Phase 3: 데이터 처리 (3일)
-- [ ] `data_routing_engine.py` - 데이터 라우팅
-- [ ] `models.py` - 데이터 모델
-- [ ] `exceptions.py` - 예외 처리
-
-### Phase 4: 통합 테스트 (2일)
-- [ ] 실제 서브시스템 연동 테스트
-- [ ] 성능 벤치마킹
-- [ ] 문서화 완료
-
-## 🎯 **성공 기준**
-
-1. **기능적 성공**
-   - [ ] 모든 v5 기능을 v6에서 동일하게 제공
-   - [ ] API 키 없이 Public 기능 완전 동작
-   - [ ] 다중 컴포넌트 사용 시 구독 충돌 Zero
-
-2. **성능적 성공**
-   - [ ] 동시 100개 심볼 실시간 처리 안정성
-   - [ ] 메모리 사용량 v5 대비 50% 이상 절약
-   - [ ] 연결 끊김 시 5초 내 자동 복구
-
-3. **개발자 경험**
-   - [ ] v5 → v6 마이그레이션 평균 10분 이내
-   - [ ] 새 컴포넌트 WebSocket 연동 5분 이내
-   - [ ] 제로 설정으로 즉시 사용 가능
-
-## 📞 **지원 및 문의**
-
-- **API 문서**: `API_REFERENCE.md` 참조
-- **설계 문서**: `DESIGN_PRINCIPLES.md` 참조
-- **마이그레이션 가이드**: `MIGRATION_GUIDE.md` 참조
-- **이슈 리포팅**: GitHub Issues 활용
+## 🎯 개발 목표
+- **전역 중앙집중식 WebSocket 관리** (업비트 구독 덮어쓰기 문제 해결)
+- **컴포넌트별 프록시 인터페이스** (Zero Configuration)
+- **자동 리소스 정리** (WeakRef + 명시적 cleanup)
+- **장애 복구 및 백프레셔 처리** (24/7 안정성)
 
 ---
 
-**WebSocket v6.0** - "하나의 연결, 무한한 가능성" 🚀
+## 📋 구현 파일 목록
+
+### 🔧 1. 핵심 인프라 (Phase 1)
+```python
+# 전역 관리자 (싱글톤)
+global_websocket_manager.py        # 150-200줄
+├── GlobalWebSocketManager 클래스
+├── 단일 Public/Private 연결 관리
+├── 전역 구독 상태 통합
+└── 데이터 라우팅 허브
+
+# 구독 상태 관리
+subscription_state_manager.py      # 120-150줄
+├── SubscriptionStateManager 클래스
+├── 클라이언트별 구독 추적
+├── 구독 통합 알고리즘
+└── 원자적 상태 업데이트
+
+# 데이터 분배 엔진
+data_routing_engine.py             # 100-130줄
+├── DataRoutingEngine 클래스
+├── FanoutHub (멀티캐스팅)
+├── BackpressureHandler (큐 오버플로우 처리)
+└── 콜백 에러 격리
+```
+
+### 🎭 2. 프록시 인터페이스 (Phase 2)
+```python
+# 컴포넌트용 프록시
+websocket_client_proxy.py          # 180-220줄
+├── WebSocketClientProxy 클래스
+├── subscribe_ticker/orderbook/candle
+├── get_snapshot 메서드들
+├── WeakRef 기반 자동 정리
+└── Context Manager 지원
+
+# 생명주기 관리
+component_lifecycle_manager.py     # 80-100줄
+├── ComponentLifecycleManager 클래스
+├── WeakRef 콜백 등록
+├── 자동 구독 정리
+└── 메모리 누수 방지
+```
+
+### 🔥 3. 고급 기능 (Phase 3)
+```python
+# 장애 복구 엔진
+recovery_engine.py                 # 120-150줄
+├── RecoveryEngine 클래스
+├── 지수 백오프 재연결
+├── 구독 상태 복원
+└── EpochManager (데이터 순서 보장)
+
+# JWT 토큰 관리 (Private 채널용)
+jwt_manager.py                     # 90-120줄
+├── JWTManager 클래스
+├── 자동 토큰 갱신 (만료 80% 시점)
+├── Graceful Degradation
+└── REST API 폴백
+
+# 백프레셔 처리
+backpressure_handler.py            # 80-100줄
+├── BackpressureHandler 클래스
+├── drop_oldest 전략
+├── coalesce_by_symbol 전략
+└── throttle 전략
+
+# GUI 스레드 브릿지
+qt_bridge_manager.py               # 60-80줄
+├── QtBridgeManager 클래스
+├── SignalEmitter (PyQt 연동)
+├── 스레드 안전 데이터 전달
+└── GUI 업데이트 큐
+```
+
+### 📊 4. 모니터링 & 유틸리티 (Phase 4)
+```python
+# 성능 모니터링
+performance_monitor.py             # 100-130줄
+├── PerformanceMonitor 클래스
+├── 실시간 메트릭 수집
+├── 알림 임계값 관리
+└── 상태 대시보드 데이터
+
+# 타입 정의 (이벤트 시스템)
+types.py                          # 80-100줄
+├── @dataclass 이벤트들
+├── TickerEvent, OrderbookEvent, CandleEvent
+├── SubscriptionSpec, ComponentSubscription
+└── PerformanceMetrics
+
+# 설정 관리
+config.py                         # 50-70줄
+├── WebSocketV6Config 클래스
+├── 연결 설정, 재연결 설정
+├── 백프레셔 설정
+└── 모니터링 설정
+
+# 예외 정의
+exceptions.py                     # 40-60줄
+├── WebSocketV6Exception 계층
+├── ConnectionError, SubscriptionError
+├── BackpressureError, AuthError
+└── RecoveryError
+```
+
+### 🧪 5. 테스트 지원 (Phase 4)
+```python
+# Mock WebSocket 서버
+mock_websocket_server.py          # 150-200줄
+├── MockUpbitWebSocketServer 클래스
+├── 업비트 동작 모방 (구독 덮어쓰기)
+├── 시장 데이터 시뮬레이션
+└── 연결 실패 시뮬레이션
+
+# 테스트 유틸리티
+test_utils.py                     # 80-100줄
+├── 테스트용 헬퍼 함수들
+├── Mock 데이터 생성기
+├── 성능 측정 도구
+└── 시나리오 시뮬레이터
+```
+
+### 🔗 6. 메인 인터페이스 (Phase 5)
+```python
+# 메인 인터페이스
+__init__.py                      # 30-50줄
+├── 주요 클래스 export
+├── 편의 함수들
+├── 버전 정보
+└── 설정 기본값
+```
+
+---
+
+## 🎯 개발 우선순위
+
+### Phase 1: 핵심 인프라 (1주차)
+1. `global_websocket_manager.py` - 전역 관리 중심
+2. `subscription_state_manager.py` - 구독 상태 통합
+3. `data_routing_engine.py` - 데이터 분배
+4. `types.py` - 기본 타입 정의
+
+### Phase 2: 프록시 인터페이스 (2주차)
+1. `websocket_client_proxy.py` - 컴포넌트 인터페이스
+2. `component_lifecycle_manager.py` - 자동 정리
+3. `exceptions.py` - 예외 체계
+4. `config.py` - 설정 관리
+
+### Phase 3: 고급 기능 (3-4주차)
+1. `recovery_engine.py` - 장애 복구
+2. `jwt_manager.py` - Private 인증
+3. `backpressure_handler.py` - 성능 최적화
+4. `qt_bridge_manager.py` - GUI 연동
+
+### Phase 4: 모니터링 & 테스트 (5주차)
+1. `performance_monitor.py` - 성능 추적
+2. `mock_websocket_server.py` - 테스트 지원
+3. `test_utils.py` - 테스트 도구
+
+### Phase 5: 최종 통합 (6주차)
+1. `__init__.py` - 최종 인터페이스
+2. 통합 테스트 및 최적화
+3. 전체 시스템 교체
+
+---
+
+## 🔧 기존 시스템 연동
+
+### 전역 Rate Limiter 통합 (핵심)
+```python
+# 전역 Rate Limiter - 모든 업비트 요청 통합 관리
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
+    get_global_rate_limiter,      # GCRA 기반 전역 Rate Limiter
+    gate_websocket,               # WebSocket 전용 게이트
+    UpbitRateLimitGroup          # 5개 그룹 분류
+)
+
+from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
+    get_dynamic_rate_limiter,     # 429 에러 자동 조정
+    DynamicConfig,               # 동적 조정 설정
+    AdaptiveStrategy             # 조정 전략
+)
+```
+
+### v5 재사용 컴포넌트
+```python
+# 물리적 WebSocket 연결만 재사용
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket_v5 import (
+    UpbitWebSocketPublicClient,   # 물리적 Public 연결
+    UpbitWebSocketPrivateClient   # 물리적 Private 연결
+)
+```
+
+### 인증 시스템 연동
+```python
+# 기존 인증 인프라 활용
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import (
+    UpbitAuthenticator           # JWT 토큰 생성
+)
+```
+
+---
+
+## 🚀 빠른 시작 예제
+
+### 개발자용 사용법
+```python
+# 1. 프록시 생성 (Zero Configuration)
+from websocket_v6 import WebSocketClientProxy
+
+async def main():
+    proxy = WebSocketClientProxy("my_chart_component")
+
+    # 2. 구독 시작 (자동으로 전역 관리됨)
+    await proxy.subscribe_ticker(
+        ["KRW-BTC", "KRW-ETH"],
+        callback=lambda event: print(f"{event.symbol}: {event.trade_price}")
+    )
+
+    # 3. 스냅샷 요청
+    tickers = await proxy.get_ticker_snapshot(["KRW-BTC"])
+
+    # 4. 자동 정리 (컨텍스트 종료 시)
+    await proxy.cleanup()  # 또는 WeakRef 자동 호출
+```
+
+### 전역 상태 확인
+```python
+from websocket_v6 import GlobalWebSocketManager
+
+# 시스템 상태 조회
+manager = GlobalWebSocketManager.get_instance()
+status = await manager.get_health_status()
+print(f"연결 상태: {status['connections']}")
+print(f"활성 구독: {status['subscriptions']}")
+```
+
+---
+
+## 📈 예상 총 라인수
+- **핵심 코드**: ~1,300줄 (호환성 제거)
+- **테스트 코드**: ~600줄
+- **문서/예제**: ~200줄
+- **총합**: ~2,100줄
+
+## 🎯 성공 기준
+- ✅ 업비트 구독 충돌 문제 100% 해결
+- ✅ 메모리 누수 0건 달성
+- ✅ 99.9% 연결 안정성 확보
+- ✅ 전역 Rate Limiter 통합 관리
+- ✅ v6 완전 교체 (v5 제거)---
+
+*📌 이 가이드는 [WEBSOCKET_V6_FINAL_SPECIFICATION.md](../../../docs/upbit_API_reference/websocket_v6/WEBSOCKET_V6_FINAL_SPECIFICATION.md)의 실제 구현을 위한 개발 로드맵입니다.*

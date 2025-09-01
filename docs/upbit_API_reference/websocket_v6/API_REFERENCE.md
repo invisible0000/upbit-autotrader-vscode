@@ -98,7 +98,7 @@ async def on_candle_update(symbol: str, data_type: str, data: dict):
 # 1분봉 실시간 구독
 await ws.subscribe_candle(
     symbols=["KRW-BTC"],
-    interval="1m",  # 1m, 3m, 5m, 10m, 15m, 30m, 1h, 4h, 1d, 1w, 1M
+    interval="1m",  # 1s, 1m, 3m, 5m, 10m, 15m, 30m, 60m, 240m
     callback=on_candle_update
 )
 ```
