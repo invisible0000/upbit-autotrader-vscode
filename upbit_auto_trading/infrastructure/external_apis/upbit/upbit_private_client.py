@@ -1,53 +1,124 @@
 """
-업비트 프라이빗 API 클라이언트 - 업비트 전용 단순화 버전
+업비트 프라이빗 API 클라이언트 - 동적 GCRA Rate Limiter + DRY-RUN 지원
 
-업비트 전용으로 최적화된 구현
-인증이 필요한 REST API 기능을 담당합니다.
+DDD Infrastructure 계층 컴포넌트
+- 업비트 전용 최적화 구현
+- 동적 조정 GCRA Rate Limiter 통합
+- DRY-RUN 모드 기본 지원
+- 429 오류 자동 처리 및 재시도
+- Infrastructure 로깅 시스템 준수
 """
+import asyncio
 import aiohttp
-import logging
-from typing import List, Dict, Any, Optional, Literal
+import time
+from typing import List, Dict, Any, Optional, Literal, Union
 from decimal import Decimal
 
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .upbit_auth import UpbitAuthenticator
-from .upbit_rate_limiter import UpbitGCRARateLimiter, get_global_rate_limiter
+from .upbit_rate_limiter import get_global_rate_limiter, UpbitGCRARateLimiter
+from .dynamic_rate_limiter_wrapper import (
+    get_dynamic_rate_limiter,
+    DynamicUpbitRateLimiter,
+    DynamicConfig,
+    AdaptiveStrategy
+)
+
+
+class DryRunConfig:
+    """DRY-RUN 모드 설정"""
+
+    def __init__(self, enabled: bool = True, log_prefix: str = "[DRY-RUN]"):
+        self.enabled = enabled
+        self.log_prefix = log_prefix
 
 
 class UpbitPrivateClient:
     """
-    업비트 전용 프라이빗 API 클라이언트
+    업비트 프라이빗 API 클라이언트 - 동적 GCRA + DRY-RUN 지원
 
-    특징:
-    - 업비트 전용 최적화
-    - 업비트 Rate Limiter 사용
-    - 간단하고 직관적인 구조
-    - 인증이 필요한 모든 기능 지원
+    주요 특징:
+    - 동적 조정 GCRA Rate Limiter 기본 사용
+    - DRY-RUN 모드 기본 활성화 (안전성 우선)
+    - 429 오류 자동 감지 및 Rate Limit 조정
+    - Infrastructure 로깅 시스템 준수
+    - 전역 공유 Rate Limiter 지원
+    - 상세한 응답 시간 추적
+    - 배치 작업 최적화
+
+    DDD 원칙:
+    - Infrastructure 계층 컴포넌트
+    - 외부 API 통신 책임
+    - 도메인 로직 포함 금지
     """
 
     BASE_URL = "https://api.upbit.com/v1"
 
-    def __init__(self, access_key: Optional[str] = None, secret_key: Optional[str] = None,
-                 rate_limiter: Optional[UpbitRateLimiter] = None):
+    def __init__(self,
+                 access_key: Optional[str] = None,
+                 secret_key: Optional[str] = None,
+                 dry_run: bool = True,
+                 use_dynamic_limiter: bool = True,
+                 dynamic_config: Optional[DynamicConfig] = None,
+                 legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None):
         """
         업비트 프라이빗 API 클라이언트 초기화
 
         Args:
-            access_key: Upbit API Access Key
-            secret_key: Upbit API Secret Key
-            rate_limiter: 업비트 Rate Limiter (기본값: 자동 생성)
+            access_key: Upbit API Access Key (None이면 환경변수/ApiKeyService에서 로드)
+            secret_key: Upbit API Secret Key (None이면 환경변수/ApiKeyService에서 로드)
+            dry_run: DRY-RUN 모드 활성화 (기본값: True, 안전성 우선)
+            use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
+            dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
+            legacy_rate_limiter: 기존 GCRA Rate Limiter (동적 비활성화 시)
+
+        Raises:
+            ValueError: 인증 정보가 없고 인증이 필요한 작업 시도 시
+
+        Note:
+            DRY-RUN 모드에서는 실제 주문이 전송되지 않고 로그만 출력됩니다.
+            실제 거래를 위해서는 명시적으로 dry_run=False로 설정해야 합니다.
         """
+        # Infrastructure 로깅 초기화
+        self._logger = create_component_logger("UpbitPrivateClient")
+
         # 인증 관리자 초기화
         self._auth = UpbitAuthenticator(access_key, secret_key)
         if not self._auth.is_authenticated():
-            raise ValueError("API 키가 설정되지 않았습니다. 인증이 필요한 API는 사용할 수 없습니다.")
+            self._logger.warning("⚠️ API 키가 설정되지 않았습니다. 인증이 필요한 API는 사용할 수 없습니다.")
+
+        # DRY-RUN 설정
+        self._dry_run_config = DryRunConfig(enabled=dry_run)
+        if dry_run:
+            self._logger.info("🔒 DRY-RUN 모드 활성화: 실제 주문이 전송되지 않습니다")
 
         # Rate Limiter 설정
-        self.rate_limiter = rate_limiter or create_upbit_private_limiter("upbit_private")
+        self._use_dynamic_limiter = use_dynamic_limiter
+        self._dynamic_limiter: Optional[DynamicUpbitRateLimiter] = None
+        self._legacy_rate_limiter = legacy_rate_limiter
+        self._dynamic_config = dynamic_config or DynamicConfig(strategy=AdaptiveStrategy.BALANCED)
+
+        # HTTP 세션 관리
         self._session: Optional[aiohttp.ClientSession] = None
-        self._logger = logging.getLogger("UpbitPrivateClient")
+
+        # 성능 통계 추적
+        self._stats = {
+            'total_requests': 0,
+            'dry_run_requests': 0,
+            'real_requests': 0,
+            'total_429_retries': 0,
+            'last_request_429_retries': 0,
+            'average_response_time_ms': 0.0,
+            'last_http_response_time_ms': 0.0
+        }
+
+        self._logger.info(f"✅ UpbitPrivateClient 초기화 완료 (DRY-RUN: {dry_run}, 동적 Rate Limiter: {use_dynamic_limiter})")
 
     def __repr__(self):
-        return f"UpbitPrivateClient(authenticated={self._auth.is_authenticated()})"
+        return (f"UpbitPrivateClient("
+                f"authenticated={self._auth.is_authenticated()}, "
+                f"dry_run={self._dry_run_config.enabled}, "
+                f"dynamic_limiter={self._use_dynamic_limiter})")
 
     async def __aenter__(self):
         await self._ensure_session()
@@ -56,30 +127,249 @@ class UpbitPrivateClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
+    # ================================================================
+    # 세션 및 리소스 관리
+    # ================================================================
+
     async def _ensure_session(self) -> None:
-        """HTTP 세션 확보"""
-        if not self._session:
-            self._session = aiohttp.ClientSession()
+        """HTTP 세션 확보 - 연결 풀링 및 타임아웃 최적화"""
+        if not self._session or self._session.closed:
+            connector = aiohttp.TCPConnector(
+                limit=100,           # 전체 연결 제한
+                limit_per_host=30,   # 호스트당 연결 제한
+                keepalive_timeout=30,  # Keep-alive 타임아웃
+                enable_cleanup_closed=True
+            )
+            timeout = aiohttp.ClientTimeout(
+                total=30,      # 전체 요청 타임아웃
+                connect=10,    # 연결 타임아웃
+                sock_read=20   # 소켓 읽기 타임아웃
+            )
+            self._session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=timeout,
+                headers={
+                    'Accept': 'application/json',
+                    'User-Agent': 'upbit-autotrader-vscode/1.0'
+                }
+            )
+            self._logger.debug("🌐 HTTP 세션 초기화 완료")
+
+    async def _ensure_rate_limiter(self) -> Union[DynamicUpbitRateLimiter, UpbitGCRARateLimiter]:
+        """Rate Limiter 확보 (동적 우선, 전역 공유 대체)"""
+        if self._use_dynamic_limiter:
+            if self._dynamic_limiter is None:
+                self._dynamic_limiter = await get_dynamic_rate_limiter(self._dynamic_config)
+                self._logger.debug("🔄 동적 Rate Limiter 초기화 완료")
+            return self._dynamic_limiter
+        else:
+            if self._legacy_rate_limiter is None:
+                self._legacy_rate_limiter = await get_global_rate_limiter()
+                self._logger.debug("⚙️ 레거시 Rate Limiter 초기화 완료")
+            return self._legacy_rate_limiter
 
     async def close(self) -> None:
         """리소스 정리"""
-        if self._session:
+        if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
+            self._logger.debug("🗑️ HTTP 세션 정리 완료")
+
+        # 동적 Rate Limiter 모니터링 중지
+        if self._dynamic_limiter:
+            await self._dynamic_limiter.stop_monitoring()
+
+    # ================================================================
+    # 상태 조회 및 설정
+    # ================================================================
 
     def is_authenticated(self) -> bool:
         """인증 상태 확인"""
         return self._auth.is_authenticated()
 
+    def is_dry_run_enabled(self) -> bool:
+        """DRY-RUN 모드 활성화 여부 확인"""
+        return self._dry_run_config.enabled
+
+    def enable_dry_run(self, enabled: bool = True) -> None:
+        """DRY-RUN 모드 활성화/비활성화"""
+        old_state = self._dry_run_config.enabled
+        self._dry_run_config.enabled = enabled
+
+        if old_state != enabled:
+            if enabled:
+                self._logger.warning("🔒 DRY-RUN 모드 활성화: 실제 주문이 전송되지 않습니다")
+            else:
+                self._logger.warning("🔓 DRY-RUN 모드 비활성화: 실제 주문이 전송됩니다!")
+
+    def get_stats(self) -> Dict[str, Any]:
+        """클라이언트 통계 정보 조회"""
+        stats = self._stats.copy()
+
+        # 동적 Rate Limiter 통계 추가
+        if self._dynamic_limiter:
+            stats['dynamic_limiter'] = self._dynamic_limiter.get_dynamic_status()
+
+        return stats
+
+    def get_last_http_response_time(self) -> float:
+        """마지막 HTTP 요청의 순수 서버 응답 시간 조회 (Rate Limiter 대기 시간 제외)"""
+        return self._stats['last_http_response_time_ms']
+
+    # ================================================================
+    # 핵심 HTTP 요청 처리
+    # ================================================================
+
     async def _make_request(
         self,
         method: str,
         endpoint: str,
-        params: Optional[Dict] = None,
-        data: Optional[Dict] = None
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        is_order_request: bool = False
     ) -> Any:
         """
-        인증된 HTTP 요청 수행
+        인증된 HTTP 요청 수행 - 429 자동 처리 및 재시도
+
+        Args:
+            method: HTTP 메서드
+            endpoint: API 엔드포인트
+            params: 쿼리 파라미터
+            data: 요청 바디 데이터
+            is_order_request: 주문 관련 요청 여부 (DRY-RUN 적용 대상)
+
+        Returns:
+            Any: API 응답 데이터
+
+        Raises:
+            ValueError: 인증되지 않은 상태에서 인증 필요 요청 시
+            Exception: API 오류 또는 네트워크 오류
+        """
+        # 인증 확인
+        if not self._auth.is_authenticated():
+            raise ValueError("API 키가 설정되지 않았습니다. 인증이 필요한 API는 사용할 수 없습니다.")
+
+        # DRY-RUN 모드 처리 (주문 요청만)
+        if is_order_request and self._dry_run_config.enabled:
+            return await self._handle_dry_run_request(method, endpoint, params, data)
+
+        await self._ensure_session()
+
+        if not self._session:
+            raise RuntimeError("HTTP 세션이 초기화되지 않았습니다")
+
+        url = f"{self.BASE_URL}{endpoint}"
+        max_retries = 3
+
+        # 요청별 429 재시도 카운터 초기화
+        self._stats['last_request_429_retries'] = 0
+        self._stats['total_requests'] += 1
+
+        for attempt in range(max_retries):
+            try:
+                # Rate Limit 적용
+                rate_limiter = await self._ensure_rate_limiter()
+                await rate_limiter.acquire(endpoint, method)
+
+                # 인증 헤더 생성
+                headers = self._auth.get_private_headers(query_params=params, request_body=data)
+                headers.update({
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'upbit-autotrader-vscode/1.0'
+                })
+
+                # 순수 HTTP 요청 시간 측정 시작
+                http_start_time = time.perf_counter()
+
+                async with self._session.request(
+                    method=method,
+                    url=url,
+                    params=params,
+                    json=data,
+                    headers=headers
+                ) as response:
+                    http_end_time = time.perf_counter()
+
+                    # 순수 HTTP 응답 시간 저장 (Rate Limiter 대기 시간 제외)
+                    response_time_ms = (http_end_time - http_start_time) * 1000
+                    self._stats['last_http_response_time_ms'] = response_time_ms
+
+                    # 평균 응답 시간 업데이트
+                    if self._stats['average_response_time_ms'] == 0.0:
+                        self._stats['average_response_time_ms'] = response_time_ms
+                    else:
+                        # 지수 이동 평균 (α=0.1)
+                        self._stats['average_response_time_ms'] = (
+                            0.9 * self._stats['average_response_time_ms']
+                            + 0.1 * response_time_ms
+                        )
+
+                    if response.status == 200:
+                        self._stats['real_requests'] += 1
+                        response_data = await response.json()
+                        self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
+                        return response_data
+
+                    elif response.status == 429:
+                        # 429 응답 처리
+                        retry_after = response.headers.get('Retry-After')
+                        retry_after_float = float(retry_after) if retry_after else None
+
+                        if isinstance(rate_limiter, DynamicUpbitRateLimiter):
+                            # 동적 Rate Limiter는 자동으로 429 처리됨
+                            pass
+                        else:
+                            # 레거시 Rate Limiter 수동 처리
+                            rate_limiter.handle_429_response(retry_after=retry_after_float)
+
+                        # 429 재시도 카운터 업데이트
+                        self._stats['last_request_429_retries'] += 1
+                        self._stats['total_429_retries'] += 1
+
+                        self._logger.warning(f"⚠️ Rate Limit 초과 (429): {endpoint}, 재시도 {attempt + 1}/{max_retries}")
+
+                        # 429 오류 시 지수 백오프로 재시도
+                        if attempt < max_retries - 1:
+                            wait_time = (2 ** attempt) * 0.5  # 0.5, 1.0, 2.0초
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            error_text = await response.text()
+                            raise Exception(f"429 Rate Limit 오류로 {max_retries}회 재시도 후에도 실패: {error_text}")
+
+                    else:
+                        error_text = await response.text()
+                        self._logger.error(f"❌ API 오류 (상태: {response.status}): {error_text}")
+                        raise Exception(f"API 오류 (상태: {response.status}): {error_text}")
+
+            except asyncio.TimeoutError:
+                self._logger.warning(f"⏰ 타임아웃 발생: {endpoint}, 재시도 {attempt + 1}/{max_retries}")
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 0.3  # 타임아웃 재시도
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    raise Exception(f"타임아웃으로 {max_retries}회 재시도 후에도 실패")
+
+            except Exception as e:
+                self._logger.error(f"❌ HTTP 요청 중 오류 발생: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.5)
+                    continue
+                else:
+                    raise e
+
+        raise Exception("모든 재시도 실패")
+
+    async def _handle_dry_run_request(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        DRY-RUN 모드에서 주문 요청 시뮬레이션
 
         Args:
             method: HTTP 메서드
@@ -88,44 +378,53 @@ class UpbitPrivateClient:
             data: 요청 바디 데이터
 
         Returns:
-            Any: API 응답 데이터 (보통 Dict 또는 List)
+            Dict: 시뮬레이션된 응답 데이터
         """
-        await self._ensure_session()
+        self._stats['dry_run_requests'] += 1
 
-        # Rate Limiting 적용
-        await self.rate_limiter.acquire(endpoint)
+        # 시뮬레이션 지연 (실제 네트워크 지연 모사)
+        await asyncio.sleep(0.1)
 
-        # 인증 헤더 생성
-        headers = self._auth.get_private_headers(query_params=params, request_body=data)
-        headers.update({
-            'Content-Type': 'application/json',
-            'User-Agent': 'upbit-autotrader-vscode/1.0'
-        })
+        # 요청 정보 로깅
+        log_msg = f"{self._dry_run_config.log_prefix} {method} {endpoint}"
+        if data:
+            log_msg += f" | 데이터: {data}"
+        if params:
+            log_msg += f" | 파라미터: {params}"
 
-        url = f"{self.BASE_URL}{endpoint}"
+        self._logger.info(log_msg)
 
-        if not self._session:
-            raise RuntimeError("HTTP 세션이 초기화되지 않았습니다")
-
-        try:
-            async with self._session.request(
-                method=method,
-                url=url,
-                params=params,
-                json=data,
-                headers=headers
-            ) as response:
-                response_text = await response.text()
-
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    self._logger.error(f"API 요청 실패: {response.status} - {response_text}")
-                    response.raise_for_status()
-
-        except Exception as e:
-            self._logger.error(f"HTTP 요청 중 오류 발생: {e}")
-            raise
+        # 시뮬레이션된 응답 생성
+        if endpoint == '/orders' and method == 'POST':
+            # 주문 생성 시뮬레이션
+            return {
+                'uuid': f'dry-run-order-{int(time.time() * 1000)}',
+                'side': data.get('side', 'unknown') if data else 'unknown',
+                'ord_type': data.get('ord_type', 'unknown') if data else 'unknown',
+                'price': data.get('price', '0') if data else '0',
+                'volume': data.get('volume', '0') if data else '0',
+                'market': data.get('market', 'unknown') if data else 'unknown',
+                'state': 'wait',
+                'created_at': '2023-01-01T00:00:00+09:00',
+                'dry_run': True
+            }
+        elif endpoint in ['/order', '/orders'] and method == 'DELETE':
+            # 주문 취소 시뮬레이션
+            return {
+                'uuid': params.get('uuid', 'dry-run-cancel') if params else 'dry-run-cancel',
+                'state': 'cancel',
+                'cancelled_at': '2023-01-01T00:00:00+09:00',
+                'dry_run': True
+            }
+        else:
+            # 기본 시뮬레이션 응답
+            return {
+                'success': True,
+                'message': 'DRY-RUN 모드: 실제 요청이 전송되지 않았습니다',
+                'dry_run': True,
+                'endpoint': endpoint,
+                'method': method
+            }
 
     # ================================================================
     # 자산(Asset) API - 계좌 및 자산 관리
@@ -138,14 +437,33 @@ class UpbitPrivateClient:
         내가 보유한 자산 리스트를 통화별로 인덱싱하여 반환합니다.
 
         Returns:
-            Dict[str, Dict]: {
-                'KRW': {'currency': 'KRW', 'balance': '20000.0', 'locked': '0.0', ...},
-                'BTC': {'currency': 'BTC', 'balance': '0.00005', 'locked': '0.0', ...}
-            }
+            Dict[str, Dict]: 통화별 계좌 정보
+                {
+                    'KRW': {
+                        'currency': 'KRW',
+                        'balance': '20000.0',
+                        'locked': '0.0',
+                        'avg_buy_price': '0',
+                        'avg_buy_price_modified': False,
+                        'unit_currency': 'KRW'
+                    },
+                    'BTC': {
+                        'currency': 'BTC',
+                        'balance': '0.00005',
+                        'locked': '0.0',
+                        'avg_buy_price': '50000000',
+                        'avg_buy_price_modified': False,
+                        'unit_currency': 'KRW'
+                    }
+                }
 
         Note:
-            기존 List 형식이 필요한 경우, 다음과 같이 변환할 수 있습니다:
+            기존 List 형식이 필요한 경우:
             accounts_list = list(accounts.values())
+
+        Raises:
+            ValueError: 인증되지 않은 상태
+            Exception: API 오류
         """
         response = await self._make_request('GET', '/accounts')
 
@@ -157,6 +475,8 @@ class UpbitPrivateClient:
                     currency = account.get('currency')
                     if currency:
                         accounts_dict[currency] = account
+
+        self._logger.debug(f"📊 계좌 정보 조회 완료: {len(accounts_dict)}개 통화")
         return accounts_dict
 
     # ================================================================
@@ -173,10 +493,44 @@ class UpbitPrivateClient:
             market: 마켓 코드 (예: KRW-BTC)
 
         Returns:
-            Dict: 주문 가능 정보 (최대/최소 주문 금액, 수수료 등)
+            Dict[str, Any]: 주문 가능 정보
+                {
+                    'bid_fee': '0.0005',           # 매수 수수료율
+                    'ask_fee': '0.0005',           # 매도 수수료율
+                    'market': {
+                        'id': 'KRW-BTC',
+                        'name': '비트코인',
+                        'order_types': ['limit', 'price', 'market'],
+                        'order_sides': ['ask', 'bid'],
+                        'bid': {
+                            'currency': 'KRW',
+                            'price_unit': None,
+                            'min_total': '5000'    # 최소 주문 금액
+                        },
+                        'ask': {
+                            'currency': 'BTC',
+                            'price_unit': None,
+                            'min_total': '5000'
+                        },
+                        'max_total': '1000000000',     # 최대 주문 금액
+                        'state': 'active'
+                    },
+                    'bid_account': {...},               # 매수 가능 계좌 정보
+                    'ask_account': {...}                # 매도 가능 계좌 정보
+                }
+
+        Raises:
+            ValueError: 인증되지 않은 상태 또는 잘못된 마켓 코드
+            Exception: API 오류
         """
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
         params = {'market': market}
-        return await self._make_request('GET', '/orders/chance', params=params)
+        response = await self._make_request('GET', '/orders/chance', params=params)
+
+        self._logger.debug(f"💰 주문 가능 정보 조회 완료: {market}")
+        return response
 
     async def place_order(
         self,
@@ -185,35 +539,90 @@ class UpbitPrivateClient:
         ord_type: Literal['limit', 'price', 'market'],
         volume: Optional[Decimal] = None,
         price: Optional[Decimal] = None,
-        identifier: Optional[str] = None
+        identifier: Optional[str] = None,
+        dry_run: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
         주문 생성
 
         Args:
             market: 마켓 코드 (예: KRW-BTC)
-            side: 주문 종류 ('bid': 매수, 'ask': 매도)
+            side: 주문 종류
+                - 'bid': 매수
+                - 'ask': 매도
             ord_type: 주문 타입
                 - 'limit': 지정가 주문 (volume, price 필수)
                 - 'price': 시장가 매수 (price 필수)
                 - 'market': 시장가 매도 (volume 필수)
             volume: 주문 수량 (지정가, 시장가 매도 시 필수)
             price: 주문 가격 (지정가, 시장가 매수 시 필수)
-            identifier: 조회용 사용자 지정값
+            identifier: 조회용 사용자 지정값 (최대 40자)
+            dry_run: 이 요청에 대한 DRY-RUN 모드 override (None이면 클라이언트 설정 따름)
 
         Returns:
-            Dict: 생성된 주문 정보
+            Dict[str, Any]: 생성된 주문 정보
+                {
+                    'uuid': 'order-uuid-string',
+                    'side': 'bid',
+                    'ord_type': 'limit',
+                    'price': '50000000.0',
+                    'volume': '0.001',
+                    'market': 'KRW-BTC',
+                    'state': 'wait',
+                    'created_at': '2023-01-01T12:00:00+09:00',
+                    'trades_count': 0,
+                    'executed_volume': '0.0',
+                    'remaining_volume': '0.001',
+                    'paid_fee': '0.0',
+                    'locked': '50000.0',
+                    'identifier': 'my-order-001'
+                }
 
         Examples:
-            # 지정가 매수
-            order = await client.place_order('KRW-BTC', 'bid', 'limit', volume=Decimal('0.001'), price=Decimal('50000000'))
+            # 지정가 매수 (0.001 BTC를 50,000,000원에)
+            order = await client.place_order(
+                market='KRW-BTC',
+                side='bid',
+                ord_type='limit',
+                volume=Decimal('0.001'),
+                price=Decimal('50000000')
+            )
 
             # 시장가 매수 (5만원어치)
-            order = await client.place_order('KRW-BTC', 'bid', 'price', price=Decimal('50000'))
+            order = await client.place_order(
+                market='KRW-BTC',
+                side='bid',
+                ord_type='price',
+                price=Decimal('50000')
+            )
 
             # 시장가 매도 (0.001 BTC)
-            order = await client.place_order('KRW-BTC', 'ask', 'market', volume=Decimal('0.001'))
+            order = await client.place_order(
+                market='KRW-BTC',
+                side='ask',
+                ord_type='market',
+                volume=Decimal('0.001')
+            )
+
+        Raises:
+            ValueError: 잘못된 파라미터 조합
+            Exception: API 오류
         """
+        # 파라미터 검증
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        if ord_type == 'limit' and (volume is None or price is None):
+            raise ValueError("지정가 주문에는 volume과 price가 모두 필요합니다")
+        elif ord_type == 'price' and price is None:
+            raise ValueError("시장가 매수에는 price가 필요합니다")
+        elif ord_type == 'market' and volume is None:
+            raise ValueError("시장가 매도에는 volume이 필요합니다")
+
+        if identifier and len(identifier) > 40:
+            raise ValueError("identifier는 최대 40자까지 가능합니다")
+
+        # 주문 데이터 구성
         data = {
             'market': market,
             'side': side,
@@ -227,7 +636,34 @@ class UpbitPrivateClient:
         if identifier is not None:
             data['identifier'] = identifier
 
-        return await self._make_request('POST', '/orders', data=data)
+        # DRY-RUN 모드 결정 (요청별 override 또는 클라이언트 설정)
+        effective_dry_run = dry_run if dry_run is not None else self._dry_run_config.enabled
+
+        # 임시로 DRY-RUN 설정 변경
+        original_dry_run = self._dry_run_config.enabled
+        if dry_run is not None:
+            self._dry_run_config.enabled = dry_run
+
+        try:
+            response = await self._make_request('POST', '/orders', data=data, is_order_request=True)
+
+            order_info = f"{side} {ord_type}"
+            if volume:
+                order_info += f" volume={volume}"
+            if price:
+                order_info += f" price={price}"
+
+            if effective_dry_run:
+                self._logger.info(f"🔒 [DRY-RUN] 주문 생성: {market} {order_info}")
+            else:
+                self._logger.info(f"📝 주문 생성 완료: {market} {order_info}")
+
+            return response
+
+        finally:
+            # DRY-RUN 설정 복원
+            if dry_run is not None:
+                self._dry_run_config.enabled = original_dry_run
 
     async def get_order(self, uuid: Optional[str] = None, identifier: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -238,7 +674,27 @@ class UpbitPrivateClient:
             identifier: 조회용 사용자 지정값
 
         Returns:
-            Dict: 주문 상세 정보
+            Dict[str, Any]: 주문 상세 정보
+                {
+                    'uuid': 'order-uuid-string',
+                    'side': 'bid',
+                    'ord_type': 'limit',
+                    'price': '50000000.0',
+                    'volume': '0.001',
+                    'market': 'KRW-BTC',
+                    'state': 'wait',
+                    'created_at': '2023-01-01T12:00:00+09:00',
+                    'trades': [...],              # 체결 내역
+                    'trades_count': 0,
+                    'executed_volume': '0.0',
+                    'remaining_volume': '0.001',
+                    'paid_fee': '0.0',
+                    'locked': '50000.0'
+                }
+
+        Raises:
+            ValueError: uuid와 identifier가 모두 없음
+            Exception: API 오류
         """
         params = {}
         if uuid:
@@ -248,7 +704,10 @@ class UpbitPrivateClient:
         else:
             raise ValueError("uuid 또는 identifier 중 하나는 필수입니다")
 
-        return await self._make_request('GET', '/order', params=params)
+        response = await self._make_request('GET', '/order', params=params)
+
+        self._logger.debug(f"🔍 주문 조회 완료: {uuid or identifier}")
+        return response
 
     async def get_orders(
         self,
@@ -265,20 +724,43 @@ class UpbitPrivateClient:
         주문 목록 조회
 
         Args:
-            market: 마켓 코드
+            market: 마켓 코드 (예: KRW-BTC)
             uuids: 주문 UUID 목록
             identifiers: 사용자 지정 식별자 목록
-            state: 주문 상태 ('wait': 체결대기, 'watch': 예약주문, 'done': 체결완료, 'cancel': 취소)
-            states: 주문 상태 목록
-            page: 페이지 번호
+            state: 주문 상태
+                - 'wait': 체결대기
+                - 'watch': 예약주문
+                - 'done': 체결완료
+                - 'cancel': 취소
+            states: 주문 상태 목록 (state와 중복 사용 불가)
+            page: 페이지 번호 (1부터 시작)
             limit: 페이지당 항목 수 (최대 100)
-            order_by: 정렬 순서
+            order_by: 정렬 순서 ('asc': 오름차순, 'desc': 내림차순)
 
         Returns:
-            Dict[str, Dict]: {
-                'order_uuid_1': {...},
-                'order_uuid_2': {...}
-            }
+            Dict[str, Dict[str, Any]]: UUID를 키로 하는 주문 정보 딕셔너리
+                {
+                    'order-uuid-1': {
+                        'uuid': 'order-uuid-1',
+                        'side': 'bid',
+                        'ord_type': 'limit',
+                        'price': '50000000.0',
+                        'volume': '0.001',
+                        'market': 'KRW-BTC',
+                        'state': 'wait',
+                        'created_at': '2023-01-01T12:00:00+09:00',
+                        ...
+                    },
+                    'order-uuid-2': {...}
+                }
+
+        Note:
+            기존 List 형식이 필요한 경우:
+            orders_list = list(orders.values())
+
+        Raises:
+            ValueError: 잘못된 파라미터 조합
+            Exception: API 오류
         """
         params = {
             'page': page,
@@ -289,8 +771,12 @@ class UpbitPrivateClient:
         if market:
             params['market'] = market
         if uuids:
+            if len(uuids) > 100:
+                raise ValueError("UUID 목록은 최대 100개까지 가능합니다")
             params['uuids'] = ','.join(uuids)
         if identifiers:
+            if len(identifiers) > 100:
+                raise ValueError("identifier 목록은 최대 100개까지 가능합니다")
             params['identifiers'] = ','.join(identifiers)
         if state:
             params['state'] = state
@@ -307,6 +793,8 @@ class UpbitPrivateClient:
                     order_id = order.get('uuid') or order.get('identifier')
                     if order_id:
                         orders_dict[order_id] = order
+
+        self._logger.debug(f"📋 주문 목록 조회 완료: {len(orders_dict)}개 주문")
         return orders_dict
 
     async def get_open_orders(
@@ -323,14 +811,19 @@ class UpbitPrivateClient:
         현재 체결 대기 중인 주문들을 조회합니다.
 
         Args:
-            market: 마켓 코드
-            state: 주문 상태 ('wait': 체결대기, 'watch': 예약주문, 기본값: 'wait')
-            page: 페이지 번호
+            market: 마켓 코드 (예: KRW-BTC)
+            state: 주문 상태 (기본값: 'wait')
+                - 'wait': 체결대기
+                - 'watch': 예약주문
+            page: 페이지 번호 (1부터 시작)
             limit: 페이지당 항목 수 (최대 100)
             order_by: 정렬 순서
 
         Returns:
-            Dict[str, Dict]: 체결 대기 주문들
+            Dict[str, Dict[str, Any]]: 체결 대기 주문들
+
+        Raises:
+            Exception: API 오류
         """
         params = {
             'page': page,
@@ -352,6 +845,8 @@ class UpbitPrivateClient:
                     order_id = order.get('uuid') or order.get('identifier')
                     if order_id:
                         orders_dict[order_id] = order
+
+        self._logger.debug(f"⏳ 체결 대기 주문 조회 완료: {len(orders_dict)}개 주문")
         return orders_dict
 
     async def get_closed_orders(
@@ -370,15 +865,24 @@ class UpbitPrivateClient:
         조회 기간은 최대 7일입니다.
 
         Args:
-            market: 마켓 코드
-            state: 주문 상태 ('done': 체결완료, 'cancel': 취소, 기본값: 모든 상태)
-            start_time: 조회 시작 시간 (ISO 8601)
-            end_time: 조회 종료 시간 (ISO 8601)
+            market: 마켓 코드 (예: KRW-BTC)
+            state: 주문 상태 (기본값: 모든 상태)
+                - 'done': 체결완료
+                - 'cancel': 취소
+            start_time: 조회 시작 시간 (ISO 8601 형식, 예: '2023-01-01T00:00:00+09:00')
+            end_time: 조회 종료 시간 (ISO 8601 형식)
             limit: 페이지당 항목 수 (최대 1000)
             order_by: 정렬 순서
 
         Returns:
-            Dict[str, Dict]: 종료된 주문들
+            Dict[str, Dict[str, Any]]: 종료된 주문들
+
+        Note:
+            조회 기간이 지정되지 않으면 최근 7일간의 주문을 조회합니다.
+
+        Raises:
+            ValueError: 조회 기간이 7일을 초과하는 경우
+            Exception: API 오류
         """
         params = {
             'limit': min(limit, 1000),
@@ -403,18 +907,41 @@ class UpbitPrivateClient:
                     order_id = order.get('uuid') or order.get('identifier')
                     if order_id:
                         orders_dict[order_id] = order
+
+        self._logger.debug(f"✅ 종료 주문 조회 완료: {len(orders_dict)}개 주문")
         return orders_dict
 
-    async def cancel_order(self, uuid: Optional[str] = None, identifier: Optional[str] = None) -> Dict[str, Any]:
+    async def cancel_order(
+        self,
+        uuid: Optional[str] = None,
+        identifier: Optional[str] = None,
+        dry_run: Optional[bool] = None
+    ) -> Dict[str, Any]:
         """
         주문 취소
 
         Args:
             uuid: 주문 UUID (uuid 또는 identifier 중 하나 필수)
             identifier: 조회용 사용자 지정값
+            dry_run: 이 요청에 대한 DRY-RUN 모드 override
 
         Returns:
-            Dict: 취소된 주문 정보
+            Dict[str, Any]: 취소된 주문 정보
+                {
+                    'uuid': 'order-uuid-string',
+                    'side': 'bid',
+                    'ord_type': 'limit',
+                    'price': '50000000.0',
+                    'volume': '0.001',
+                    'market': 'KRW-BTC',
+                    'state': 'cancel',
+                    'cancelled_at': '2023-01-01T12:00:00+09:00',
+                    ...
+                }
+
+        Raises:
+            ValueError: uuid와 identifier가 모두 없음
+            Exception: API 오류
         """
         data = {}
         if uuid:
@@ -424,7 +951,28 @@ class UpbitPrivateClient:
         else:
             raise ValueError("uuid 또는 identifier 중 하나는 필수입니다")
 
-        return await self._make_request('DELETE', '/order', data=data)
+        # DRY-RUN 모드 결정
+        effective_dry_run = dry_run if dry_run is not None else self._dry_run_config.enabled
+
+        # 임시로 DRY-RUN 설정 변경
+        original_dry_run = self._dry_run_config.enabled
+        if dry_run is not None:
+            self._dry_run_config.enabled = dry_run
+
+        try:
+            response = await self._make_request('DELETE', '/order', data=data, is_order_request=True)
+
+            if effective_dry_run:
+                self._logger.info(f"🔒 [DRY-RUN] 주문 취소: {uuid or identifier}")
+            else:
+                self._logger.info(f"❌ 주문 취소 완료: {uuid or identifier}")
+
+            return response
+
+        finally:
+            # DRY-RUN 설정 복원
+            if dry_run is not None:
+                self._dry_run_config.enabled = original_dry_run
 
     # ================================================================
     # 고급 주문 기능 - 대량 처리 및 특수 주문
@@ -433,7 +981,8 @@ class UpbitPrivateClient:
     async def cancel_orders_by_ids(
         self,
         uuids: Optional[List[str]] = None,
-        identifiers: Optional[List[str]] = None
+        identifiers: Optional[List[str]] = None,
+        dry_run: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
         ID로 주문 목록 취소
@@ -443,9 +992,18 @@ class UpbitPrivateClient:
         Args:
             uuids: 취소할 주문 UUID 목록 (최대 20개)
             identifiers: 취소할 주문 식별자 목록 (최대 20개)
+            dry_run: 이 요청에 대한 DRY-RUN 모드 override
 
         Returns:
-            Dict: 취소 결과 (성공/실패 주문 목록)
+            Dict[str, Any]: 취소 결과 (성공/실패 주문 목록)
+                {
+                    'cancelled': [...],    # 성공적으로 취소된 주문들
+                    'failed': [...]        # 취소 실패한 주문들
+                }
+
+        Raises:
+            ValueError: 잘못된 파라미터
+            Exception: API 오류
         """
         if not uuids and not identifiers:
             raise ValueError("uuids 또는 identifiers 중 하나는 필수입니다")
@@ -462,14 +1020,37 @@ class UpbitPrivateClient:
         if identifiers:
             params['identifiers'] = ','.join(identifiers)
 
-        return await self._make_request('DELETE', '/orders/uuids', params=params)
+        # DRY-RUN 모드 결정
+        effective_dry_run = dry_run if dry_run is not None else self._dry_run_config.enabled
+
+        # 임시로 DRY-RUN 설정 변경
+        original_dry_run = self._dry_run_config.enabled
+        if dry_run is not None:
+            self._dry_run_config.enabled = dry_run
+
+        try:
+            response = await self._make_request('DELETE', '/orders/uuids', params=params, is_order_request=True)
+
+            count = len(uuids) if uuids else len(identifiers or [])
+            if effective_dry_run:
+                self._logger.info(f"🔒 [DRY-RUN] 일괄 주문 취소: {count}개 주문")
+            else:
+                self._logger.info(f"❌ 일괄 주문 취소 완료: {count}개 주문")
+
+            return response
+
+        finally:
+            # DRY-RUN 설정 복원
+            if dry_run is not None:
+                self._dry_run_config.enabled = original_dry_run
 
     async def batch_cancel_orders(
         self,
         quote_currencies: Optional[List[str]] = None,
         cancel_side: Literal['all', 'ask', 'bid'] = 'all',
         count: int = 20,
-        order_by: Literal['asc', 'desc'] = 'desc'
+        order_by: Literal['asc', 'desc'] = 'desc',
+        dry_run: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
         주문 일괄 취소
@@ -477,17 +1058,28 @@ class UpbitPrivateClient:
         조건을 만족하는 최대 300개의 주문을 일괄 취소합니다.
 
         Args:
-            quote_currencies: 기준 통화 목록 (['KRW', 'BTC', 'USDT'])
-            cancel_side: 취소할 주문 방향 ('all': 전체, 'ask': 매도, 'bid': 매수)
+            quote_currencies: 기준 통화 목록 (예: ['KRW', 'BTC', 'USDT'])
+            cancel_side: 취소할 주문 방향
+                - 'all': 전체
+                - 'ask': 매도만
+                - 'bid': 매수만
             count: 취소할 최대 주문 수 (최대 300)
             order_by: 정렬 순서
+            dry_run: 이 요청에 대한 DRY-RUN 모드 override
 
         Returns:
-            Dict: 취소 결과
+            Dict[str, Any]: 취소 결과
 
         Note:
-            Rate Limit: 최대 2초당 1회 호출 가능
+            Rate Limit: 최대 2초당 1회 호출 가능 (REST_PRIVATE_CANCEL_ALL 그룹)
+
+        Raises:
+            ValueError: count가 300을 초과하는 경우
+            Exception: API 오류
         """
+        if count > 300:
+            raise ValueError("취소 가능한 최대 주문 수는 300개입니다")
+
         params = {
             'cancel_side': cancel_side,
             'count': min(count, 300),
@@ -497,7 +1089,28 @@ class UpbitPrivateClient:
         if quote_currencies:
             params['quote_currencies'] = ','.join(quote_currencies)
 
-        return await self._make_request('DELETE', '/orders/open', params=params)
+        # DRY-RUN 모드 결정
+        effective_dry_run = dry_run if dry_run is not None else self._dry_run_config.enabled
+
+        # 임시로 DRY-RUN 설정 변경
+        original_dry_run = self._dry_run_config.enabled
+        if dry_run is not None:
+            self._dry_run_config.enabled = dry_run
+
+        try:
+            response = await self._make_request('DELETE', '/orders/open', params=params, is_order_request=True)
+
+            if effective_dry_run:
+                self._logger.warning(f"🔒 [DRY-RUN] 대량 주문 취소: {cancel_side} 방향, 최대 {count}개")
+            else:
+                self._logger.warning(f"❌ 대량 주문 취소 완료: {cancel_side} 방향, 최대 {count}개")
+
+            return response
+
+        finally:
+            # DRY-RUN 설정 복원
+            if dry_run is not None:
+                self._dry_run_config.enabled = original_dry_run
 
     # ================================================================
     # 체결 내역 조회
@@ -513,16 +1126,34 @@ class UpbitPrivateClient:
         내 체결 내역 조회
 
         Args:
-            market: 마켓 코드
+            market: 마켓 코드 (예: KRW-BTC)
             limit: 조회 개수 (최대 500)
             order_by: 정렬 순서
 
         Returns:
-            Dict[str, Dict]: {
-                'trade_id_1': {...},
-                'trade_id_2': {...}
-            }
+            Dict[str, Dict[str, Any]]: 체결 내역 딕셔너리
+                {
+                    'trade-uuid-1': {
+                        'uuid': 'trade-uuid-1',
+                        'side': 'bid',
+                        'price': '50000000.0',
+                        'volume': '0.001',
+                        'market': 'KRW-BTC',
+                        'created_at': '2023-01-01T12:00:00+09:00',
+                        'order_uuid': 'order-uuid',
+                        'fee': '25.0',
+                        'fee_currency': 'KRW'
+                    },
+                    'trade-uuid-2': {...}
+                }
+
+        Raises:
+            ValueError: limit이 500을 초과하는 경우
+            Exception: API 오류
         """
+        if limit > 500:
+            raise ValueError("조회 개수는 최대 500개까지 가능합니다")
+
         params = {
             'limit': min(limit, 500),
             'order_by': order_by
@@ -539,6 +1170,8 @@ class UpbitPrivateClient:
                 if isinstance(trade, dict):
                     trade_id = trade.get('uuid', f'trade_{i}')
                     trades_dict[trade_id] = trade
+
+        self._logger.debug(f"📈 체결 내역 조회 완료: {len(trades_dict)}개 체결")
         return trades_dict
 
 
@@ -546,6 +1179,65 @@ class UpbitPrivateClient:
 # 편의 팩토리 함수
 # ================================================================
 
-def create_upbit_private_client(access_key: str, secret_key: str) -> UpbitPrivateClient:
-    """업비트 프라이빗 API 클라이언트 생성 (편의 함수)"""
-    return UpbitPrivateClient(access_key=access_key, secret_key=secret_key)
+def create_upbit_private_client(
+    access_key: str,
+    secret_key: str,
+    dry_run: bool = True,
+    use_dynamic_limiter: bool = True
+) -> UpbitPrivateClient:
+    """
+    업비트 프라이빗 API 클라이언트 생성 (편의 함수)
+
+    Args:
+        access_key: Upbit API Access Key
+        secret_key: Upbit API Secret Key
+        dry_run: DRY-RUN 모드 활성화 (기본값: True, 안전성 우선)
+        use_dynamic_limiter: 동적 Rate Limiter 사용 여부
+
+    Returns:
+        UpbitPrivateClient: 설정된 클라이언트 인스턴스
+
+    Note:
+        DRY-RUN 모드가 기본으로 활성화되어 있습니다.
+        실제 거래를 위해서는 명시적으로 dry_run=False로 설정해야 합니다.
+    """
+    return UpbitPrivateClient(
+        access_key=access_key,
+        secret_key=secret_key,
+        dry_run=dry_run,
+        use_dynamic_limiter=use_dynamic_limiter
+    )
+
+
+async def create_upbit_private_client_async(
+    access_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    dry_run: bool = True,
+    use_dynamic_limiter: bool = True,
+    dynamic_config: Optional[DynamicConfig] = None
+) -> UpbitPrivateClient:
+    """
+    업비트 프라이빗 API 클라이언트 비동기 생성 (편의 함수)
+
+    Args:
+        access_key: Upbit API Access Key (None이면 ApiKeyService에서 로드)
+        secret_key: Upbit API Secret Key (None이면 ApiKeyService에서 로드)
+        dry_run: DRY-RUN 모드 활성화 (기본값: True)
+        use_dynamic_limiter: 동적 Rate Limiter 사용 여부
+        dynamic_config: 동적 조정 설정
+
+    Returns:
+        UpbitPrivateClient: 초기화된 클라이언트 인스턴스
+    """
+    client = UpbitPrivateClient(
+        access_key=access_key,
+        secret_key=secret_key,
+        dry_run=dry_run,
+        use_dynamic_limiter=use_dynamic_limiter,
+        dynamic_config=dynamic_config
+    )
+
+    # 세션 미리 초기화
+    await client._ensure_session()
+
+    return client
