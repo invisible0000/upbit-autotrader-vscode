@@ -319,6 +319,7 @@ class PerformanceMetrics:
     """성능 지표"""
     # 연결 관련
     connection_count: int = 0
+    active_connections: int = 0
     uptime_seconds: float = 0.0
     reconnect_count: int = 0
 
@@ -330,7 +331,11 @@ class PerformanceMetrics:
     # 구독 관련
     active_subscriptions: int = 0
     active_components: int = 0
+    total_components: int = 0
     subscription_conflicts: int = 0
+
+    # 타임스탬프
+    last_updated: float = 0.0
 
     # 에러 관련
     callback_errors: int = 0

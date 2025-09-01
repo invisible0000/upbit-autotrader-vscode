@@ -9,7 +9,7 @@ v5 호환성 완전 제거, 순수 v6 아키텍처
 import asyncio
 import weakref
 import time
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any, Callable, Set
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -168,6 +168,18 @@ class GlobalWebSocketManager:
         # 컴포넌트 생명주기 관리 (WeakRef)
         self._component_refs: Dict[str, weakref.ReferenceType] = {}
 
+        # 백그라운드 태스크 관리
+        self._background_tasks: Set[asyncio.Task] = set()
+
+        # 성능 메트릭스
+        self._performance_metrics = PerformanceMetrics(
+            messages_per_second=0.0,
+            active_connections=0,
+            total_components=0,
+            last_updated=self._startup_time
+        )
+        self._last_metrics_update = self._startup_time
+
         # Rate Limiter (선택적) - 비동기 초기화 예약
         self._rate_limiter = None
 
@@ -203,6 +215,9 @@ class GlobalWebSocketManager:
 
             # 데이터 라우터 시작
             await self.data_router.start()
+
+            # 백그라운드 태스크 시작
+            self._start_background_tasks()
 
             self._state = GlobalManagerState.IDLE
             self.logger.info("GlobalWebSocketManager 비동기 초기화 완료")
@@ -529,6 +544,114 @@ class GlobalWebSocketManager:
             self.logger.error(f"컴포넌트 자동 정리 실패 {component_id}: {e}")
 
     # =============================================================================
+    # 백그라운드 모니터링 태스크
+    # =============================================================================
+
+    def _start_background_tasks(self):
+        """백그라운드 작업 시작"""
+        tasks = [
+            self._health_monitor_task(),
+            self._metrics_collector_task(),
+            self._cleanup_monitor_task()
+        ]
+
+        for task in tasks:
+            bg_task = asyncio.create_task(task)
+            self._background_tasks.add(bg_task)
+            # 작업 완료 시 자동 정리
+            bg_task.add_done_callback(self._background_tasks.discard)
+
+    async def _health_monitor_task(self) -> None:
+        """헬스 모니터링 백그라운드 작업"""
+        try:
+            while not self._shutdown_requested:
+                await asyncio.sleep(30)  # 30초마다 체크
+
+                # 연결 상태 체크
+                for connection_type, metrics in self._connection_metrics.items():
+                    if metrics.is_connected:
+                        # 마지막 메시지 시간 체크
+                        if (metrics.last_message_time and
+                            time.time() - metrics.last_message_time > 60):
+                            self.logger.warning(
+                                f"{connection_type} 연결: 60초간 메시지 없음"
+                            )
+
+                # 컴포넌트 WeakRef 정리
+                dead_refs = [
+                    comp_id for comp_id, ref in self._component_refs.items()
+                    if ref() is None
+                ]
+                for comp_id in dead_refs:
+                    self.logger.info(f"Dead component reference 정리: {comp_id}")
+                    del self._component_refs[comp_id]
+
+        except asyncio.CancelledError:
+            self.logger.info("헬스 모니터 종료")
+        except Exception as e:
+            self.logger.error(f"헬스 모니터 오류: {e}")
+
+    async def _metrics_collector_task(self) -> None:
+        """성능 메트릭스 수집 백그라운드 작업"""
+        try:
+            while not self._shutdown_requested:
+                await asyncio.sleep(10)  # 10초마다 업데이트
+
+                # 성능 메트릭스 업데이트
+                current_time = time.time()
+
+                # 전체 메시지 처리량 계산
+                total_messages = sum(
+                    metrics.message_count
+                    for metrics in self._connection_metrics.values()
+                )
+
+                time_diff = current_time - self._last_metrics_update
+                if time_diff > 0:
+                    self._performance_metrics.messages_per_second = (
+                        total_messages / time_diff
+                    )
+
+                self._performance_metrics.active_connections = sum(
+                    1 for metrics in self._connection_metrics.values()
+                    if metrics.is_connected
+                )
+
+                self._performance_metrics.total_components = len(
+                    self._component_refs
+                )
+
+                self._performance_metrics.last_updated = current_time
+                self._last_metrics_update = current_time
+
+        except asyncio.CancelledError:
+            self.logger.info("메트릭스 수집기 종료")
+        except Exception as e:
+            self.logger.error(f"메트릭스 수집기 오류: {e}")
+
+    async def _cleanup_monitor_task(self) -> None:
+        """정리 모니터링 백그라운드 작업"""
+        try:
+            while not self._shutdown_requested:
+                await asyncio.sleep(60)  # 1분마다 정리
+
+                # 죽은 WeakRef 정리
+                dead_refs = [
+                    comp_id for comp_id, ref in self._component_refs.items()
+                    if ref() is None
+                ]
+
+                if dead_refs:
+                    self.logger.info(f"정리된 컴포넌트 참조: {len(dead_refs)}개")
+                    for comp_id in dead_refs:
+                        del self._component_refs[comp_id]
+
+        except asyncio.CancelledError:
+            self.logger.info("정리 모니터 종료")
+        except Exception as e:
+            self.logger.error(f"정리 모니터 오류: {e}")
+
+    # =============================================================================
     # 구독 관리
     # =============================================================================
 
@@ -737,6 +860,21 @@ class GlobalWebSocketManager:
             self._shutdown_requested = True
             self._state = GlobalManagerState.SHUTTING_DOWN
 
+            # 백그라운드 작업 취소
+            for task in self._background_tasks:
+                if not task.done():
+                    task.cancel()
+
+            # 백그라운드 작업 완료 대기 (타임아웃 적용)
+            if self._background_tasks:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*self._background_tasks, return_exceptions=True),
+                        timeout=timeout / 2
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.warning("백그라운드 작업 종료 타임아웃")
+
             # 컴포넌트 정리
             for component_id in list(self._component_refs.keys()):
                 try:
@@ -787,6 +925,11 @@ class GlobalWebSocketManager:
     def active_component_count(self) -> int:
         """활성 컴포넌트 수"""
         return len([ref for ref in self._component_refs.values() if ref() is not None])
+
+    @property
+    def uptime_seconds(self) -> float:
+        """가동 시간 (초)"""
+        return time.time() - self._startup_time
 
 
 # =============================================================================
