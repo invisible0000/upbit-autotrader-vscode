@@ -435,6 +435,16 @@ def validate_myasset_simple_format(data: Dict[str, Any]) -> Dict[str, Any]:
 # ================================================================
 
 
+def convert_simple_to_default(data: Dict[str, Any]) -> Dict[str, Any]:
+    """자동 타입 감지하여 SIMPLE → DEFAULT 변환"""
+    return auto_detect_and_convert(data)
+
+
+def convert_default_to_simple(data: Dict[str, Any]) -> Dict[str, Any]:
+    """자동 타입 감지하여 DEFAULT → SIMPLE 변환"""
+    return auto_detect_and_convert(data)
+
+
 def convert_to_simple_format(data: Dict[str, Any], data_type: str) -> Dict[str, Any]:
     """데이터 타입에 따라 적절한 SIMPLE 포맷으로 변환"""
     type_mapping = {

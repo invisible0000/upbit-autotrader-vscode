@@ -81,96 +81,116 @@ class BaseWebSocketEvent:
     connection_type: WebSocketType
     symbol: Optional[str] = None
 
+    @property
+    def data_type(self) -> DataType:
+        """이벤트 데이터 타입 반환"""
+        # 클래스 이름에서 DataType 추출
+        class_name = self.__class__.__name__
+        if 'Ticker' in class_name:
+            return DataType.TICKER
+        elif 'Orderbook' in class_name:
+            return DataType.ORDERBOOK
+        elif 'Trade' in class_name:
+            return DataType.TRADE
+        elif 'Candle' in class_name:
+            return DataType.CANDLE
+        elif 'MyOrder' in class_name:
+            return DataType.MY_ORDER
+        elif 'MyAsset' in class_name:
+            return DataType.MY_ASSET
+        else:
+            return DataType.TICKER  # 기본값
+
 
 @dataclass
 class TickerEvent(BaseWebSocketEvent):
     """현재가 이벤트"""
-    trade_price: Decimal         # 체결가
-    trade_volume: Decimal        # 체결량
-    acc_trade_price: Decimal     # 누적 거래 대금
-    acc_trade_volume: Decimal    # 누적 거래량
-    high_price: Decimal          # 고가
-    low_price: Decimal           # 저가
-    prev_closing_price: Decimal  # 전일 종가
-    change: str                  # 변화 (RISE, EVEN, FALL)
-    change_price: Decimal        # 변화 대금
-    change_rate: Decimal         # 변화율
-    ask_bid: str                 # 매수/매도 구분
-    trade_timestamp: int         # 체결 시각 (업비트 timestamp)
+    trade_price: Decimal = field(default_factory=lambda: Decimal('0'))         # 체결가
+    trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))        # 체결량
+    acc_trade_price: Decimal = field(default_factory=lambda: Decimal('0'))     # 누적 거래 대금
+    acc_trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))    # 누적 거래량
+    high_price: Decimal = field(default_factory=lambda: Decimal('0'))          # 고가
+    low_price: Decimal = field(default_factory=lambda: Decimal('0'))           # 저가
+    prev_closing_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 전일 종가
+    change: str = 'EVEN'          # 변화 (RISE, EVEN, FALL)
+    change_price: Decimal = field(default_factory=lambda: Decimal('0'))        # 변화 대금
+    change_rate: Decimal = field(default_factory=lambda: Decimal('0'))         # 변화율
+    ask_bid: str = ''             # 매수/매도 구분
+    trade_timestamp: int = 0      # 체결 시각 (업비트 timestamp)
 
 
 @dataclass
 class OrderbookUnit:
     """호가 단위"""
-    ask_price: Decimal          # 매도호가
-    bid_price: Decimal          # 매수호가
-    ask_size: Decimal           # 매도잔량
-    bid_size: Decimal           # 매수잔량
+    ask_price: Decimal = field(default_factory=lambda: Decimal('0'))          # 매도호가
+    bid_price: Decimal = field(default_factory=lambda: Decimal('0'))          # 매수호가
+    ask_size: Decimal = field(default_factory=lambda: Decimal('0'))           # 매도잔량
+    bid_size: Decimal = field(default_factory=lambda: Decimal('0'))           # 매수잔량
 
 
 @dataclass
 class OrderbookEvent(BaseWebSocketEvent):
     """호가 이벤트"""
-    orderbook_units: List[OrderbookUnit]  # 호가 리스트 (15단계)
-    total_ask_size: Decimal      # 총 매도량
-    total_bid_size: Decimal      # 총 매수량
-    orderbook_timestamp: int     # 호가 시각 (업비트 timestamp)
+    orderbook_units: List[OrderbookUnit] = field(default_factory=list)  # 호가 리스트 (15단계)
+    total_ask_size: Decimal = field(default_factory=lambda: Decimal('0'))      # 총 매도량
+    total_bid_size: Decimal = field(default_factory=lambda: Decimal('0'))      # 총 매수량
+    orderbook_timestamp: int = 0     # 호가 시각 (업비트 timestamp)
 
 
 @dataclass
 class TradeEvent(BaseWebSocketEvent):
     """체결 이벤트"""
-    trade_price: Decimal         # 체결가
-    trade_volume: Decimal        # 체결량
-    ask_bid: str                 # 매수/매도 구분
-    trade_timestamp: int         # 체결 시각 (업비트 timestamp)
-    sequential_id: int           # 체결 번호
-    prev_closing_price: Decimal  # 전일 종가
+    trade_price: Decimal = field(default_factory=lambda: Decimal('0'))         # 체결가
+    trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))        # 체결량
+    ask_bid: str = ''                 # 매수/매도 구분
+    trade_timestamp: int = 0         # 체결 시각 (업비트 timestamp)
+    sequential_id: int = 0           # 체결 번호
+    prev_closing_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 전일 종가
 
 
 @dataclass
 class CandleEvent(BaseWebSocketEvent):
     """캔들 이벤트"""
-    opening_price: Decimal       # 시가
-    high_price: Decimal          # 고가
-    low_price: Decimal           # 저가
-    trade_price: Decimal         # 종가
-    candle_acc_trade_price: Decimal  # 누적 거래 대금
-    candle_acc_trade_volume: Decimal  # 누적 거래량
-    unit: int                    # 분봉 (1, 3, 5, 15, 30, 60, 240)
-    candle_timestamp: int        # 캔들 시각 (업비트 timestamp)
+    opening_price: Decimal = field(default_factory=lambda: Decimal('0'))       # 시가
+    high_price: Decimal = field(default_factory=lambda: Decimal('0'))          # 고가
+    low_price: Decimal = field(default_factory=lambda: Decimal('0'))           # 저가
+    trade_price: Decimal = field(default_factory=lambda: Decimal('0'))         # 종가
+    candle_acc_trade_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 누적 거래 대금
+    candle_acc_trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))  # 누적 거래량
+    unit: int = 1                    # 분봉 (1, 3, 5, 15, 30, 60, 240)
+    candle_timestamp: int = 0        # 캔들 시각 (업비트 timestamp)
 
 
 @dataclass
 class MyOrderEvent(BaseWebSocketEvent):
     """내 주문 이벤트 (Private)"""
-    uuid: str                    # 주문 고유 아이디
-    order_type: str              # 주문 타입 (limit, price, market)
-    ord_type: str                # 주문 방식 (bid, ask)
-    price: Optional[Decimal]     # 주문 당일 단가
-    avg_price: Optional[Decimal]     # 체결 가격 평균값
-    state: str                   # 주문 상태 (wait, done, cancel)
-    market: str                  # 마켓 ID
-    created_at: str              # 주문 생성 시간
-    volume: Optional[Decimal]    # 사용자가 입력한 주문 양
-    remaining_volume: Optional[Decimal]  # 미체결 수량
-    reserved_fee: Optional[Decimal]      # 수수료로 예약된 비용
-    remaining_fee: Optional[Decimal]     # 남은 수수료
-    paid_fee: Optional[Decimal]          # 사용된 수수료
-    locked: Optional[Decimal]            # 거래에 사용중인 비용 또는 수량
-    executed_volume: Optional[Decimal]   # 체결된 양
-    trades_count: Optional[int]          # 해당 주문에 걸린 체결 수
+    uuid: str = ''                    # 주문 고유 아이디
+    order_type: str = ''              # 주문 타입 (limit, price, market)
+    ord_type: str = ''                # 주문 방식 (bid, ask)
+    state: str = ''                   # 주문 상태 (wait, done, cancel)
+    market: str = ''                  # 마켓 ID
+    created_at: str = ''              # 주문 생성 시간
+    price: Optional[Decimal] = None     # 주문 당일 단가
+    avg_price: Optional[Decimal] = None     # 체결 가격 평균값
+    volume: Optional[Decimal] = None    # 사용자가 입력한 주문 양
+    remaining_volume: Optional[Decimal] = None  # 미체결 수량
+    reserved_fee: Optional[Decimal] = None      # 수수료로 예약된 비용
+    remaining_fee: Optional[Decimal] = None     # 남은 수수료
+    paid_fee: Optional[Decimal] = None          # 사용된 수수료
+    locked: Optional[Decimal] = None            # 거래에 사용중인 비용 또는 수량
+    executed_volume: Optional[Decimal] = None   # 체결된 양
+    trades_count: Optional[int] = None          # 해당 주문에 걸린 체결 수
 
 
 @dataclass
 class MyAssetEvent(BaseWebSocketEvent):
     """내 자산 이벤트 (Private)"""
-    currency: str                # 화폐를 의미하는 영문 대문자 코드
-    balance: Decimal             # 주문가능 금액/수량
-    locked: Decimal              # 주문 중 묶여있는 금액/수량
-    avg_buy_price: Optional[Decimal]     # 매수평균가
-    avg_buy_price_modified: Optional[bool]  # 매수평균가 수정 여부
-    unit_currency: Optional[str]         # 평단가 기준 화폐
+    currency: str = ''                # 화폐를 의미하는 영문 대문자 코드
+    balance: Decimal = field(default_factory=lambda: Decimal('0'))             # 주문가능 금액/수량
+    locked: Decimal = field(default_factory=lambda: Decimal('0'))              # 주문 중 묶여있는 금액/수량
+    avg_buy_price: Optional[Decimal] = None     # 매수평균가
+    avg_buy_price_modified: Optional[bool] = None  # 매수평균가 수정 여부
+    unit_currency: Optional[str] = None         # 평단가 기준 화폐
 
 
 # =============================================================================
@@ -181,8 +201,8 @@ class MyAssetEvent(BaseWebSocketEvent):
 class SubscriptionSpec:
     """구독 규격"""
     data_type: DataType
-    symbols: List[str]
-    callback: Callable[[BaseWebSocketEvent], None]
+    symbols: List[str] = field(default_factory=list)
+    callback: Optional[Callable[[BaseWebSocketEvent], None]] = None
     error_handler: Optional[Callable[[Exception], None]] = None
 
     # Private 전용

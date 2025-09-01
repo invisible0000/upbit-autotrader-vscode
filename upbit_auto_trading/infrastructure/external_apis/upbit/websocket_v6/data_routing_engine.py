@@ -50,6 +50,32 @@ class CallbackInfo:
     is_active: bool = True
 
 
+@dataclass
+class DataDistributionStats:
+    """데이터 분배 통계"""
+    total_events_received: int = 0
+    total_events_distributed: int = 0
+    events_dropped: int = 0
+    active_callbacks: int = 0
+    avg_processing_time_ms: float = 0.0
+    max_queue_size_reached: int = 0
+    backpressure_activations: int = 0
+
+    @property
+    def distribution_rate(self) -> float:
+        """분배 성공률"""
+        if self.total_events_received == 0:
+            return 1.0
+        return self.total_events_distributed / self.total_events_received
+
+    @property
+    def drop_rate(self) -> float:
+        """이벤트 드롭률"""
+        if self.total_events_received == 0:
+            return 0.0
+        return self.events_dropped / self.total_events_received
+
+
 class BackpressureHandler:
     """백프레셔 처리 전략"""
 

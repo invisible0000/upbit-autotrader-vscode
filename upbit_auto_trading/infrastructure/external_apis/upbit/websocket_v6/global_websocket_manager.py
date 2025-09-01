@@ -50,6 +50,8 @@ class ConnectionMetrics:
     message_count: int = 0
     error_count: int = 0
     reconnect_count: int = 0
+    bytes_received: int = 0
+    current_subscriptions: int = 0
 
     @property
     def uptime_seconds(self) -> float:
@@ -58,6 +60,42 @@ class ConnectionMetrics:
             return 0.0
         return time.time() - self.connect_time
 
+    @property
+    def messages_per_second(self) -> float:
+        """초당 메시지 수"""
+        if not self.is_connected or self.uptime_seconds <= 0:
+            return 0.0
+        return self.message_count / self.uptime_seconds
+
+    @property
+    def error_rate(self) -> float:
+        """에러율 (0.0 ~ 1.0)"""
+        if self.message_count == 0:
+            return 0.0
+        return self.error_count / (self.message_count + self.error_count)
+
+    @property
+    def health_score(self) -> float:
+        """연결 건강도 점수 (0.0 ~ 1.0)"""
+        if not self.is_connected:
+            return 0.0
+
+        # 기본 점수
+        score = 0.5
+
+        # 연결 유지 시간 보너스 (최대 30분)
+        uptime_bonus = min(self.uptime_seconds / 1800, 0.3)
+        score += uptime_bonus
+
+        # 에러율 패널티
+        error_penalty = self.error_rate * 0.4
+        score -= error_penalty
+
+        # 메시지 활동 보너스
+        if self.message_count > 0:
+            score += 0.2
+
+        return max(0.0, min(1.0, score))
 
 class EpochManager:
     """재연결 시 데이터 순서 보장을 위한 Epoch 관리"""
@@ -79,7 +117,13 @@ class EpochManager:
         """현재 Epoch 반환"""
         return self._current_epochs[connection_type]
 
+    def is_current_epoch(self, connection_type: WebSocketType, epoch: int) -> bool:
+        """주어진 Epoch가 현재 Epoch인지 확인 (백워드 호환성)"""
+        return epoch == self._current_epochs[connection_type]
 
+    def reset_epoch(self, connection_type: WebSocketType) -> None:
+        """Epoch 리셋 (테스트용)"""
+        self._current_epochs[connection_type] = 0
 class GlobalWebSocketManager:
     """
     WebSocket v6.0 전역 관리자 (싱글톤)
@@ -474,14 +518,10 @@ class GlobalWebSocketManager:
                 if total_changes > 0:
                     try:
                         rate_limiter = await self._rate_limiter
-                        await rate_limiter.acquire(
-                            group=UpbitRateLimitGroup.WEBSOCKET,
-                            weight=min(total_changes, 10)
-                        )
+                        # Rate Limiter 호환성 처리
+                        await rate_limiter.acquire("websocket", min(total_changes, 10))
                     except Exception as e:
-                        self.logger.warning(f"Rate limiting 실패: {e}")
-
-            # Public 구독 적용
+                        self.logger.warning(f"Rate limiting 실패: {e}")            # Public 구독 적용
             public_changes = {
                 data_type: change for data_type, change in changes.items()
                 if data_type in [DataType.TICKER, DataType.ORDERBOOK, DataType.TRADE]
@@ -728,6 +768,16 @@ class GlobalWebSocketManager:
 async def get_global_websocket_manager() -> GlobalWebSocketManager:
     """전역 웹소켓 매니저 인스턴스 획득"""
     return await GlobalWebSocketManager.get_instance()
+
+
+def get_global_websocket_manager_sync() -> GlobalWebSocketManager:
+    """전역 웹소켓 매니저 인스턴스 획득 (동기 버전)"""
+    if GlobalWebSocketManager._instance is None:
+        # 임시로 매니저 인스턴스 생성 (초기화 없이)
+        manager = GlobalWebSocketManager.__new__(GlobalWebSocketManager)
+        manager._initialized = False
+        GlobalWebSocketManager._instance = manager
+    return GlobalWebSocketManager._instance
 
 
 def is_manager_available() -> bool:
