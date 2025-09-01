@@ -431,17 +431,41 @@ class GlobalWebSocketManager:
             def cleanup_callback(ref):
                 asyncio.create_task(self._cleanup_component(component_id))
 
-            weak_ref = weakref.ref(component_instance, cleanup_callback)
-            self._component_refs[component_id] = weak_ref
+            # WeakRef 생성 시 타입 검증 및 디버깅
+            self.logger.debug(f"component_instance 타입: {type(component_instance)}")
+            self.logger.debug(f"component_instance repr: {repr(component_instance)}")
 
-            # 컴포넌트 구독 생성
-            component_subscription = ComponentSubscription(
-                component_id=component_id,
-                subscription_specs=subscriptions,
-                callback=callback,
-                created_at=time.time(),
-                is_active=True
-            )
+            try:
+                # WeakRef 생성 가능성 확인
+                if hasattr(component_instance, '__weakref__'):
+                    self.logger.debug(f"WeakRef 생성 가능: {component_instance.__weakref__}")
+                else:
+                    self.logger.debug("WeakRef 생성 불가능")
+
+                weak_ref = weakref.ref(component_instance, cleanup_callback)
+                self._component_refs[component_id] = weak_ref
+                self.logger.debug(f"WeakRef 생성 성공: {weak_ref}")
+
+            except Exception as weakref_error:
+                self.logger.error(f"WeakRef 생성 실패: {weakref_error}")
+                self.logger.error(f"component_instance 타입: {type(component_instance)}")
+                self.logger.error(f"component_instance의 __class__: {component_instance.__class__}")
+                self.logger.error(f"component_instance의 __dict__: {getattr(component_instance, '__dict__', 'NO_DICT')}")
+                raise
+
+            # 컴포넌트 구독 생성 (상태 관리 전용, 디버깅용 로깅 추가)
+            self.logger.debug(f"ComponentSubscription 생성 - component_id: {component_id}")
+            self.logger.debug(f"subscriptions: {subscriptions}")
+
+            try:
+                component_subscription = ComponentSubscription(
+                    component_id=component_id,
+                    subscription_specs=subscriptions
+                )
+            except Exception as e:
+                self.logger.error(f"ComponentSubscription 생성 실패: {e}")
+                self.logger.error(f"전달된 매개변수 - component_id: {component_id}, subscriptions: {subscriptions}")
+                raise
 
             # 구독 상태 관리자에 등록
             await self.subscription_manager.register_component(

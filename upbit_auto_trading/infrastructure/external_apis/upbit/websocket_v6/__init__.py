@@ -27,6 +27,19 @@ from .global_websocket_manager import (
     EpochManager
 )
 
+from .websocket_client_proxy import (
+    WebSocketClientProxy,
+    create_websocket_proxy,
+    quick_ticker_subscription
+)
+
+from .jwt_manager import (
+    JWTManager,
+    get_global_jwt_manager,
+    get_valid_jwt_token,
+    shutdown_global_jwt_manager
+)
+
 from .native_websocket_client import (
     NativeWebSocketClient,
     create_public_client,
@@ -144,7 +157,7 @@ from .config import (
 )
 
 from .exceptions import (
-    WebSocketV6Exception,
+    WebSocketException,
     ConnectionError,
     SubscriptionError,
     BackpressureError,
@@ -176,6 +189,16 @@ __all__ = [
     "get_global_websocket_manager",
     "is_manager_available",
 
+    # === 프록시 인터페이스 ===
+    "WebSocketClientProxy",
+    "create_websocket_proxy",
+    "quick_ticker_subscription",
+
+    # === JWT 관리 ===
+    "JWTManager",
+    "get_global_jwt_manager",
+    "get_valid_jwt_token",
+
     # === 클라이언트 ===
     "NativeWebSocketClient",
     "create_public_client",
@@ -200,7 +223,7 @@ __all__ = [
 
     # === 설정 및 예외 ===
     "get_config",
-    "WebSocketV6Exception",
+    "WebSocketException",
     "ConnectionError",
     "SubscriptionError",
 
@@ -271,7 +294,7 @@ async def quick_health_check():
             try:
                 manager_instance = await get_global_websocket_manager()
                 health_status = await manager_instance.get_health_status()
-            except Exception as e:
+            except Exception:
                 health_status = None
         else:
             health_status = None
@@ -334,7 +357,7 @@ def debug_package_structure():
 
     # 패키지 정보
     info = get_package_info()
-    print(f"\n📊 Package Info:")
+    print("\n📊 Package Info:")
     print(f"  Version: {info['version']}")
     print(f"  Components: {len(info['core_components'])}")
     print(f"  Data Types: {len(info['supported_data_types'])}")

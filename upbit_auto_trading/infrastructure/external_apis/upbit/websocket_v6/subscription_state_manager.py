@@ -108,20 +108,36 @@ class SubscriptionStateManager:
             if component_id in self._component_subscriptions:
                 await self._unregister_component_internal(component_id)
 
-            # 컴포넌트 구독 생성
-            component_subscription = ComponentSubscription(
-                component_id=component_id,
-                subscription_specs=subscription_specs
-            )
+            # 컴포넌트 구독 생성 (디버깅용 로깅 추가)
+            self.logger.debug(f"ComponentSubscription 생성 - component_id: {component_id}")
+            self.logger.debug(f"subscription_specs: {subscription_specs}")
+
+            try:
+                component_subscription = ComponentSubscription(
+                    component_id=component_id,
+                    subscription_specs=subscription_specs
+                )
+            except Exception as e:
+                self.logger.error(f"ComponentSubscription 생성 실패: {e}")
+                self.logger.error(f"전달된 매개변수 - component_id: {component_id}, subscription_specs: {subscription_specs}")
+                raise
 
             self._component_subscriptions[component_id] = component_subscription
 
             # WeakRef 등록 (자동 정리)
             if cleanup_ref is not None:
-                def cleanup_callback(ref):
-                    asyncio.create_task(self._cleanup_component(component_id))
+                # cleanup_ref가 이미 WeakRef인지 확인
+                if isinstance(cleanup_ref, weakref.ReferenceType):
+                    # 이미 WeakRef인 경우 그대로 저장
+                    self._component_refs[component_id] = cleanup_ref
+                    self.logger.debug(f"기존 WeakRef 저장: {cleanup_ref}")
+                else:
+                    # 일반 객체인 경우 WeakRef 생성
+                    def cleanup_callback(ref):
+                        asyncio.create_task(self._cleanup_component(component_id))
 
-                self._component_refs[component_id] = weakref.ref(cleanup_ref, cleanup_callback)
+                    self._component_refs[component_id] = weakref.ref(cleanup_ref, cleanup_callback)
+                    self.logger.debug(f"새 WeakRef 생성: {self._component_refs[component_id]}")
 
             # 구독 상태 재계산
             changes = await self._recalculate_subscriptions()

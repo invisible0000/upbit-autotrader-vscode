@@ -6,7 +6,7 @@ WebSocket v6 시스템의 예외 계층 구조 정의
 명확한 에러 분류와 복구 가능성 판단 지원
 
 예외 계층:
-- WebSocketV6Exception (기본)
+- WebSocketException (기본)
   ├── ConnectionError
   ├── SubscriptionError
   ├── BackpressureError
@@ -33,8 +33,8 @@ class RecoverabilityType(Enum):
     NON_RECOVERABLE = "non_recoverable"        # 복구 불가능
 
 
-class WebSocketV6Exception(Exception):
-    """WebSocket v6 기본 예외 클래스"""
+class WebSocketException(Exception):
+    """WebSocket 기본 예외 클래스"""
 
     def __init__(
         self,
@@ -71,7 +71,7 @@ class WebSocketV6Exception(Exception):
         }
 
 
-class ConnectionError(WebSocketV6Exception):
+class ConnectionError(WebSocketException):
     """WebSocket 연결 관련 오류"""
 
     def __init__(
@@ -131,7 +131,7 @@ class ConnectionLostError(ConnectionError):
         super().__init__(message, **kwargs)
 
 
-class SubscriptionError(WebSocketV6Exception):
+class SubscriptionError(WebSocketException):
     """구독 관련 오류"""
 
     def __init__(
@@ -198,7 +198,7 @@ class SubscriptionLimitError(SubscriptionError):
         super().__init__(message, **kwargs)
 
 
-class BackpressureError(WebSocketV6Exception):
+class BackpressureError(WebSocketException):
     """백프레셔 관련 오류"""
 
     def __init__(
@@ -246,7 +246,7 @@ class QueueOverflowError(BackpressureError):
         super().__init__(message, queue_size=queue_size, max_size=max_size, **kwargs)
 
 
-class AuthenticationError(WebSocketV6Exception):
+class AuthenticationError(WebSocketException):
     """인증 관련 오류 (Private WebSocket 전용)"""
 
     def __init__(
@@ -302,7 +302,7 @@ class JWTTokenExpiredError(JWTTokenError):
         super().__init__("토큰 만료", **kwargs)
 
 
-class RecoveryError(WebSocketV6Exception):
+class RecoveryError(WebSocketException):
     """복구 프로세스 관련 오류"""
 
     def __init__(
@@ -365,7 +365,7 @@ class SubscriptionRecoveryError(RecoveryError):
         super().__init__(message, **kwargs)
 
 
-class RateLimitError(WebSocketV6Exception):
+class RateLimitError(WebSocketException):
     """Rate Limit 관련 오류"""
 
     def __init__(
@@ -389,7 +389,7 @@ class RateLimitError(WebSocketV6Exception):
         super().__init__(message, **kwargs)
 
 
-class ValidationError(WebSocketV6Exception):
+class ValidationError(WebSocketException):
     """데이터 검증 오류"""
 
     def __init__(
@@ -419,7 +419,7 @@ class ValidationError(WebSocketV6Exception):
 
 def is_recoverable_error(exception: Exception) -> bool:
     """예외가 복구 가능한지 판단"""
-    if isinstance(exception, WebSocketV6Exception):
+    if isinstance(exception, WebSocketException):
         return exception.recoverable in [
             RecoverabilityType.AUTO_RECOVERABLE,
             RecoverabilityType.MANUAL_RECOVERABLE
@@ -434,7 +434,7 @@ def is_recoverable_error(exception: Exception) -> bool:
 
 def should_auto_retry(exception: Exception) -> bool:
     """자동 재시도가 필요한지 판단"""
-    if isinstance(exception, WebSocketV6Exception):
+    if isinstance(exception, WebSocketException):
         return exception.recoverable == RecoverabilityType.AUTO_RECOVERABLE
 
     # 표준 예외 처리
@@ -446,7 +446,7 @@ def should_auto_retry(exception: Exception) -> bool:
 
 def get_error_severity(exception: Exception) -> ErrorSeverity:
     """예외의 심각도 반환"""
-    if isinstance(exception, WebSocketV6Exception):
+    if isinstance(exception, WebSocketException):
         return exception.severity
 
     # 표준 예외의 기본 심각도

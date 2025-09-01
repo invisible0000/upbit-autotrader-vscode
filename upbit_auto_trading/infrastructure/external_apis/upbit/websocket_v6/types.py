@@ -104,7 +104,8 @@ class BaseWebSocketEvent:
 
 @dataclass
 class TickerEvent(BaseWebSocketEvent):
-    """현재가 이벤트"""
+    """현재가 이벤트 - models.py 완전 호환"""
+    # 기본 가격 정보
     trade_price: Decimal = field(default_factory=lambda: Decimal('0'))         # 체결가
     trade_volume: Decimal = field(default_factory=lambda: Decimal('0'))        # 체결량
     acc_trade_price: Decimal = field(default_factory=lambda: Decimal('0'))     # 누적 거래 대금
@@ -112,11 +113,40 @@ class TickerEvent(BaseWebSocketEvent):
     high_price: Decimal = field(default_factory=lambda: Decimal('0'))          # 고가
     low_price: Decimal = field(default_factory=lambda: Decimal('0'))           # 저가
     prev_closing_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 전일 종가
+
+    # 추가 가격 정보 (models.py 호환)
+    opening_price: Decimal = field(default_factory=lambda: Decimal('0'))       # 시가
+
+    # 변화량 정보
     change: str = 'EVEN'          # 변화 (RISE, EVEN, FALL)
     change_price: Decimal = field(default_factory=lambda: Decimal('0'))        # 변화 대금
     change_rate: Decimal = field(default_factory=lambda: Decimal('0'))         # 변화율
+    signed_change_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 부호 포함 변화금액
+    signed_change_rate: Decimal = field(default_factory=lambda: Decimal('0'))   # 부호 포함 변화율
+
+    # 24시간 통계
+    acc_trade_price_24h: Decimal = field(default_factory=lambda: Decimal('0'))  # 24시간 누적 거래대금
+    acc_trade_volume_24h: Decimal = field(default_factory=lambda: Decimal('0'))  # 24시간 누적 거래량
+
+    # 52주 통계
+    highest_52_week_price: Decimal = field(default_factory=lambda: Decimal('0'))  # 52주 최고가
+    highest_52_week_date: Optional[str] = None                                    # 52주 최고가 달성일
+    lowest_52_week_price: Decimal = field(default_factory=lambda: Decimal('0'))   # 52주 최저가
+    lowest_52_week_date: Optional[str] = None                                     # 52주 최저가 달성일    # 시장 상태
+    market_state: str = 'ACTIVE'  # 시장 상태 (ACTIVE, PREVIEW, DELISTED)
+    is_trading_suspended: Optional[bool] = None    # 거래 중단 여부
+    delisting_date: Optional[str] = None           # 상장폐지일
+    market_warning: str = 'NONE'                   # 시장 경고 (NONE, CAUTION)
+
+    # 체결 정보
     ask_bid: str = ''             # 매수/매도 구분
     trade_timestamp: int = 0      # 체결 시각 (업비트 timestamp)
+
+    # 시간 정보
+    trade_date: Optional[str] = None        # 최근거래일자 (UTC)
+    trade_time: Optional[str] = None        # 최근거래시각 (UTC)
+    trade_date_kst: Optional[str] = None    # 최근거래일자 (KST)
+    trade_time_kst: Optional[str] = None    # 최근거래시각 (KST)
 
 
 @dataclass
@@ -222,10 +252,9 @@ class SubscriptionSpec:
 
 @dataclass
 class ComponentSubscription:
-    """컴포넌트별 구독 정보"""
+    """컴포넌트별 구독 정보 (상태 관리 전용)"""
     component_id: str            # 컴포넌트 식별자
     subscription_specs: List[SubscriptionSpec]
-    callback: Callable[[BaseWebSocketEvent], None]
     created_at: float = field(default_factory=time.monotonic)
     last_data_received: Optional[float] = None
     error_count: int = 0
@@ -310,37 +339,11 @@ class BackpressureConfig:
 
 
 # =============================================================================
-# 에러 처리
+# 에러 처리 (exceptions.py에서 import)
 # =============================================================================
 
-class WebSocketV6Error(Exception):
-    """WebSocket v6 기본 예외"""
-    pass
-
-
-class ConnectionError(WebSocketV6Error):
-    """연결 오류"""
-    pass
-
-
-class SubscriptionError(WebSocketV6Error):
-    """구독 오류"""
-    pass
-
-
-class BackpressureError(WebSocketV6Error):
-    """백프레셔 오류"""
-    pass
-
-
-class AuthenticationError(WebSocketV6Error):
-    """인증 오류 (Private 전용)"""
-    pass
-
-
-class RecoveryError(WebSocketV6Error):
-    """복구 오류"""
-    pass
+# 예외 클래스들은 exceptions.py에 정의되어 있음
+# 필요시 from .exceptions import WebSocketException, ConnectionError 등으로 사용
 
 
 # =============================================================================
@@ -407,12 +410,13 @@ class DataStreamEvent:
 # =============================================================================
 
 def create_ticker_event(data: Dict[str, Any], epoch: int, connection_type: WebSocketType) -> TickerEvent:
-    """업비트 데이터에서 TickerEvent 생성"""
+    """업비트 데이터에서 TickerEvent 생성 - models.py 완전 호환"""
     return TickerEvent(
         epoch=epoch,
         timestamp=time.monotonic(),
         connection_type=connection_type,
         symbol=data.get('code'),
+        # 기본 가격 정보
         trade_price=Decimal(str(data.get('trade_price', 0))),
         trade_volume=Decimal(str(data.get('trade_volume', 0))),
         acc_trade_price=Decimal(str(data.get('acc_trade_price', 0))),
@@ -420,11 +424,34 @@ def create_ticker_event(data: Dict[str, Any], epoch: int, connection_type: WebSo
         high_price=Decimal(str(data.get('high_price', 0))),
         low_price=Decimal(str(data.get('low_price', 0))),
         prev_closing_price=Decimal(str(data.get('prev_closing_price', 0))),
+        opening_price=Decimal(str(data.get('opening_price', 0))),
+        # 변화량 정보
         change=data.get('change', 'EVEN'),
         change_price=Decimal(str(data.get('change_price', 0))),
         change_rate=Decimal(str(data.get('change_rate', 0))),
+        signed_change_price=Decimal(str(data.get('signed_change_price', 0))),
+        signed_change_rate=Decimal(str(data.get('signed_change_rate', 0))),
+        # 24시간 통계
+        acc_trade_price_24h=Decimal(str(data.get('acc_trade_price_24h', 0))),
+        acc_trade_volume_24h=Decimal(str(data.get('acc_trade_volume_24h', 0))),
+        # 52주 통계
+        highest_52_week_price=Decimal(str(data.get('highest_52_week_price', 0))),
+        highest_52_week_date=data.get('highest_52_week_date'),
+        lowest_52_week_price=Decimal(str(data.get('lowest_52_week_price', 0))),
+        lowest_52_week_date=data.get('lowest_52_week_date'),
+        # 시장 상태
+        market_state=data.get('market_state', 'ACTIVE'),
+        is_trading_suspended=data.get('is_trading_suspended'),
+        delisting_date=data.get('delisting_date'),
+        market_warning=data.get('market_warning', 'NONE'),
+        # 체결 정보
         ask_bid=data.get('ask_bid', ''),
-        trade_timestamp=data.get('trade_timestamp', 0)
+        trade_timestamp=data.get('trade_timestamp', 0),
+        # 시간 정보
+        trade_date=data.get('trade_date'),
+        trade_time=data.get('trade_time'),
+        trade_date_kst=data.get('trade_date_kst'),
+        trade_time_kst=data.get('trade_time_kst')
     )
 
 
