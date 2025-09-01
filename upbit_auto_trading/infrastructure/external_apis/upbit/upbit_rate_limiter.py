@@ -249,6 +249,11 @@ class UpbitGCRARateLimiter:
         # 전역 잠금 (asyncio.Lock)
         self._lock = asyncio.Lock()
 
+        # 배치 로깅을 위한 큐
+        self._log_queue = []
+        self._last_batch_log = time.monotonic()
+        self._batch_interval = 2.0  # 2초마다 배치 로그 출력
+
         # 그룹별 GCRA 컨트롤러 초기화
         self._controllers: Dict[UpbitRateLimitGroup, List[GCRA]] = {}
         for group, configs in self._GROUP_CONFIGS.items():
@@ -312,8 +317,8 @@ class UpbitGCRARateLimiter:
                     if elapsed < 0.001:  # 1ms 미만이면 즉시 통과
                         self._stats['immediate_passes'] += 1
 
-                    self.logger.debug(f"Rate limit 획득: {endpoint} [{method}] -> {group.value} "
-                                      f"(소요: {elapsed * 1000:.1f}ms)")
+                    # 배치 로깅 (즉시 처리된 경우만)
+                    self._add_to_log_batch(f"획득: {endpoint} [{method}] -> {group.value} ({elapsed * 1000:.1f}ms)")
                     return
 
             # 대기 필요 → 지터 추가 후 재시도
@@ -324,10 +329,41 @@ class UpbitGCRARateLimiter:
                 raise TimeoutError(f"Rate limit 대기시간 초과: {endpoint} (max_wait={max_wait}s)")
 
             self._stats['total_wait_time'] += wait_time
-            self.logger.debug(f"Rate limit 대기: {endpoint} -> {group.value} "
-                              f"(대기: {wait_time * 1000:.1f}ms)")
+
+            # 배치 로깅 (대기하는 경우)
+            self._add_to_log_batch(f"대기: {endpoint} -> {group.value} ({wait_time * 1000:.1f}ms)")
 
             await asyncio.sleep(max(0.0, wait_time))
+
+    def _add_to_log_batch(self, message: str):
+        """로그 메시지를 배치에 추가"""
+        now = time.monotonic()
+        self._log_queue.append(message)
+
+        # 배치 간격이 지났거나 큐가 너무 많이 쌓인 경우 출력
+        if (now - self._last_batch_log >= self._batch_interval or
+            len(self._log_queue) >= 10):
+            self._flush_log_batch()
+            self._last_batch_log = now
+
+    def _flush_log_batch(self):
+        """배치된 로그 메시지들을 출력"""
+        if not self._log_queue:
+            return
+
+        # 메시지 종류별 집계
+        wait_count = sum(1 for msg in self._log_queue if "대기:" in msg)
+        acquire_count = sum(1 for msg in self._log_queue if "획득:" in msg)
+
+        if wait_count > 0 and acquire_count > 0:
+            self.logger.info(f"Rate Limiter 활동: 대기 {wait_count}회, 획득 {acquire_count}회")
+        elif wait_count > 0:
+            self.logger.info(f"Rate Limiter 대기: {wait_count}회")
+        elif acquire_count > 0:
+            self.logger.info(f"Rate Limiter 획득: {acquire_count}회")
+
+        # 큐 초기화
+        self._log_queue.clear()
 
     def _get_rate_limit_group(self, endpoint: str, method: str = 'GET') -> UpbitRateLimitGroup:
         """엔드포인트와 메서드를 기반으로 Rate Limit 그룹 매핑"""

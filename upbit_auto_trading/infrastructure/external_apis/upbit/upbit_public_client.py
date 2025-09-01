@@ -1,7 +1,7 @@
 """
-업비트 공개 API 클라이언트 - GCRA Rate Limiter 기반
+업비트 공개 API 클라이언트 - 동적 GCRA Rate Limiter 기반
 
-GCRA 알고리즘 기반 Rate Limiter 사용
+GCRA 알고리즘 기반 Rate Limiter + 동적 조정 기능 사용
 """
 import asyncio
 import aiohttp
@@ -9,28 +9,43 @@ import time
 from typing import List, Dict, Any, Optional, Union
 
 from .upbit_rate_limiter import get_global_rate_limiter, UpbitGCRARateLimiter
+from .dynamic_rate_limiter_wrapper import (
+    get_dynamic_rate_limiter,
+    DynamicUpbitRateLimiter,
+    DynamicConfig,
+    AdaptiveStrategy
+)
 
 
 class UpbitPublicClient:
     """
-    업비트 전용 공개 API 클라이언트 - GCRA 기반
+    업비트 전용 공개 API 클라이언트 - 동적 GCRA 기반
 
     특징:
-    - GCRA Rate Limiter 사용
+    - 동적 조정 GCRA Rate Limiter 사용
+    - 429 오류 자동 감지 및 Rate Limit 조정
     - 전역 공유 Rate Limiter 지원
     - 버스트 처리 지원
     """
 
     BASE_URL = "https://api.upbit.com/v1"
 
-    def __init__(self, rate_limiter: Optional[UpbitGCRARateLimiter] = None):
+    def __init__(self,
+                 use_dynamic_limiter: bool = True,
+                 dynamic_config: Optional[DynamicConfig] = None,
+                 legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
         Args:
-            rate_limiter: GCRA Rate Limiter (기본값: 전역 공유)
+            use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
+            dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
+            legacy_rate_limiter: 기존 GCRA Rate Limiter (동적 비활성화 시)
         """
-        self._rate_limiter = rate_limiter
+        self._use_dynamic_limiter = use_dynamic_limiter
+        self._dynamic_limiter: Optional[DynamicUpbitRateLimiter] = None
+        self._legacy_rate_limiter = legacy_rate_limiter
+        self._dynamic_config = dynamic_config or DynamicConfig(strategy=AdaptiveStrategy.BALANCED)
         self._session: Optional[aiohttp.ClientSession] = None
 
         # 429 재시도 통계
@@ -60,11 +75,16 @@ class UpbitPublicClient:
                 headers={'Accept': 'application/json'}
             )
 
-    async def _ensure_rate_limiter(self) -> UpbitGCRARateLimiter:
-        """Rate Limiter 확보 (전역 공유 우선)"""
-        if self._rate_limiter is None:
-            self._rate_limiter = await get_global_rate_limiter()
-        return self._rate_limiter
+    async def _ensure_rate_limiter(self) -> Union[DynamicUpbitRateLimiter, UpbitGCRARateLimiter]:
+        """Rate Limiter 확보 (동적 우선, 전역 공유 대체)"""
+        if self._use_dynamic_limiter:
+            if self._dynamic_limiter is None:
+                self._dynamic_limiter = await get_dynamic_rate_limiter(self._dynamic_config)
+            return self._dynamic_limiter
+        else:
+            if self._legacy_rate_limiter is None:
+                self._legacy_rate_limiter = await get_global_rate_limiter()
+            return self._legacy_rate_limiter
 
     async def close(self) -> None:
         """리소스 정리"""
@@ -131,10 +151,16 @@ class UpbitPublicClient:
                         data = await response.json()
                         return data
                     elif response.status == 429:
-                        # 429 응답 처리
+                        # 429 응답 처리 - 동적/레거시 Rate Limiter별 처리
                         retry_after = response.headers.get('Retry-After')
-                        if retry_after:
-                            rate_limiter.handle_429_response(float(retry_after))
+                        retry_after_float = float(retry_after) if retry_after else None
+
+                        if isinstance(rate_limiter, DynamicUpbitRateLimiter):
+                            # 동적 Rate Limiter는 자동으로 429 처리됨 (acquire 단계에서)
+                            pass
+                        else:
+                            # 레거시 Rate Limiter 수동 처리
+                            rate_limiter.handle_429_response(retry_after=retry_after_float)
 
                         # 429 재시도 카운터 업데이트
                         self.retry_stats['last_request_429_retries'] += 1
@@ -200,7 +226,7 @@ class UpbitPublicClient:
         params = {'market': market}
         if count:
             params['count'] = str(count)
-        return await self._make_request('/trades', params=params)
+        return await self._make_request('/trades/ticks', params=params)
 
     async def get_candles_minutes(self, unit: int, market: str, count: int = 200) -> Any:
         """분봉 정보 조회"""
@@ -232,13 +258,21 @@ class UpbitPublicClient:
 # 편의 팩토리 함수
 # ================================================================
 
-async def create_upbit_public_client() -> UpbitPublicClient:
+async def create_upbit_public_client(
+    use_dynamic_limiter: bool = True,
+    dynamic_config: Optional[DynamicConfig] = None
+) -> UpbitPublicClient:
     """
     업비트 공개 API 클라이언트 생성 (편의 함수)
 
-    자동으로 글로벌 공유 Rate Limiter 적용
-    서브시스템에서는 반드시 이 함수를 사용해야 함
+    Args:
+        use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
+        dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
+
+    Returns:
+        UpbitPublicClient: 설정된 클라이언트 인스턴스
     """
-    # 🌍 글로벌 공유 Rate Limiter 사용 (IP 기반 10 RPS 제한 준수)
-    rate_limiter = await get_global_rate_limiter()
-    return UpbitPublicClient(rate_limiter=rate_limiter)
+    return UpbitPublicClient(
+        use_dynamic_limiter=use_dynamic_limiter,
+        dynamic_config=dynamic_config
+    )
