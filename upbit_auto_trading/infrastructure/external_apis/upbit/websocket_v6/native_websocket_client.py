@@ -30,24 +30,26 @@ except ImportError:
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
+# Rate Limiter 연동 (필수)
+try:
+    from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
+        get_global_rate_limiter, gate_websocket
+    )
+    from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
+        get_dynamic_rate_limiter, DynamicConfig, AdaptiveStrategy
+    )
+    RATE_LIMITER_AVAILABLE = True
+except ImportError:
+    RATE_LIMITER_AVAILABLE = False
+
 # v6 타입 import
 from .types import WebSocketType, ConnectionState
+from .config import ConnectionConfig  # config.py의 ConnectionConfig 사용
 from .exceptions import ConnectionError
 from .simple_format_converter import (
     convert_simple_to_default,
     convert_default_to_simple
 )
-
-
-@dataclass
-class ConnectionConfig:
-    """WebSocket 연결 설정"""
-    url: str
-    enable_compression: bool = True
-    enable_simple_format: bool = True
-    connect_timeout: float = 10.0
-    heartbeat_interval: float = 30.0
-    max_message_size: int = 1024 * 1024  # 1MB
 
 
 class NativeWebSocketClient:
@@ -89,6 +91,13 @@ class NativeWebSocketClient:
         self._jwt_token: Optional[str] = None
         self._token_expires_at: Optional[float] = None
 
+        # Rate Limiter 연동 (필수)
+        self._rate_limiter = None
+        self._dynamic_limiter = None
+        if RATE_LIMITER_AVAILABLE:
+            # 초기화는 connect() 시점에 비동기로 수행
+            self.logger.info("Rate Limiter 초기화 예약됨")
+
     async def connect(self) -> bool:
         """WebSocket 연결"""
         try:
@@ -97,6 +106,31 @@ class NativeWebSocketClient:
 
             self.logger.info(f"{self.connection_type.value} WebSocket 연결 시작")
             self._connection_state = ConnectionState.CONNECTING
+
+            # Rate Limiter 초기화 (비동기)
+            if RATE_LIMITER_AVAILABLE and not self._rate_limiter:
+                try:
+                    self._rate_limiter = await get_global_rate_limiter()
+                    # 동적 Rate Limiter도 초기화 (Conservative 전략)
+                    dynamic_config = DynamicConfig(
+                        strategy=AdaptiveStrategy.CONSERVATIVE,
+                        error_429_threshold=2,
+                        reduction_ratio=0.7,
+                        min_ratio=0.4
+                    )
+                    self._dynamic_limiter = await get_dynamic_rate_limiter(dynamic_config)
+                    self.logger.info("Rate Limiter 초기화 완료 (Conservative 전략)")
+                except Exception as e:
+                    self.logger.warning(f"Rate Limiter 초기화 실패: {e}")
+
+            # WebSocket 연결 Rate Limit 적용 (필수)
+            if self._dynamic_limiter:
+                try:
+                    await self._dynamic_limiter.acquire("websocket_connect", "WS")
+                    self.logger.debug("WebSocket 연결 Rate Limit 통과")
+                except Exception as e:
+                    self.logger.warning(f"WebSocket 연결 Rate Limit 실패: {e}")
+                    # Rate Limit 실패 시에도 연결 시도는 계속 (로깅만)
 
             # 연결 옵션 설정
             extra_headers = {}
@@ -108,9 +142,12 @@ class NativeWebSocketClient:
                 if self._jwt_token:
                     extra_headers["Authorization"] = f"Bearer {self._jwt_token}"
 
+            # 연결 URL (현재: Public/Private 동일)
+            url = self.config.url
+
             # WebSocket 연결
             self._websocket = await websockets.connect(
-                self.config.url,
+                url,
                 extra_headers=extra_headers,
                 compression="deflate" if self.config.enable_compression else None,
                 max_size=self.config.max_message_size,
@@ -131,6 +168,11 @@ class NativeWebSocketClient:
         except Exception as e:
             self.logger.error(f"{self.connection_type.value} WebSocket 연결 실패: {e}")
             self._connection_state = ConnectionState.ERROR
+
+            # 429 에러 등 Rate Limit 관련 에러 처리
+            if "429" in str(e) and self._dynamic_limiter:
+                self.logger.warning("429 에러 감지 - 동적 Rate Limit 조정 시작")
+
             return False
 
     async def disconnect(self) -> None:
@@ -166,6 +208,15 @@ class NativeWebSocketClient:
                 self.logger.warning("WebSocket이 연결되지 않음")
                 return False
 
+            # Rate Limit 적용 (구독 메시지 전송)
+            if self._dynamic_limiter:
+                try:
+                    await self._dynamic_limiter.acquire("websocket_message", "WS")
+                    self.logger.debug("구독 메시지 Rate Limit 통과")
+                except Exception as e:
+                    self.logger.error(f"구독 메시지 Rate Limit 실패: {e}")
+                    return False  # Rate Limit 실패 시 전송 중단
+
             # SIMPLE 포맷으로 변환 (옵션)
             if self.config.enable_simple_format:
                 converted_data = []
@@ -187,6 +238,11 @@ class NativeWebSocketClient:
 
         except Exception as e:
             self.logger.error(f"구독 메시지 전송 실패: {e}")
+
+            # 429 에러 감지 및 동적 조정
+            if "429" in str(e) and self._dynamic_limiter:
+                self.logger.warning("구독 메시지 429 에러 감지 - 동적 Rate Limit 조정")
+
             return False
 
     async def _refresh_jwt_token(self) -> bool:
@@ -374,18 +430,25 @@ def create_public_client(
     enable_compression: bool = True,
     enable_simple_format: bool = True
 ) -> NativeWebSocketClient:
-    """Public WebSocket 클라이언트 생성"""
+    """Public WebSocket 클라이언트 생성 (Rate Limiter 통합)"""
     config = ConnectionConfig(
-        url="wss://api.upbit.com/websocket/v1",
         enable_compression=enable_compression,
         enable_simple_format=enable_simple_format
     )
 
-    return NativeWebSocketClient(
+    client = NativeWebSocketClient(
         connection_type=WebSocketType.PUBLIC,
         config=config,
         message_handler=message_handler
     )
+
+    # Rate Limiter 사용 가능 여부 로깅
+    if RATE_LIMITER_AVAILABLE:
+        client.logger.info("Public 클라이언트 생성 완료 (Rate Limiter 활성화)")
+    else:
+        client.logger.warning("Public 클라이언트 생성 완료 (Rate Limiter 비활성화)")
+
+    return client
 
 
 def create_private_client(
@@ -393,15 +456,22 @@ def create_private_client(
     enable_compression: bool = True,
     enable_simple_format: bool = True
 ) -> NativeWebSocketClient:
-    """Private WebSocket 클라이언트 생성"""
+    """Private WebSocket 클라이언트 생성 (Rate Limiter 통합)"""
     config = ConnectionConfig(
-        url="wss://api.upbit.com/websocket/v1",
         enable_compression=enable_compression,
         enable_simple_format=enable_simple_format
     )
 
-    return NativeWebSocketClient(
+    client = NativeWebSocketClient(
         connection_type=WebSocketType.PRIVATE,
         config=config,
         message_handler=message_handler
     )
+
+    # Rate Limiter 사용 가능 여부 로깅
+    if RATE_LIMITER_AVAILABLE:
+        client.logger.info("Private 클라이언트 생성 완료 (Rate Limiter 활성화)")
+    else:
+        client.logger.warning("Private 클라이언트 생성 완료 (Rate Limiter 비활성화)")
+
+    return client

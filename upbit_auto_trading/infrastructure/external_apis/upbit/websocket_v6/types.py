@@ -45,14 +45,61 @@ class WebSocketType(Enum):
     PRIVATE = "private"
 
 
-class DataType(Enum):
-    """데이터 타입"""
-    TICKER = "ticker"
-    ORDERBOOK = "orderbook"
-    TRADE = "trade"
-    CANDLE = "candle"
-    MY_ORDER = "my_order"
-    MY_ASSET = "my_asset"
+class DataType(str, Enum):
+    """업비트 웹소켓 지원 데이터 타입 - 공식 API 기준"""
+    # Public 데이터 타입
+    TICKER = "ticker"           # 현재가
+    TRADE = "trade"             # 체결
+    ORDERBOOK = "orderbook"     # 호가
+
+    # 캔들 데이터 (업비트 공식 형식)
+    CANDLE_1S = "candle.1s"     # 초봉
+    CANDLE_1M = "candle.1m"     # 1분봉
+    CANDLE_3M = "candle.3m"     # 3분봉
+    CANDLE_5M = "candle.5m"     # 5분봉
+    CANDLE_10M = "candle.10m"   # 10분봉
+    CANDLE_15M = "candle.15m"   # 15분봉
+    CANDLE_30M = "candle.30m"   # 30분봉
+    CANDLE_60M = "candle.60m"   # 60분봉 (1시간)
+    CANDLE_240M = "candle.240m"  # 240분봉 (4시간)
+
+    # Private 데이터 타입
+    MYORDER = "myOrder"         # 내 주문 및 체결
+    MYASSET = "myAsset"         # 내 자산
+
+    @classmethod
+    def get_public_types(cls) -> List['DataType']:
+        """Public 연결용 데이터 타입들"""
+        return [
+            cls.TICKER, cls.TRADE, cls.ORDERBOOK,
+            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
+            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
+        ]
+
+    @classmethod
+    def get_private_types(cls) -> List['DataType']:
+        """Private 연결용 데이터 타입들"""
+        return [cls.MYORDER, cls.MYASSET]
+
+    @classmethod
+    def get_candle_types(cls) -> List['DataType']:
+        """캔들 데이터 타입들"""
+        return [
+            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
+            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
+        ]
+
+    def is_public(self) -> bool:
+        """Public 연결용 데이터인지 확인"""
+        return self in self.get_public_types()
+
+    def is_private(self) -> bool:
+        """Private 연결용 데이터인지 확인"""
+        return self in self.get_private_types()
+
+    def is_candle(self) -> bool:
+        """캔들 데이터인지 확인"""
+        return self in self.get_candle_types()
 
 
 class GlobalManagerState(Enum):
@@ -63,10 +110,6 @@ class GlobalManagerState(Enum):
     SHUTTING_DOWN = "shutting_down"
     STOPPED = "stopped"
     ERROR = "error"
-    TRADE = "trade"
-    CANDLE = "candle"
-    MY_ORDER = "myOrder"
-    MY_ASSET = "myAsset"
 
 
 # =============================================================================
@@ -93,11 +136,12 @@ class BaseWebSocketEvent:
         elif 'Trade' in class_name:
             return DataType.TRADE
         elif 'Candle' in class_name:
-            return DataType.CANDLE
+            # 캔들은 기본적으로 1분봉으로 설정 (구체적인 타입은 별도 처리 필요)
+            return DataType.CANDLE_1M
         elif 'MyOrder' in class_name:
-            return DataType.MY_ORDER
+            return DataType.MYORDER
         elif 'MyAsset' in class_name:
-            return DataType.MY_ASSET
+            return DataType.MYASSET
         else:
             return DataType.TICKER  # 기본값
 
@@ -240,7 +284,7 @@ class SubscriptionSpec:
 
     def __post_init__(self):
         """검증 로직"""
-        if self.data_type in [DataType.MY_ORDER, DataType.MY_ASSET]:
+        if self.data_type in [DataType.MYORDER, DataType.MYASSET]:
             # Private 데이터는 symbols 대신 markets 사용
             if not self.markets and not self.symbols:
                 raise ValueError("Private 데이터는 markets 또는 symbols 필요")
@@ -347,36 +391,11 @@ class BackpressureConfig:
 
 
 # =============================================================================
-# 설정
+# 설정 (config.py에서 import)
 # =============================================================================
 
-@dataclass
-class WebSocketV6Config:
-    """WebSocket v6 설정"""
-    # 연결 설정
-    public_url: str = "wss://api.upbit.com/websocket/v1"
-    private_url: str = "wss://api.upbit.com/websocket/v1"
-    connect_timeout: float = 10.0
-    heartbeat_interval: float = 30.0
-
-    # 재연결 설정
-    max_reconnect_attempts: int = 5
-    reconnect_base_delay: float = 1.0
-    reconnect_max_delay: float = 60.0
-    reconnect_jitter: bool = True
-
-    # 백프레셔 설정
-    backpressure: BackpressureConfig = field(default_factory=BackpressureConfig)
-
-    # Private 인증 설정
-    jwt_refresh_threshold: float = 0.8   # 80% 만료 시점에 갱신
-    jwt_refresh_retry_count: int = 3
-
-    # 성능 모니터링 설정
-    metrics_collection_interval: float = 10.0
-    health_check_interval: float = 30.0
-    alert_threshold_error_rate: float = 0.05  # 5% 에러율
-    alert_threshold_latency_ms: float = 1000.0  # 1초 지연
+# WebSocketConfig는 config.py에서 정의됨 - 중복 제거
+# from .config import WebSocketConfig, ConnectionConfig, etc. 으로 사용
 
 
 # =============================================================================
@@ -489,12 +508,32 @@ def get_data_type_from_message(data: Dict[str, Any]) -> Optional[DataType]:
             return DataType.ORDERBOOK
         elif type_str == 'trade':
             return DataType.TRADE
-        elif type_str == 'candle':
-            return DataType.CANDLE
+        elif type_str.startswith('candle'):
+            # 구체적인 캔들 타입 반환
+            if type_str == 'candle.1s':
+                return DataType.CANDLE_1S
+            elif type_str == 'candle.1m':
+                return DataType.CANDLE_1M
+            elif type_str == 'candle.3m':
+                return DataType.CANDLE_3M
+            elif type_str == 'candle.5m':
+                return DataType.CANDLE_5M
+            elif type_str == 'candle.10m':
+                return DataType.CANDLE_10M
+            elif type_str == 'candle.15m':
+                return DataType.CANDLE_15M
+            elif type_str == 'candle.30m':
+                return DataType.CANDLE_30M
+            elif type_str == 'candle.60m':
+                return DataType.CANDLE_60M
+            elif type_str == 'candle.240m':
+                return DataType.CANDLE_240M
+            else:
+                return DataType.CANDLE_1M  # 기본값
         elif type_str == 'myOrder':
-            return DataType.MY_ORDER
+            return DataType.MYORDER
         elif type_str == 'myAsset':
-            return DataType.MY_ASSET
+            return DataType.MYASSET
 
     # 메시지 구조로 추론
     if 'trade_price' in data and 'trade_volume' in data:
@@ -504,9 +543,9 @@ def get_data_type_from_message(data: Dict[str, Any]) -> Optional[DataType]:
     elif 'orderbook_units' in data:
         return DataType.ORDERBOOK
     elif 'uuid' in data and 'state' in data:
-        return DataType.MY_ORDER
+        return DataType.MYORDER
     elif 'currency' in data and 'balance' in data:
-        return DataType.MY_ASSET
+        return DataType.MYASSET
 
     return None
 

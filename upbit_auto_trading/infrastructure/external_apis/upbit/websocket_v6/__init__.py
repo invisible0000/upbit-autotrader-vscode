@@ -75,9 +75,6 @@ from .types import (
     HealthStatus,
     BackpressureConfig,
 
-    # 설정
-    WebSocketV6Config,
-
     # 유틸리티 함수
     create_ticker_event,
     create_orderbook_event,
@@ -86,7 +83,7 @@ from .types import (
     normalize_symbols
 )
 
-# 데이터 모델 (v5 + v6 통합)
+# 데이터 모델 (v5 + v6 통합 - types.py 기반)
 from .models import (
     # v5 호환 열거형
     StreamType,
@@ -106,11 +103,11 @@ from .models import (
     infer_message_type,
     validate_mixed_message,
 
-    # v6 통합 함수
-    convert_dict_to_v6_event,
-    process_message_to_v6_event,
-    get_v6_data_type_from_dict,
-    create_v6_compatible_message,
+    # v6 통합 함수 (models.py가 types.py 함수들을 래핑)
+    convert_dict_to_event,
+    process_message_to_event,
+    get_data_type_from_dict,
+    create_compatible_message,
 
     # 검증 함수
     validate_ticker_data,
@@ -153,7 +150,10 @@ from .data_routing_engine import (
 # 설정 및 예외
 from .config import (
     get_config,
-    WebSocketV6Config as Config
+    WebSocketConfig as Config,
+    ConnectionConfig,
+    FormatConfig,
+    Environment
 )
 
 from .exceptions import (
@@ -218,8 +218,8 @@ __all__ = [
     # === 데이터 모델 ===
     "infer_message_type",
     "validate_mixed_message",
-    "convert_dict_to_v6_event",
-    "process_message_to_v6_event",
+    "convert_dict_to_event",
+    "process_message_to_event",
 
     # === 설정 및 예외 ===
     "get_config",

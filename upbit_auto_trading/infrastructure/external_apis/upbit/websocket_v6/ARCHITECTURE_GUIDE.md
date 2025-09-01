@@ -110,7 +110,7 @@
   - 데이터 검증 및 정규화
 - **v5 통합 요소**:
   - `TICKER_FIELDS`, `TRADE_FIELDS` 등 필드 문서
-  - `convert_dict_to_v6_event()` 변환 함수
+  - `convert_dict_to_event()` 변환 함수
 
 ### ⚙️ **설정 및 유틸리티**
 
@@ -141,7 +141,7 @@
     ↓ WebSocket
 [NativeWebSocketClient]
     ↓ 원시 메시지
-[GlobalWebSocketManager._convert_to_v6_event]
+[GlobalWebSocketManager._convert_to_event]
     ↓ v6 이벤트
 [DataRoutingEngine.route_event]
     ↓ 타입별 분배
@@ -224,7 +224,7 @@ metrics = await manager.get_performance_metrics()
 ### 새로운 데이터 타입 추가
 1. `types.py`에 `DataType` enum 추가
 2. 해당 이벤트 클래스 정의
-3. `GlobalWebSocketManager._convert_to_v6_event()` 확장
+3. `GlobalWebSocketManager._convert_to_event()` 확장
 4. `WebSocketClientProxy`에 전용 메서드 추가
 
 ### 새로운 백프레셔 전략

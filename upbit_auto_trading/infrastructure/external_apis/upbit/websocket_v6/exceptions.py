@@ -173,7 +173,7 @@ class SubscriptionConflictError(SubscriptionError):
 
         kwargs['context'] = context
         kwargs['error_code'] = 'SUB_CONFLICT'
-        kwargs['severity'] = ErrorSeverity.HIGH  # v6에서는 이런 상황이 발생하면 안됨
+        kwargs['severity'] = ErrorSeverity.HIGH  # 이런 상황이 발생하면 안됨
 
         super().__init__(message, **kwargs)
 

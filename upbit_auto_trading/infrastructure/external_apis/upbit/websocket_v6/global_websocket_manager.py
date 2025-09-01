@@ -34,7 +34,7 @@ from .types import (
     get_data_type_from_message
 )
 from .exceptions import SubscriptionError, RecoveryError
-from .config import get_config
+from .config import get_config, is_compression_enabled, is_simple_format_enabled
 from .subscription_state_manager import SubscriptionStateManager
 from .data_routing_engine import DataRoutingEngine
 from .native_websocket_client import NativeWebSocketClient, create_public_client, create_private_client
@@ -168,16 +168,11 @@ class GlobalWebSocketManager:
         # 컴포넌트 생명주기 관리 (WeakRef)
         self._component_refs: Dict[str, weakref.ReferenceType] = {}
 
-        # Rate Limiter (선택적)
+        # Rate Limiter (선택적) - 비동기 초기화 예약
         self._rate_limiter = None
-        if RATE_LIMITER_AVAILABLE:
-            try:
-                self._rate_limiter = get_global_rate_limiter()
-            except Exception as e:
-                self.logger.warning(f"Rate Limiter 초기화 실패: {e}")
 
         self._initialized = True
-        self.logger.info("GlobalWebSocketManager v6.0 초기화 완료")
+        self.logger.info("GlobalWebSocketManager 초기화 완료")
 
     @classmethod
     async def get_instance(cls) -> 'GlobalWebSocketManager':
@@ -192,6 +187,14 @@ class GlobalWebSocketManager:
         """비동기 초기화 작업"""
         try:
             self.logger.info("비동기 초기화 시작")
+
+            # Rate Limiter 초기화 (비동기)
+            if RATE_LIMITER_AVAILABLE:
+                try:
+                    self._rate_limiter = await get_global_rate_limiter()
+                    self.logger.info("Rate Limiter 초기화 완료")
+                except Exception as e:
+                    self.logger.warning(f"Rate Limiter 초기화 실패: {e}")
 
             # 구독 상태 관리자에 변경 콜백 등록
             self.subscription_manager.add_change_callback(
@@ -235,11 +238,12 @@ class GlobalWebSocketManager:
                     self._handle_received_message(message_data, WebSocketType.PUBLIC)
                 )
 
-            # 클라이언트 생성
+            # 클라이언트 생성 (설정 기반)
+            config = get_config()
             self._public_client = create_public_client(
                 message_handler=public_message_handler,
-                enable_compression=True,
-                enable_simple_format=True
+                enable_compression=config.connection.enable_compression,
+                enable_simple_format=config.connection.enable_simple_format
             )
 
             # 연결 시도
@@ -275,11 +279,12 @@ class GlobalWebSocketManager:
                     self._handle_received_message(message_data, WebSocketType.PRIVATE)
                 )
 
-            # 클라이언트 생성
+            # 클라이언트 생성 (설정 기반)
+            config = get_config()
             self._private_client = create_private_client(
                 message_handler=private_message_handler,
-                enable_compression=True,
-                enable_simple_format=True
+                enable_compression=config.connection.enable_compression,
+                enable_simple_format=config.connection.enable_simple_format
             )
 
             # 연결 시도
@@ -314,15 +319,15 @@ class GlobalWebSocketManager:
             # 현재 Epoch 가져오기
             current_epoch = self.epoch_manager.get_current_epoch(connection_type)
 
-            # v6 이벤트로 변환
-            v6_event = self._convert_to_v6_event(message_data, current_epoch, connection_type)
+            # 이벤트로 변환
+            event = self._convert_to_event(message_data, current_epoch, connection_type)
 
-            if v6_event:
+            if event:
                 # 데이터 타입 추론
                 data_type = get_data_type_from_message(message_data)
                 if data_type:
-                    # v6 데이터 라우터로 분배
-                    await self.data_router.route_event(v6_event, data_type)
+                    # 데이터 라우터로 분배
+                    await self.data_router.route_event(event, data_type)
 
                 # 메트릭스 업데이트
                 metrics = self._connection_metrics[connection_type]
@@ -334,13 +339,13 @@ class GlobalWebSocketManager:
             metrics = self._connection_metrics[connection_type]
             metrics.error_count += 1
 
-    def _convert_to_v6_event(
+    def _convert_to_event(
         self,
         message_data: Dict[str, Any],
         epoch: int,
         connection_type: WebSocketType
     ) -> Optional[BaseWebSocketEvent]:
-        """업비트 메시지를 v6 이벤트로 변환"""
+        """업비트 메시지를 이벤트로 변환"""
         try:
             # 메시지 타입 확인
             msg_type = message_data.get('type', '').lower()
@@ -541,9 +546,8 @@ class GlobalWebSocketManager:
 
                 if total_changes > 0:
                     try:
-                        rate_limiter = await self._rate_limiter
-                        # Rate Limiter 호환성 처리
-                        await rate_limiter.acquire("websocket", min(total_changes, 10))
+                        # Rate Limiter 호출 (이미 초기화된 인스턴스)
+                        await self._rate_limiter.acquire("websocket_message", "WS", max(total_changes, 10))
                     except Exception as e:
                         self.logger.warning(f"Rate limiting 실패: {e}")            # Public 구독 적용
             public_changes = {
@@ -583,7 +587,7 @@ class GlobalWebSocketManager:
             for data_type, subscription in active_subscriptions.items():
                 if subscription.symbols:
                     message = {
-                        "ticket": f"v6_{data_type.value}_{int(time.time())}",
+                        "ticket": f"ws_{data_type.value}_{int(time.time())}",
                         "type": data_type.value,
                         "codes": list(subscription.symbols),
                         "isOnlySnapshot": False,
@@ -617,7 +621,7 @@ class GlobalWebSocketManager:
             for data_type, subscription in active_subscriptions.items():
                 if data_type == DataType.MY_ORDER:
                     message = {
-                        "ticket": f"v6_myorder_{int(time.time())}",
+                        "ticket": f"ws_myorder_{int(time.time())}",
                         "type": "myOrder",
                         "isOnlySnapshot": False,
                         "isOnlyRealtime": True
@@ -626,7 +630,7 @@ class GlobalWebSocketManager:
 
                 elif data_type == DataType.MY_ASSET:
                     message = {
-                        "ticket": f"v6_myasset_{int(time.time())}",
+                        "ticket": f"ws_myasset_{int(time.time())}",
                         "type": "myAsset",
                         "isOnlySnapshot": False,
                         "isOnlyRealtime": True

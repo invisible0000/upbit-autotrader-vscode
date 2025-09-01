@@ -15,10 +15,12 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from enum import Enum
+from decimal import Decimal
+import time
 
-# v6 타입 시스템 통합
+# 타입 시스템 통합 (types.py에서 모든 타입 import)
 from .types import (
-    DataType as V6DataType,
+    DataType,
     WebSocketType,
     BaseWebSocketEvent,
     TickerEvent,
@@ -28,7 +30,8 @@ from .types import (
     MyOrderEvent,
     MyAssetEvent,
     create_ticker_event,
-    create_orderbook_event
+    create_orderbook_event,
+    get_data_type_from_message
 )
 
 # SIMPLE 포맷 변환기 통합
@@ -42,6 +45,13 @@ try:
 except ImportError:
     SIMPLE_FORMAT_AVAILABLE = False
 
+    # 폴백 함수들
+    def auto_detect_and_convert(data, **kwargs):
+        return data
+
+    def convert_to_simple_format(data, **kwargs):
+        return data
+
 
 class StreamType(str, Enum):
     """WebSocket 스트림 타입"""
@@ -49,74 +59,20 @@ class StreamType(str, Enum):
     REALTIME = "REALTIME"
 
 
-class DataType(str, Enum):
-    """업비트 웹소켓 지원 데이터 타입 - 공식 API 기준"""
-    # Public 데이터 타입
-    TICKER = "ticker"           # 현재가
-    TRADE = "trade"             # 체결
-    ORDERBOOK = "orderbook"     # 호가
-
-    # 캔들 데이터 (업비트 공식 형식)
-    CANDLE_1S = "candle.1s"     # 초봉
-    CANDLE_1M = "candle.1m"     # 1분봉
-    CANDLE_3M = "candle.3m"     # 3분봉
-    CANDLE_5M = "candle.5m"     # 5분봉
-    CANDLE_10M = "candle.10m"   # 10분봉
-    CANDLE_15M = "candle.15m"   # 15분봉
-    CANDLE_30M = "candle.30m"   # 30분봉
-    CANDLE_60M = "candle.60m"   # 60분봉 (1시간)
-    CANDLE_240M = "candle.240m"  # 240분봉 (4시간)
-
-    # Private 데이터 타입
-    MYORDER = "myOrder"         # 내 주문 및 체결
-    MYASSET = "myAsset"         # 내 자산
-
-    @classmethod
-    def get_public_types(cls) -> List['DataType']:
-        """Public 연결용 데이터 타입들"""
-        return [
-            cls.TICKER, cls.TRADE, cls.ORDERBOOK,
-            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
-            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
-        ]
-
-    @classmethod
-    def get_private_types(cls) -> List['DataType']:
-        """Private 연결용 데이터 타입들"""
-        return [cls.MYORDER, cls.MYASSET]
-
-    @classmethod
-    def get_candle_types(cls) -> List['DataType']:
-        """캔들 데이터 타입들"""
-        return [
-            cls.CANDLE_1S, cls.CANDLE_1M, cls.CANDLE_3M, cls.CANDLE_5M,
-            cls.CANDLE_10M, cls.CANDLE_15M, cls.CANDLE_30M, cls.CANDLE_60M, cls.CANDLE_240M
-        ]
-
-    def is_public(self) -> bool:
-        """Public 연결용 데이터인지 확인"""
-        return self in self.get_public_types()
-
-    def is_private(self) -> bool:
-        """Private 연결용 데이터인지 확인"""
-        return self in self.get_private_types()
-
-    def is_candle(self) -> bool:
-        """캔들 데이터인지 확인"""
-        return self in self.get_candle_types()
+# models.py의 DataType 클래스는 제거 - types.py 것 사용
 
 
 # ================================================================
-# v6 이벤트 시스템 통합 (dict -> v6 Event 변환)
+# 이벤트 시스템 통합 (dict -> Event 변환)
 # ================================================================
 
-def convert_dict_to_v6_event(
+def convert_dict_to_event(
     message_data: Dict[str, Any],
     epoch: int = 0,
     connection_type: Optional[WebSocketType] = None
 ) -> Optional[BaseWebSocketEvent]:
     """
-    Dict 기반 메시지를 v6 이벤트 객체로 변환
+    Dict 기반 메시지를 이벤트 객체로 변환
 
     Args:
         message_data: 검증된 Dict 메시지
@@ -124,7 +80,7 @@ def convert_dict_to_v6_event(
         connection_type: WebSocket 연결 타입
 
     Returns:
-        BaseWebSocketEvent: v6 이벤트 객체 또는 None
+        BaseWebSocketEvent: 이벤트 객체 또는 None
     """
     if not connection_type:
         connection_type = WebSocketType.PUBLIC
@@ -137,7 +93,6 @@ def convert_dict_to_v6_event(
         elif msg_type == 'orderbook':
             return create_orderbook_event(message_data, epoch, connection_type)
         elif msg_type == 'trade':
-            from decimal import Decimal
             return TradeEvent(
                 epoch=epoch,
                 timestamp=time.time(),
@@ -166,8 +121,6 @@ def convert_dict_to_v6_event(
                 candle_timestamp=message_data.get('timestamp', 0)
             )
         elif msg_type == 'myOrder':
-            from decimal import Decimal
-
             def safe_decimal(value):
                 return Decimal(str(value)) if value is not None else None
 
@@ -202,18 +155,19 @@ def convert_dict_to_v6_event(
                 currency=message_data.get('currency', ''),
                 balance=Decimal(str(message_data.get('balance', 0))),
                 locked=Decimal(str(message_data.get('locked', 0))),
-                avg_buy_price=Decimal(str(message_data.get('avg_buy_price', 0))) if message_data.get('avg_buy_price') else None,
+                avg_buy_price=(Decimal(str(message_data.get('avg_buy_price', 0)))
+                               if message_data.get('avg_buy_price') else None),
                 avg_buy_price_modified=message_data.get('avg_buy_price_modified'),
                 unit_currency=message_data.get('unit_currency')
             )
     except Exception as e:
-        print(f"v6 이벤트 변환 실패: {e}")
+        print(f"이벤트 변환 실패: {e}")
         return None
 
     return None
 
 
-def process_message_to_v6_event(
+def process_message_to_event(
     raw_data: Dict[str, Any],
     epoch: int = 0,
     connection_type: Optional[WebSocketType] = None,
@@ -241,39 +195,28 @@ def process_message_to_v6_event(
             validate_data=validate_data
         )
 
-        # 2. v6 이벤트로 변환
-        return convert_dict_to_v6_event(
+        # 2. 이벤트로 변환
+        return convert_dict_to_event(
             processed_data['data'],
             epoch=epoch,
             connection_type=connection_type
         )
 
     except Exception as e:
-        print(f"메시지 -> v6 이벤트 변환 실패: {e}")
+        print(f"메시지 -> 이벤트 변환 실패: {e}")
         return None
 
 
-def get_v6_data_type_from_dict(message_data: Dict[str, Any]) -> Optional[V6DataType]:
-    """Dict 메시지에서 v6 DataType 추론"""
-    msg_type = infer_message_type(message_data)
-
-    type_mapping = {
-        'ticker': V6DataType.TICKER,
-        'trade': V6DataType.TRADE,
-        'orderbook': V6DataType.ORDERBOOK,
-        'candle': V6DataType.CANDLE,
-        'myOrder': V6DataType.MY_ORDER,
-        'myAsset': V6DataType.MY_ASSET
-    }
-
-    return type_mapping.get(msg_type)
+def get_data_type_from_dict(message_data: Dict[str, Any]) -> Optional[DataType]:
+    """Dict 메시지에서 DataType 추론 (types.py의 get_data_type_from_message 호출)"""
+    return get_data_type_from_message(message_data)
 
 
 # ================================================================
 # v6 호환성 유틸리티
 # ================================================================
 
-def create_v6_compatible_message(
+def create_compatible_message(
     msg_type: str,
     market: str,
     data: Dict[str, Any],
@@ -288,22 +231,18 @@ def create_v6_compatible_message(
         msg_type, market, data, timestamp, stream_type
     )
 
-    # v6 이벤트 추가
-    v6_event = convert_dict_to_v6_event(
+    # 이벤트 추가
+    event = convert_dict_to_event(
         data, epoch=epoch, connection_type=connection_type
     )
 
     # 통합 메시지 구조
     return {
         'dict_format': dict_message,
-        'v6_event': v6_event,
-        'format_type': 'v6_compatible',
+        'event': event,
+        'format_type': 'compatible',
         'supports_both': True
     }
-
-
-import time
-
 
 # ================================================================
 # 기본 WebSocket 메시지 유틸리티 (기존 클라이언트 패턴)

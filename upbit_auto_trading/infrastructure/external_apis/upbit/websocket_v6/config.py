@@ -1,9 +1,11 @@
 """
-WebSocket v6.0 설정 관리
-======================
+WebSocket v6.0 설정 관리 (YAML 지원 확장)
+=========================================
 
-WebSocket v6 시스템의 설정 관리
-환경별 설정, 기본값, 검증 로직 포함
+WebSocket v6 시스템의 통합 설정 관리
+- 기존 Python 기반 설정 유지 (하위 호환성)
+- YAML 파일 로딩 기능 추가 (v6.1 신규)
+- 환경별 설정, 기본값, 검증 로직 포함
 
 설정 영역:
 - 연결 설정 (URL, 타임아웃)
@@ -11,14 +13,20 @@ WebSocket v6 시스템의 설정 관리
 - 백프레셔 설정 (큐 크기, 전략)
 - Private 인증 설정 (JWT)
 - 성능 모니터링 설정
+- 포맷 변환 설정 (SIMPLE ↔ DEFAULT) - NEW
 """
 
 import os
+import yaml
+from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from enum import Enum
 
 from .types import BackpressureConfig, BackpressureStrategy
+from upbit_auto_trading.infrastructure.logging import create_component_logger
+
+logger = create_component_logger("WebSocketConfig")
 
 
 class Environment(Enum):
@@ -30,17 +38,35 @@ class Environment(Enum):
 
 
 @dataclass
+class FormatConfig:
+    """포맷 변환 설정 (v6.1 신규)"""
+    internal_format: str = "default"  # 내부 시스템 포맷
+    transmission_format: str = "simple"  # 네트워크 전송 포맷
+    user_interface_format: str = "default"  # 사용자 API 포맷
+    enable_transparent_conversion: bool = True  # 투명 변환 활성화
+    log_format_conversion: bool = False  # 변환 로깅
+
+
+@dataclass
 class ConnectionConfig:
     """연결 설정"""
+    # 현재: Public/Private 동일 URL (업비트 정책)
+    url: str = "wss://api.upbit.com/websocket/v1"
+
+    # 향후 분리 대비 (현재 미사용)
     public_url: str = "wss://api.upbit.com/websocket/v1"
     private_url: str = "wss://api.upbit.com/websocket/v1"
+
     connect_timeout: float = 10.0
     heartbeat_interval: float = 30.0
     enable_compression: bool = True
     enable_simple_format: bool = False
+    max_message_size: int = 1024 * 1024  # 1MB
 
     def validate(self) -> None:
         """설정 검증"""
+        if not self.url.startswith("wss://"):
+            raise ValueError("url은 wss:// 형식이어야 합니다")
         if not self.public_url.startswith("wss://"):
             raise ValueError("public_url은 wss:// 형식이어야 합니다")
         if not self.private_url.startswith("wss://"):
@@ -137,8 +163,8 @@ class SubscriptionConfig:
 
 
 @dataclass
-class WebSocketV6Config:
-    """WebSocket v6 통합 설정"""
+class WebSocketConfig:
+    """WebSocket 통합 설정"""
     environment: Environment = Environment.DEVELOPMENT
     connection: ConnectionConfig = field(default_factory=ConnectionConfig)
     reconnection: ReconnectionConfig = field(default_factory=ReconnectionConfig)
@@ -146,11 +172,24 @@ class WebSocketV6Config:
     auth: AuthConfig = field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
     subscription: SubscriptionConfig = field(default_factory=SubscriptionConfig)
+    format: FormatConfig = field(default_factory=FormatConfig)  # NEW
 
     # 디버깅 옵션
     debug_mode: bool = False
     log_level: str = "INFO"
     log_websocket_messages: bool = False
+
+    @property
+    def is_transparent_conversion_enabled(self) -> bool:
+        """투명 포맷 변환 활성화 여부"""
+        return (self.format.enable_transparent_conversion
+                and self.connection.enable_simple_format)
+
+    @property
+    def should_use_simple_format_for_transmission(self) -> bool:
+        """전송 시 SIMPLE 포맷 사용 여부"""
+        return (self.format.transmission_format == "simple"
+                and self.connection.enable_simple_format)
 
     def validate(self) -> None:
         """전체 설정 검증"""
@@ -229,6 +268,13 @@ class WebSocketV6Config:
                 'subscription_timeout': self.subscription.subscription_timeout,
                 'auto_cleanup_interval': self.subscription.auto_cleanup_interval,
             },
+            'format': {
+                'internal_format': self.format.internal_format,
+                'transmission_format': self.format.transmission_format,
+                'user_interface_format': self.format.user_interface_format,
+                'enable_transparent_conversion': self.format.enable_transparent_conversion,
+                'log_format_conversion': self.format.log_format_conversion,
+            },
             'debug': {
                 'debug_mode': self.debug_mode,
                 'log_level': self.log_level,
@@ -238,20 +284,174 @@ class WebSocketV6Config:
 
 
 # =============================================================================
+# YAML 설정 로딩 기능 (v6.1 신규)
+# =============================================================================
+
+def load_yaml_config(config_file: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    YAML 설정 파일 로드
+
+    Args:
+        config_file: YAML 설정 파일 경로
+
+    Returns:
+        Dict[str, Any]: YAML 설정 데이터 또는 None
+    """
+    if config_file is None:
+        # 현재 디렉토리의 websocket_config.yaml 찾기
+        current_dir = Path(__file__).parent
+        config_path = current_dir / "websocket_config.yaml"
+    else:
+        config_path = Path(config_file)
+
+    if not config_path.exists():
+        logger.info(f"YAML 설정 파일 없음: {config_path}, Python 설정 사용")
+        return None
+
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            yaml_data = yaml.safe_load(f)
+
+        logger.info(f"✅ YAML 설정 로드 완료: {config_path}")
+        return yaml_data
+
+    except Exception as e:
+        logger.error(f"YAML 설정 로드 실패: {e}, Python 설정으로 폴백")
+        return None
+
+
+def apply_yaml_overrides(config: WebSocketConfig, yaml_data: Dict[str, Any]) -> WebSocketConfig:
+    """
+    YAML 설정으로 기존 설정 오버라이드
+
+    Args:
+        config: 기존 WebSocketConfig
+        yaml_data: YAML 설정 데이터
+
+    Returns:
+        WebSocketConfig: 오버라이드된 설정
+    """
+    # Connection 설정 오버라이드
+    if 'connection' in yaml_data:
+        conn_yaml = yaml_data['connection']
+        if 'url' in conn_yaml:
+            config.connection.url = conn_yaml['url']
+            # 향후 분리 대비
+            config.connection.public_url = conn_yaml['url']
+            config.connection.private_url = conn_yaml['url']
+        if 'connection_timeout' in conn_yaml:
+            config.connection.connect_timeout = conn_yaml['connection_timeout']
+        if 'heartbeat_interval' in conn_yaml:
+            config.connection.heartbeat_interval = conn_yaml['heartbeat_interval']
+        if 'max_message_size' in conn_yaml:
+            config.connection.max_message_size = conn_yaml['max_message_size']
+
+    # Performance 설정 오버라이드
+    if 'performance' in yaml_data:
+        perf_yaml = yaml_data['performance']
+        if 'enable_compression' in perf_yaml:
+            config.connection.enable_compression = perf_yaml['enable_compression']
+        if 'enable_simple_format' in perf_yaml:
+            config.connection.enable_simple_format = perf_yaml['enable_simple_format']
+
+    # Backpressure 설정 오버라이드 (NEW)
+    if 'backpressure' in yaml_data:
+        bp_yaml = yaml_data['backpressure']
+        if 'max_queue_size' in bp_yaml:
+            config.backpressure.max_queue_size = bp_yaml['max_queue_size']
+        if 'warning_threshold' in bp_yaml:
+            config.backpressure.warning_threshold = bp_yaml['warning_threshold']
+        if 'strategy' in bp_yaml:
+            try:
+                config.backpressure.strategy = BackpressureStrategy(bp_yaml['strategy'])
+            except ValueError:
+                pass  # 잘못된 전략은 무시
+
+    # Monitoring 설정 오버라이드 (NEW)
+    if 'monitoring' in yaml_data:
+        mon_yaml = yaml_data['monitoring']
+        if 'metrics_collection_interval' in mon_yaml:
+            config.monitoring.metrics_collection_interval = mon_yaml['metrics_collection_interval']
+        if 'health_check_interval' in mon_yaml:
+            config.monitoring.health_check_interval = mon_yaml['health_check_interval']
+        if 'performance_window_size' in mon_yaml:
+            config.monitoring.performance_window_size = mon_yaml['performance_window_size']
+        if 'alert_error_rate_threshold' in mon_yaml:
+            config.monitoring.alert_error_rate_threshold = mon_yaml['alert_error_rate_threshold']
+        if 'alert_latency_threshold_ms' in mon_yaml:
+            config.monitoring.alert_latency_threshold_ms = mon_yaml['alert_latency_threshold_ms']
+        if 'alert_queue_threshold' in mon_yaml:
+            config.monitoring.alert_queue_threshold = mon_yaml['alert_queue_threshold']
+        if 'alert_reconnect_threshold' in mon_yaml:
+            config.monitoring.alert_reconnect_threshold = mon_yaml['alert_reconnect_threshold']
+
+    # Subscription 설정 오버라이드 (NEW)
+    if 'subscription' in yaml_data:
+        sub_yaml = yaml_data['subscription']
+        if 'max_symbols_per_request' in sub_yaml:
+            config.subscription.max_symbols_per_request = sub_yaml['max_symbols_per_request']
+        if 'timeout' in sub_yaml:
+            config.subscription.subscription_timeout = sub_yaml['timeout']
+        if 'auto_cleanup_interval' in sub_yaml:
+            config.subscription.auto_cleanup_interval = sub_yaml['auto_cleanup_interval']
+        if 'grace_period' in sub_yaml:
+            config.subscription.grace_period = sub_yaml['grace_period']
+
+    # Auth 설정 오버라이드 (NEW)
+    if 'auth' in yaml_data:
+        auth_yaml = yaml_data['auth']
+        if 'jwt_refresh_threshold' in auth_yaml:
+            config.auth.jwt_refresh_threshold = auth_yaml['jwt_refresh_threshold']
+        if 'jwt_refresh_retry_count' in auth_yaml:
+            config.auth.jwt_refresh_retry_count = auth_yaml['jwt_refresh_retry_count']
+        if 'jwt_refresh_timeout' in auth_yaml:
+            config.auth.jwt_refresh_timeout = auth_yaml['jwt_refresh_timeout']
+        if 'fallback_to_rest' in auth_yaml:
+            config.auth.fallback_to_rest = auth_yaml['fallback_to_rest']
+
+    # Format 설정 오버라이드 (v6.1 신규)
+    if 'format' in yaml_data:
+        format_yaml = yaml_data['format']
+        if 'internal_format' in format_yaml:
+            config.format.internal_format = format_yaml['internal_format']
+        if 'transmission_format' in format_yaml:
+            config.format.transmission_format = format_yaml['transmission_format']
+        if 'user_interface_format' in format_yaml:
+            config.format.user_interface_format = format_yaml['user_interface_format']
+        if 'enable_transparent_conversion' in format_yaml:
+            config.format.enable_transparent_conversion = format_yaml['enable_transparent_conversion']
+        if 'log_format_conversion' in format_yaml:
+            config.format.log_format_conversion = format_yaml['log_format_conversion']
+
+    # Reconnection 설정 오버라이드
+    if 'reconnection' in yaml_data:
+        recon_yaml = yaml_data['reconnection']
+        if 'max_attempts' in recon_yaml:
+            config.reconnection.max_attempts = recon_yaml['max_attempts']
+        if 'base_delay' in recon_yaml:
+            config.reconnection.base_delay = recon_yaml['base_delay']
+        if 'max_delay' in recon_yaml:
+            config.reconnection.max_delay = recon_yaml['max_delay']
+
+    logger.info("✅ YAML 설정 오버라이드 완료")
+    return config
+
+
+# =============================================================================
 # 설정 팩토리 함수
 # =============================================================================
 
-def create_default_config(environment: Environment = Environment.DEVELOPMENT) -> WebSocketV6Config:
+def create_default_config(environment: Environment = Environment.DEVELOPMENT) -> WebSocketConfig:
     """기본 설정 생성"""
-    config = WebSocketV6Config(environment=environment)
+    config = WebSocketConfig(environment=environment)
     config.apply_environment_overrides()
     config.validate()
     return config
 
 
-def create_development_config() -> WebSocketV6Config:
+def create_development_config() -> WebSocketConfig:
     """개발 환경 설정"""
-    config = WebSocketV6Config(environment=Environment.DEVELOPMENT)
+    config = WebSocketConfig(environment=Environment.DEVELOPMENT)
 
     # 개발 환경 특화 설정
     config.debug_mode = True
@@ -271,9 +471,9 @@ def create_development_config() -> WebSocketV6Config:
     return config
 
 
-def create_testing_config() -> WebSocketV6Config:
+def create_testing_config() -> WebSocketConfig:
     """테스트 환경 설정"""
-    config = WebSocketV6Config(environment=Environment.TESTING)
+    config = WebSocketConfig(environment=Environment.TESTING)
 
     # 테스트 환경 특화 설정
     config.debug_mode = True
@@ -295,9 +495,9 @@ def create_testing_config() -> WebSocketV6Config:
     return config
 
 
-def create_production_config() -> WebSocketV6Config:
+def create_production_config() -> WebSocketConfig:
     """프로덕션 환경 설정"""
-    config = WebSocketV6Config(environment=Environment.PRODUCTION)
+    config = WebSocketConfig(environment=Environment.PRODUCTION)
 
     # 프로덕션 환경 특화 설정
     config.debug_mode = False
@@ -326,8 +526,12 @@ def create_production_config() -> WebSocketV6Config:
 # 환경변수 기반 설정 로딩
 # =============================================================================
 
-def load_config_from_env() -> WebSocketV6Config:
-    """환경변수에서 설정 로딩"""
+# =============================================================================
+# 환경변수 기반 설정 로딩 (YAML 지원 확장)
+# =============================================================================
+
+def load_config_from_env() -> WebSocketConfig:
+    """환경변수에서 설정 로딩 (YAML 오버라이드 지원)"""
     # 환경 결정
     env_name = os.getenv("UPBIT_ENVIRONMENT", "development").lower()
     try:
@@ -338,7 +542,12 @@ def load_config_from_env() -> WebSocketV6Config:
     # 기본 설정 생성
     config = create_default_config(environment)
 
-    # 환경변수 오버라이드
+    # YAML 설정 오버라이드 시도
+    yaml_data = load_yaml_config()
+    if yaml_data:
+        config = apply_yaml_overrides(config, yaml_data)
+
+    # 환경변수 오버라이드 (최우선)
     if url := os.getenv("UPBIT_WEBSOCKET_PUBLIC_URL"):
         config.connection.public_url = url
 
@@ -379,14 +588,59 @@ def load_config_from_env() -> WebSocketV6Config:
     return config
 
 
-def get_config() -> WebSocketV6Config:
+# 전역 설정 인스턴스 (싱글톤)
+_global_config_instance: Optional[WebSocketConfig] = None
+
+
+def get_config() -> WebSocketConfig:
     """설정 인스턴스 획득 (싱글톤 패턴)"""
-    if not hasattr(get_config, '_instance'):
-        get_config._instance = load_config_from_env()
-    return get_config._instance
+    global _global_config_instance
+    if _global_config_instance is None:
+        _global_config_instance = load_config_from_env()
+    return _global_config_instance
 
 
 def reset_config() -> None:
     """설정 인스턴스 리셋 (테스트용)"""
-    if hasattr(get_config, '_instance'):
-        delattr(get_config, '_instance')
+    global _global_config_instance
+    _global_config_instance = None
+
+
+# =============================================================================
+# 편의 함수들 (v6.1 신규)
+# =============================================================================
+
+def get_transmission_format() -> str:
+    """전송용 포맷 반환"""
+    config = get_config()
+    return config.format.transmission_format
+
+
+def is_compression_enabled() -> bool:
+    """압축 활성화 여부"""
+    config = get_config()
+    return config.connection.enable_compression
+
+
+def is_simple_format_enabled() -> bool:
+    """SIMPLE 포맷 활성화 여부"""
+    config = get_config()
+    return config.connection.enable_simple_format
+
+
+def is_transparent_conversion_enabled() -> bool:
+    """투명 변환 활성화 여부"""
+    config = get_config()
+    return config.is_transparent_conversion_enabled
+
+
+def get_user_interface_format() -> str:
+    """사용자 인터페이스 포맷 반환"""
+    config = get_config()
+    return config.format.user_interface_format
+
+
+def get_internal_format() -> str:
+    """내부 시스템 포맷 반환"""
+    config = get_config()
+    return config.format.internal_format
