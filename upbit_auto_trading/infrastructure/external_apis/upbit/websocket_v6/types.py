@@ -1,0 +1,486 @@
+"""
+WebSocket v6.0 타입 정의
+=======================
+
+이벤트 시스템, 구독 규격, 성능 지표 등 핵심 타입 정의
+@dataclass 기반 타입 안전성 강화
+
+핵심 타입:
+- WebSocket 이벤트 (TickerEvent, OrderbookEvent, CandleEvent)
+- 구독 규격 (SubscriptionSpec, ComponentSubscription)
+- 성능 지표 (PerformanceMetrics)
+- 상태 관리 (ConnectionState, SubscriptionState)
+"""
+
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any, Callable
+from enum import Enum
+from decimal import Decimal
+
+
+class ConnectionState(Enum):
+    """WebSocket 연결 상태"""
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    SUBSCRIBING = "subscribing"
+    ACTIVE = "active"
+    RECONNECTING = "reconnecting"
+    ERROR = "error"
+
+
+class SubscriptionState(Enum):
+    """구독 상태"""
+    IDLE = "idle"
+    PENDING = "pending"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ERROR = "error"
+
+
+class WebSocketType(Enum):
+    """WebSocket 연결 타입"""
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+
+class DataType(Enum):
+    """데이터 타입"""
+    TICKER = "ticker"
+    ORDERBOOK = "orderbook"
+    TRADE = "trade"
+    CANDLE = "candle"
+    MY_ORDER = "my_order"
+    MY_ASSET = "my_asset"
+
+
+class GlobalManagerState(Enum):
+    """글로벌 매니저 상태"""
+    INITIALIZING = "initializing"
+    IDLE = "idle"
+    ACTIVE = "active"
+    SHUTTING_DOWN = "shutting_down"
+    STOPPED = "stopped"
+    ERROR = "error"
+    TRADE = "trade"
+    CANDLE = "candle"
+    MY_ORDER = "myOrder"
+    MY_ASSET = "myAsset"
+
+
+# =============================================================================
+# 이벤트 시스템 (타입 안전성)
+# =============================================================================
+
+@dataclass
+class BaseWebSocketEvent:
+    """WebSocket 이벤트 기본 클래스"""
+    epoch: int                    # 재연결 구분용 세대 번호
+    timestamp: float             # 수신 시각 (monotonic time)
+    connection_type: WebSocketType
+    symbol: Optional[str] = None
+
+
+@dataclass
+class TickerEvent(BaseWebSocketEvent):
+    """현재가 이벤트"""
+    trade_price: Decimal         # 체결가
+    trade_volume: Decimal        # 체결량
+    acc_trade_price: Decimal     # 누적 거래 대금
+    acc_trade_volume: Decimal    # 누적 거래량
+    high_price: Decimal          # 고가
+    low_price: Decimal           # 저가
+    prev_closing_price: Decimal  # 전일 종가
+    change: str                  # 변화 (RISE, EVEN, FALL)
+    change_price: Decimal        # 변화 대금
+    change_rate: Decimal         # 변화율
+    ask_bid: str                 # 매수/매도 구분
+    trade_timestamp: int         # 체결 시각 (업비트 timestamp)
+
+
+@dataclass
+class OrderbookUnit:
+    """호가 단위"""
+    ask_price: Decimal          # 매도호가
+    bid_price: Decimal          # 매수호가
+    ask_size: Decimal           # 매도잔량
+    bid_size: Decimal           # 매수잔량
+
+
+@dataclass
+class OrderbookEvent(BaseWebSocketEvent):
+    """호가 이벤트"""
+    orderbook_units: List[OrderbookUnit]  # 호가 리스트 (15단계)
+    total_ask_size: Decimal      # 총 매도량
+    total_bid_size: Decimal      # 총 매수량
+    orderbook_timestamp: int     # 호가 시각 (업비트 timestamp)
+
+
+@dataclass
+class TradeEvent(BaseWebSocketEvent):
+    """체결 이벤트"""
+    trade_price: Decimal         # 체결가
+    trade_volume: Decimal        # 체결량
+    ask_bid: str                 # 매수/매도 구분
+    trade_timestamp: int         # 체결 시각 (업비트 timestamp)
+    sequential_id: int           # 체결 번호
+    prev_closing_price: Decimal  # 전일 종가
+
+
+@dataclass
+class CandleEvent(BaseWebSocketEvent):
+    """캔들 이벤트"""
+    opening_price: Decimal       # 시가
+    high_price: Decimal          # 고가
+    low_price: Decimal           # 저가
+    trade_price: Decimal         # 종가
+    candle_acc_trade_price: Decimal  # 누적 거래 대금
+    candle_acc_trade_volume: Decimal  # 누적 거래량
+    unit: int                    # 분봉 (1, 3, 5, 15, 30, 60, 240)
+    candle_timestamp: int        # 캔들 시각 (업비트 timestamp)
+
+
+@dataclass
+class MyOrderEvent(BaseWebSocketEvent):
+    """내 주문 이벤트 (Private)"""
+    uuid: str                    # 주문 고유 아이디
+    order_type: str              # 주문 타입 (limit, price, market)
+    ord_type: str                # 주문 방식 (bid, ask)
+    price: Optional[Decimal]     # 주문 당일 단가
+    avg_price: Optional[Decimal]     # 체결 가격 평균값
+    state: str                   # 주문 상태 (wait, done, cancel)
+    market: str                  # 마켓 ID
+    created_at: str              # 주문 생성 시간
+    volume: Optional[Decimal]    # 사용자가 입력한 주문 양
+    remaining_volume: Optional[Decimal]  # 미체결 수량
+    reserved_fee: Optional[Decimal]      # 수수료로 예약된 비용
+    remaining_fee: Optional[Decimal]     # 남은 수수료
+    paid_fee: Optional[Decimal]          # 사용된 수수료
+    locked: Optional[Decimal]            # 거래에 사용중인 비용 또는 수량
+    executed_volume: Optional[Decimal]   # 체결된 양
+    trades_count: Optional[int]          # 해당 주문에 걸린 체결 수
+
+
+@dataclass
+class MyAssetEvent(BaseWebSocketEvent):
+    """내 자산 이벤트 (Private)"""
+    currency: str                # 화폐를 의미하는 영문 대문자 코드
+    balance: Decimal             # 주문가능 금액/수량
+    locked: Decimal              # 주문 중 묶여있는 금액/수량
+    avg_buy_price: Optional[Decimal]     # 매수평균가
+    avg_buy_price_modified: Optional[bool]  # 매수평균가 수정 여부
+    unit_currency: Optional[str]         # 평단가 기준 화폐
+
+
+# =============================================================================
+# 구독 규격
+# =============================================================================
+
+@dataclass
+class SubscriptionSpec:
+    """구독 규격"""
+    data_type: DataType
+    symbols: List[str]
+    callback: Callable[[BaseWebSocketEvent], None]
+    error_handler: Optional[Callable[[Exception], None]] = None
+
+    # Private 전용
+    markets: Optional[List[str]] = None  # Private에서는 markets 사용
+
+    def __post_init__(self):
+        """검증 로직"""
+        if self.data_type in [DataType.MY_ORDER, DataType.MY_ASSET]:
+            # Private 데이터는 symbols 대신 markets 사용
+            if not self.markets and not self.symbols:
+                raise ValueError("Private 데이터는 markets 또는 symbols 필요")
+        else:
+            # Public 데이터는 symbols 필수
+            if not self.symbols:
+                raise ValueError("Public 데이터는 symbols 필수")
+
+
+@dataclass
+class ComponentSubscription:
+    """컴포넌트별 구독 정보"""
+    component_id: str            # 컴포넌트 식별자
+    subscription_specs: List[SubscriptionSpec]
+    callback: Callable[[BaseWebSocketEvent], None]
+    created_at: float = field(default_factory=time.monotonic)
+    last_data_received: Optional[float] = None
+    error_count: int = 0
+    is_active: bool = True
+
+    @property
+    def subscriptions(self) -> List[SubscriptionSpec]:
+        """호환성을 위한 별칭"""
+        return self.subscription_specs
+
+
+# =============================================================================
+# 성능 지표
+# =============================================================================
+
+@dataclass
+class PerformanceMetrics:
+    """성능 지표"""
+    # 연결 관련
+    connection_count: int = 0
+    uptime_seconds: float = 0.0
+    reconnect_count: int = 0
+
+    # 메시지 관련
+    messages_received_total: int = 0
+    messages_per_second: float = 0.0
+    data_routing_latency_ms: float = 0.0
+
+    # 구독 관련
+    active_subscriptions: int = 0
+    active_components: int = 0
+    subscription_conflicts: int = 0
+
+    # 에러 관련
+    callback_errors: int = 0
+    connection_errors: int = 0
+    rate_limit_hits: int = 0
+
+    # 메모리 관련
+    queue_depth_public: int = 0
+    queue_depth_private: int = 0
+    dropped_messages: int = 0
+
+    # 백프레셔 관련
+    backpressure_events: int = 0
+    coalesced_messages: int = 0
+    throttled_callbacks: int = 0
+
+
+@dataclass
+class HealthStatus:
+    """시스템 건강 상태"""
+    status: str  # healthy, degraded, critical
+    public_connection: ConnectionState
+    private_connection: ConnectionState
+    active_subscriptions: Dict[str, int]  # data_type -> count
+    performance: PerformanceMetrics
+    alerts: List[str] = field(default_factory=list)
+    timestamp: float = field(default_factory=time.monotonic)
+
+
+# =============================================================================
+# 백프레셔 처리
+# =============================================================================
+
+class BackpressureStrategy(Enum):
+    """백프레셔 처리 전략"""
+    DROP_OLDEST = "drop_oldest"           # 오래된 데이터 삭제
+    COALESCE_BY_SYMBOL = "coalesce_by_symbol"  # 심볼별 최신 데이터만 유지
+    THROTTLE = "throttle"                 # 콜백 호출 빈도 제한
+    BLOCK = "block"                       # 대기 (비권장)
+
+
+@dataclass
+class BackpressureConfig:
+    """백프레셔 설정"""
+    strategy: BackpressureStrategy = BackpressureStrategy.DROP_OLDEST
+    max_queue_size: int = 1000           # 큐 최대 크기
+    warning_threshold: float = 0.8       # 경고 임계값 (80%)
+    coalesce_window_ms: int = 100        # 통합 윈도우 (밀리초)
+    throttle_interval_ms: int = 50       # 스로틀 간격 (밀리초)
+
+
+# =============================================================================
+# 에러 처리
+# =============================================================================
+
+class WebSocketV6Error(Exception):
+    """WebSocket v6 기본 예외"""
+    pass
+
+
+class ConnectionError(WebSocketV6Error):
+    """연결 오류"""
+    pass
+
+
+class SubscriptionError(WebSocketV6Error):
+    """구독 오류"""
+    pass
+
+
+class BackpressureError(WebSocketV6Error):
+    """백프레셔 오류"""
+    pass
+
+
+class AuthenticationError(WebSocketV6Error):
+    """인증 오류 (Private 전용)"""
+    pass
+
+
+class RecoveryError(WebSocketV6Error):
+    """복구 오류"""
+    pass
+
+
+# =============================================================================
+# 설정
+# =============================================================================
+
+@dataclass
+class WebSocketV6Config:
+    """WebSocket v6 설정"""
+    # 연결 설정
+    public_url: str = "wss://api.upbit.com/websocket/v1"
+    private_url: str = "wss://api.upbit.com/websocket/v1"
+    connect_timeout: float = 10.0
+    heartbeat_interval: float = 30.0
+
+    # 재연결 설정
+    max_reconnect_attempts: int = 5
+    reconnect_base_delay: float = 1.0
+    reconnect_max_delay: float = 60.0
+    reconnect_jitter: bool = True
+
+    # 백프레셔 설정
+    backpressure: BackpressureConfig = field(default_factory=BackpressureConfig)
+
+    # Private 인증 설정
+    jwt_refresh_threshold: float = 0.8   # 80% 만료 시점에 갱신
+    jwt_refresh_retry_count: int = 3
+
+    # 성능 모니터링 설정
+    metrics_collection_interval: float = 10.0
+    health_check_interval: float = 30.0
+    alert_threshold_error_rate: float = 0.05  # 5% 에러율
+    alert_threshold_latency_ms: float = 1000.0  # 1초 지연
+
+
+# =============================================================================
+# 연결 및 성능 메트릭스
+# =============================================================================
+
+@dataclass(frozen=True)
+class ConnectionMetrics:
+    """WebSocket 연결 성능 지표"""
+    connected_clients: int = 0
+    total_subscriptions: int = 0
+    messages_per_second: float = 0.0
+    average_latency_ms: float = 0.0
+    error_rate: float = 0.0
+    uptime_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class DataStreamEvent:
+    """데이터 스트림 이벤트"""
+    data_type: DataType
+    symbol: str
+    data: Dict[str, Any]
+    source_connection: str
+    sequence_id: int
+    timestamp: float = field(default_factory=time.monotonic)
+
+
+# =============================================================================
+# 유틸리티 함수
+# =============================================================================
+
+def create_ticker_event(data: Dict[str, Any], epoch: int, connection_type: WebSocketType) -> TickerEvent:
+    """업비트 데이터에서 TickerEvent 생성"""
+    return TickerEvent(
+        epoch=epoch,
+        timestamp=time.monotonic(),
+        connection_type=connection_type,
+        symbol=data.get('code'),
+        trade_price=Decimal(str(data.get('trade_price', 0))),
+        trade_volume=Decimal(str(data.get('trade_volume', 0))),
+        acc_trade_price=Decimal(str(data.get('acc_trade_price', 0))),
+        acc_trade_volume=Decimal(str(data.get('acc_trade_volume', 0))),
+        high_price=Decimal(str(data.get('high_price', 0))),
+        low_price=Decimal(str(data.get('low_price', 0))),
+        prev_closing_price=Decimal(str(data.get('prev_closing_price', 0))),
+        change=data.get('change', 'EVEN'),
+        change_price=Decimal(str(data.get('change_price', 0))),
+        change_rate=Decimal(str(data.get('change_rate', 0))),
+        ask_bid=data.get('ask_bid', ''),
+        trade_timestamp=data.get('trade_timestamp', 0)
+    )
+
+
+def create_orderbook_event(data: Dict[str, Any], epoch: int, connection_type: WebSocketType) -> OrderbookEvent:
+    """업비트 데이터에서 OrderbookEvent 생성"""
+    orderbook_units = []
+    for unit_data in data.get('orderbook_units', []):
+        unit = OrderbookUnit(
+            ask_price=Decimal(str(unit_data.get('ask_price', 0))),
+            bid_price=Decimal(str(unit_data.get('bid_price', 0))),
+            ask_size=Decimal(str(unit_data.get('ask_size', 0))),
+            bid_size=Decimal(str(unit_data.get('bid_size', 0)))
+        )
+        orderbook_units.append(unit)
+
+    return OrderbookEvent(
+        epoch=epoch,
+        timestamp=time.monotonic(),
+        connection_type=connection_type,
+        symbol=data.get('code'),
+        orderbook_units=orderbook_units,
+        total_ask_size=Decimal(str(data.get('total_ask_size', 0))),
+        total_bid_size=Decimal(str(data.get('total_bid_size', 0))),
+        orderbook_timestamp=data.get('timestamp', 0)
+    )
+
+
+def get_data_type_from_message(data: Dict[str, Any]) -> Optional[DataType]:
+    """업비트 메시지에서 DataType 추론"""
+    if 'type' in data:
+        type_str = data['type']
+        if type_str == 'ticker':
+            return DataType.TICKER
+        elif type_str == 'orderbook':
+            return DataType.ORDERBOOK
+        elif type_str == 'trade':
+            return DataType.TRADE
+        elif type_str == 'candle':
+            return DataType.CANDLE
+        elif type_str == 'myOrder':
+            return DataType.MY_ORDER
+        elif type_str == 'myAsset':
+            return DataType.MY_ASSET
+
+    # 메시지 구조로 추론
+    if 'trade_price' in data and 'trade_volume' in data:
+        if 'orderbook_units' in data:
+            return None  # 애매한 경우
+        return DataType.TICKER
+    elif 'orderbook_units' in data:
+        return DataType.ORDERBOOK
+    elif 'uuid' in data and 'state' in data:
+        return DataType.MY_ORDER
+    elif 'currency' in data and 'balance' in data:
+        return DataType.MY_ASSET
+
+    return None
+
+
+def validate_symbols(symbols: List[str]) -> bool:
+    """심볼 형식 검증"""
+    if not symbols:
+        return False
+
+    for symbol in symbols:
+        if not isinstance(symbol, str):
+            return False
+        if not symbol or len(symbol) < 3:
+            return False
+        # 업비트 형식: KRW-BTC, BTC-ETH 등
+        if '-' not in symbol:
+            return False
+
+    return True
+
+
+def normalize_symbols(symbols: List[str]) -> List[str]:
+    """심볼 정규화 (대문자 변환)"""
+    return [symbol.upper().strip() for symbol in symbols if symbol and symbol.strip()]
