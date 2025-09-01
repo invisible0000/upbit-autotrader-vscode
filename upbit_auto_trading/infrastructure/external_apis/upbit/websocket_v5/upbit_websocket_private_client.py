@@ -15,7 +15,7 @@ import jwt
 import time
 import uuid
 import websockets
-from typing import Dict, List, Optional, Callable, Any, Set
+from typing import Dict, List, Optional, Callable, Any, Set, Union
 from datetime import datetime, timedelta
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -37,6 +37,16 @@ from .exceptions import (
     ErrorCode
 )
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
+# 동적 Rate Limiter 통합
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
+    get_global_rate_limiter, UpbitGCRARateLimiter
+)
+from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
+    get_dynamic_rate_limiter,
+    DynamicUpbitRateLimiter,
+    DynamicConfig,
+    AdaptiveStrategy
+)
 
 logger = create_component_logger("UpbitWebSocketPrivateV5")
 
@@ -48,14 +58,16 @@ class PrivateDataType:
 
 
 class UpbitWebSocketPrivateV5:
-    """업비트 WebSocket v5.0 Private 클라이언트 - v4.0 구독 매니저 통합"""
+    """업비트 WebSocket v5.0 Private 클라이언트 - 동적 Rate Limiter 통합"""
 
     def __init__(self,
                  access_key: Optional[str] = None,
                  secret_key: Optional[str] = None,
                  config_path: Optional[str] = None,
                  event_broker: Optional[Any] = None,
-                 cleanup_interval: Optional[int] = None):
+                 cleanup_interval: Optional[int] = None,
+                 use_dynamic_limiter: bool = True,
+                 dynamic_config: Optional[DynamicConfig] = None):
         """
         Args:
             access_key: 업비트 API Access Key (None이면 UpbitAuthenticator에서 자동 로드)
@@ -63,6 +75,8 @@ class UpbitWebSocketPrivateV5:
             config_path: 설정 파일 경로
             event_broker: 외부 이벤트 브로커
             cleanup_interval: 구독 자동 정리 간격 (초, None이면 30초)
+            use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본: True)
+            dynamic_config: 동적 Rate Limiter 설정
         """
         # UpbitAuthenticator를 통한 API 키 로드
         self.auth = UpbitAuthenticator(access_key, secret_key)
@@ -80,6 +94,18 @@ class UpbitWebSocketPrivateV5:
         # 연결 관리
         self.websocket: Optional[Any] = None
         self.connection_id = str(uuid.uuid4())
+
+        # 🔄 동적 Rate Limiter 통합 (Private 전용 설정)
+        self._use_dynamic_limiter = use_dynamic_limiter
+        self._dynamic_config = dynamic_config or DynamicConfig(
+            strategy=AdaptiveStrategy.CONSERVATIVE,  # Private는 더 보수적으로
+            error_429_threshold=1,       # 첫 429에서 바로 대응
+            reduction_ratio=0.6,         # 429 발생 시 60%로 감소
+            recovery_delay=300.0,        # 5분 후 복구 시작
+            min_ratio=0.3                # 최소 30%까지만 감소
+        )
+        self._dynamic_limiter: Optional[DynamicUpbitRateLimiter] = None
+        self._legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None
 
         # 🚀 v4.0 구독 관리자 통합 (Private 전용)
         self.subscription_manager = SubscriptionManager(
@@ -103,17 +129,53 @@ class UpbitWebSocketPrivateV5:
             'start_time': datetime.now(),
             'last_message_time': None,
             'auth_token_refreshes': 0,
-            'auth_failures': 0
+            'auth_failures': 0,
+            'subscription_requests': 0,
+            'subscription_429_count': 0,
+            'rate_limit_waits': 0
         }
 
         # 백그라운드 태스크
         self._tasks: Set[asyncio.Task] = set()
 
-        logger.info(f"Private WebSocket 클라이언트 v4.0 초기화 완료 - ID: {self.connection_id}")
+        logger.info(f"Private WebSocket 클라이언트 v4.0 (동적 Rate Limiter) 초기화 완료 - ID: {self.connection_id}")
 
     def _default_callback(self, symbol: str, data_type: str, data: dict):
         """기본 콜백 함수"""
         logger.debug(f"Private 기본 콜백: {symbol} {data_type} 데이터 수신")
+
+    async def _ensure_rate_limiter(self) -> Union[DynamicUpbitRateLimiter, UpbitGCRARateLimiter]:
+        """Rate Limiter 확보 (동적 우선, Private 전용 설정)"""
+        if self._use_dynamic_limiter:
+            if self._dynamic_limiter is None:
+                self._dynamic_limiter = await get_dynamic_rate_limiter(self._dynamic_config)
+                logger.debug("🔄 Private WebSocket 동적 Rate Limiter 초기화 완료")
+            return self._dynamic_limiter
+        else:
+            if self._legacy_rate_limiter is None:
+                self._legacy_rate_limiter = await get_global_rate_limiter()
+                logger.debug("⚙️ Private WebSocket 레거시 Rate Limiter 초기화 완료")
+            return self._legacy_rate_limiter
+
+    async def _apply_subscription_rate_limit(self, data_type: str) -> None:
+        """Private 구독 요청에 Rate Limiting 적용"""
+        try:
+            rate_limiter = await self._ensure_rate_limiter()
+
+            # Private WebSocket 구독 요청을 REST API 엔드포인트로 매핑
+            endpoint = f"/websocket/private/subscribe/{data_type}"
+
+            start_time = time.perf_counter()
+            await rate_limiter.acquire(endpoint, "POST")
+            wait_time = time.perf_counter() - start_time
+
+            if wait_time > 0.001:  # 1ms 이상 대기한 경우
+                self.stats['rate_limit_waits'] += 1
+                logger.debug(f"🚦 Private Rate Limit 대기: {data_type} ({wait_time * 1000:.1f}ms)")
+
+        except Exception as e:
+            logger.warning(f"Private Rate Limiting 적용 실패: {e}")
+            # Rate Limiting 실패해도 구독은 계속 진행
 
     def _generate_jwt_token(self) -> str:
         """JWT 토큰 생성 및 갱신"""
@@ -279,6 +341,10 @@ class UpbitWebSocketPrivateV5:
             # 백그라운드 태스크 정리
             await self._cleanup_tasks()
 
+            # 🔄 동적 Rate Limiter 모니터링 중지
+            if self._dynamic_limiter:
+                await self._dynamic_limiter.stop_monitoring()
+
             # WebSocket 연결 종료
             if self.websocket:
                 await self.websocket.close()
@@ -308,12 +374,16 @@ class UpbitWebSocketPrivateV5:
 
     async def _subscribe(self, data_type: str, markets: Optional[List[str]] = None,
                          callback: Optional[Callable] = None) -> str:
-        """Private 데이터 구독 - v4.0 단순화"""
+        """Private 데이터 구독 - v4.0 + 동적 Rate Limiting 통합"""
         if not self.is_connected():
             raise SubscriptionError("Private WebSocket이 연결되지 않았습니다", data_type)
 
         try:
             self.state_machine.transition_to(WebSocketState.SUBSCRIBING)
+
+            # 🔄 Rate Limiting 적용
+            await self._apply_subscription_rate_limit(data_type)
+            self.stats['subscription_requests'] += 1
 
             # v4.0 실시간 구독
             success = await self.subscription_manager.request_realtime_data(
@@ -327,12 +397,17 @@ class UpbitWebSocketPrivateV5:
             if success:
                 subscription_id = f"private_{data_type}_{int(time.time())}"
                 self.state_machine.transition_to(WebSocketState.ACTIVE)
-                logger.info(f"Private 구독 완료: {data_type}")
+                logger.info(f"Private 구독 완료 (Rate Limited): {data_type}")
                 return subscription_id
             else:
                 raise SubscriptionError(f"Private 구독 실패: {data_type}", data_type)
 
         except Exception as e:
+            # 429 오류인 경우 별도 처리
+            if "429" in str(e) or "rate limit" in str(e).lower():
+                self.stats['subscription_429_count'] += 1
+                logger.warning(f"🚨 Private 구독 Rate Limit 감지: {data_type}")
+
             error = SubscriptionError(f"Private 구독 실패: {str(e)}", data_type)
             await self._handle_error(error)
             raise error
@@ -410,12 +485,32 @@ class UpbitWebSocketPrivateV5:
 
     # 상태 조회 메서드들
     async def get_status(self) -> Dict[str, Any]:
-        """연결 상태 조회 - v4.0"""
+        """연결 상태 조회 - v4.0 + Rate Limiter 통합"""
         current_time = datetime.now()
         uptime = (current_time - self.stats['start_time']).total_seconds()
 
         # v4.0 구독 정보
         subscription_state = self.subscription_manager.get_state()
+
+        # Rate Limiter 상태 정보
+        rate_limiter_status = {}
+        try:
+            if self._use_dynamic_limiter and self._dynamic_limiter:
+                rate_limiter_status = self._dynamic_limiter.get_dynamic_status()
+                rate_limiter_status['type'] = 'dynamic'
+            elif self._legacy_rate_limiter:
+                rate_limiter_status = {
+                    'type': 'legacy',
+                    'initialized': True
+                }
+            else:
+                rate_limiter_status = {
+                    'type': 'dynamic' if self._use_dynamic_limiter else 'legacy',
+                    'initialized': False
+                }
+        except Exception as e:
+            logger.warning(f"Private Rate Limiter 상태 조회 실패: {e}")
+            rate_limiter_status = {'error': str(e)}
 
         return {
             **create_connection_status(
@@ -426,12 +521,16 @@ class UpbitWebSocketPrivateV5:
             "messages_received": self.stats['messages_received'],
             "messages_processed": self.stats['messages_processed'],
             "error_count": self.stats['errors'],
+            "subscription_requests": self.stats['subscription_requests'],
+            "subscription_429_count": self.stats['subscription_429_count'],
+            "rate_limit_waits": self.stats['rate_limit_waits'],
             "auth_metrics": {
                 "token_refreshes": self.stats['auth_token_refreshes'],
                 "auth_failures": self.stats['auth_failures'],
                 "token_expires_at": self._token_expires_at.isoformat() if self._token_expires_at else None,
                 "token_valid": not self._is_token_expired()
             },
+            "rate_limiter": rate_limiter_status,
             "subscription_state": subscription_state
         }
 
@@ -692,14 +791,18 @@ async def create_private_client(access_key: Optional[str] = None,
                                 secret_key: Optional[str] = None,
                                 config_path: Optional[str] = None,
                                 event_broker: Optional[Any] = None,
-                                cleanup_interval: int = 30) -> UpbitWebSocketPrivateV5:
-    """Private 클라이언트 생성"""
+                                cleanup_interval: int = 30,
+                                use_dynamic_limiter: bool = True,
+                                dynamic_config: Optional[DynamicConfig] = None) -> UpbitWebSocketPrivateV5:
+    """Private 클라이언트 생성 - 동적 Rate Limiter 지원"""
     client = UpbitWebSocketPrivateV5(
         access_key=access_key,
         secret_key=secret_key,
         config_path=config_path,
         event_broker=event_broker,
-        cleanup_interval=cleanup_interval
+        cleanup_interval=cleanup_interval,
+        use_dynamic_limiter=use_dynamic_limiter,
+        dynamic_config=dynamic_config
     )
     await client.connect()
     return client
@@ -708,17 +811,27 @@ async def create_private_client(access_key: Optional[str] = None,
 async def quick_subscribe_my_orders(access_key: Optional[str] = None,
                                     secret_key: Optional[str] = None,
                                     markets: Optional[List[str]] = None,
-                                    callback: Optional[Callable] = None) -> UpbitWebSocketPrivateV5:
-    """빠른 내 주문 구독 (개발/테스트용)"""
-    client = await create_private_client(access_key, secret_key)
+                                    callback: Optional[Callable] = None,
+                                    use_dynamic_limiter: bool = True) -> UpbitWebSocketPrivateV5:
+    """빠른 내 주문 구독 (개발/테스트용) - 동적 Rate Limiter 기본 활성화"""
+    client = await create_private_client(
+        access_key=access_key,
+        secret_key=secret_key,
+        use_dynamic_limiter=use_dynamic_limiter
+    )
     await client.subscribe_my_orders(markets, callback)
     return client
 
 
 async def quick_subscribe_my_assets(access_key: Optional[str] = None,
                                     secret_key: Optional[str] = None,
-                                    callback: Optional[Callable] = None) -> UpbitWebSocketPrivateV5:
-    """빠른 내 자산 구독 (개발/테스트용)"""
-    client = await create_private_client(access_key, secret_key)
+                                    callback: Optional[Callable] = None,
+                                    use_dynamic_limiter: bool = True) -> UpbitWebSocketPrivateV5:
+    """빠른 내 자산 구독 (개발/테스트용) - 동적 Rate Limiter 기본 활성화"""
+    client = await create_private_client(
+        access_key=access_key,
+        secret_key=secret_key,
+        use_dynamic_limiter=use_dynamic_limiter
+    )
     await client.subscribe_my_assets(callback)
     return client
