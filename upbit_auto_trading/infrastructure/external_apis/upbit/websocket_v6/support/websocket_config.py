@@ -72,11 +72,12 @@ class Environment(Enum):
 class ConnectionConfig:
     """연결 설정"""
     public_url: str = "wss://api.upbit.com/websocket/v1"
-    private_url: str = "wss://api.upbit.com/websocket/v1"
+    private_url: str = "wss://api.upbit.com/websocket/v1/private"  # Private 엔드포인트 분리
     connect_timeout: float = 10.0
     heartbeat_interval: float = 30.0
-    enable_compression: bool = True
+    enable_compression: bool = True  # 업비트 압축 기능 활성화
     max_message_size: int = 1024 * 1024  # 1MB
+    compression_threshold: int = 1024  # 압축 임계값 (바이트)
 
     def validate(self) -> None:
         """설정 검증"""
@@ -88,6 +89,8 @@ class ConnectionConfig:
             raise ValueError("connect_timeout은 양수여야 합니다")
         if self.heartbeat_interval <= 0:
             raise ValueError("heartbeat_interval은 양수여야 합니다")
+        if self.compression_threshold < 0:
+            raise ValueError("compression_threshold는 0 이상이어야 합니다")
 
 
 @dataclass
@@ -188,6 +191,13 @@ class WebSocketConfig:
         if compression := os.getenv('UPBIT_WEBSOCKET_COMPRESSION'):
             self.connection.enable_compression = compression.lower() in ('true', '1', 'yes')
 
+        # 압축 임계값 설정
+        if threshold := os.getenv('UPBIT_WEBSOCKET_COMPRESSION_THRESHOLD'):
+            try:
+                self.connection.compression_threshold = int(threshold)
+            except ValueError:
+                logger.warning(f"잘못된 UPBIT_WEBSOCKET_COMPRESSION_THRESHOLD 값: {threshold}")
+
     def to_dict(self) -> Dict[str, Any]:
         """Dict 형식으로 변환"""
         return {
@@ -198,7 +208,8 @@ class WebSocketConfig:
                 'connect_timeout': self.connection.connect_timeout,
                 'heartbeat_interval': self.connection.heartbeat_interval,
                 'enable_compression': self.connection.enable_compression,
-                'max_message_size': self.connection.max_message_size
+                'max_message_size': self.connection.max_message_size,
+                'compression_threshold': self.connection.compression_threshold
             },
             'reconnection': {
                 'max_attempts': self.reconnection.max_attempts,

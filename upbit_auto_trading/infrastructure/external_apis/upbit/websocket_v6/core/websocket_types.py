@@ -136,32 +136,58 @@ class BaseWebSocketEvent:
 
 @dataclass
 class TickerEvent(BaseWebSocketEvent):
-    """현재가 이벤트"""
-    symbol: Optional[str] = None
-    trade_price: Optional[Decimal] = None
-    change: Optional[str] = None
-    change_price: Optional[Decimal] = None
-    change_rate: Optional[Decimal] = None
-    signed_change_price: Optional[Decimal] = None
-    signed_change_rate: Optional[Decimal] = None
-    trade_volume: Optional[Decimal] = None
-    acc_trade_volume: Optional[Decimal] = None
-    acc_trade_price: Optional[Decimal] = None
-    trade_date: Optional[str] = None
-    trade_time: Optional[str] = None
-    trade_timestamp: Optional[int] = None
-    ask_bid: Optional[str] = None
-    acc_trade_volume_24h: Optional[Decimal] = None
-    acc_trade_price_24h: Optional[Decimal] = None
-    highest_52_week_price: Optional[Decimal] = None
-    highest_52_week_date: Optional[str] = None
-    lowest_52_week_price: Optional[Decimal] = None
-    lowest_52_week_date: Optional[str] = None
+    """현재가 이벤트 (업비트 공식 문서 완전 반영)"""
+    # 기본 정보
+    symbol: Optional[str] = None  # code 필드에서 변환
+
+    # 가격 정보
     opening_price: Optional[Decimal] = None
     high_price: Optional[Decimal] = None
     low_price: Optional[Decimal] = None
+    trade_price: Optional[Decimal] = None
     prev_closing_price: Optional[Decimal] = None
-    timestamp_ms: Optional[int] = None
+
+    # 변화 정보
+    change: Optional[str] = None  # RISE/EVEN/FALL
+    change_price: Optional[Decimal] = None
+    signed_change_price: Optional[Decimal] = None
+    change_rate: Optional[Decimal] = None
+    signed_change_rate: Optional[Decimal] = None
+
+    # 거래량/거래대금
+    trade_volume: Optional[Decimal] = None
+    acc_trade_volume: Optional[Decimal] = None
+    acc_trade_volume_24h: Optional[Decimal] = None
+    acc_trade_price: Optional[Decimal] = None
+    acc_trade_price_24h: Optional[Decimal] = None
+
+    # 거래 시간 정보
+    trade_date: Optional[str] = None  # yyyyMMdd
+    trade_time: Optional[str] = None  # HHmmss
+    trade_timestamp: Optional[int] = None  # ms
+
+    # 매수/매도 정보
+    ask_bid: Optional[str] = None  # ASK/BID
+    acc_ask_volume: Optional[Decimal] = None
+    acc_bid_volume: Optional[Decimal] = None
+
+    # 52주 고/저가
+    highest_52_week_price: Optional[Decimal] = None
+    highest_52_week_date: Optional[str] = None  # yyyy-MM-dd
+    lowest_52_week_price: Optional[Decimal] = None
+    lowest_52_week_date: Optional[str] = None  # yyyy-MM-dd
+
+    # 거래 상태 (일부 Deprecated)
+    trade_status: Optional[str] = None  # Deprecated
+    market_state: Optional[str] = None  # PREVIEW/ACTIVE/DELISTED
+    market_state_for_ios: Optional[str] = None  # Deprecated
+    is_trading_suspended: Optional[bool] = None  # Deprecated
+    delisting_date: Optional[str] = None
+    market_warning: Optional[str] = None  # NONE/CAUTION
+
+    # 시스템 정보
+    timestamp_ms: Optional[int] = None  # timestamp 필드에서 변환
+    stream_type: Optional[str] = None  # SNAPSHOT/REALTIME
 
 
 @dataclass
@@ -181,12 +207,13 @@ class OrderbookEvent(BaseWebSocketEvent):
     timestamp_ms: Optional[int] = None
     total_ask_size: Optional[Decimal] = None
     total_bid_size: Optional[Decimal] = None
-    level: int = 15
+    level: int = 0  # 호가 모아보기 단위 (기본: 0, 기본 호가단위)
+    stream_type: Optional[str] = None  # SNAPSHOT/REALTIME
 
 
 @dataclass
 class TradeEvent(BaseWebSocketEvent):
-    """체결 이벤트"""
+    """체결 이벤트 (업비트 공식 문서 완전 반영)"""
     symbol: Optional[str] = None
     trade_price: Optional[Decimal] = None
     trade_volume: Optional[Decimal] = None
@@ -200,10 +227,19 @@ class TradeEvent(BaseWebSocketEvent):
     sequential_id: Optional[int] = None
     prev_closing_price: Optional[Decimal] = None
 
+    # 최우선 호가 정보
+    best_ask_price: Optional[Decimal] = None
+    best_ask_size: Optional[Decimal] = None
+    best_bid_price: Optional[Decimal] = None
+    best_bid_size: Optional[Decimal] = None
+
+    # 스트림 타입
+    stream_type: Optional[str] = None
+
 
 @dataclass
 class CandleEvent(BaseWebSocketEvent):
-    """캔들 이벤트"""
+    """캔들 이벤트 (업비트 공식 문서 완전 반영)"""
     symbol: Optional[str] = None
     unit: Optional[str] = None
     opening_price: Optional[Decimal] = None
@@ -218,34 +254,85 @@ class CandleEvent(BaseWebSocketEvent):
     prev_closing_price: Optional[Decimal] = None
     timestamp_ms: Optional[int] = None
 
+    # 캔들 기준 시각 (핵심 필드)
+    candle_date_time_utc: Optional[str] = None
+    candle_date_time_kst: Optional[str] = None
+
+    # 스트림 타입
+    stream_type: Optional[str] = None
+
 
 @dataclass
 class MyOrderEvent(BaseWebSocketEvent):
-    """내 주문 이벤트"""
-    order_uuid: Optional[str] = None
-    symbol: Optional[str] = None
-    side: Optional[str] = None
-    ord_type: Optional[str] = None
-    price: Optional[Decimal] = None
-    avg_price: Optional[Decimal] = None
-    state: Optional[str] = None
-    volume: Optional[Decimal] = None
-    remaining_volume: Optional[Decimal] = None
-    executed_volume: Optional[Decimal] = None
-    trades_count: Optional[int] = None
-    timestamp_ms: Optional[int] = None
+    """내 주문 및 체결 이벤트 (업비트 공식 문서 완전 반영)"""
+    # 기본 주문 정보
+    symbol: Optional[str] = None  # code 필드에서 변환
+    uuid: Optional[str] = None  # 주문의 유일 식별자
+    ask_bid: Optional[str] = None  # 매수/매도 구분 (ASK/BID)
+    order_type: Optional[str] = None  # 주문 타입 (limit/price/market/best)
+    state: Optional[str] = None  # 주문 상태 (wait/watch/trade/done/cancel/prevented)
+
+    # 체결 정보
+    trade_uuid: Optional[str] = None  # 체결의 유일 식별자
+    price: Optional[Decimal] = None  # 주문 가격 또는 체결 가격
+    avg_price: Optional[Decimal] = None  # 평균 체결 가격
+    volume: Optional[Decimal] = None  # 주문량 또는 체결량
+    remaining_volume: Optional[Decimal] = None  # 체결 후 주문 잔량
+    executed_volume: Optional[Decimal] = None  # 체결된 수량
+    trades_count: Optional[int] = None  # 해당 주문에 걸린 체결 수
+
+    # 수수료 및 자금 정보
+    reserved_fee: Optional[Decimal] = None  # 수수료로 예약된 비용
+    remaining_fee: Optional[Decimal] = None  # 남은 수수료
+    paid_fee: Optional[Decimal] = None  # 사용된 수수료
+    locked: Optional[Decimal] = None  # 거래에 사용중인 비용
+    executed_funds: Optional[Decimal] = None  # 체결된 금액
+    trade_fee: Optional[Decimal] = None  # 체결 시 발생한 수수료
+
+    # 주문 조건 및 메타데이터
+    time_in_force: Optional[str] = None  # IOC, FOK, POST_ONLY 설정
+    is_maker: Optional[bool] = None  # 메이커/테이커 여부 (체결 시에만)
+    identifier: Optional[str] = None  # 클라이언트 지정 주문 식별자
+
+    # SMP (자전거래 체결 방지) 관련 (2025.07.02 신규 추가)
+    smp_type: Optional[str] = None  # reduce/cancel_maker/cancel_taker
+    prevented_volume: Optional[Decimal] = None  # 자전거래 방지로 취소된 수량
+    prevented_locked: Optional[Decimal] = None  # 자전거래 방지로 취소된 금액
+
+    # 타임스탬프
+    trade_timestamp: Optional[int] = None  # 체결 타임스탬프 (ms)
+    order_timestamp: Optional[int] = None  # 주문 타임스탬프 (ms)
+    timestamp_ms: Optional[int] = None  # 타임스탬프 (ms)
+
+    # 스트림 타입
+    stream_type: Optional[str] = None  # REALTIME/SNAPSHOT
+
+
+@dataclass
+class AssetItem:
+    """자산 개별 아이템"""
+    currency: str
+    balance: Decimal
+    locked: Decimal
 
 
 @dataclass
 class MyAssetEvent(BaseWebSocketEvent):
-    """내 자산 이벤트"""
-    currency: Optional[str] = None
-    balance: Optional[Decimal] = None
-    locked: Optional[Decimal] = None
-    avg_buy_price: Optional[Decimal] = None
-    avg_buy_price_modified: Optional[bool] = None
-    unit_currency: Optional[str] = None
+    """내 자산 이벤트 (업비트 공식 문서 완전 반영)"""
+    # 자산 고유 식별자
+    asset_uuid: Optional[str] = None
+
+    # 자산 목록 (List of Objects)
+    assets: List[AssetItem] = field(default_factory=list)
+
+    # 자산 타임스탬프 (ms)
+    asset_timestamp: Optional[int] = None
+
+    # 타임스탬프 (ms)
     timestamp_ms: Optional[int] = None
+
+    # 스트림 타입
+    stream_type: Optional[str] = None
 
 
 # ================================================================
@@ -319,32 +406,58 @@ class ConnectionMetrics:
 # ================================================================
 
 TICKER_FIELDS = {
+    # 기본 정보
     'type': 'ticker',
     'code': '마켓 코드 (ex. KRW-BTC)',
+
+    # 가격 정보
     'opening_price': '시가',
     'high_price': '고가',
     'low_price': '저가',
     'trade_price': '현재가',
     'prev_closing_price': '전일 종가',
-    'change': '전일 대비 (RISE/FALL/EVEN)',
-    'change_price': '변화 가격',
-    'change_rate': '변화율',
-    'signed_change_price': '부호 포함 변화 가격',
-    'signed_change_rate': '부호 포함 변화율',
-    'trade_volume': '체결량',
-    'acc_trade_volume': '누적 체결량',
-    'acc_trade_price': '누적 체결 대금',
-    'trade_date': '체결 일자 (UTC)',
-    'trade_time': '체결 시각 (UTC)',
-    'trade_timestamp': '체결 타임스탬프',
-    'ask_bid': '매수/매도 구분 (ASK/BID)',
-    'acc_trade_volume_24h': '24시간 누적 체결량',
-    'acc_trade_price_24h': '24시간 누적 체결 대금',
+
+    # 변화 정보
+    'change': '전일 종가 대비 가격 변동 방향 (RISE/EVEN/FALL)',
+    'change_price': '전일 대비 가격 변동의 절대값',
+    'signed_change_price': '전일 대비 가격 변동 값',
+    'change_rate': '전일 대비 등락율의 절대값',
+    'signed_change_rate': '전일 대비 등락율',
+
+    # 거래량/거래대금
+    'trade_volume': '가장 최근 거래량',
+    'acc_trade_volume': '누적 거래량(UTC 0시 기준)',
+    'acc_trade_volume_24h': '24시간 누적 거래량',
+    'acc_trade_price': '누적 거래대금(UTC 0시 기준)',
+    'acc_trade_price_24h': '24시간 누적 거래대금',
+
+    # 거래 시간 정보
+    'trade_date': '최근 거래 일자(UTC) - yyyyMMdd',
+    'trade_time': '최근 거래 시각(UTC) - HHmmss',
+    'trade_timestamp': '체결 타임스탬프(ms)',
+
+    # 매수/매도 정보
+    'ask_bid': '매수/매도 구분 (ASK: 매도, BID: 매수)',
+    'acc_ask_volume': '누적 매도량',
+    'acc_bid_volume': '누적 매수량',
+
+    # 52주 고/저가
     'highest_52_week_price': '52주 최고가',
-    'highest_52_week_date': '52주 최고가 달성일',
+    'highest_52_week_date': '52주 최고가 달성일 (yyyy-MM-dd)',
     'lowest_52_week_price': '52주 최저가',
-    'lowest_52_week_date': '52주 최저가 달성일',
-    'timestamp': '타임스탬프'
+    'lowest_52_week_date': '52주 최저가 달성일 (yyyy-MM-dd)',
+
+    # 거래 상태 (일부 Deprecated)
+    'trade_status': '거래상태 (Deprecated - 참조 대상에서 제외 권장)',
+    'market_state': '거래상태 (PREVIEW: 입금지원, ACTIVE: 거래지원가능, DELISTED: 거래지원종료)',
+    'market_state_for_ios': '거래 상태 (Deprecated - 참조 대상에서 제외 권장)',
+    'is_trading_suspended': '거래 정지 여부 (Deprecated - 참조 대상에서 제외 권장)',
+    'delisting_date': '거래지원 종료일',
+    'market_warning': '유의 종목 여부 (NONE: 해당없음, CAUTION: 투자유의)',
+
+    # 기타
+    'timestamp': '타임스탬프 (ms)',
+    'stream_type': '스트림 타입 (SNAPSHOT: 스냅샷, REALTIME: 실시간)'
 }
 
 TRADE_FIELDS = {
@@ -352,15 +465,20 @@ TRADE_FIELDS = {
     'code': '마켓 코드',
     'trade_price': '체결 가격',
     'trade_volume': '체결량',
-    'ask_bid': '매수/매도 구분',
-    'change': '전일 대비',
-    'change_price': '변화 가격',
-    'trade_date': '체결 일자',
-    'trade_time': '체결 시각',
-    'trade_timestamp': '체결 타임스탬프',
-    'timestamp': '타임스탬프',
-    'sequential_id': '체결 번호',
-    'prev_closing_price': '전일 종가'
+    'ask_bid': '매수/매도 구분 (ASK: 매도, BID: 매수)',
+    'change': '전일 종가 대비 가격 변동 방향 (RISE: 상승, EVEN: 보합, FALL: 하락)',
+    'change_price': '전일 대비 가격 변동의 절대값',
+    'trade_date': '체결 일자(UTC 기준) - yyyy-MM-dd',
+    'trade_time': '체결 시각(UTC 기준) - HH:mm:ss',
+    'trade_timestamp': '체결 타임스탬프(ms)',
+    'timestamp': '타임스탬프(ms)',
+    'sequential_id': '체결 번호(Unique)',
+    'prev_closing_price': '전일 종가',
+    'best_ask_price': '최우선 매도 호가',
+    'best_ask_size': '최우선 매도 잔량',
+    'best_bid_price': '최우선 매수 호가',
+    'best_bid_size': '최우선 매수 잔량',
+    'stream_type': '스트림 타입 (SNAPSHOT: 스냅샷, REALTIME: 실시간)'
 }
 
 ORDERBOOK_FIELDS = {
@@ -369,51 +487,79 @@ ORDERBOOK_FIELDS = {
     'total_ask_size': '호가 매도 총 잔량',
     'total_bid_size': '호가 매수 총 잔량',
     'orderbook_units': '호가 리스트',
-    'timestamp': '타임스탬프'
+    'orderbook_units.ask_price': '매도 호가',
+    'orderbook_units.bid_price': '매수 호가',
+    'orderbook_units.ask_size': '매도 잔량',
+    'orderbook_units.bid_size': '매수 잔량',
+    'timestamp': '타임스탬프 (ms)',
+    'level': '호가 모아보기 단위 (기본: 0, 기본 호가단위) - 원화마켓(KRW)에서만 지원',
+    'stream_type': '스트림 타입 (SNAPSHOT: 스냅샷, REALTIME: 실시간)'
 }
 
 CANDLE_FIELDS = {
-    'type': 'candle',
-    'code': '마켓 코드',
+    'type': ('캔들 타입 (candle.1s: 초봉, candle.1m: 1분봉, candle.3m: 3분봉, '
+             'candle.5m: 5분봉, candle.10m: 10분봉, candle.15m: 15분봉, '
+             'candle.30m: 30분봉, candle.60m: 60분봉, candle.240m: 240분봉)'),
+    'code': '마켓 코드 (ex. KRW-BTC)',
+    'candle_date_time_utc': '캔들 기준 시각(UTC 기준) - yyyy-MM-dd\'T\'HH:mm:ss',
+    'candle_date_time_kst': '캔들 기준 시각(KST 기준) - yyyy-MM-dd\'T\'HH:mm:ss',
     'opening_price': '시가',
     'high_price': '고가',
     'low_price': '저가',
     'trade_price': '종가',
-    'candle_acc_trade_price': '누적 체결 대금',
-    'candle_acc_trade_volume': '누적 체결량',
+    'candle_acc_trade_price': '누적 거래 금액',
+    'candle_acc_trade_volume': '누적 거래량',
     'unit': '캔들 단위',
     'change': '전일 대비',
     'change_price': '변화 가격',
     'change_rate': '변화율',
     'prev_closing_price': '전일 종가',
-    'timestamp': '타임스탬프'
+    'timestamp': '타임스탬프 (ms)',
+    'stream_type': '스트림 타입 (SNAPSHOT: 스냅샷, REALTIME: 실시간)'
 }
 
 MY_ORDER_FIELDS = {
     'type': 'myOrder',
-    'order_uuid': '주문 고유 아이디',
-    'code': '마켓 코드',
-    'side': '주문 종류 (bid/ask)',
-    'ord_type': '주문 방식 (limit/price/market)',
-    'price': '주문 가격',
+    'code': '페어 코드(예시:KRW-BTC)',
+    'uuid': '주문의 유일 식별자',
+    'ask_bid': '매수/매도 구분 (ASK: 매도, BID: 매수)',
+    'order_type': '주문 타입 (limit: 지정가, price: 시장가 매수, market: 시장가 매도, best: 최유리 지정가)',
+    'state': '주문 상태 (wait: 체결 대기, watch: 예약 주문 대기, trade: 체결 발생, done: 전체 체결 완료, cancel: 주문 취소, prevented: 체결 방지)',
+    'trade_uuid': '체결의 유일 식별자',
+    'price': '주문 가격 또는 체결 가격(state: trade 일 때)',
     'avg_price': '평균 체결 가격',
-    'state': '주문 상태',
-    'volume': '주문량',
-    'remaining_volume': '미체결량',
-    'executed_volume': '체결량',
-    'trades_count': '체결 건수',
-    'timestamp': '타임스탬프'
+    'volume': '주문량 또는 체결량 (state: trade 일 때)',
+    'remaining_volume': '체결 후 주문 잔량',
+    'executed_volume': '체결된 수량',
+    'trades_count': '해당 주문에 걸린 체결 수',
+    'reserved_fee': '수수료로 예약된 비용',
+    'remaining_fee': '남은 수수료',
+    'paid_fee': '사용된 수수료',
+    'locked': '거래에 사용중인 비용',
+    'executed_funds': '체결된 금액',
+    'time_in_force': 'IOC, FOK, POST ONLY 설정 (ioc/fok/post_only)',
+    'trade_fee': '체결 시 발생한 수수료 (state:trade가 아닐 경우 null)',
+    'is_maker': '체결이 발생한 주문의 메이커/테이커 여부 (true: 메이커, false: 테이커)',
+    'identifier': '클라이언트 지정 주문 식별자',
+    'smp_type': '자전거래 체결 방지 타입 (reduce: 주문 줄이고 진행, cancel_maker: 메이커 주문 취소, cancel_taker: 테이커 주문 취소)',
+    'prevented_volume': '자전거래 체결 방지로 인해 취소된 주문 수량',
+    'prevented_locked': '자전거래 체결 방지 설정으로 인해 취소된 금액/수량',
+    'trade_timestamp': '체결 타임스탬프 (ms)',
+    'order_timestamp': '주문 타임스탬프 (ms)',
+    'timestamp': '타임스탬프 (ms)',
+    'stream_type': '스트림 타입 (REALTIME: 실시간, SNAPSHOT: 스냅샷)'
 }
 
 MY_ASSET_FIELDS = {
     'type': 'myAsset',
-    'currency': '화폐를 의미하는 영문 대문자 코드',
-    'balance': '주문가능 금액/수량',
-    'locked': '주문 중 묶여있는 금액/수량',
-    'avg_buy_price': '매수평균가',
-    'avg_buy_price_modified': '매수평균가 수정 여부',
-    'unit_currency': '평가 화폐 단위',
-    'timestamp': '타임스탬프'
+    'asset_uuid': '자산 고유 식별자 (UUID)',
+    'assets': '자산 목록 (List of Objects)',
+    'assets.currency': '화폐 코드 (KRW, BTC, ETH 등)',
+    'assets.balance': '주문가능 수량/금액',
+    'assets.locked': '주문 중 묶여있는 수량/금액',
+    'asset_timestamp': '자산 타임스탬프 (ms)',
+    'timestamp': '타임스탬프 (ms)',
+    'stream_type': '스트림 타입 (REALTIME: 실시간)'
 }
 
 
@@ -423,7 +569,7 @@ MY_ASSET_FIELDS = {
 
 def create_ticker_event(data: Dict[str, Any], epoch: int = 0,
                         connection_type: WebSocketType = WebSocketType.PUBLIC) -> TickerEvent:
-    """Dict에서 TickerEvent 생성"""
+    """Dict에서 TickerEvent 생성 (업비트 공식 문서 모든 필드 지원)"""
     def safe_decimal(value, default=None):
         if value is None:
             return default
@@ -432,35 +578,148 @@ def create_ticker_event(data: Dict[str, Any], epoch: int = 0,
         except (ValueError, TypeError, InvalidOperation):
             return default
 
+    def safe_bool(value, default=None):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
     return TickerEvent(
+        epoch=epoch,
+        timestamp=time.time(),
+        connection_type=connection_type,
+
+        # 기본 정보
+        symbol=data.get('code'),
+
+        # 가격 정보
+        opening_price=safe_decimal(data.get('opening_price')),
+        high_price=safe_decimal(data.get('high_price')),
+        low_price=safe_decimal(data.get('low_price')),
+        trade_price=safe_decimal(data.get('trade_price')),
+        prev_closing_price=safe_decimal(data.get('prev_closing_price')),
+
+        # 변화 정보
+        change=data.get('change'),  # RISE/EVEN/FALL
+        change_price=safe_decimal(data.get('change_price')),
+        signed_change_price=safe_decimal(data.get('signed_change_price')),
+        change_rate=safe_decimal(data.get('change_rate')),
+        signed_change_rate=safe_decimal(data.get('signed_change_rate')),
+
+        # 거래량/거래대금
+        trade_volume=safe_decimal(data.get('trade_volume')),
+        acc_trade_volume=safe_decimal(data.get('acc_trade_volume')),
+        acc_trade_volume_24h=safe_decimal(data.get('acc_trade_volume_24h')),
+        acc_trade_price=safe_decimal(data.get('acc_trade_price')),
+        acc_trade_price_24h=safe_decimal(data.get('acc_trade_price_24h')),
+
+        # 거래 시간 정보
+        trade_date=data.get('trade_date'),  # yyyyMMdd
+        trade_time=data.get('trade_time'),  # HHmmss
+        trade_timestamp=data.get('trade_timestamp'),  # ms
+
+        # 매수/매도 정보
+        ask_bid=data.get('ask_bid'),  # ASK/BID
+        acc_ask_volume=safe_decimal(data.get('acc_ask_volume')),
+        acc_bid_volume=safe_decimal(data.get('acc_bid_volume')),
+
+        # 52주 고/저가
+        highest_52_week_price=safe_decimal(data.get('highest_52_week_price')),
+        highest_52_week_date=data.get('highest_52_week_date'),  # yyyy-MM-dd
+        lowest_52_week_price=safe_decimal(data.get('lowest_52_week_price')),
+        lowest_52_week_date=data.get('lowest_52_week_date'),  # yyyy-MM-dd
+
+        # 거래 상태 (일부 Deprecated)
+        trade_status=data.get('trade_status'),  # Deprecated
+        market_state=data.get('market_state'),  # PREVIEW/ACTIVE/DELISTED
+        market_state_for_ios=data.get('market_state_for_ios'),  # Deprecated
+        is_trading_suspended=safe_bool(data.get('is_trading_suspended')),  # Deprecated
+        delisting_date=data.get('delisting_date'),
+        market_warning=data.get('market_warning'),  # NONE/CAUTION
+
+        # 시스템 정보
+        timestamp_ms=data.get('timestamp'),
+        stream_type=data.get('stream_type')  # SNAPSHOT/REALTIME
+    )
+
+
+def create_trade_event(data: Dict[str, Any], epoch: int = 0,
+                       connection_type: WebSocketType = WebSocketType.PUBLIC) -> TradeEvent:
+    """Dict에서 TradeEvent 생성 (업비트 공식 문서 모든 필드 지원)"""
+    def safe_decimal(value, default=None):
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return default
+
+    return TradeEvent(
         epoch=epoch,
         timestamp=time.time(),
         connection_type=connection_type,
         symbol=data.get('code'),
         trade_price=safe_decimal(data.get('trade_price')),
+        trade_volume=safe_decimal(data.get('trade_volume')),
+        ask_bid=data.get('ask_bid'),
         change=data.get('change'),
         change_price=safe_decimal(data.get('change_price')),
-        change_rate=safe_decimal(data.get('change_rate')),
-        signed_change_price=safe_decimal(data.get('signed_change_price')),
-        signed_change_rate=safe_decimal(data.get('signed_change_rate')),
-        trade_volume=safe_decimal(data.get('trade_volume')),
-        acc_trade_volume=safe_decimal(data.get('acc_trade_volume')),
-        acc_trade_price=safe_decimal(data.get('acc_trade_price')),
         trade_date=data.get('trade_date'),
         trade_time=data.get('trade_time'),
         trade_timestamp=data.get('trade_timestamp'),
-        ask_bid=data.get('ask_bid'),
-        acc_trade_volume_24h=safe_decimal(data.get('acc_trade_volume_24h')),
-        acc_trade_price_24h=safe_decimal(data.get('acc_trade_price_24h')),
-        highest_52_week_price=safe_decimal(data.get('highest_52_week_price')),
-        highest_52_week_date=data.get('highest_52_week_date'),
-        lowest_52_week_price=safe_decimal(data.get('lowest_52_week_price')),
-        lowest_52_week_date=data.get('lowest_52_week_date'),
+        timestamp_ms=data.get('timestamp'),
+        sequential_id=data.get('sequential_id'),
+        prev_closing_price=safe_decimal(data.get('prev_closing_price')),
+
+        # 최우선 호가 정보
+        best_ask_price=safe_decimal(data.get('best_ask_price')),
+        best_ask_size=safe_decimal(data.get('best_ask_size')),
+        best_bid_price=safe_decimal(data.get('best_bid_price')),
+        best_bid_size=safe_decimal(data.get('best_bid_size')),
+
+        # 스트림 타입
+        stream_type=data.get('stream_type')
+    )
+
+
+def create_candle_event(data: Dict[str, Any], epoch: int = 0,
+                        connection_type: WebSocketType = WebSocketType.PUBLIC) -> CandleEvent:
+    """Dict에서 CandleEvent 생성 (업비트 공식 문서 모든 필드 지원)"""
+    def safe_decimal(value, default=None):
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError):
+            return default
+
+    return CandleEvent(
+        epoch=epoch,
+        timestamp=time.time(),
+        connection_type=connection_type,
+        symbol=data.get('code'),
+        unit=data.get('unit'),
         opening_price=safe_decimal(data.get('opening_price')),
         high_price=safe_decimal(data.get('high_price')),
         low_price=safe_decimal(data.get('low_price')),
+        trade_price=safe_decimal(data.get('trade_price')),
+        candle_acc_trade_price=safe_decimal(data.get('candle_acc_trade_price')),
+        candle_acc_trade_volume=safe_decimal(data.get('candle_acc_trade_volume')),
+        change=data.get('change'),
+        change_price=safe_decimal(data.get('change_price')),
+        change_rate=safe_decimal(data.get('change_rate')),
         prev_closing_price=safe_decimal(data.get('prev_closing_price')),
-        timestamp_ms=data.get('timestamp')
+        timestamp_ms=data.get('timestamp'),
+
+        # 캔들 기준 시각 (핵심 필드)
+        candle_date_time_utc=data.get('candle_date_time_utc'),
+        candle_date_time_kst=data.get('candle_date_time_kst'),
+
+        # 스트림 타입
+        stream_type=data.get('stream_type')
     )
 
 
@@ -494,7 +753,110 @@ def create_orderbook_event(data: Dict[str, Any], epoch: int = 0,
         timestamp_ms=data.get('timestamp'),
         total_ask_size=safe_decimal(data.get('total_ask_size')),
         total_bid_size=safe_decimal(data.get('total_bid_size')),
-        level=len(units)
+        level=data.get('level', 0),  # 호가 모아보기 단위 (기본: 0)
+        stream_type=data.get('stream_type')  # SNAPSHOT/REALTIME
+    )
+
+
+def create_myasset_event(data: Dict[str, Any], epoch: int = 0,
+                         connection_type: WebSocketType = WebSocketType.PRIVATE) -> MyAssetEvent:
+    """Dict에서 MyAssetEvent 생성 (업비트 공식 문서 모든 필드 지원)"""
+    def safe_decimal(value, default=Decimal('0')):
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (ValueError, TypeError, InvalidOperation):
+            return default
+
+    # assets 목록 처리
+    assets = []
+    assets_data = data.get('assets', [])
+    for asset_data in assets_data:
+        assets.append(AssetItem(
+            currency=asset_data.get('currency', ''),
+            balance=safe_decimal(asset_data.get('balance')),
+            locked=safe_decimal(asset_data.get('locked'))
+        ))
+
+    return MyAssetEvent(
+        epoch=epoch,
+        timestamp=time.time(),
+        connection_type=connection_type,
+        asset_uuid=data.get('asset_uuid'),
+        assets=assets,
+        asset_timestamp=data.get('asset_timestamp'),
+        timestamp_ms=data.get('timestamp'),
+        stream_type=data.get('stream_type')
+    )
+
+
+def create_myorder_event(data: Dict[str, Any], epoch: int = 0,
+                         connection_type: WebSocketType = WebSocketType.PRIVATE) -> MyOrderEvent:
+    """Dict에서 MyOrderEvent 생성 (업비트 공식 문서 모든 필드 지원)"""
+    def safe_decimal(value, default=None):
+        if value is None:
+            return default
+        try:
+            return Decimal(str(value))
+        except (ValueError, TypeError, InvalidOperation):
+            return default
+
+    def safe_bool(value, default=None):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ('true', '1', 'yes')
+        return bool(value)
+
+    return MyOrderEvent(
+        epoch=epoch,
+        timestamp=time.time(),
+        connection_type=connection_type,
+
+        # 기본 주문 정보
+        symbol=data.get('code'),
+        uuid=data.get('uuid'),
+        ask_bid=data.get('ask_bid'),
+        order_type=data.get('order_type'),
+        state=data.get('state'),
+
+        # 체결 정보
+        trade_uuid=data.get('trade_uuid'),
+        price=safe_decimal(data.get('price')),
+        avg_price=safe_decimal(data.get('avg_price')),
+        volume=safe_decimal(data.get('volume')),
+        remaining_volume=safe_decimal(data.get('remaining_volume')),
+        executed_volume=safe_decimal(data.get('executed_volume')),
+        trades_count=data.get('trades_count'),
+
+        # 수수료 및 자금 정보
+        reserved_fee=safe_decimal(data.get('reserved_fee')),
+        remaining_fee=safe_decimal(data.get('remaining_fee')),
+        paid_fee=safe_decimal(data.get('paid_fee')),
+        locked=safe_decimal(data.get('locked')),
+        executed_funds=safe_decimal(data.get('executed_funds')),
+        trade_fee=safe_decimal(data.get('trade_fee')),
+
+        # 주문 조건 및 메타데이터
+        time_in_force=data.get('time_in_force'),
+        is_maker=safe_bool(data.get('is_maker')),
+        identifier=data.get('identifier'),
+
+        # SMP (자전거래 체결 방지) 관련
+        smp_type=data.get('smp_type'),
+        prevented_volume=safe_decimal(data.get('prevented_volume')),
+        prevented_locked=safe_decimal(data.get('prevented_locked')),
+
+        # 타임스탬프
+        trade_timestamp=data.get('trade_timestamp'),
+        order_timestamp=data.get('order_timestamp'),
+        timestamp_ms=data.get('timestamp'),
+
+        # 스트림 타입
+        stream_type=data.get('stream_type')
     )
 
 
@@ -531,23 +893,9 @@ def convert_dict_to_event(message_data: Dict[str, Any], epoch: int = 0,
         elif msg_type == 'orderbook':
             return create_orderbook_event(message_data, epoch, connection_type)
         elif msg_type == 'trade':
-            return TradeEvent(
-                epoch=epoch,
-                timestamp=time.time(),
-                connection_type=connection_type,
-                symbol=message_data.get('code'),
-                trade_price=Decimal(str(message_data.get('trade_price', 0))),
-                trade_volume=Decimal(str(message_data.get('trade_volume', 0))),
-                ask_bid=message_data.get('ask_bid'),
-                change=message_data.get('change'),
-                change_price=Decimal(str(message_data.get('change_price', 0))),
-                trade_date=message_data.get('trade_date'),
-                trade_time=message_data.get('trade_time'),
-                trade_timestamp=message_data.get('trade_timestamp'),
-                timestamp_ms=message_data.get('timestamp'),
-                sequential_id=message_data.get('sequential_id'),
-                prev_closing_price=Decimal(str(message_data.get('prev_closing_price', 0)))
-            )
+            return create_trade_event(message_data, epoch, connection_type)
+        elif msg_type and msg_type.startswith('candle.'):
+            return create_candle_event(message_data, epoch, connection_type)
         # 추가 타입들은 필요시 구현
         else:
             return None
@@ -580,7 +928,7 @@ __all__ = [
 
     # 이벤트 클래스
     'BaseWebSocketEvent', 'TickerEvent', 'OrderbookEvent', 'OrderbookUnit',
-    'TradeEvent', 'CandleEvent', 'MyOrderEvent', 'MyAssetEvent',
+    'TradeEvent', 'CandleEvent', 'MyOrderEvent', 'MyAssetEvent', 'AssetItem',
 
     # 구독 및 성능
     'SubscriptionSpec', 'ComponentSubscription', 'PerformanceMetrics',
@@ -591,6 +939,7 @@ __all__ = [
     'MY_ORDER_FIELDS', 'MY_ASSET_FIELDS',
 
     # 유틸리티 함수
-    'create_ticker_event', 'create_orderbook_event', 'get_data_type_from_message',
-    'infer_message_type', 'convert_dict_to_event', 'validate_symbols', 'normalize_symbols'
+    'create_ticker_event', 'create_trade_event', 'create_candle_event', 'create_orderbook_event',
+    'create_myasset_event', 'create_myorder_event', 'get_data_type_from_message', 'infer_message_type',
+    'convert_dict_to_event', 'validate_symbols', 'normalize_symbols'
 ]

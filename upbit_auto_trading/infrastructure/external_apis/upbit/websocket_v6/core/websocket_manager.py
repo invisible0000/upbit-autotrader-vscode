@@ -31,6 +31,7 @@ from .websocket_types import (
 from .data_processor import DataProcessor
 from ..support.subscription_manager import SubscriptionManager
 from ..support.jwt_manager import JWTManager
+from ..support.websocket_config import get_config
 
 
 class WebSocketManager:
@@ -245,8 +246,14 @@ class WebSocketManager:
 
             self._connection_states[connection_type] = ConnectionState.CONNECTING
 
-            # URL 설정
-            url = "wss://api.upbit.com/websocket/v1"
+            # 설정 로드
+            config = get_config()
+
+            # 연결 타입에 따른 URL 선택 (업비트 공식 엔드포인트)
+            if connection_type == WebSocketType.PUBLIC:
+                url = config.connection.public_url  # wss://api.upbit.com/websocket/v1
+            else:
+                url = config.connection.private_url  # wss://api.upbit.com/websocket/v1/private
 
             # 헤더 설정 (Private 연결 시 JWT 포함)
             headers = {}
@@ -255,11 +262,22 @@ class WebSocketManager:
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
 
+            # 압축 설정 (업비트 공식 압축 지원)
+            compression = "deflate" if config.connection.enable_compression else None
+
             # 연결 생성
             if not WEBSOCKETS_AVAILABLE or websockets is None:
                 raise RuntimeError("websockets 라이브러리가 설치되지 않았습니다")
 
-            connection = await websockets.connect(url, extra_headers=headers)
+            # 업비트 압축 지원 WebSocket 연결
+            connection = await websockets.connect(
+                url,
+                extra_headers=headers,
+                compression=compression,  # 업비트 압축 기능 활성화
+                max_size=config.connection.max_message_size,
+                timeout=config.connection.connect_timeout
+            )
+
             self._connections[connection_type] = connection
             self._connection_states[connection_type] = ConnectionState.CONNECTED
 
@@ -270,7 +288,7 @@ class WebSocketManager:
             # 현재 구독 전송
             await self._send_current_subscriptions(connection_type)
 
-            self.logger.info(f"WebSocket 연결 성공: {connection_type}")
+            self.logger.info(f"WebSocket 연결 성공: {connection_type} -> {url} (압축: {compression is not None})")
 
         except Exception as e:
             self._connection_states[connection_type] = ConnectionState.DISCONNECTED

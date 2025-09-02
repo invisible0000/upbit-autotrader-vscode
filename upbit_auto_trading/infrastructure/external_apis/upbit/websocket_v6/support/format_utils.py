@@ -21,19 +21,36 @@ from ..core.websocket_types import DataType
 # SIMPLE 포맷 매핑 (업비트 공식 압축 포맷)
 # ================================================================
 
-# TICKER SIMPLE 매핑
+# TICKER SIMPLE 매핑 (업비트 공식 문서 정확 반영)
 TICKER_SIMPLE_MAPPING = {
+    # 기본 필드
     'type': 'ty', 'code': 'cd', 'timestamp': 'tms', 'stream_type': 'st',
+
+    # 가격 정보
     'opening_price': 'op', 'high_price': 'hp', 'low_price': 'lp', 'trade_price': 'tp', 'prev_closing_price': 'pcp',
+
+    # 변화 정보
     'change': 'c', 'change_price': 'cp', 'signed_change_price': 'scp', 'change_rate': 'cr', 'signed_change_rate': 'scr',
+
+    # 거래량/거래대금
     'trade_volume': 'tv', 'acc_trade_volume': 'atv', 'acc_trade_volume_24h': 'atv24h',
     'acc_trade_price': 'atp', 'acc_trade_price_24h': 'atp24h',
+
+    # 거래 시간 정보
     'trade_date': 'tdt', 'trade_time': 'ttm', 'trade_timestamp': 'ttms',
+
+    # 매수/매도 정보
     'ask_bid': 'ab', 'acc_ask_volume': 'aav', 'acc_bid_volume': 'abv',
+
+    # 52주 고/저가
     'highest_52_week_price': 'h52wp', 'highest_52_week_date': 'h52wdt',
     'lowest_52_week_price': 'l52wp', 'lowest_52_week_date': 'l52wdt',
-    'market_state': 'ms', 'market_state_for_ios': 'msfi', 'is_trading_suspended': 'its',
-    'delisting_date': 'dd', 'market_warning': 'mw', 'trade_status': 'ts',
+
+    # 시장 상태 (일부 Deprecated 포함)
+    'trade_status': 'ts',  # Deprecated
+    'market_state': 'ms', 'market_state_for_ios': 'msfi',  # msfi는 Deprecated
+    'is_trading_suspended': 'its',  # Deprecated
+    'delisting_date': 'dd', 'market_warning': 'mw',
 }
 
 # TRADE SIMPLE 매핑
@@ -188,11 +205,13 @@ class UpbitMessageFormatter:
 
     def _detect_simple_type(self, data: Dict[str, Any]) -> Optional[str]:
         """SIMPLE 포맷 타입 감지"""
-        return data.get('ty', data.get('type'))
+        type_val = data.get('ty', data.get('type'))
+        return type_val.lower() if type_val else None
 
     def _detect_default_type(self, data: Dict[str, Any]) -> Optional[str]:
         """DEFAULT 포맷 타입 감지"""
-        return data.get('type', data.get('ty'))
+        type_val = data.get('type', data.get('ty'))
+        return type_val.lower() if type_val else None
 
     def _convert_mapping(self, data: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
         """매핑 테이블을 사용한 필드 변환"""
@@ -375,7 +394,7 @@ class UpbitMessageFormatter:
 
     def normalize_ticker_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        업비트 Ticker 데이터 정규화
+        업비트 Ticker 데이터 정규화 (공식 문서 모든 필드 지원)
 
         Args:
             raw_data: 업비트 원시 Ticker 데이터
@@ -385,22 +404,58 @@ class UpbitMessageFormatter:
         """
         try:
             return {
+                # 기본 정보
                 "symbol": raw_data.get("code", ""),
-                "trade_price": self._to_decimal(raw_data.get("trade_price")),
-                "trade_volume": self._to_decimal(raw_data.get("trade_volume")),
-                "acc_trade_price": self._to_decimal(raw_data.get("acc_trade_price")),
-                "acc_trade_volume": self._to_decimal(raw_data.get("acc_trade_volume")),
+                "type": raw_data.get("type", "ticker"),
+
+                # 가격 정보
+                "opening_price": self._to_decimal(raw_data.get("opening_price")),
                 "high_price": self._to_decimal(raw_data.get("high_price")),
                 "low_price": self._to_decimal(raw_data.get("low_price")),
-                "opening_price": self._to_decimal(raw_data.get("opening_price")),
+                "trade_price": self._to_decimal(raw_data.get("trade_price")),
                 "prev_closing_price": self._to_decimal(raw_data.get("prev_closing_price")),
+
+                # 변화 정보
+                "change": raw_data.get("change", ""),  # RISE/EVEN/FALL
+                "change_price": self._to_decimal(raw_data.get("change_price")),
                 "signed_change_price": self._to_decimal(raw_data.get("signed_change_price")),
+                "change_rate": self._to_decimal(raw_data.get("change_rate")),
                 "signed_change_rate": self._to_decimal(raw_data.get("signed_change_rate")),
+
+                # 거래량/거래대금
+                "trade_volume": self._to_decimal(raw_data.get("trade_volume")),
+                "acc_trade_volume": self._to_decimal(raw_data.get("acc_trade_volume")),
+                "acc_trade_volume_24h": self._to_decimal(raw_data.get("acc_trade_volume_24h")),
+                "acc_trade_price": self._to_decimal(raw_data.get("acc_trade_price")),
+                "acc_trade_price_24h": self._to_decimal(raw_data.get("acc_trade_price_24h")),
+
+                # 거래 시간 정보
+                "trade_date": raw_data.get("trade_date", ""),  # yyyyMMdd
+                "trade_time": raw_data.get("trade_time", ""),  # HHmmss
+                "trade_timestamp": raw_data.get("trade_timestamp"),  # ms
+
+                # 매수/매도 정보
+                "ask_bid": raw_data.get("ask_bid", ""),  # ASK/BID
+                "acc_ask_volume": self._to_decimal(raw_data.get("acc_ask_volume")),
+                "acc_bid_volume": self._to_decimal(raw_data.get("acc_bid_volume")),
+
+                # 52주 고/저가
+                "highest_52_week_price": self._to_decimal(raw_data.get("highest_52_week_price")),
+                "highest_52_week_date": raw_data.get("highest_52_week_date", ""),  # yyyy-MM-dd
+                "lowest_52_week_price": self._to_decimal(raw_data.get("lowest_52_week_price")),
+                "lowest_52_week_date": raw_data.get("lowest_52_week_date", ""),  # yyyy-MM-dd
+
+                # 거래 상태 (일부 Deprecated)
+                "trade_status": raw_data.get("trade_status", ""),  # Deprecated
+                "market_state": raw_data.get("market_state", ""),  # PREVIEW/ACTIVE/DELISTED
+                "market_state_for_ios": raw_data.get("market_state_for_ios", ""),  # Deprecated
+                "is_trading_suspended": raw_data.get("is_trading_suspended", False),  # Deprecated
+                "delisting_date": raw_data.get("delisting_date"),
+                "market_warning": raw_data.get("market_warning", ""),  # NONE/CAUTION
+
+                # 시스템 정보
                 "timestamp": raw_data.get("timestamp"),
-                "trade_timestamp": raw_data.get("trade_timestamp"),
-                "ask_bid": raw_data.get("ask_bid", ""),
-                "trade_date": raw_data.get("trade_date", ""),
-                "trade_time": raw_data.get("trade_time", ""),
+                "stream_type": raw_data.get("stream_type", ""),  # SNAPSHOT/REALTIME
             }
         except Exception as e:
             self.logger.error(f"Ticker 데이터 정규화 실패: {e}")
@@ -434,7 +489,8 @@ class UpbitMessageFormatter:
                 "total_bid_size": self._to_decimal(raw_data.get("total_bid_size")),
                 "orderbook_units": normalized_units,
                 "timestamp": raw_data.get("timestamp"),
-                "stream_type": raw_data.get("stream_type", "")
+                "stream_type": raw_data.get("stream_type", ""),
+                "level": raw_data.get("level", 0)  # 호가 모아보기 단위 추가
             }
         except Exception as e:
             self.logger.error(f"Orderbook 데이터 정규화 실패: {e}")
