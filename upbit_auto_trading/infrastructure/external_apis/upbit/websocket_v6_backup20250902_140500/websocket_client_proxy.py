@@ -22,7 +22,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 
 from .types import (
     TickerEvent, OrderbookEvent, TradeEvent, CandleEvent, MyOrderEvent, MyAssetEvent,
-    SubscriptionSpec, DataType, HealthStatus
+    SubscriptionSpec, DataType as V6DataType, HealthStatus
 )
 from .global_websocket_manager import get_global_websocket_manager
 from .exceptions import SubscriptionError
@@ -92,7 +92,7 @@ class WebSocketClientProxy:
             bool: 구독 성공 여부
         """
         return await self._subscribe_data(
-            data_type=DataType.TICKER,
+            data_type=V6DataType.TICKER,
             symbols=symbols,
             callback=callback,
             error_handler=error_handler
@@ -116,7 +116,7 @@ class WebSocketClientProxy:
             bool: 구독 성공 여부
         """
         return await self._subscribe_data(
-            data_type=DataType.ORDERBOOK,
+            data_type=V6DataType.ORDERBOOK,
             symbols=symbols,
             callback=callback,
             error_handler=error_handler
@@ -140,7 +140,7 @@ class WebSocketClientProxy:
             bool: 구독 성공 여부
         """
         return await self._subscribe_data(
-            data_type=DataType.TRADE,
+            data_type=V6DataType.TRADE,
             symbols=symbols,
             callback=callback,
             error_handler=error_handler
@@ -166,30 +166,12 @@ class WebSocketClientProxy:
             bool: 구독 성공 여부
         """
         # 캔들 타입 결정
-        candle_type = DataType.CANDLE_1M  # 기본값
-
-        if unit == 0:
-            candle_type = DataType.CANDLE_1S
-        elif unit == 1:
-            candle_type = DataType.CANDLE_1M
-        elif unit == 3:
-            candle_type = DataType.CANDLE_3M
-        elif unit == 5:
-            candle_type = DataType.CANDLE_5M
-        elif unit == 15:
-            candle_type = DataType.CANDLE_15M
-        elif unit == 30:
-            candle_type = DataType.CANDLE_30M
-        elif unit == 60:
-            candle_type = DataType.CANDLE_60M
-        elif unit == 240:
-            candle_type = DataType.CANDLE_240M
+        candle_type = V6DataType.CANDLE
+        if unit in [1, 3, 5, 15, 30, 60, 240]:
+            self.logger.debug(f"캔들 구독: {unit}분봉")
         else:
             self.logger.warning(f"지원하지 않는 캔들 단위: {unit}, 1분봉으로 대체")
-
-        if unit in [0, 1, 3, 5, 15, 30, 60, 240]:
-            unit_name = "1초봉" if unit == 0 else f"{unit}분봉"
-            self.logger.debug(f"캔들 구독: {unit_name}")
+            unit = 1
 
         return await self._subscribe_data(
             data_type=candle_type,
@@ -225,7 +207,7 @@ class WebSocketClientProxy:
             return False
 
         return await self._subscribe_data(
-            data_type=DataType.MYORDER,
+            data_type=V6DataType.MY_ORDER,
             symbols=markets or [],
             callback=callback,
             error_handler=error_handler,
@@ -254,7 +236,7 @@ class WebSocketClientProxy:
             return False
 
         return await self._subscribe_data(
-            data_type=DataType.MYASSET,
+            data_type=V6DataType.MY_ASSET,
             symbols=currencies or [],
             callback=callback,
             error_handler=error_handler,
@@ -305,68 +287,7 @@ class WebSocketClientProxy:
     # 상태 관리 및 제어 메서드
     # =============================================================================
 
-    async def unsubscribe_ticker(self, symbols: List[str]) -> bool:
-        """
-        티커 구독 해제
-
-        Args:
-            symbols: 해제할 심볼 리스트
-
-        Returns:
-            bool: 해제 성공 여부
-        """
-        return await self.unsubscribe(DataType.TICKER, symbols)
-
-    async def unsubscribe_orderbook(self, symbols: List[str]) -> bool:
-        """
-        오더북 구독 해제
-
-        Args:
-            symbols: 해제할 심볼 리스트
-
-        Returns:
-            bool: 해제 성공 여부
-        """
-        return await self.unsubscribe(DataType.ORDERBOOK, symbols)
-
-    async def unsubscribe_trade(self, symbols: List[str]) -> bool:
-        """
-        체결 구독 해제
-
-        Args:
-            symbols: 해제할 심볼 리스트
-
-        Returns:
-            bool: 해제 성공 여부
-        """
-        return await self.unsubscribe(DataType.TRADE, symbols)
-
-    async def unsubscribe_candle(self, symbols: List[str], unit: int = 1) -> bool:
-        """
-        캔들 구독 해제
-
-        Args:
-            symbols: 해제할 심볼 리스트
-            unit: 캔들 단위 (0, 1, 3, 5, 15, 30, 60, 240)
-
-        Returns:
-            bool: 해제 성공 여부
-        """
-        # 캔들 타입 결정
-        candle_type = {
-            0: DataType.CANDLE_1S,
-            1: DataType.CANDLE_1M,
-            3: DataType.CANDLE_3M,
-            5: DataType.CANDLE_5M,
-            15: DataType.CANDLE_15M,
-            30: DataType.CANDLE_30M,
-            60: DataType.CANDLE_60M,
-            240: DataType.CANDLE_240M,
-        }.get(unit, DataType.CANDLE_1M)
-
-        return await self.unsubscribe(candle_type, symbols)
-
-    async def unsubscribe(self, data_type: DataType, symbols: Optional[List[str]] = None) -> bool:
+    async def unsubscribe(self, data_type: V6DataType, symbols: Optional[List[str]] = None) -> bool:
         """
         특정 구독 해제 (간소화)
 
@@ -543,7 +464,7 @@ class WebSocketClientProxy:
 
     async def _subscribe_data(
         self,
-        data_type: DataType,
+        data_type: V6DataType,
         symbols: List[str],
         callback: Callable[[Any], None],  # Any로 변경하여 타입 에러 해결
         error_handler: Optional[Callable[[Exception], None]] = None,

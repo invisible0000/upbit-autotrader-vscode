@@ -6,12 +6,13 @@
 # 연결 설정
 connection:
   # WebSocket 엔드포인트 (업비트 공식)
-  # 업비트는 Public/Private 다른 엔드포인트 사용 (2025년 현재)
-  public_url: "wss://api.upbit.com/websocket/v1"
-  private_url: "wss://api.upbit.com/websocket/v1/private"
-
-  # 하위 호환성을 위한 기본 URL (Public 기준)
+  # 현재: Public/Private 동일 엔드포인트 (업비트 정책)
+  # 미래: 필요시 분리 가능 (로드밸런싱, 보안 격리 등)
   url: "wss://api.upbit.com/websocket/v1"
+
+  # 향후 분리 시 사용할 개별 URL들 (현재 미사용)
+  # public_url: "wss://api.upbit.com/websocket/v1"
+  # private_url: "wss://private-api.upbit.com/websocket/v1"
 
   connection_timeout: 10.0
   ping_interval: 20.0

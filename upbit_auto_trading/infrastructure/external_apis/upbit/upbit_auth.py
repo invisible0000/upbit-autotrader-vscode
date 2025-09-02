@@ -2,7 +2,7 @@ import jwt  # type: ignore
 import hashlib
 import uuid
 from urllib.parse import urlencode
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import os
 import logging
 
@@ -141,6 +141,30 @@ class UpbitAuthenticator:
         except Exception as e:
             self._logger.error(f"JWT 토큰 생성 실패: {e}")
             raise AuthenticationError(f"JWT 토큰 생성 실패: {e}")
+
+    async def create_websocket_token(self) -> Dict[str, Any]:
+        """WebSocket 연결용 JWT 토큰 생성"""
+        if not self.is_authenticated():
+            raise AuthenticationError("API 키가 설정되지 않았습니다")
+
+        try:
+            # WebSocket용 JWT 토큰 생성 (REST API와 동일한 방식)
+            access_token = self.create_jwt_token()
+
+            # WebSocket JWT 토큰은 일반적으로 1시간 수명
+            expires_in = 3600  # 1시간 (3600초)
+
+            self._logger.debug("WebSocket JWT 토큰 생성 완료")
+
+            return {
+                'access_token': access_token,
+                'expires_in': expires_in,
+                'token_type': 'Bearer'
+            }
+
+        except Exception as e:
+            self._logger.error(f"WebSocket JWT 토큰 생성 실패: {e}")
+            raise AuthenticationError(f"WebSocket JWT 토큰 생성 실패: {e}")
 
     def get_public_headers(self) -> Dict[str, str]:
         """공개 API용 헤더"""

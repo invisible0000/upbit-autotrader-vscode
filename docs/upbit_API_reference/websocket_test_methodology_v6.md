@@ -1,21 +1,23 @@
-# 업비트 WebSocket API 테스트 방법론 v6.0
+# 업비트 WebSocket API 테스트 방법론 v6.0 (실제 API 기반)
 
 ## 🎯 **핵심 원칙**
 - **전역 관리자 기반**: GlobalWebSocketManager 중심 테스트
 - **API 키 선택적**: Public/Private 기능 분리 테스트
+- **실제 API 우선**: Mock 없이 실제 업비트 API로 검증
 - **간결한 5테스트 패턴**: 필수 기능만 검증
-- **Mock 우선**: 단위 테스트 시 실제 API 호출 최소화
 - **WebSocketClientProxy 활용**: 상위 레벨 인터페이스 테스트
 
 ## 🚀 **v6.0 주요 개선사항**
-- **중앙 집중 테스트**: 하나의 전역 관리자로 모든 기능 테스트
+- **실제 API 테스트**: Mock 제거, 실제 업비트 WebSocket API 연동
+- **DDD 통합**: Application Service로 WebSocket v6 생명주기 관리
 - **자동 인증 관리**: API 키 설정 자동화, 테스트 코드 단순화
 - **프록시 패턴**: WebSocketClientProxy를 통한 고수준 API 테스트
 - **리소스 자동 정리**: WeakRef 기반 자동 정리로 테스트 격리 보장
+- **pytest-asyncio 자동화**: --asyncio-mode=auto로 비동기 테스트 단순화
 
 ## 📁 **파일 구조 (v6.0 간소화)**
 ```
-tests/infrastructure/test_external_apis/upbit/websocket_v6/
+tests/infrastructure/test_external_apis/upbit/test_websocket_v6/
 ├── conftest.py                          # 공통 픽스처 (전역 관리자)
 ├── test_global_websocket_manager.py     # 전역 관리자 핵심 테스트
 ├── test_websocket_client_proxy.py       # 프록시 클라이언트 테스트
@@ -29,70 +31,96 @@ tests/infrastructure/test_external_apis/upbit/websocket_v6/
 ### **핵심 컴포넌트 테스트**
 ```python
 class TestComponent:
-    def test01_initialization(self):
+    @pytest.mark.asyncio
+    async def test01_initialization(self):
         """초기화: 기본 설정으로 컴포넌트 초기화"""
 
-    def test02_core_functionality(self):
+    @pytest.mark.asyncio
+    async def test02_core_functionality(self):
         """핵심기능: 주요 기능 정상 동작 확인"""
 
-    def test03_error_handling(self):
+    @pytest.mark.asyncio
+    async def test03_error_handling(self):
         """에러처리: 예외 상황 적절한 처리 확인"""
 
-    def test04_resource_cleanup(self):
+    @pytest.mark.asyncio
+    async def test04_resource_cleanup(self):
         """리소스정리: 자동 정리 메커니즘 검증"""
 
-    def test05_edge_cases(self):
+    @pytest.mark.asyncio
+    async def test05_edge_cases(self):
         """경계사례: 특수 상황 및 극한 케이스 검증"""
 ```
 
-## 🔧 **conftest.py 설정 (v6.0 전역 관리자)**
+## 🔧 **conftest.py 설정 (v6.0 실제 API 기반)**
 
 ```python
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock
+import os
+import time
+from typing import Dict, Any
+
 from upbit_auto_trading.infrastructure.external_apis.upbit.websocket_v6 import (
-    GlobalWebSocketManager, WebSocketClientProxy
+    WebSocketClientProxy,
+    get_global_websocket_manager,
+    WebSocketType
 )
 
-@pytest.fixture
+@pytest.fixture(scope="session")
+def event_loop():
+    """세션 레벨 이벤트 루프"""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
+
+@pytest.fixture(scope="session")
 async def global_manager():
-    """전역 WebSocket 관리자 (API 키 선택적)"""
-    manager = await GlobalWebSocketManager.get_instance()
+    """전역 WebSocket 관리자 (실제 API 연결)"""
+    logger.info("전역 WebSocket 관리자 초기화 시작")
 
-    # API 키 환경변수에서 자동 로드 시도
-    await manager.initialize()
+    try:
+        # 전역 관리자 인스턴스 가져오기
+        manager = await get_global_websocket_manager()
 
-    yield manager
+        # API 키 환경변수 확인
+        access_key = os.getenv('UPBIT_ACCESS_KEY')
+        secret_key = os.getenv('UPBIT_SECRET_KEY')
 
-    # 테스트 후 정리
-    await manager.cleanup()
+        if access_key and secret_key:
+            logger.info("API 키 발견 - Private API 테스트 가능")
+        else:
+            logger.info("API 키 없음 - Public API만 테스트")
+
+        yield manager
+
+    except Exception as e:
+        logger.error(f"전역 관리자 초기화 실패: {e}")
+        raise
+    finally:
+        # 테스트 후 정리
+        try:
+            if 'manager' in locals():
+                await manager.shutdown(timeout=5.0)
+        except Exception as e:
+            logger.warning(f"정리 중 오류: {e}")
 
 @pytest.fixture
 async def public_client(global_manager):
-    """Public 전용 클라이언트 프록시"""
-    client = WebSocketClientProxy("test_public")
+    """Public 전용 클라이언트 프록시 (실제 API)"""
+    client = WebSocketClientProxy("test_public_client")
     yield client
     await client.cleanup()
 
 @pytest.fixture
 async def private_client(global_manager):
     """Private 클라이언트 프록시 (API 키 필요)"""
-    if not global_manager.is_private_available():
+    if not os.getenv('UPBIT_ACCESS_KEY'):
         pytest.skip("API 키 필요 - Private 테스트 건너뜀")
 
-    client = WebSocketClientProxy("test_private")
+    client = WebSocketClientProxy("test_private_client")
     yield client
     await client.cleanup()
-
-@pytest.fixture
-def mock_websocket():
-    """Mock WebSocket 연결"""
-    mock_ws = AsyncMock()
-    mock_ws.send = AsyncMock()
-    mock_ws.recv = AsyncMock()
-    mock_ws.close = AsyncMock()
-    return mock_ws
 
 @pytest.fixture
 def sample_symbols():
@@ -179,57 +207,49 @@ class TestPrivateFeatures:
         """인증실패: 잘못된 API 키 처리"""
 ```
 
-## 🚀 **실행 명령어 (v6.0)**
+## 🚀 **실행 명령어 (v6.0 실제 API)**
 
-### **빠른 검증 (핵심만)**
+### **기본 테스트 실행**
 ```powershell
 # 전역 관리자 테스트 (필수)
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/test_global_websocket_manager.py -v
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/test_global_websocket_manager.py -v --asyncio-mode=auto
 
 # 프록시 인터페이스 테스트 (중요)
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/test_websocket_client_proxy.py -v
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/test_websocket_client_proxy.py -v --asyncio-mode=auto
 
 # Public 기능 (API 키 불필요)
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/test_public_features.py -v
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/test_public_features.py -v --asyncio-mode=auto
 ```
 
 ### **완전 검증 (API 키 필요)**
 ```powershell
 # Private 기능 포함 전체 테스트
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/ -v
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/ -v --asyncio-mode=auto
 
 # 통합 시나리오 테스트
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/test_integration_scenarios.py -v
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/test_integration_scenarios.py -v --asyncio-mode=auto
 ```
 
-### **Mock 기반 단위 테스트**
+### **API 키 설정**
 ```powershell
-# 실제 API 호출 없는 빠른 테스트
-pytest tests/infrastructure/test_external_apis/upbit/websocket_v6/ -m "not integration" -v
+# 환경변수 설정 (PowerShell)
+$env:UPBIT_ACCESS_KEY = "your_access_key"
+$env:UPBIT_SECRET_KEY = "your_secret_key"
+
+# 테스트 실행 시 자동 감지됨
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/ -v --asyncio-mode=auto
+```
+
+### **성능 및 안정성 테스트**
+```powershell
+# 느린 테스트 포함 (연결 안정성)
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/ -v --asyncio-mode=auto -m slow
+
+# 성능 벤치마크
+python -m pytest tests/infrastructure/test_external_apis/upbit/test_websocket_v6/ -v --asyncio-mode=auto -m performance
 ```
 
 ## 🔍 **핵심 검증 패턴**
-
-### **Mock을 활용한 단위 테스트**
-```python
-@pytest.mark.asyncio
-async def test_subscription_with_mock(mock_websocket):
-    """Mock WebSocket으로 구독 로직 단위 테스트"""
-    # Given: Mock WebSocket 연결
-    with patch('websockets.connect', return_value=mock_websocket):
-        manager = await GlobalWebSocketManager.get_instance()
-
-        # When: 구독 요청
-        subscription_id = await manager.subscribe_ticker(['KRW-BTC'])
-
-        # Then: 올바른 메시지 전송 확인
-        mock_websocket.send.assert_called_once()
-        call_args = mock_websocket.send.call_args[0][0]
-
-        assert '"type":"ticker"' in call_args
-        assert '"codes":["KRW-BTC"]' in call_args
-        assert subscription_id is not None
-```
 
 ### **실제 API 통합 테스트**
 ```python
@@ -255,6 +275,48 @@ async def test_real_api_integration(global_manager, sample_symbols):
 
     # 정리
     await client.unsubscribe(subscription_id)
+```
+
+### **성능 검증 패턴**
+```python
+@pytest.mark.performance
+@pytest.mark.asyncio
+async def test_performance_benchmark(global_manager, performance_monitor):
+    """성능 벤치마크 테스트"""
+    # Given: 성능 모니터 시작
+    monitor = performance_monitor.start()
+
+    # When: 대량 구독 요청
+    tasks = []
+    for symbol in large_symbol_list:
+        task = asyncio.create_task(
+            manager.subscribe_ticker([symbol])
+        )
+        tasks.append(task)
+
+    subscription_ids = await asyncio.gather(*tasks)
+    monitor.end()
+
+    # Then: 성능 기준 확인
+    monitor.assert_faster_than(5.0, "대량 구독")
+    assert len(subscription_ids) > 0
+```
+
+### **연결 안정성 검증**
+```python
+@pytest.mark.slow
+@pytest.mark.asyncio
+async def test_connection_stability(global_manager):
+    """장시간 연결 안정성 테스트"""
+    # Given: 초기 연결 상태
+    initial_health = await manager.get_health_status()
+
+    # When: 30초 안정성 테스트
+    await asyncio.sleep(30)
+
+    # Then: 연결 유지 확인
+    final_health = await manager.get_health_status()
+    assert final_health.status == "healthy"
 ```
 
 ## 📈 **성능 기준 (v6.0 최적화)**

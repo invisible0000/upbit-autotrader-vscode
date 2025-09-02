@@ -308,7 +308,37 @@ async def run_application_async(app: QApplication) -> int:
         # 3. UI 서비스 등록 (Repository Container 전달)
         register_ui_services(app_context, repository_container)
 
-        # 4. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
+        # 4. WebSocket v6 Application Service 초기화 (새로 추가)
+        try:
+            from upbit_auto_trading.application.services.websocket_v6_application_service import (
+                get_websocket_v6_service,
+                WebSocketServiceConfig
+            )
+
+            # WebSocket v6 서비스 설정
+            websocket_config = WebSocketServiceConfig(
+                auto_start_on_init=True,
+                enable_public_connection=True,
+                enable_private_connection=True,  # API 키가 있으면 자동 활성화
+                reconnect_on_failure=True,
+                health_check_interval=30.0
+            )
+
+            # WebSocket v6 서비스 초기화 및 시작
+            websocket_service = await get_websocket_v6_service(websocket_config)
+
+            # ApplicationContext에 등록 (다른 서비스에서 사용할 수 있도록)
+            if hasattr(app_context, 'container') and app_context.container:
+                app_context.container._instances['websocket_v6_service'] = websocket_service
+
+            logger.info("✅ WebSocket v6 Application Service 초기화 완료")
+
+        except Exception as e:
+            logger.error(f"❌ WebSocket v6 Application Service 초기화 실패: {e}")
+            # WebSocket 실패는 치명적이지 않으므로 계속 진행
+            logger.warning("WebSocket v6 없이 계속 진행합니다")
+
+        # 5. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
         try:
             from upbit_auto_trading.application.container import ApplicationServiceContainer, set_application_container
 
@@ -371,6 +401,16 @@ async def run_application_async(app: QApplication) -> int:
     finally:
         # 안전한 정리 작업
         try:
+            # WebSocket v6 서비스 정리 (우선 수행)
+            try:
+                from upbit_auto_trading.application.services.websocket_v6_application_service import (
+                    shutdown_websocket_v6_service
+                )
+                await shutdown_websocket_v6_service()
+                logger.info("✅ WebSocket v6 Application Service 정리 완료")
+            except Exception as websocket_cleanup_error:
+                logger.warning(f"⚠️ WebSocket v6 서비스 정리 중 오류: {websocket_cleanup_error}")
+
             if main_window:
                 main_window.close()
                 main_window = None

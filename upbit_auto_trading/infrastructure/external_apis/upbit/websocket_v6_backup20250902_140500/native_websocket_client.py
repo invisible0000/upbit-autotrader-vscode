@@ -135,20 +135,20 @@ class NativeWebSocketClient:
             # 연결 옵션 설정
             headers = {}
 
-            # Private 연결의 경우 JWT 토큰 추가 및 URL 선택
+            # Private 연결의 경우 JWT 토큰 추가 및 URL 변경
             if self.connection_type == WebSocketType.PRIVATE:
                 if not self._jwt_token:
                     await self._refresh_jwt_token()
                 if self._jwt_token:
                     headers["Authorization"] = f"Bearer {self._jwt_token}"
-                    # Private 전용 URL 사용
-                    url = self.config.private_url
+                    # Private 엔드포인트 사용
+                    url = self.config.url.replace("/websocket/v1", "/websocket/v1/private")
                 else:
                     self.logger.warning("Private 연결 요청되었지만 JWT 토큰이 없음")
                     return False
             else:
-                # Public 전용 URL 사용
-                url = self.config.public_url
+                # Public 연결
+                url = self.config.url
 
             # WebSocket 연결 (websockets 15.0+ 호환)
             self._websocket = await websockets.connect(

@@ -50,12 +50,12 @@ class FormatConfig:
 @dataclass
 class ConnectionConfig:
     """연결 설정"""
-    # 하위 호환성을 위한 기본 URL (Public 기준)
+    # 현재: Public/Private 동일 URL (업비트 정책)
     url: str = "wss://api.upbit.com/websocket/v1"
 
-    # 업비트 공식 분리된 엔드포인트 (2025년 현재)
+    # 향후 분리 대비 (현재 미사용)
     public_url: str = "wss://api.upbit.com/websocket/v1"
-    private_url: str = "wss://api.upbit.com/websocket/v1/private"
+    private_url: str = "wss://api.upbit.com/websocket/v1"
 
     connect_timeout: float = 10.0
     heartbeat_interval: float = 30.0
@@ -334,22 +334,11 @@ def apply_yaml_overrides(config: WebSocketConfig, yaml_data: Dict[str, Any]) -> 
     # Connection 설정 오버라이드
     if 'connection' in yaml_data:
         conn_yaml = yaml_data['connection']
-
-        # 기본 URL (하위 호환성)
         if 'url' in conn_yaml:
             config.connection.url = conn_yaml['url']
-
-        # 개별 URL (신규 - 우선 적용)
-        if 'public_url' in conn_yaml:
-            config.connection.public_url = conn_yaml['public_url']
-        elif 'url' in conn_yaml:
-            config.connection.public_url = conn_yaml['url']  # 폴백
-
-        if 'private_url' in conn_yaml:
-            config.connection.private_url = conn_yaml['private_url']
-        elif 'url' in conn_yaml:
-            config.connection.private_url = conn_yaml['url']  # 폴백
-
+            # 향후 분리 대비
+            config.connection.public_url = conn_yaml['url']
+            config.connection.private_url = conn_yaml['url']
         if 'connection_timeout' in conn_yaml:
             config.connection.connect_timeout = conn_yaml['connection_timeout']
         if 'heartbeat_interval' in conn_yaml:

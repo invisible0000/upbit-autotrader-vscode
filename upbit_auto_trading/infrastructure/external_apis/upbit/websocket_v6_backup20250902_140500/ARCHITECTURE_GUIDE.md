@@ -18,10 +18,8 @@
 - 컴포넌트 생명주기 자동 관리
 - 메모리 누수 방지 및 자동 구독 해제
 
-### 4. **데이터 풀 기반 아키텍처 (v6.1)**
-- 복잡한 콜백 시스템을 간소화된 Pull 모델로 전환
-- 중앙집중식 데이터 풀을 통한 최신 데이터 관리
-- 클라이언트 관심사 등록 방식으로 구독 최적화
+### 4. **백프레셔 및 성능 최적화**
+- 큐 기반 데이터 라우팅으로 성능 병목 해결
 - SIMPLE 포맷 지원으로 대역폭 최적화
 
 ## 📦 핵심 컴포넌트
@@ -46,10 +44,9 @@
   - ← `NativeWebSocketClient` (실제 연결)
   - ← `EpochManager` (재연결 순서 보장)
   - ← `UpbitRateLimiter` (선택적, 요청 제한 관리)
-  - ← `DataPoolManager` (v6.1 추가, 데이터 풀 관리)
 
-#### `WebSocketClientProxy` (websocket_client_proxy.py) **[레거시]**
-**역할**: 콜백 기반 인터페이스 (v6.1에서 SimpleWebSocketClient 권장)
+#### `WebSocketClientProxy` (websocket_client_proxy.py)
+**역할**: 사용자 친화적 인터페이스 제공
 - **기능**:
   - 컨텍스트 매니저 지원 (`async with`)
   - 타입 안전한 구독 API (`subscribe_ticker`, `subscribe_orderbook`)
@@ -57,27 +54,6 @@
 - **의존성**:
   - → `GlobalWebSocketManager` (중앙 관리자 호출)
   - ← `types.py` (타입 정의)
-
-#### `DataPoolManager` (data_pool_manager.py) **[v6.1 신규]**
-**역할**: 중앙집중식 데이터 풀 관리
-- **기능**:
-  - WebSocket 데이터를 심볼별로 메모리 캐시
-  - 클라이언트 관심사 등록 및 구독 최적화
-  - Pull 모델 기반 데이터 조회 API
-  - 데이터 히스토리 관리 (선택적)
-- **의존성**:
-  - ← `types.py` (데이터 타입)
-  - → `GlobalWebSocketManager` (구독 변경 알림)
-
-#### `SimpleWebSocketClient` (simple_websocket_client.py) **[v6.1 신규]**
-**역할**: 간소화된 WebSocket 클라이언트 인터페이스
-- **기능**:
-  - 콜백 없는 Pull 모델 API
-  - 관심사 등록을 통한 간단한 구독 관리
-  - 타입 안전한 데이터 조회 메서드
-- **의존성**:
-  - → `DataPoolManager` (데이터 조회)
-  - → `GlobalWebSocketManager` (관심사 등록)
 
 ### 🔌 **연결 계층**
 
@@ -169,22 +145,6 @@
 
 ## 🔄 데이터 흐름
 
-### v6.1 권장 아키텍처 (데이터 풀 기반)
-```
-[업비트 서버]
-    ↓ WebSocket
-[NativeWebSocketClient]
-    ↓ 원시 메시지
-[GlobalWebSocketManager._convert_to_event]
-    ↓ v6 이벤트
-[DataPoolManager.store_websocket_data]
-    ↓ 심볼별 캐시
-[클라이언트 Pull 요청]
-    ↓ 최신 데이터 반환
-[SimpleWebSocketClient API]
-```
-
-### v6.0 레거시 아키텍처 (콜백 기반)
 ```
 [업비트 서버]
     ↓ WebSocket
@@ -205,11 +165,11 @@
 ```
 📱 사용자 코드
     ↓
-🎯 SimpleWebSocketClient (v6.1 권장) | WebSocketClientProxy (레거시)
+🎯 WebSocketClientProxy (인터페이스)
     ↓
 🏛️ GlobalWebSocketManager (중앙 관리)
     ↓
-�️ DataPoolManager (v6.1) + �🔌 NativeWebSocketClient (연결)
+🔌 NativeWebSocketClient (연결) + 📡 DataRoutingEngine (분배)
     ↓
 🌐 WebSocket Protocol
 ```
@@ -221,45 +181,18 @@ config.py ← 모든 모듈 (설정)
 exceptions.py ← 모든 모듈 (예외)
 
 GlobalWebSocketManager → SubscriptionStateManager
-                      → DataRoutingEngine (레거시)
-                      → DataPoolManager (v6.1 권장)
+                      → DataRoutingEngine
                       → NativeWebSocketClient
                       → JWTManager
 
-SimpleWebSocketClient → DataPoolManager (v6.1)
-                     → GlobalWebSocketManager
-
-WebSocketClientProxy → GlobalWebSocketManager (레거시)
+WebSocketClientProxy → GlobalWebSocketManager
 
 models.py → types.py (v5 호환성)
 ```
 
 ## 🚀 사용 방법
 
-### v6.1 권장 방법 (Pull 모델)
-```python
-from websocket_v6 import SimpleWebSocketClient, DataType
-
-# 간소화된 클라이언트 사용
-async with SimpleWebSocketClient("my_component") as client:
-    # 관심 데이터 등록
-    await client.register_interest(
-        data_types=[DataType.TICKER, DataType.ORDERBOOK],
-        symbols=["KRW-BTC", "KRW-ETH"]
-    )
-
-    # 필요할 때 최신 데이터 조회
-    prices = await client.get_multiple_prices(["KRW-BTC", "KRW-ETH"])
-    print(f"최신 가격: {prices}")
-
-    # 오더북 조회
-    orderbooks = await client.get_orderbook_data(["KRW-BTC"])
-
-    # 히스토리 조회
-    history = await client.get_ticker_history("KRW-BTC", limit=10)
-```
-
-### v6.0 레거시 방법 (콜백 기반)
+### 기본 사용법
 ```python
 from websocket_v6 import WebSocketClientProxy
 
@@ -292,13 +225,12 @@ print(f"Uptime: {manager.uptime_seconds:.2f}s")
 ## 📊 성능 특징
 
 ### 메모리 관리
-- **데이터 풀 기반**: 중앙집중식 데이터 캐시로 메모리 효율성 개선 (v6.1)
 - **WeakRef 기반**: 컴포넌트 자동 정리로 메모리 누수 방지
 - **백그라운드 모니터링**: 3개의 백그라운드 태스크가 자동으로 시스템 상태 관리
   - 헬스 모니터링 (30초 주기)
   - 성능 메트릭스 수집 (10초 주기)
   - 죽은 참조 정리 (1분 주기)
-- **Pull 모델**: 불필요한 콜백 오버헤드 제거 (v6.1)
+- **백프레셔 제어**: 큐 크기 제한으로 메모리 사용량 제어
 
 ### 네트워크 효율성
 - **연결 재사용**: 중앙 집중식 관리로 연결 수 최소화
@@ -308,8 +240,6 @@ print(f"Uptime: {manager.uptime_seconds:.2f}s")
 ### 확장성
 - **비동기 처리**: 모든 I/O 작업이 비동기
 - **타입 안전성**: 컴파일 타임 오류 검출
-- **구독 최적화**: 클라이언트 관심사 기반 지능적 구독 관리 (v6.1)
-- **데이터 격리**: 클라이언트별 독립적 데이터 접근 (v6.1)
 
 ## 🔧 확장 포인트
 
@@ -344,5 +274,3 @@ print(f"Uptime: {manager.uptime_seconds:.2f}s")
 ---
 
 **WebSocket v6.0은 안정성과 성능, 개발자 경험, 자동 모니터링을 모두 고려하여 설계된 차세대 WebSocket 시스템입니다.**
-
-**v6.1 업데이트**: 복잡한 콜백 시스템을 간소화된 데이터 풀 기반 Pull 모델로 전환하여 구독 상태 불일치, 콜백 중복, 메모리 누수 등의 문제를 근본적으로 해결했습니다. 새로운 프로젝트에서는 `SimpleWebSocketClient` 사용을 강력히 권장합니다.

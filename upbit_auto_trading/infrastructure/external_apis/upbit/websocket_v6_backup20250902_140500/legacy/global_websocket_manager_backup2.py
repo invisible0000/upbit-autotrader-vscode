@@ -1,24 +1,33 @@
 """
-GlobalWebSocketManager v6.0 (최종 안정화 버전)
-================================================
+글로벌 웹소켓 매니저 v6.0 (간소화 버전)
+========================================
 
 WebSocket v6의 핵심 중앙 관리자 (싱글톤)
 v5 호환성 완전 제거, 순수 v6 아키텍처
+
+핵심 기능:
+- 네이티브 WebSocket 클라이언트 관리
+- 전역 구독 상태 통합
+- 데이터 라우팅 및 분배
+- WeakRef 기반 자동 리소스 정리
+- SIMPLE 포맷 및 압축 지원
 """
 
 import asyncio
+
 import weakref
 import time
-from typing import Dict, List, Optional, Any, Callable, Set
+from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-# Rate Limiter 연동 (선택적)
+# Rate Limiter 연동
 try:
     from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
-        get_global_rate_limiter
+        get_global_rate_limiter,
+        UpbitRateLimitGroup
     )
     RATE_LIMITER_AVAILABLE = True
 except ImportError:
@@ -32,7 +41,9 @@ from .types import (
     create_ticker_event, create_orderbook_event,
     get_data_type_from_message
 )
-from .exceptions import SubscriptionError, RecoveryError
+from .exceptions import (
+    SubscriptionError, RecoveryError
+)
 from .config import get_config
 from .subscription_state_manager import SubscriptionStateManager
 from .data_routing_engine import DataRoutingEngine
@@ -49,8 +60,6 @@ class ConnectionMetrics:
     message_count: int = 0
     error_count: int = 0
     reconnect_count: int = 0
-    bytes_received: int = 0
-    current_subscriptions: int = 0
 
     @property
     def uptime_seconds(self) -> float:
@@ -58,43 +67,6 @@ class ConnectionMetrics:
         if not self.is_connected or not self.connect_time:
             return 0.0
         return time.time() - self.connect_time
-
-    @property
-    def messages_per_second(self) -> float:
-        """초당 메시지 수"""
-        if not self.is_connected or self.uptime_seconds <= 0:
-            return 0.0
-        return self.message_count / self.uptime_seconds
-
-    @property
-    def error_rate(self) -> float:
-        """에러율 (0.0 ~ 1.0)"""
-        if self.message_count == 0:
-            return 0.0
-        return self.error_count / (self.message_count + self.error_count)
-
-    @property
-    def health_score(self) -> float:
-        """연결 건강도 점수 (0.0 ~ 1.0)"""
-        if not self.is_connected:
-            return 0.0
-
-        # 기본 점수
-        score = 0.5
-
-        # 연결 유지 시간 보너스 (최대 30분)
-        uptime_bonus = min(self.uptime_seconds / 1800, 0.3)
-        score += uptime_bonus
-
-        # 에러율 패널티
-        error_penalty = self.error_rate * 0.4
-        score -= error_penalty
-
-        # 메시지 활동 보너스
-        if self.message_count > 0:
-            score += 0.2
-
-        return max(0.0, min(1.0, score))
 
 
 class EpochManager:
@@ -117,18 +89,12 @@ class EpochManager:
         """현재 Epoch 반환"""
         return self._current_epochs[connection_type]
 
-    def is_current_epoch(self, connection_type: WebSocketType, epoch: int) -> bool:
-        """주어진 Epoch가 현재 Epoch인지 확인 (백워드 호환성)"""
-        return epoch == self._current_epochs[connection_type]
-
-    def reset_epoch(self, connection_type: WebSocketType) -> None:
-        """Epoch 리셋 (테스트용)"""
-        self._current_epochs[connection_type] = 0
-
 
 class GlobalWebSocketManager:
     """
     WebSocket v6.0 전역 관리자 (싱글톤)
+
+    단순화된 구조로 안정성과 성능에 집중
     """
 
     _instance: Optional['GlobalWebSocketManager'] = None
@@ -170,23 +136,16 @@ class GlobalWebSocketManager:
         # 컴포넌트 생명주기 관리 (WeakRef)
         self._component_refs: Dict[str, weakref.ReferenceType] = {}
 
-        # 백그라운드 태스크 관리
-        self._background_tasks: Set[asyncio.Task] = set()
-
-        # 성능 메트릭스
-        self._performance_metrics = PerformanceMetrics(
-            messages_per_second=0.0,
-            active_connections=0,
-            total_components=0,
-            last_updated=self._startup_time
-        )
-        self._last_metrics_update = self._startup_time
-
-        # Rate Limiter (선택적) - 비동기 초기화 예약
+        # Rate Limiter
         self._rate_limiter = None
+        if RATE_LIMITER_AVAILABLE:
+            try:
+                self._rate_limiter = get_global_rate_limiter()
+            except Exception as e:
+                self.logger.warning(f"Rate Limiter 초기화 실패: {e}")
 
         self._initialized = True
-        self.logger.info("GlobalWebSocketManager 초기화 완료")
+        self.logger.info("GlobalWebSocketManager v6.0 초기화 완료")
 
     @classmethod
     async def get_instance(cls) -> 'GlobalWebSocketManager':
@@ -202,24 +161,13 @@ class GlobalWebSocketManager:
         try:
             self.logger.info("비동기 초기화 시작")
 
-            # Rate Limiter 초기화 (비동기)
-            if RATE_LIMITER_AVAILABLE:
-                try:
-                    self._rate_limiter = await get_global_rate_limiter()
-                    self.logger.info("Rate Limiter 초기화 완료")
-                except Exception as e:
-                    self.logger.warning(f"Rate Limiter 초기화 실패: {e}")
-
             # 구독 상태 관리자에 변경 콜백 등록
             self.subscription_manager.add_change_callback(
-                self._on_subscription_changes_sync
+                self._on_subscription_changes
             )
 
             # 데이터 라우터 시작
             await self.data_router.start()
-
-            # 백그라운드 태스크 시작
-            self._start_background_tasks()
 
             self._state = GlobalManagerState.IDLE
             self.logger.info("GlobalWebSocketManager 비동기 초기화 완료")
@@ -228,20 +176,6 @@ class GlobalWebSocketManager:
             self.logger.error(f"비동기 초기화 실패: {e}")
             self._state = GlobalManagerState.ERROR
             raise RecoveryError(f"매니저 초기화 실패: {e}")
-
-    def _on_subscription_changes_sync(self, changes):
-        """구독 변경 이벤트 핸들러 (동기 래퍼)"""
-        asyncio.create_task(self._on_subscription_changes(changes))
-
-    async def _on_subscription_changes(self, changes):
-        """구독 변경 이벤트 핸들러"""
-        try:
-            self.logger.info(f"구독 변경 이벤트 수신: {len(changes)}개 타입")
-            for data_type, change in changes.items():
-                self.logger.debug(f"  {data_type}: +{len(change.added_symbols)} -{len(change.removed_symbols)}")
-            await self._apply_subscription_changes(changes)
-        except Exception as e:
-            self.logger.error(f"구독 변경 적용 실패: {e}")
 
     # =============================================================================
     # WebSocket 연결 관리
@@ -258,12 +192,11 @@ class GlobalWebSocketManager:
                     self._handle_received_message(message_data, WebSocketType.PUBLIC)
                 )
 
-            # 클라이언트 생성 (설정 기반)
-            config = get_config()
+            # 클라이언트 생성
             self._public_client = create_public_client(
                 message_handler=public_message_handler,
-                enable_compression=config.connection.enable_compression,
-                enable_simple_format=config.connection.enable_simple_format
+                enable_compression=True,
+                enable_simple_format=True
             )
 
             # 연결 시도
@@ -299,12 +232,11 @@ class GlobalWebSocketManager:
                     self._handle_received_message(message_data, WebSocketType.PRIVATE)
                 )
 
-            # 클라이언트 생성 (설정 기반)
-            config = get_config()
+            # 클라이언트 생성
             self._private_client = create_private_client(
                 message_handler=private_message_handler,
-                enable_compression=config.connection.enable_compression,
-                enable_simple_format=config.connection.enable_simple_format
+                enable_compression=True,
+                enable_simple_format=True
             )
 
             # 연결 시도
@@ -327,9 +259,7 @@ class GlobalWebSocketManager:
 
         except Exception as e:
             self.logger.error(f"Private WebSocket 연결 실패: {e}")
-            return False
-
-    async def _handle_received_message(
+            return False    async def _handle_received_message(
         self,
         message_data: Dict[str, Any],
         connection_type: WebSocketType
@@ -339,15 +269,15 @@ class GlobalWebSocketManager:
             # 현재 Epoch 가져오기
             current_epoch = self.epoch_manager.get_current_epoch(connection_type)
 
-            # 이벤트로 변환
-            event = self._convert_to_event(message_data, current_epoch, connection_type)
+            # v6 이벤트로 변환
+            v6_event = self._convert_to_v6_event(message_data, current_epoch, connection_type)
 
-            if event:
+            if v6_event:
                 # 데이터 타입 추론
                 data_type = get_data_type_from_message(message_data)
                 if data_type:
-                    # 데이터 라우터로 분배
-                    await self.data_router.route_event(event, data_type)
+                    # v6 데이터 라우터로 분배
+                    await self.data_router.route_event(v6_event, data_type)
 
                 # 메트릭스 업데이트
                 metrics = self._connection_metrics[connection_type]
@@ -359,13 +289,13 @@ class GlobalWebSocketManager:
             metrics = self._connection_metrics[connection_type]
             metrics.error_count += 1
 
-    def _convert_to_event(
+    def _convert_to_v6_event(
         self,
         message_data: Dict[str, Any],
         epoch: int,
         connection_type: WebSocketType
     ) -> Optional[BaseWebSocketEvent]:
-        """업비트 메시지를 이벤트로 변환"""
+        """업비트 메시지를 v6 이벤트로 변환"""
         try:
             # 메시지 타입 확인
             msg_type = message_data.get('type', '').lower()
@@ -385,16 +315,9 @@ class GlobalWebSocketManager:
                     ask_bid=message_data.get('ask_bid', ''),
                     trade_timestamp=message_data.get('trade_timestamp', 0),
                     sequential_id=message_data.get('sequential_id', 0),
-                    prev_closing_price=Decimal(str(
-                        message_data.get('prev_closing_price', 0)
-                    ))
+                    prev_closing_price=Decimal(str(message_data.get('prev_closing_price', 0)))
                 )
             elif msg_type in ['myorder', 'my_order']:
-                # 긴 Decimal 변환을 헬퍼 함수로 처리
-                def safe_decimal(value, default=0):
-                    return (Decimal(str(value)) if value is not None
-                           else Decimal(str(default)))
-
                 return MyOrderEvent(
                     epoch=epoch,
                     timestamp=time.time(),
@@ -403,22 +326,18 @@ class GlobalWebSocketManager:
                     uuid=message_data.get('uuid', ''),
                     order_type=message_data.get('order_type', ''),
                     ord_type=message_data.get('ord_type', ''),
-                    price=safe_decimal(message_data.get('price')) if message_data.get('price') else None,
-                    avg_price=safe_decimal(message_data.get('avg_price')) if message_data.get('avg_price') else None,
+                    price=Decimal(str(message_data.get('price', 0))) if message_data.get('price') else None,
+                    avg_price=Decimal(str(message_data.get('avg_price', 0))) if message_data.get('avg_price') else None,
                     state=message_data.get('state', ''),
                     market=message_data.get('market', ''),
                     created_at=message_data.get('created_at', ''),
-                    volume=safe_decimal(message_data.get('volume')) if message_data.get('volume') else None,
-                    remaining_volume=(safe_decimal(message_data.get('remaining_volume'))
-                                      if message_data.get('remaining_volume') else None),
-                    reserved_fee=(safe_decimal(message_data.get('reserved_fee'))
-                                  if message_data.get('reserved_fee') else None),
-                    remaining_fee=(safe_decimal(message_data.get('remaining_fee'))
-                                   if message_data.get('remaining_fee') else None),
-                    paid_fee=safe_decimal(message_data.get('paid_fee')) if message_data.get('paid_fee') else None,
-                    locked=safe_decimal(message_data.get('locked')) if message_data.get('locked') else None,
-                    executed_volume=(safe_decimal(message_data.get('executed_volume'))
-                                     if message_data.get('executed_volume') else None),
+                    volume=Decimal(str(message_data.get('volume', 0))) if message_data.get('volume') else None,
+                    remaining_volume=Decimal(str(message_data.get('remaining_volume', 0))) if message_data.get('remaining_volume') else None,
+                    reserved_fee=Decimal(str(message_data.get('reserved_fee', 0))) if message_data.get('reserved_fee') else None,
+                    remaining_fee=Decimal(str(message_data.get('remaining_fee', 0))) if message_data.get('remaining_fee') else None,
+                    paid_fee=Decimal(str(message_data.get('paid_fee', 0))) if message_data.get('paid_fee') else None,
+                    locked=Decimal(str(message_data.get('locked', 0))) if message_data.get('locked') else None,
+                    executed_volume=Decimal(str(message_data.get('executed_volume', 0))) if message_data.get('executed_volume') else None,
                     trades_count=message_data.get('trades_count')
                 )
             elif msg_type in ['myasset', 'my_asset']:
@@ -430,8 +349,7 @@ class GlobalWebSocketManager:
                     currency=message_data.get('currency', ''),
                     balance=Decimal(str(message_data.get('balance', 0))),
                     locked=Decimal(str(message_data.get('locked', 0))),
-                    avg_buy_price=(Decimal(str(message_data.get('avg_buy_price', 0)))
-                                   if message_data.get('avg_buy_price') else None),
+                    avg_buy_price=Decimal(str(message_data.get('avg_buy_price', 0))) if message_data.get('avg_buy_price') else None,
                     avg_buy_price_modified=message_data.get('avg_buy_price_modified'),
                     unit_currency=message_data.get('unit_currency')
                 )
@@ -461,44 +379,20 @@ class GlobalWebSocketManager:
             def cleanup_callback(ref):
                 asyncio.create_task(self._cleanup_component(component_id))
 
-            # WeakRef 생성 시 타입 검증 및 디버깅
-            self.logger.debug(f"component_instance 타입: {type(component_instance)}")
-            self.logger.debug(f"component_instance repr: {repr(component_instance)}")
+            weak_ref = weakref.ref(component_instance, cleanup_callback)
+            self._component_refs[component_id] = weak_ref
 
-            try:
-                # WeakRef 생성 가능성 확인
-                if hasattr(component_instance, '__weakref__'):
-                    self.logger.debug(f"WeakRef 생성 가능: {component_instance.__weakref__}")
-                else:
-                    self.logger.debug("WeakRef 생성 불가능")
-
-                weak_ref = weakref.ref(component_instance, cleanup_callback)
-                self._component_refs[component_id] = weak_ref
-                self.logger.debug(f"WeakRef 생성 성공: {weak_ref}")
-
-            except Exception as weakref_error:
-                self.logger.error(f"WeakRef 생성 실패: {weakref_error}")
-                self.logger.error(f"component_instance 타입: {type(component_instance)}")
-                self.logger.error(f"component_instance의 __class__: {component_instance.__class__}")
-                self.logger.error(f"component_instance의 __dict__: {getattr(component_instance, '__dict__', 'NO_DICT')}")
-                raise
-
-            # 컴포넌트 구독 생성 (상태 관리 전용, 디버깅용 로깅 추가)
-            self.logger.debug(f"ComponentSubscription 생성 - component_id: {component_id}")
-            self.logger.debug(f"subscriptions: {subscriptions}")
-
-            try:
-                component_subscription = ComponentSubscription(
-                    component_id=component_id,
-                    subscription_specs=subscriptions
-                )
-            except Exception as e:
-                self.logger.error(f"ComponentSubscription 생성 실패: {e}")
-                self.logger.error(f"전달된 매개변수 - component_id: {component_id}, subscriptions: {subscriptions}")
-                raise
+            # 컴포넌트 구독 생성
+            component_subscription = ComponentSubscription(
+                component_id=component_id,
+                subscription_specs=subscriptions,
+                callback=callback,
+                created_at=time.time(),
+                is_active=True
+            )
 
             # 구독 상태 관리자에 등록
-            await self.subscription_manager.register_component(
+            changes = await self.subscription_manager.register_component(
                 component_id, subscriptions, weak_ref
             )
 
@@ -528,12 +422,9 @@ class GlobalWebSocketManager:
             await self.subscription_manager.unregister_component(component_id)
 
             # 데이터 라우터에서 콜백 제거
-            for data_type in DataType:
-                consumer_id = f"{component_id}_{data_type.value}"
-                try:
+            for consumer_id in list(self.data_router._fanout_hub._callbacks.keys()):
+                if consumer_id.startswith(f"{component_id}_"):
                     self.data_router.unregister_data_consumer(consumer_id)
-                except Exception:
-                    pass  # 존재하지 않는 경우 무시
 
             # WeakRef 정리
             if component_id in self._component_refs:
@@ -554,123 +445,22 @@ class GlobalWebSocketManager:
             self.logger.error(f"컴포넌트 자동 정리 실패 {component_id}: {e}")
 
     # =============================================================================
-    # 백그라운드 모니터링 태스크
-    # =============================================================================
-
-    def _start_background_tasks(self):
-        """백그라운드 작업 시작"""
-        tasks = [
-            self._health_monitor_task(),
-            self._metrics_collector_task(),
-            self._cleanup_monitor_task()
-        ]
-
-        for task in tasks:
-            bg_task = asyncio.create_task(task)
-            self._background_tasks.add(bg_task)
-            # 작업 완료 시 자동 정리
-            bg_task.add_done_callback(self._background_tasks.discard)
-
-    async def _health_monitor_task(self) -> None:
-        """헬스 모니터링 백그라운드 작업"""
-        try:
-            while not self._shutdown_requested:
-                await asyncio.sleep(30)  # 30초마다 체크
-
-                # 연결 상태 체크
-                for connection_type, metrics in self._connection_metrics.items():
-                    if metrics.is_connected:
-                        # 마지막 메시지 시간 체크
-                        last_msg_time = metrics.last_message_time
-                        if last_msg_time and time.time() - last_msg_time > 60:
-                            self.logger.warning(
-                                f"{connection_type} 연결: 60초간 메시지 없음"
-                            )
-
-                # 컴포넌트 WeakRef 정리
-                dead_refs = [
-                    comp_id for comp_id, ref in self._component_refs.items()
-                    if ref() is None
-                ]
-                for comp_id in dead_refs:
-                    self.logger.info(f"Dead component reference 정리: {comp_id}")
-                    del self._component_refs[comp_id]
-
-        except asyncio.CancelledError:
-            self.logger.info("헬스 모니터 종료")
-        except Exception as e:
-            self.logger.error(f"헬스 모니터 오류: {e}")
-
-    async def _metrics_collector_task(self) -> None:
-        """성능 메트릭스 수집 백그라운드 작업"""
-        try:
-            while not self._shutdown_requested:
-                await asyncio.sleep(10)  # 10초마다 업데이트
-
-                # 성능 메트릭스 업데이트
-                current_time = time.time()
-
-                # 전체 메시지 처리량 계산
-                total_messages = sum(
-                    metrics.message_count
-                    for metrics in self._connection_metrics.values()
-                )
-
-                time_diff = current_time - self._last_metrics_update
-                if time_diff > 0:
-                    self._performance_metrics.messages_per_second = (
-                        total_messages / time_diff
-                    )
-
-                self._performance_metrics.active_connections = sum(
-                    1 for metrics in self._connection_metrics.values()
-                    if metrics.is_connected
-                )
-
-                self._performance_metrics.total_components = len(
-                    self._component_refs
-                )
-
-                self._performance_metrics.last_updated = current_time
-                self._last_metrics_update = current_time
-
-        except asyncio.CancelledError:
-            self.logger.info("메트릭스 수집기 종료")
-        except Exception as e:
-            self.logger.error(f"메트릭스 수집기 오류: {e}")
-
-    async def _cleanup_monitor_task(self) -> None:
-        """정리 모니터링 백그라운드 작업"""
-        try:
-            while not self._shutdown_requested:
-                await asyncio.sleep(60)  # 1분마다 정리
-
-                # 죽은 WeakRef 정리
-                dead_refs = [
-                    comp_id for comp_id, ref in self._component_refs.items()
-                    if ref() is None
-                ]
-
-                if dead_refs:
-                    self.logger.info(f"정리된 컴포넌트 참조: {len(dead_refs)}개")
-                    for comp_id in dead_refs:
-                        del self._component_refs[comp_id]
-
-        except asyncio.CancelledError:
-            self.logger.info("정리 모니터 종료")
-        except Exception as e:
-            self.logger.error(f"정리 모니터 오류: {e}")
-
-    # =============================================================================
     # 구독 관리
     # =============================================================================
 
+    async def _on_subscription_changes(self, changes):
+        """구독 변경 이벤트 핸들러"""
+        try:
+            await self._apply_subscription_changes(changes)
+        except Exception as e:
+            self.logger.error(f"구독 변경 적용 실패: {e}")
+
     async def _apply_subscription_changes(self, changes) -> None:
-        """구독 변경사항을 물리적 연결에 적용 - 스마트 라우팅"""
+        """구독 변경사항을 물리적 연결에 적용"""
         try:
             self.logger.info("구독 변경사항 적용 시작")
 
-            # Rate Limiter 체크 (가용 시에만)
+            # Rate Limiter 체크
             if self._rate_limiter and RATE_LIMITER_AVAILABLE:
                 total_changes = sum(
                     len(change.added_symbols) + len(change.removed_symbols)
@@ -678,55 +468,35 @@ class GlobalWebSocketManager:
                 )
 
                 if total_changes > 0:
-                    try:
-                        # Rate Limiter 호출 (이미 초기화된 인스턴스)
-                        await self._rate_limiter.acquire("websocket_message", "WS", max(total_changes, 10))
-                    except Exception as e:
-                        self.logger.warning(f"Rate limiting 실패: {e}")
+                    await self._rate_limiter.acquire(
+                        group=UpbitRateLimitGroup.WEBSOCKET,
+                        weight=min(total_changes, 10)
+                    )
 
-            # 스마트 라우팅: 데이터 타입별 자동 연결 선택
+            # Public 구독 적용
             public_changes = {
                 data_type: change for data_type, change in changes.items()
-                if data_type.is_public()  # types.py의 is_public() 메서드 활용
+                if data_type in [DataType.TICKER, DataType.ORDERBOOK, DataType.TRADE]
             }
+            if public_changes and self._public_client:
+                await self._apply_public_subscriptions()
 
+            # Private 구독 적용
             private_changes = {
                 data_type: change for data_type, change in changes.items()
-                if data_type.is_private()  # types.py의 is_private() 메서드 활용
+                if data_type in [DataType.MY_ORDER, DataType.MY_ASSET]
             }
+            if private_changes and self._private_client:
+                await self._apply_private_subscriptions()
 
-            # Public 연결 필요 시 자동 초기화
-            if public_changes:
-                if not self._public_client or not self._public_client.is_connected:
-                    self.logger.info("Public 구독 요청 감지 - Public 연결 자동 초기화")
-                    success = await self.initialize_public_connection()
-                    if not success:
-                        self.logger.error("Public 연결 자동 초기화 실패")
-                        return
-
-                if self._public_client and self._public_client.is_connected:
-                    await self._apply_public_subscriptions()
-
-            # Private 연결 필요 시 자동 초기화
-            if private_changes:
-                if not self._private_client or not self._private_client.is_connected:
-                    self.logger.info("Private 구독 요청 감지 - Private 연결 자동 초기화")
-                    success = await self.initialize_private_connection()
-                    if not success:
-                        self.logger.error("Private 연결 자동 초기화 실패")
-                        return
-
-                if self._private_client and self._private_client.is_connected:
-                    await self._apply_private_subscriptions()
-
-            self.logger.info(f"구독 변경사항 적용 완료 - Public: {len(public_changes)}개, Private: {len(private_changes)}개")
+            self.logger.info("구독 변경사항 적용 완료")
 
         except Exception as e:
             self.logger.error(f"구독 변경사항 적용 실패: {e}")
             raise SubscriptionError(f"구독 적용 오류: {e}")
 
     async def _apply_public_subscriptions(self) -> None:
-        """Public WebSocket 구독 적용 - 모든 Public 데이터 타입 지원"""
+        """Public WebSocket 구독 적용"""
         try:
             if not self._public_client or not self._public_client.is_connected:
                 return
@@ -740,21 +510,13 @@ class GlobalWebSocketManager:
 
             for data_type, subscription in active_subscriptions.items():
                 if subscription.symbols:
-                    # 업비트 공식 메시지 형식 생성 (기본값 필드 생략으로 최적화)
                     message = {
-                        "ticket": f"ws_{data_type.value}_{int(time.time())}",
-                        "type": self._get_upbit_message_type(data_type),
-                        "codes": list(subscription.symbols)
+                        "ticket": f"v6_{data_type.value}_{int(time.time())}",
+                        "type": data_type.value,
+                        "codes": list(subscription.symbols),
+                        "isOnlySnapshot": False,
+                        "isOnlyRealtime": True
                     }
-
-                    # 포맷 설정에 따른 동적 형식 지정
-                    if data_type.is_candle():
-                        # 설정 기반으로 포맷 결정 (투명 변환 시스템 준수)
-                        if self.config.should_use_simple_format_for_transmission:
-                            message["format"] = "SIMPLE"
-                        else:
-                            message["format"] = "DEFAULT"
-
                     subscription_messages.append(message)
 
             # 구독 메시지 전송
@@ -768,27 +530,8 @@ class GlobalWebSocketManager:
         except Exception as e:
             self.logger.error(f"Public 구독 적용 실패: {e}")
 
-    def _get_upbit_message_type(self, data_type: 'DataType') -> str:
-        """DataType을 업비트 WebSocket 메시지 타입으로 변환"""
-        if data_type == DataType.TICKER:
-            return "ticker"
-        elif data_type == DataType.TRADE:
-            return "trade"
-        elif data_type == DataType.ORDERBOOK:
-            return "orderbook"
-        elif data_type.is_candle():
-            # 캔들 데이터는 타입명 그대로 사용 (예: "candle.1m")
-            return data_type.value
-        elif data_type == DataType.MYORDER:
-            return "myOrder"
-        elif data_type == DataType.MYASSET:
-            return "myAsset"
-        else:
-            # 알 수 없는 타입은 그대로 반환
-            return data_type.value
-
     async def _apply_private_subscriptions(self) -> None:
-        """Private WebSocket 구독 적용 - 모든 Private 데이터 타입 지원"""
+        """Private WebSocket 구독 적용"""
         try:
             if not self._private_client or not self._private_client.is_connected:
                 return
@@ -800,12 +543,23 @@ class GlobalWebSocketManager:
             subscription_messages = []
 
             for data_type, subscription in active_subscriptions.items():
-                # Private 데이터는 심볼 없이 구독 (기본값 필드 생략으로 최적화)
-                message = {
-                    "ticket": f"ws_{data_type.value.lower()}_{int(time.time())}",
-                    "type": self._get_upbit_message_type(data_type)
-                }
-                subscription_messages.append(message)
+                if data_type == DataType.MY_ORDER:
+                    message = {
+                        "ticket": f"v6_myorder_{int(time.time())}",
+                        "type": "myOrder",
+                        "isOnlySnapshot": False,
+                        "isOnlyRealtime": True
+                    }
+                    subscription_messages.append(message)
+
+                elif data_type == DataType.MY_ASSET:
+                    message = {
+                        "ticket": f"v6_myasset_{int(time.time())}",
+                        "type": "myAsset",
+                        "isOnlySnapshot": False,
+                        "isOnlyRealtime": True
+                    }
+                    subscription_messages.append(message)
 
             # 구독 메시지 전송
             if subscription_messages:
@@ -839,8 +593,8 @@ class GlobalWebSocketManager:
 
             # 건강도 계산
             is_healthy = (
-                self._state in [GlobalManagerState.IDLE, GlobalManagerState.ACTIVE]
-                and not self._shutdown_requested
+                self._state in [GlobalManagerState.IDLE, GlobalManagerState.ACTIVE] and
+                not self._shutdown_requested
             )
 
             status = "healthy" if is_healthy else "degraded"
@@ -849,16 +603,8 @@ class GlobalWebSocketManager:
 
             return HealthStatus(
                 status=status,
-                public_connection=(
-                    ConnectionState.CONNECTED
-                    if public_metrics.is_connected
-                    else ConnectionState.DISCONNECTED
-                ),
-                private_connection=(
-                    ConnectionState.CONNECTED
-                    if private_metrics.is_connected
-                    else ConnectionState.DISCONNECTED
-                ),
+                public_connection=ConnectionState.CONNECTED if public_metrics.is_connected else ConnectionState.DISCONNECTED,
+                private_connection=ConnectionState.CONNECTED if private_metrics.is_connected else ConnectionState.DISCONNECTED,
                 active_subscriptions={},  # TODO: 구독 요약 추가
                 performance=performance,
                 timestamp=time.time()
@@ -907,21 +653,6 @@ class GlobalWebSocketManager:
             self._shutdown_requested = True
             self._state = GlobalManagerState.SHUTTING_DOWN
 
-            # 백그라운드 작업 취소
-            for task in self._background_tasks:
-                if not task.done():
-                    task.cancel()
-
-            # 백그라운드 작업 완료 대기 (타임아웃 적용)
-            if self._background_tasks:
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*self._background_tasks, return_exceptions=True),
-                        timeout=timeout / 2
-                    )
-                except asyncio.TimeoutError:
-                    self.logger.warning("백그라운드 작업 종료 타임아웃")
-
             # 컴포넌트 정리
             for component_id in list(self._component_refs.keys()):
                 try:
@@ -930,12 +661,8 @@ class GlobalWebSocketManager:
                     self.logger.error(f"컴포넌트 정리 실패 {component_id}: {e}")
 
             # 하위 시스템 종료
-            try:
-                # SubscriptionStateManager는 간단한 정리만 수행
-                pass  # 별도 정리 불필요 (WeakRef 자동 정리)
-            except Exception as e:
-                self.logger.warning(f"구독 관리자 정리 실패: {e}")
-
+            if hasattr(self.subscription_manager, 'cleanup'):
+                await self.subscription_manager.cleanup()
             await self.data_router.stop()
 
             # WebSocket 연결 정리
@@ -964,8 +691,8 @@ class GlobalWebSocketManager:
     def is_healthy(self) -> bool:
         """시스템 건강 상태"""
         return (
-            self._state in [GlobalManagerState.IDLE, GlobalManagerState.ACTIVE]
-            and not self._shutdown_requested
+            self._state in [GlobalManagerState.IDLE, GlobalManagerState.ACTIVE] and
+            not self._shutdown_requested
         )
 
     @property
@@ -973,35 +700,30 @@ class GlobalWebSocketManager:
         """활성 컴포넌트 수"""
         return len([ref for ref in self._component_refs.values() if ref() is not None])
 
-    @property
-    def uptime_seconds(self) -> float:
-        """가동 시간 (초)"""
-        return time.time() - self._startup_time
-
 
 # =============================================================================
 # 전역 접근 헬퍼 함수
 # =============================================================================
 
 async def get_global_websocket_manager() -> GlobalWebSocketManager:
-    """전역 웹소켓 매니저 인스턴스 획득"""
+    """
+    전역 웹소켓 매니저 인스턴스 획득
+
+    Returns:
+        GlobalWebSocketManager: 싱글톤 인스턴스
+    """
     return await GlobalWebSocketManager.get_instance()
 
 
-def get_global_websocket_manager_sync() -> GlobalWebSocketManager:
-    """전역 웹소켓 매니저 인스턴스 획득 (동기 버전)"""
-    if GlobalWebSocketManager._instance is None:
-        # 임시로 매니저 인스턴스 생성 (초기화 없이)
-        manager = GlobalWebSocketManager.__new__(GlobalWebSocketManager)
-        manager._initialized = False
-        GlobalWebSocketManager._instance = manager
-    return GlobalWebSocketManager._instance
-
-
 def is_manager_available() -> bool:
-    """매니저 사용 가능 여부 확인"""
+    """
+    매니저 사용 가능 여부 확인
+
+    Returns:
+        bool: 매니저가 초기화되어 사용 가능한지 여부
+    """
     return (
-        GlobalWebSocketManager._instance is not None
-        and hasattr(GlobalWebSocketManager._instance, '_initialized')
-        and GlobalWebSocketManager._instance._initialized
+        GlobalWebSocketManager._instance is not None and
+        hasattr(GlobalWebSocketManager._instance, '_initialized') and
+        GlobalWebSocketManager._instance._initialized
     )

@@ -293,8 +293,8 @@ class FanoutHub:
     ) -> None:
         """콜백 등록"""
         if callback_id in self._callbacks:
-            self.logger.warning(f"콜백 ID 중복: {callback_id}, 기존 콜백 해제 후 재등록")
-            self.unregister_callback(callback_id)
+            self.logger.warning(f"콜백 ID 중복: {callback_id}")
+            return
 
         queue_size = max_queue_size or self.backpressure_handler.config.max_queue_size
         queue = asyncio.Queue(maxsize=queue_size)

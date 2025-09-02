@@ -105,12 +105,9 @@ class SubscriptionStateManager:
         async with self._lock:
             self.logger.debug(f"컴포넌트 구독 등록: {component_id}, 스펙 {len(subscription_specs)}개")
 
-            # 기존 구독과 통합 처리 (재등록 시 기존 구독 해제하지 않음)
+            # 기존 구독 제거 (재등록 시)
             if component_id in self._component_subscriptions:
-                self.logger.debug(f"기존 컴포넌트 {component_id} 구독 업데이트")
-                # 기존 구독을 해제하지 않고 새 구독으로 교체
-            else:
-                self.logger.debug(f"새 컴포넌트 {component_id} 구독 등록")
+                await self._unregister_component_internal(component_id)
 
             # 컴포넌트 구독 생성 (디버깅용 로깅 추가)
             self.logger.debug(f"ComponentSubscription 생성 - component_id: {component_id}")
@@ -126,7 +123,6 @@ class SubscriptionStateManager:
                 self.logger.error(f"전달된 매개변수 - component_id: {component_id}, subscription_specs: {subscription_specs}")
                 raise
 
-            # 기존 구독 교체
             self._component_subscriptions[component_id] = component_subscription
 
             # WeakRef 등록 (자동 정리)

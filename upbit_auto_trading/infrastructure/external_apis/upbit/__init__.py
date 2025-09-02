@@ -29,21 +29,36 @@ await private_client.close()
 
 from .upbit_public_client import UpbitPublicClient, create_upbit_public_client
 # from .upbit_private_client import UpbitPrivateClient, create_upbit_private_client
-from .websocket_v5.upbit_websocket_public_client import UpbitWebSocketPublicV5 as UpbitWebSocketPublicClient
-from .websocket_v5.upbit_websocket_private_client import UpbitWebSocketPrivateV5 as UpbitWebSocketPrivateClient
 from .upbit_auth import UpbitAuthenticator
 from .upbit_rate_limiter import (
     UpbitGCRARateLimiter, get_global_rate_limiter
 )
 
+# WebSocket v6 사용 (통합된 클라이언트 - 프록시 패턴)
+from .websocket_v6.websocket_client_proxy import WebSocketClientProxy as UpbitWebSocketClient
+from .websocket_v6.native_websocket_client import create_public_client, create_private_client
+from .websocket_v6.global_websocket_manager import get_global_websocket_manager
+
+# 호환성을 위한 별칭 (레거시 코드 지원)
+UpbitWebSocketPublicClient = create_public_client
+UpbitWebSocketPrivateClient = create_private_client
+
 __all__ = [
     'UpbitPublicClient',
     # 'UpbitPrivateClient',
-    'UpbitWebSocketPublicClient',
-    'UpbitWebSocketPrivateClient',
     'UpbitAuthenticator',
     'UpbitGCRARateLimiter',
     'create_upbit_public_client',
     # 'create_upbit_private_client',
-    'get_global_rate_limiter'
+    'get_global_rate_limiter',
+
+    # WebSocket v6 (새로운 통합 API)
+    'UpbitWebSocketClient',           # 새로운 프록시 API (권장)
+    'get_global_websocket_manager',   # 고급 사용자용
+
+    # WebSocket v6 (호환성 별칭)
+    'UpbitWebSocketPublicClient',     # 레거시 호환성
+    'UpbitWebSocketPrivateClient',    # 레거시 호환성
+    'create_public_client',           # 직접 사용
+    'create_private_client',          # 직접 사용
 ]
