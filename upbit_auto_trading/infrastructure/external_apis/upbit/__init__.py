@@ -34,12 +34,22 @@ from .upbit_rate_limiter import (
     UpbitGCRARateLimiter, get_global_rate_limiter
 )
 
-# WebSocket v6 사용 (통합된 클라이언트 - 프록시 패턴)
-from .websocket_v6.websocket_client_proxy import WebSocketClientProxy as UpbitWebSocketClient
-from .websocket_v6.native_websocket_client import create_public_client, create_private_client
-from .websocket_v6.global_websocket_manager import get_global_websocket_manager
+# WebSocket v6 사용 (간소화된 아키텍처)
+from .websocket_v6 import WebSocketClient as UpbitWebSocketClient
+from .websocket_v6 import get_websocket_manager as get_global_websocket_manager
+
 
 # 호환성을 위한 별칭 (레거시 코드 지원)
+def create_public_client():
+    """공개 데이터용 WebSocket 클라이언트 생성"""
+    return UpbitWebSocketClient(component_id="public_client")
+
+
+def create_private_client():
+    """개인 데이터용 WebSocket 클라이언트 생성"""
+    return UpbitWebSocketClient(component_id="private_client")
+
+
 UpbitWebSocketPublicClient = create_public_client
 UpbitWebSocketPrivateClient = create_private_client
 
