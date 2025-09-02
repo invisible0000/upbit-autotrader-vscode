@@ -35,8 +35,8 @@ from .upbit_rate_limiter import (
 )
 
 # WebSocket v6 사용 (간소화된 아키텍처)
-from .websocket_v6 import WebSocketClient as UpbitWebSocketClient
-from .websocket_v6 import get_websocket_manager as get_global_websocket_manager
+from .websocket.core.websocket_client import WebSocketClient as UpbitWebSocketClient
+from .websocket.core.websocket_manager import get_websocket_manager as get_global_websocket_manager
 
 
 # 호환성을 위한 별칭 (레거시 코드 지원)

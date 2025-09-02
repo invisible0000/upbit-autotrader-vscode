@@ -222,6 +222,7 @@ class UpbitGCRARateLimiter:
         # ============================================
         'websocket_connect': UpbitRateLimitGroup.WEBSOCKET,
         'websocket_message': UpbitRateLimitGroup.WEBSOCKET,
+        'test_message': UpbitRateLimitGroup.WEBSOCKET,  # 테스트용
     }
 
     # 메서드별 특별 매핑 (엔드포인트 + HTTP 메서드 조합)

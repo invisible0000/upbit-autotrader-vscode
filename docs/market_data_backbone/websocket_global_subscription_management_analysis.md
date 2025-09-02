@@ -43,7 +43,7 @@
    - orderbook: [KRW-ETH] (KRW-BTC → KRW-ETH)
    - minute60: [KRW-ETH] (KRW-BTC → KRW-ETH)
 
-⚠️ 중요: KRW-BTC 관련 구독은 자동 정리되어야 함
+⚠️ 중요: KRW-BTC 관련 캔들과 호가는 자동 정리되어야 함(코인 리스트 클릭에 대응)
 ```
 
 #### 시나리오 3: 마켓을 BTC로 변경
@@ -62,7 +62,7 @@
    - orderbook: [KRW-ETH] (유지)
    - minute60: [KRW-ETH] (유지)
 
-⚠️ 중요: KRW 마켓 ticker 구독은 자동 정리되어야 함
+⚠️ 중요: KRW 마켓 ticker 구독은 자동 정리되어야 함(코인 리스트 기능, 콤보박스 변경에 대응)
 ```
 
 ### 🚨 핵심 기술적 도전과제

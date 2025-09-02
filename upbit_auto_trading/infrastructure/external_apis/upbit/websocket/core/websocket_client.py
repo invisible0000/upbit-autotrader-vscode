@@ -272,19 +272,6 @@ class WebSocketClient:
         if not all_subscriptions:
             return
 
-        # 통합 콜백 생성 (타입별로 적절한 콜백 호출)
-        def unified_callback(event: BaseWebSocketEvent) -> None:
-            try:
-                # 이벤트 타입에 따라 적절한 콜백 찾기
-                for sub_key, spec in self._subscriptions.items():
-                    if self._event_matches_subscription(event, spec):
-                        callback = self._callbacks.get(sub_key)
-                        if callback:
-                            callback(event)
-                            break
-            except Exception as e:
-                self.logger.error(f"콜백 실행 오류: {e}")
-
         # 매니저에 등록
         await self._manager.register_component(
             component_id=self.component_id,
@@ -343,6 +330,17 @@ class WebSocketClient:
         for spec in self._subscriptions.values():
             symbols.update(spec.symbols)
         return list(symbols)
+
+    async def get_rate_limiter_status(self) -> Optional[Dict[str, Any]]:
+        """Rate Limiter 상태 조회"""
+        try:
+            await self._ensure_manager()
+            if self._manager and hasattr(self._manager, 'get_rate_limiter_status'):
+                return self._manager.get_rate_limiter_status()
+            return None
+        except Exception as e:
+            self.logger.error(f"Rate Limiter 상태 조회 실패: {e}")
+            return None
 
     # ================================================================
     # 정리

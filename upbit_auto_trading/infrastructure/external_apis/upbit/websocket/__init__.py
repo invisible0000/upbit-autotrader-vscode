@@ -27,8 +27,12 @@ from .core.websocket_client import (
 # 내부 관리자 (고급 사용자용)
 from .core.websocket_manager import (
     WebSocketManager,
-    get_websocket_manager
+    get_websocket_manager,
+    get_global_websocket_manager
 )
+
+# GlobalWebSocketManager alias (Application Service 호환성)
+GlobalWebSocketManager = WebSocketManager
 
 # 타입 시스템
 from .core.websocket_types import (
@@ -165,6 +169,8 @@ __all__ = [
     # === 고급 기능 (전문가용) ===
     "WebSocketManager",
     "get_websocket_manager",
+    "get_global_websocket_manager",
+    "GlobalWebSocketManager",
     "get_system_status",
 
     # === 포맷 변환 ===

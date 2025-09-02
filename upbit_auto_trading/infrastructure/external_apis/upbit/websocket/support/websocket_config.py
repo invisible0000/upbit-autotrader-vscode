@@ -152,6 +152,34 @@ class MonitoringConfig:
 
 
 @dataclass
+class RateLimiterConfig:
+    """Rate Limiter 설정"""
+    enable_rate_limiter: bool = True
+    enable_dynamic_adjustment: bool = True
+    strategy: str = "balanced"  # conservative, balanced, aggressive
+    error_threshold: int = 2
+    reduction_ratio: float = 0.7
+    recovery_delay: float = 120.0
+    recovery_step: float = 0.15
+    recovery_interval: float = 20.0
+
+    def validate(self) -> None:
+        """설정 검증"""
+        if self.strategy not in ["conservative", "balanced", "aggressive"]:
+            raise ValueError("strategy는 conservative, balanced, aggressive 중 하나여야 합니다")
+        if self.error_threshold < 1:
+            raise ValueError("error_threshold는 1 이상이어야 합니다")
+        if not 0.1 <= self.reduction_ratio <= 1.0:
+            raise ValueError("reduction_ratio는 0.1~1.0 사이여야 합니다")
+        if self.recovery_delay <= 0:
+            raise ValueError("recovery_delay는 양수여야 합니다")
+        if not 0.01 <= self.recovery_step <= 1.0:
+            raise ValueError("recovery_step은 0.01~1.0 사이여야 합니다")
+        if self.recovery_interval <= 0:
+            raise ValueError("recovery_interval은 양수여야 합니다")
+
+
+@dataclass
 class WebSocketConfig:
     """WebSocket v6 통합 설정"""
     environment: Environment = Environment.DEVELOPMENT
@@ -159,6 +187,7 @@ class WebSocketConfig:
     reconnection: ReconnectionConfig = field(default_factory=ReconnectionConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
+    rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
 
     def validate(self) -> None:
         """전체 설정 검증"""
@@ -166,6 +195,7 @@ class WebSocketConfig:
         self.reconnection.validate()
         self.auth.validate()
         self.monitoring.validate()
+        self.rate_limiter.validate()
 
     def apply_environment_overrides(self) -> None:
         """환경변수 오버라이드 적용"""
@@ -197,6 +227,25 @@ class WebSocketConfig:
                 self.connection.compression_threshold = int(threshold)
             except ValueError:
                 logger.warning(f"잘못된 UPBIT_WEBSOCKET_COMPRESSION_THRESHOLD 값: {threshold}")
+
+        # Rate Limiter 설정
+        if enable_limiter := os.getenv('UPBIT_WEBSOCKET_RATE_LIMITER'):
+            self.rate_limiter.enable_rate_limiter = enable_limiter.lower() in ('true', '1', 'yes')
+
+        if enable_dynamic := os.getenv('UPBIT_WEBSOCKET_DYNAMIC_RATE_LIMITER'):
+            self.rate_limiter.enable_dynamic_adjustment = enable_dynamic.lower() in ('true', '1', 'yes')
+
+        if strategy := os.getenv('UPBIT_WEBSOCKET_RATE_STRATEGY'):
+            if strategy in ["conservative", "balanced", "aggressive"]:
+                self.rate_limiter.strategy = strategy
+            else:
+                logger.warning(f"잘못된 UPBIT_WEBSOCKET_RATE_STRATEGY 값: {strategy}")
+
+        if error_threshold := os.getenv('UPBIT_WEBSOCKET_ERROR_THRESHOLD'):
+            try:
+                self.rate_limiter.error_threshold = int(error_threshold)
+            except ValueError:
+                logger.warning(f"잘못된 UPBIT_WEBSOCKET_ERROR_THRESHOLD 값: {error_threshold}")
 
     def to_dict(self) -> Dict[str, Any]:
         """Dict 형식으로 변환"""
@@ -230,6 +279,16 @@ class WebSocketConfig:
                 'metrics_update_interval': self.monitoring.metrics_update_interval,
                 'enable_connection_metrics': self.monitoring.enable_connection_metrics,
                 'cleanup_interval': self.monitoring.cleanup_interval
+            },
+            'rate_limiter': {
+                'enable_rate_limiter': self.rate_limiter.enable_rate_limiter,
+                'enable_dynamic_adjustment': self.rate_limiter.enable_dynamic_adjustment,
+                'strategy': self.rate_limiter.strategy,
+                'error_threshold': self.rate_limiter.error_threshold,
+                'reduction_ratio': self.rate_limiter.reduction_ratio,
+                'recovery_delay': self.rate_limiter.recovery_delay,
+                'recovery_step': self.rate_limiter.recovery_step,
+                'recovery_interval': self.rate_limiter.recovery_interval
             }
         }
 

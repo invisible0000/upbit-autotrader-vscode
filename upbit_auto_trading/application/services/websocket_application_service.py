@@ -1,5 +1,5 @@
 """
-WebSocket v6 Application Service (DDD 아키텍처 통합)
+WebSocket Application Service (DDD 아키텍처 통합)
 ==================================================
 
 WebSocket v6.0 전역 관리자를 Application Layer에서 관리하는 서비스
@@ -30,9 +30,9 @@ class WebSocketServiceConfig:
     health_check_interval: float = 30.0
 
 
-class WebSocketV6ApplicationService(BaseApplicationService):
+class WebSocketApplicationService(BaseApplicationService):
     """
-    WebSocket v6 Application Service
+    WebSocket Application Service
 
     역할:
     - 전역 WebSocket Manager 생명주기 관리
@@ -43,7 +43,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
 
     def __init__(self, config: Optional[WebSocketServiceConfig] = None):
         super().__init__()
-        self.logger = create_component_logger("WebSocketV6ApplicationService")
+        self.logger = create_component_logger("WebSocketApplicationService")
 
         # 설정
         self.config = config or WebSocketServiceConfig()
@@ -61,7 +61,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
         # 구독 상태 추적 (Application Layer 레벨)
         self._active_subscriptions: Dict[str, Dict] = {}
 
-        self.logger.info("WebSocket v6 Application Service 초기화 완료")
+        self.logger.info("WebSocket Application Service 초기화 완료")
 
     async def initialize(self) -> bool:
         """
@@ -73,7 +73,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
             return True
 
         try:
-            self.logger.info("WebSocket v6 Application Service 초기화 시작")
+            self.logger.info("WebSocket Application Service 초기화 시작")
 
             # 전역 WebSocket Manager 획득
             self._global_manager = await get_global_websocket_manager()
@@ -83,11 +83,11 @@ class WebSocketV6ApplicationService(BaseApplicationService):
                 await self.start()
 
             self._is_initialized = True
-            self.logger.info("✅ WebSocket v6 Application Service 초기화 완료")
+            self.logger.info("✅ WebSocket Application Service 초기화 완료")
             return True
 
         except Exception as e:
-            self.logger.error(f"WebSocket v6 Application Service 초기화 실패: {e}")
+            self.logger.error(f"WebSocket Application Service 초기화 실패: {e}")
             return False
 
     async def start(self) -> bool:
@@ -101,7 +101,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
             return True
 
         try:
-            self.logger.info("WebSocket v6 Application Service 시작")
+            self.logger.info("WebSocket Application Service 시작")
 
             # 연결 초기화
             if self.config.enable_public_connection:
@@ -115,11 +115,11 @@ class WebSocketV6ApplicationService(BaseApplicationService):
                 self._start_health_check()
 
             self._is_running = True
-            self.logger.info("✅ WebSocket v6 Application Service 시작 완료")
+            self.logger.info("✅ WebSocket Application Service 시작 완료")
             return True
 
         except Exception as e:
-            self.logger.error(f"WebSocket v6 Application Service 시작 실패: {e}")
+            self.logger.error(f"WebSocket Application Service 시작 실패: {e}")
             return False
 
     async def stop(self) -> None:
@@ -128,7 +128,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
             return
 
         try:
-            self.logger.info("WebSocket v6 Application Service 중지 시작")
+            self.logger.info("WebSocket Application Service 중지 시작")
 
             # 헬스 체크 중지
             if self._health_check_task:
@@ -146,7 +146,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
                 await self._global_manager.shutdown(timeout=10.0)
 
             self._is_running = False
-            self.logger.info("✅ WebSocket v6 Application Service 중지 완료")
+            self.logger.info("✅ WebSocket Application Service 중지 완료")
 
         except Exception as e:
             self.logger.error(f"서비스 중지 중 오류: {e}")
@@ -260,13 +260,12 @@ class WebSocketV6ApplicationService(BaseApplicationService):
 
             # 전역 관리자 상태 추가
             if self._global_manager:
-                health_status = await self._global_manager.get_health_status()
-                performance_metrics = await self._global_manager.get_performance_metrics()
+                health_status = self._global_manager.get_health_status()
+                # performance_metrics는 현재 WebSocketManager에 없으므로 제거
 
                 status.update({
                     'global_manager_health': health_status.status,
-                    'total_subscriptions': performance_metrics.total_subscriptions,
-                    'messages_processed': performance_metrics.messages_processed
+                    'manager_state': self._global_manager.get_state().value if self._global_manager.get_state() else "unknown"
                 })
 
             return status
@@ -283,18 +282,16 @@ class WebSocketV6ApplicationService(BaseApplicationService):
         """Public 연결 보장"""
         try:
             if self._global_manager:
-                public_client = await self._global_manager.get_public_client()
-                if public_client:
-                    self.logger.info("✅ Public 연결 확인됨")
+                # 연결 초기화 시도
+                success = await self._global_manager.initialize_public_connection()
+                if success:
+                    self.logger.info("✅ Public 연결 초기화 완료")
                     return True
                 else:
-                    # 연결 초기화 시도
-                    success = await self._global_manager.initialize_public_connection()
-                    if success:
-                        self.logger.info("✅ Public 연결 초기화 완료")
-                        return True
+                    self.logger.warning("Public 연결 실패")
+                    return False
 
-            self.logger.warning("Public 연결 실패")
+            self.logger.warning("GlobalWebSocketManager가 없음")
             return False
 
         except Exception as e:
@@ -311,19 +308,16 @@ class WebSocketV6ApplicationService(BaseApplicationService):
                     self.logger.info("API 키 없음 - Private 연결 스킵")
                     return True
 
-                # Private 클라이언트 확인
-                private_client = await self._global_manager.get_private_client()
-                if private_client:
-                    self.logger.info("✅ Private 연결 확인됨")
+                # 연결 초기화 시도
+                success = await self._global_manager.initialize_private_connection()
+                if success:
+                    self.logger.info("✅ Private 연결 초기화 완료")
                     return True
                 else:
-                    # 연결 초기화 시도
-                    success = await self._global_manager.initialize_private_connection()
-                    if success:
-                        self.logger.info("✅ Private 연결 초기화 완료")
-                        return True
+                    self.logger.warning("Private 연결 실패")
+                    return False
 
-            self.logger.warning("Private 연결 실패")
+            self.logger.warning("GlobalWebSocketManager가 없음")
             return False
 
         except Exception as e:
@@ -338,7 +332,7 @@ class WebSocketV6ApplicationService(BaseApplicationService):
                     await asyncio.sleep(self.config.health_check_interval)
 
                     if self._global_manager:
-                        health_status = await self._global_manager.get_health_status()
+                        health_status = self._global_manager.get_health_status()
                         if health_status.status != "healthy":
                             self.logger.warning(f"WebSocket 상태 이상: {health_status.status}")
 
@@ -387,24 +381,24 @@ class WebSocketV6ApplicationService(BaseApplicationService):
 # 전역 서비스 인스턴스 (싱글톤 패턴)
 # ================================================================
 
-_global_websocket_service: Optional[WebSocketV6ApplicationService] = None
+_global_websocket_service: Optional[WebSocketApplicationService] = None
 
 
-async def get_websocket_v6_service(
+async def get_websocket_service(
     config: Optional[WebSocketServiceConfig] = None
-) -> WebSocketV6ApplicationService:
-    """전역 WebSocket v6 Application Service 획득"""
+) -> WebSocketApplicationService:
+    """전역 WebSocket Application Service 획득"""
     global _global_websocket_service
 
     if _global_websocket_service is None:
-        _global_websocket_service = WebSocketV6ApplicationService(config)
+        _global_websocket_service = WebSocketApplicationService(config)
         await _global_websocket_service.initialize()
 
     return _global_websocket_service
 
 
-async def shutdown_websocket_v6_service() -> None:
-    """전역 WebSocket v6 Application Service 종료"""
+async def shutdown_websocket_service() -> None:
+    """전역 WebSocket Application Service 종료"""
     global _global_websocket_service
 
     if _global_websocket_service:

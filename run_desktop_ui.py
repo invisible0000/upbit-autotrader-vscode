@@ -310,8 +310,8 @@ async def run_application_async(app: QApplication) -> int:
 
         # 4. WebSocket v6 Application Service 초기화 (새로 추가)
         try:
-            from upbit_auto_trading.application.services.websocket_v6_application_service import (
-                get_websocket_v6_service,
+            from upbit_auto_trading.application.services.websocket_application_service import (
+                get_websocket_service,
                 WebSocketServiceConfig
             )
 
@@ -325,11 +325,11 @@ async def run_application_async(app: QApplication) -> int:
             )
 
             # WebSocket v6 서비스 초기화 및 시작
-            websocket_service = await get_websocket_v6_service(websocket_config)
+            websocket_service = await get_websocket_service(websocket_config)
 
             # ApplicationContext에 등록 (다른 서비스에서 사용할 수 있도록)
             if hasattr(app_context, 'container') and app_context.container:
-                app_context.container._instances['websocket_v6_service'] = websocket_service
+                app_context.container._instances['websocket_service'] = websocket_service
 
             logger.info("✅ WebSocket v6 Application Service 초기화 완료")
 
@@ -403,10 +403,10 @@ async def run_application_async(app: QApplication) -> int:
         try:
             # WebSocket v6 서비스 정리 (우선 수행)
             try:
-                from upbit_auto_trading.application.services.websocket_v6_application_service import (
-                    shutdown_websocket_v6_service
+                from upbit_auto_trading.application.services.websocket_application_service import (
+                    shutdown_websocket_service
                 )
-                await shutdown_websocket_v6_service()
+                await shutdown_websocket_service()
                 logger.info("✅ WebSocket v6 Application Service 정리 완료")
             except Exception as websocket_cleanup_error:
                 logger.warning(f"⚠️ WebSocket v6 서비스 정리 중 오류: {websocket_cleanup_error}")
