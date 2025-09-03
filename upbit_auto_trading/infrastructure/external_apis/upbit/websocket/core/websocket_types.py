@@ -345,6 +345,7 @@ class SubscriptionSpec:
     data_type: DataType
     symbols: List[str] = field(default_factory=list)
     unit: Optional[str] = None  # 캔들 단위
+    stream_preference: str = "both"  # "both", "snapshot_only", "realtime_only"
 
 
 @dataclass

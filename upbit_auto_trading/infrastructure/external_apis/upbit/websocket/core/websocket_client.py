@@ -72,7 +72,8 @@ class WebSocketClient:
     async def subscribe_ticker(
         self,
         symbols: List[str],
-        callback: Callable[[TickerEvent], None]
+        callback: Callable[[TickerEvent], None],
+        stream_preference: str = "both"
     ) -> bool:
         """
         현재가 구독
@@ -80,6 +81,7 @@ class WebSocketClient:
         Args:
             symbols: 구독할 심볼 리스트 (예: ["KRW-BTC", "KRW-ETH"])
             callback: 데이터 수신 콜백 함수
+            stream_preference: 스트림 선호도 ("both", "snapshot_only", "realtime_only")
 
         Returns:
             bool: 구독 성공 여부
@@ -87,13 +89,15 @@ class WebSocketClient:
         return await self._subscribe_data(
             data_type=DataType.TICKER,
             symbols=symbols,
-            callback=callback
+            callback=callback,
+            stream_preference=stream_preference
         )
 
     async def subscribe_orderbook(
         self,
         symbols: List[str],
-        callback: Callable[[OrderbookEvent], None]
+        callback: Callable[[OrderbookEvent], None],
+        stream_preference: str = "both"
     ) -> bool:
         """
         호가 구독
@@ -101,6 +105,7 @@ class WebSocketClient:
         Args:
             symbols: 구독할 심볼 리스트
             callback: 데이터 수신 콜백 함수
+            stream_preference: 스트림 선호도 ("both", "snapshot_only", "realtime_only")
 
         Returns:
             bool: 구독 성공 여부
@@ -108,13 +113,15 @@ class WebSocketClient:
         return await self._subscribe_data(
             data_type=DataType.ORDERBOOK,
             symbols=symbols,
-            callback=callback
+            callback=callback,
+            stream_preference=stream_preference
         )
 
     async def subscribe_trade(
         self,
         symbols: List[str],
-        callback: Callable[[TradeEvent], None]
+        callback: Callable[[TradeEvent], None],
+        stream_preference: str = "both"
     ) -> bool:
         """
         체결 구독
@@ -122,6 +129,7 @@ class WebSocketClient:
         Args:
             symbols: 구독할 심볼 리스트
             callback: 데이터 수신 콜백 함수
+            stream_preference: 스트림 선호도 ("both", "snapshot_only", "realtime_only")
 
         Returns:
             bool: 구독 성공 여부
@@ -129,14 +137,16 @@ class WebSocketClient:
         return await self._subscribe_data(
             data_type=DataType.TRADE,
             symbols=symbols,
-            callback=callback
+            callback=callback,
+            stream_preference=stream_preference
         )
 
     async def subscribe_candle(
         self,
         symbols: List[str],
         callback: Callable[[CandleEvent], None],
-        unit: str = "1m"
+        unit: str = "1m",
+        stream_preference: str = "both"
     ) -> bool:
         """
         캔들 구독
@@ -145,6 +155,7 @@ class WebSocketClient:
             symbols: 구독할 심볼 리스트
             callback: 데이터 수신 콜백 함수
             unit: 캔들 단위 (1m, 5m, 15m, 30m, 60m, 240m)
+            stream_preference: 스트림 선호도 ("both", "snapshot_only", "realtime_only")
 
         Returns:
             bool: 구독 성공 여부
@@ -167,7 +178,8 @@ class WebSocketClient:
             data_type=data_type,
             symbols=symbols,
             callback=callback,
-            unit=unit
+            unit=unit,
+            stream_preference=stream_preference
         )
 
     # ================================================================
@@ -221,7 +233,8 @@ class WebSocketClient:
         data_type: DataType,
         symbols: List[str],
         callback: Any,  # 다양한 타입의 콜백을 받기 위해 Any 사용
-        unit: Optional[str] = None
+        unit: Optional[str] = None,
+        stream_preference: str = "both"
     ) -> bool:
         """내부 구독 처리"""
         try:
@@ -231,11 +244,12 @@ class WebSocketClient:
             subscription_spec = SubscriptionSpec(
                 data_type=data_type,
                 symbols=symbols,
-                unit=unit
+                unit=unit,
+                stream_preference=stream_preference
             )
 
             # 구독 키 생성
-            sub_key = f"{data_type.value}_{hash(tuple(symbols))}_{unit or ''}"
+            sub_key = f"{data_type.value}_{hash(tuple(symbols))}_{unit or ''}_{stream_preference}"
 
             # 기존 구독 확인
             if sub_key in self._subscriptions:
@@ -279,23 +293,58 @@ class WebSocketClient:
             subscriptions=all_subscriptions
         )
 
+    async def handle_event(self, event: BaseWebSocketEvent) -> None:
+        """이벤트 핸들러 (WebSocketManager/DataProcessor에서 호출)"""
+        try:
+            # 등록된 모든 구독에 대해 이벤트 매칭 확인
+            for sub_key, spec in self._subscriptions.items():
+                if self._event_matches_subscription(event, spec):
+                    # 매칭되는 콜백 호출
+                    callback = self._callbacks.get(sub_key)
+                    if callback:
+                        try:
+                            if asyncio.iscoroutinefunction(callback):
+                                await callback(event)
+                            else:
+                                callback(event)
+                        except Exception as callback_error:
+                            self.logger.error(f"콜백 실행 중 오류 [{sub_key}]: {callback_error}")
+        except Exception as e:
+            self.logger.error(f"이벤트 처리 중 오류: {e}")
+
     def _event_matches_subscription(self, event: BaseWebSocketEvent, spec: SubscriptionSpec) -> bool:
         """이벤트가 구독 스펙과 일치하는지 확인"""
-        # 타입 확인
-        if isinstance(event, TickerEvent) and spec.data_type == DataType.TICKER:
-            return not spec.symbols or event.symbol in spec.symbols
-        elif isinstance(event, OrderbookEvent) and spec.data_type == DataType.ORDERBOOK:
-            return not spec.symbols or event.symbol in spec.symbols
-        elif isinstance(event, TradeEvent) and spec.data_type == DataType.TRADE:
-            return not spec.symbols or event.symbol in spec.symbols
-        elif isinstance(event, CandleEvent) and spec.data_type.value.startswith("candle"):
-            return not spec.symbols or event.symbol in spec.symbols
-        elif isinstance(event, MyOrderEvent) and spec.data_type == DataType.MYORDER:
-            return True  # Private 데이터는 심볼 필터링 없음
-        elif isinstance(event, MyAssetEvent) and spec.data_type == DataType.MYASSET:
-            return True  # Private 데이터는 심볼 필터링 없음
 
-        return False
+        # 1. 기본 타입 및 심볼 확인
+        type_symbol_match = False
+
+        if isinstance(event, TickerEvent) and spec.data_type == DataType.TICKER:
+            type_symbol_match = not spec.symbols or event.symbol in spec.symbols
+        elif isinstance(event, OrderbookEvent) and spec.data_type == DataType.ORDERBOOK:
+            type_symbol_match = not spec.symbols or event.symbol in spec.symbols
+        elif isinstance(event, TradeEvent) and spec.data_type == DataType.TRADE:
+            type_symbol_match = not spec.symbols or event.symbol in spec.symbols
+        elif isinstance(event, CandleEvent) and spec.data_type.value.startswith("candle"):
+            type_symbol_match = not spec.symbols or event.symbol in spec.symbols
+        elif isinstance(event, MyOrderEvent) and spec.data_type == DataType.MYORDER:
+            type_symbol_match = True  # Private 데이터는 심볼 필터링 없음
+        elif isinstance(event, MyAssetEvent) and spec.data_type == DataType.MYASSET:
+            type_symbol_match = True  # Private 데이터는 심볼 필터링 없음
+
+        if not type_symbol_match:
+            return False
+
+        # 2. 스트림 타입 필터링 (클라이언트 사이드)
+        if spec.stream_preference == "both":
+            return True  # 모든 스트림 타입 허용
+        elif spec.stream_preference == "snapshot_only":
+            # 이벤트에 stream_type 속성이 있고 SNAPSHOT인 경우만
+            return getattr(event, 'stream_type', None) == "SNAPSHOT"
+        elif spec.stream_preference == "realtime_only":
+            # 이벤트에 stream_type 속성이 있고 REALTIME인 경우만
+            return getattr(event, 'stream_type', None) == "REALTIME"
+
+        return True  # 기본값: 모든 스트림 허용
 
     # ================================================================
     # 상태 조회

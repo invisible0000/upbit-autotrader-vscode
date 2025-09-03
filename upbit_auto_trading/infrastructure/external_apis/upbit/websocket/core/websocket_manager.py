@@ -569,11 +569,20 @@ class WebSocketManager:
     ) -> None:
         """컴포넌트 등록"""
         try:
-            # WeakRef로 컴포넌트 저장
-            self._components[component_id] = weakref.ref(
-                component_ref,
-                lambda ref: asyncio.create_task(self._cleanup_component(component_id))
-            )
+            # WeakRef로 컴포넌트 저장 (안전한 콜백으로 수정)
+            def safe_cleanup_callback(ref):
+                try:
+                    # 이벤트 루프가 실행 중인지 확인
+                    loop = asyncio.get_running_loop()
+                    if loop and not loop.is_closed():
+                        asyncio.create_task(self._cleanup_component(component_id))
+                except RuntimeError:
+                    # 이벤트 루프가 없거나 종료됨, 무시
+                    self.logger.debug(f"컴포넌트 자동 정리 스킵 (이벤트 루프 없음): {component_id}")
+                except Exception as e:
+                    self.logger.error(f"컴포넌트 자동 정리 오류: {e}")
+
+            self._components[component_id] = weakref.ref(component_ref, safe_cleanup_callback)
 
             # 구독 등록
             if subscriptions and self._subscription_manager:
@@ -838,10 +847,16 @@ class WebSocketManager:
                     # 마지막 메시지 수신 시간 업데이트 (헬스체크용)
                     self._last_message_times[connection_type] = time.time()
 
-                    self.logger.debug(f"📨 WebSocket 메시지 수신 ({connection_type}): {message[:200]}...")
+                    self.logger.debug(f"📨 WebSocket 메시지 수신 ({connection_type}): {message}")
 
                     # JSON 파싱
                     data = json.loads(message)
+
+                    # stream_type 확인을 위한 디버깅
+                    if 'stream_type' in data:
+                        self.logger.info(f"🎯 stream_type 발견: {data.get('stream_type')} (타입: {data.get('type')})")
+                    else:
+                        self.logger.warning(f"⚠️ stream_type 누락: {data.get('type')} - {list(data.keys())}")
 
                     # 업비트 에러 메시지 확인
                     if 'error' in data:
@@ -854,9 +869,13 @@ class WebSocketManager:
 
                     # 이벤트 생성
                     event = self._create_event(connection_type, data)
-                    if event and self._data_processor:
+                    if event:
                         # 데이터 프로세서로 전달
-                        await self._data_processor.route_event(event)
+                        if self._data_processor:
+                            await self._data_processor.route_event(event)
+
+                        # 등록된 컴포넌트들에게 직접 이벤트 전달
+                        await self._broadcast_event_to_components(event)
 
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"JSON 파싱 실패 ({connection_type}): {e}")
@@ -878,23 +897,61 @@ class WebSocketManager:
             # 연결 종료 시 마지막 메시지 시간 초기화
             self._last_message_times[connection_type] = None
 
+    async def _broadcast_event_to_components(self, event: BaseWebSocketEvent) -> None:
+        """등록된 모든 컴포넌트에게 이벤트 브로드캐스트"""
+        self.logger.debug(f"🔄 컴포넌트 브로드캐스트 시작: 등록된 컴포넌트 수 {len(self._components)}")
+
+        for component_id, component_ref in list(self._components.items()):
+            try:
+                component = component_ref()  # WeakRef에서 실제 객체 가져오기
+                if component and hasattr(component, 'handle_event'):
+                    self.logger.debug(f"📤 이벤트 전달 중: {component_id} <- {type(event).__name__}")
+                    await component.handle_event(event)
+                else:
+                    self.logger.warning(f"⚠️ 컴포넌트 {component_id}: handle_event 메서드 없음 또는 객체 무효")
+            except Exception as e:
+                self.logger.error(f"컴포넌트 {component_id} 이벤트 전달 실패: {e}")
+                # WeakRef가 무효화되었을 수 있으므로 정리
+                if component_ref() is None:
+                    await self._cleanup_component(component_id)
+
     def _create_event(self, connection_type: WebSocketType, data: Dict) -> Optional[BaseWebSocketEvent]:
         """이벤트 생성"""
         try:
-            # 데이터 타입 감지
-            data_type = self._detect_data_type(data)
+            # 메시지 타입 확인
+            data_type = data.get('type') or data.get('ty')
+
             if not data_type:
+                self.logger.warning(f"데이터 타입을 찾을 수 없음: {data}")
                 return None
 
-            # 기본 이벤트 생성
-            return BaseWebSocketEvent(
-                epoch=int(time.time() * 1000),
-                timestamp=time.time(),
-                connection_type=connection_type
+            # 타입별 이벤트 생성 (websocket_types.py의 변환 함수 사용)
+            from .websocket_types import (
+                create_ticker_event, create_orderbook_event, create_trade_event,
+                create_candle_event, create_myorder_event, create_myasset_event
             )
+
+            if data_type == 'ticker':
+                event = create_ticker_event(data)
+                self.logger.debug(f"📊 Ticker 이벤트 생성: {event.symbol}, stream_type: {event.stream_type}")
+                return event
+            elif data_type == 'orderbook':
+                return create_orderbook_event(data)
+            elif data_type == 'trade':
+                return create_trade_event(data)
+            elif data_type.startswith('candle'):
+                return create_candle_event(data)
+            elif data_type == 'myorder':
+                return create_myorder_event(data)
+            elif data_type == 'myasset':
+                return create_myasset_event(data)
+            else:
+                self.logger.warning(f"알 수 없는 데이터 타입: {data_type}")
+                return None
 
         except Exception as e:
             self.logger.error(f"이벤트 생성 실패: {e}")
+            self.logger.error(f"원본 데이터: {data}")
             return None
 
     def _detect_data_type(self, data: Dict) -> Optional[DataType]:
