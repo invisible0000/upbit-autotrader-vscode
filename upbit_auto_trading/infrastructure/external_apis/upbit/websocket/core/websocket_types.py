@@ -350,12 +350,14 @@ class SubscriptionSpec:
 
 @dataclass
 class ComponentSubscription:
-    """컴포넌트 구독 정보"""
+    """컴포넌트 구독 정보 (v6.1 Enhanced)"""
     component_id: str
     subscriptions: List[SubscriptionSpec]
     callback: Optional[Callable[[BaseWebSocketEvent], None]] = None
     created_at: float = field(default_factory=time.time)
     last_activity: float = field(default_factory=time.time)
+    # v6.1 새로운 기능: 스트림 필터링
+    stream_filter: Optional[str] = None  # "SNAPSHOT", "REALTIME", None (둘 다)
 
 
 @dataclass

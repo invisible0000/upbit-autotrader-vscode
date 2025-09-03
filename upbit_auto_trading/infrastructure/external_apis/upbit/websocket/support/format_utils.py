@@ -302,6 +302,185 @@ class UpbitMessageFormatter:
         return result
 
     # ================================================================
+    # v6.1 통합 메시지 생성 기능 (리얼타임 스트림 관리 개선)
+    # ================================================================
+
+    def create_unified_message(
+        self,
+        ws_type: str,
+        subscriptions: Dict[DataType, List[str]],
+        snapshot_requests: Optional[Dict[DataType, List[str]]] = None
+    ) -> str:
+        """
+        통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청 통합)
+
+        Args:
+            ws_type: WebSocket 타입 ("public" 또는 "private")
+            subscriptions: 리얼타임 구독 목록 (기본 상태)
+            snapshot_requests: 스냅샷 요청 목록 (일시적)
+
+        Returns:
+            JSON 문자열 형태의 통합 메시지
+        """
+        if not subscriptions and not snapshot_requests:
+            self.logger.warning("빈 구독 목록으로 통합 메시지 생성 시도")
+            return self._create_empty_message()
+
+        try:
+            message_parts = []
+
+            # 1. 티켓 (고유 식별자)
+            ticket = {"ticket": f"upbit_websocket_v6_{ws_type}_{int(time.time() * 1000)}"}
+            message_parts.append(ticket)
+
+            # 2. 리얼타임 구독 + 스냅샷 요청 통합 처리
+            combined_subscriptions = self._merge_realtime_and_snapshot(subscriptions, snapshot_requests)
+
+            # 3. 통합된 구독을 메시지에 포함
+            for data_type, subscription_info in combined_subscriptions.items():
+                symbols = subscription_info['symbols']
+                is_snapshot_only = subscription_info.get('snapshot_only', False)
+
+                if symbols:
+                    type_part = {
+                        "type": data_type.value,
+                        "codes": list(symbols) if not data_type.is_private() else None
+                    }
+
+                    # 스냅샷 전용 요청인 경우에만 명시
+                    if is_snapshot_only:
+                        type_part["isOnlySnapshot"] = True
+
+                    # Private 타입의 경우 codes 제거
+                    if data_type.is_private():
+                        type_part.pop("codes", None)
+
+                    message_parts.append(type_part)
+
+            # 4. 포맷 지정 (DEFAULT 고정)
+            format_part = {"format": "DEFAULT"}
+            message_parts.append(format_part)
+
+            unified_message = json.dumps(message_parts, ensure_ascii=False)
+
+            self.logger.debug(f"통합 메시지 생성 완료: {len(combined_subscriptions)}개 타입")
+            return unified_message
+
+        except Exception as e:
+            self.logger.error(f"통합 메시지 생성 실패: {e}")
+            return self._create_empty_message()
+
+    def _merge_realtime_and_snapshot(
+        self,
+        realtime_subs: Optional[Dict[DataType, List[str]]],
+        snapshot_reqs: Optional[Dict[DataType, List[str]]]
+    ) -> Dict[DataType, Dict[str, Any]]:
+        """
+        리얼타임 구독과 스냅샷 요청을 통합
+
+        Args:
+            realtime_subs: 리얼타임 구독 목록
+            snapshot_reqs: 스냅샷 요청 목록
+
+        Returns:
+            통합된 구독 정보 {DataType: {'symbols': set, 'snapshot_only': bool}}
+        """
+        combined = {}
+
+        # 리얼타임 구독 먼저 추가 (기본 상태)
+        if realtime_subs:
+            for data_type, symbols in realtime_subs.items():
+                combined[data_type] = {
+                    'symbols': set(symbols),
+                    'snapshot_only': False
+                }
+
+        # 스냅샷 요청 추가/통합
+        if snapshot_reqs:
+            for data_type, symbols in snapshot_reqs.items():
+                if data_type in combined:
+                    # 기존 리얼타임 구독에 스냅샷 심볼 추가 (리얼타임 유지)
+                    combined[data_type]['symbols'].update(symbols)
+                    # snapshot_only는 False 유지 (리얼타임 스트림 보호)
+                else:
+                    # 스냅샷 전용 요청
+                    combined[data_type] = {
+                        'symbols': set(symbols),
+                        'snapshot_only': True
+                    }
+
+        return combined
+
+    def _create_empty_message(self) -> str:
+        """빈 구독 메시지 생성 (오류 상황 대응)"""
+        empty_parts = [
+            {"ticket": f"upbit_empty_{int(time.time() * 1000)}"},
+            {"format": "DEFAULT"}
+        ]
+        return json.dumps(empty_parts)
+
+    def parse_subscriptions_from_unified_response(self, response_data: str) -> Dict[str, Any]:
+        """
+        통합 메시지 응답 파싱 (v6.1)
+
+        Args:
+            response_data: 업비트 웹소켓 응답 데이터
+
+        Returns:
+            파싱된 구독 상태 정보
+        """
+        try:
+            parsed = json.loads(response_data) if isinstance(response_data, str) else response_data
+
+            # 응답에서 활성 구독 정보 추출
+            active_subscriptions = {}
+
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict) and "type" in item:
+                        data_type = item["type"]
+                        codes = item.get("codes", [])
+                        active_subscriptions[data_type] = codes
+
+            return {
+                "status": "success",
+                "active_subscriptions": active_subscriptions,
+                "parsed_at": time.time()
+            }
+
+        except Exception as e:
+            self.logger.error(f"통합 응답 파싱 실패: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "parsed_at": time.time()
+            }
+
+    # ================================================================
+    # SIMPLE 포맷 변환 (수신 데이터용 - 단방향만)
+    # ================================================================
+
+    def convert_received_data_to_default(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        수신된 SIMPLE 포맷 데이터를 DEFAULT로 변환 (단방향)
+
+        Args:
+            data: 업비트에서 수신한 데이터 (SIMPLE 또는 DEFAULT)
+
+        Returns:
+            DEFAULT 포맷 데이터
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # SIMPLE 포맷인지 확인 (ty 키 존재)
+        if 'ty' in data and 'type' not in data:
+            return self.convert_simple_to_default(data)
+        else:
+            # 이미 DEFAULT 포맷이거나 알 수 없는 포맷
+            return data
+
+    # ================================================================
     # 기존 구독 메시지 생성 및 정규화 기능
     # ================================================================
 

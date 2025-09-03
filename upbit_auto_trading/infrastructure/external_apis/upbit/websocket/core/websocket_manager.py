@@ -104,7 +104,7 @@ class WebSocketManager:
 
         # 하위 시스템
         self._data_processor: Optional[DataProcessor] = None
-        self._subscription_manager: Optional[SubscriptionManager] = None
+        self._subscription_manager: Optional[SubscriptionManager] = None  # v6.2 구독 관리자 (리얼타임 중심)
         self._jwt_manager: Optional[JWTManager] = None
 
         # Rate Limiter 시스템
@@ -138,16 +138,16 @@ class WebSocketManager:
         try:
             # 하위 시스템 초기화
             self._data_processor = DataProcessor()
-            self._subscription_manager = SubscriptionManager()
+            self._subscription_manager = SubscriptionManager()  # v6.2 구독 관리자 (리얼타임 중심)
             self._jwt_manager = JWTManager()
 
-            # 구독 변경 감지
+            # 스트림 변경 감지
             self._subscription_manager.add_change_callback(self._on_subscription_change)
 
             # Rate Limiter 시스템 초기화
             await self._initialize_rate_limiter()
 
-            self.logger.info("WebSocketManager 하위 시스템 초기화 완료")
+            self.logger.info("WebSocketManager v6.2 하위 시스템 초기화 완료")
 
         except Exception as e:
             self.logger.error(f"초기화 실패: {e}")
@@ -275,29 +275,39 @@ class WebSocketManager:
             self._pending_subscription_task = None
 
     async def _send_latest_subscriptions(self) -> None:
-        """최신 구독 상태 전송 (Rate Limiter 적용)"""
+        """
+        최신 구독 상태 전송 (v6.1 통합 메시지 + Rate Limiter 적용)
+
+        Rate Limiter 펜딩 시나리오:
+        1. 요청 A: ticker 구독 → Rate Limiter 대기 (펜딩 Task 생성)
+        2. 요청 B: orderbook 구독 → 기존 Task 있음, SubscriptionManager만 업데이트
+        3. 요청 C: trade 구독 → 기존 Task 있음, SubscriptionManager만 업데이트
+        4. Rate Limiter 해제 → 최신 통합 상태(A+B+C)를 하나의 통합 메시지로 전송
+        """
         try:
             if not self._subscription_manager:
                 self.logger.warning("SubscriptionManager가 없음")
                 return
 
-            # 최신 통합 상태 조회
-            public_subs = self._subscription_manager.get_public_subscriptions()
-            private_subs = self._subscription_manager.get_private_subscriptions()
+            # v6.2: 리얼타임 스트림 상태 조회
+            public_streams = self._subscription_manager.get_realtime_streams(WebSocketType.PUBLIC)
+            private_streams = self._subscription_manager.get_realtime_streams(WebSocketType.PRIVATE)
 
-            # Public 구독 처리
-            if public_subs and self._connection_states[WebSocketType.PUBLIC] == ConnectionState.CONNECTED:
-                self.logger.info(f"📤 Public 구독 전송: {len(public_subs)}개 타입")
+            # Public 통합 메시지 전송
+            if public_streams and self._connection_states[WebSocketType.PUBLIC] == ConnectionState.CONNECTED:
+                self.logger.info(f"📤 Public 통합 스트림 전송: {len(public_streams)}개 타입")
+                await self._apply_rate_limit('websocket_subscription')
                 await self._send_current_subscriptions(WebSocketType.PUBLIC)
 
-            # Private 구독 처리
-            if private_subs:
-                self.logger.info(f"📤 Private 구독 전송: {len(private_subs)}개 타입")
+            # Private 통합 메시지 전송
+            if private_streams:
+                self.logger.info(f"📤 Private 통합 스트림 전송: {len(private_streams)}개 타입")
                 await self._ensure_connection(WebSocketType.PRIVATE)
+                await self._apply_rate_limit('websocket_subscription')
                 await self._send_current_subscriptions(WebSocketType.PRIVATE)
 
-            if not public_subs and not private_subs:
-                self.logger.debug("📭 전송할 구독 없음")
+            if not public_streams and not private_streams:
+                self.logger.debug("📭 전송할 리얼타임 스트림 없음")
 
         except Exception as e:
             self.logger.error(f"최신 구독 상태 전송 실패: {e}")
@@ -584,11 +594,12 @@ class WebSocketManager:
 
             self._components[component_id] = weakref.ref(component_ref, safe_cleanup_callback)
 
-            # 구독 등록
+            # v6.2: 리얼타임 스트림 등록
             if subscriptions and self._subscription_manager:
                 await self._subscription_manager.register_component(
                     component_id,
-                    subscriptions
+                    subscriptions,
+                    component_ref
                 )
 
             self.logger.debug(f"컴포넌트 등록: {component_id}")
@@ -600,7 +611,7 @@ class WebSocketManager:
     async def unregister_component(self, component_id: str) -> None:
         """컴포넌트 해제"""
         try:
-            # 구독 해제
+            # v6.2: 리얼타임 스트림 해제
             if self._subscription_manager:
                 await self._subscription_manager.unregister_component(component_id)
 
@@ -758,33 +769,82 @@ class WebSocketManager:
             await self._disconnect_websocket(connection_type)
 
     async def _send_current_subscriptions(self, connection_type: WebSocketType) -> None:
-        """현재 구독 정보 전송"""
-        try:
-            if connection_type == WebSocketType.PUBLIC and self._subscription_manager:
-                subscriptions = self._subscription_manager.get_public_subscriptions()
-            elif connection_type == WebSocketType.PRIVATE and self._subscription_manager:
-                subscriptions = self._subscription_manager.get_private_subscriptions()
-            else:
-                subscriptions = {}
+        """
+        현재 구독 정보 전송 (v6.1 통합 메시지 방식)
 
-            if not subscriptions:
+        기존 방식: 각 데이터 타입별로 개별 메시지 전송
+        새로운 방식: 모든 데이터 타입을 하나의 통합 메시지로 전송
+        """
+        try:
+            # v6.2: 리얼타임 스트림 조회
+            if self._subscription_manager:
+                streams = self._subscription_manager.get_realtime_streams(connection_type)
+            else:
+                streams = {}
+
+            if not streams:
+                self.logger.debug(f"전송할 리얼타임 스트림 없음: {connection_type}")
                 return
 
-            for data_type, symbols in subscriptions.items():
-                if symbols:
-                    try:
-                        message = self._create_subscription_message(data_type, list(symbols))
-                        self.logger.info(f"구독 메시지 전송: {data_type.value} -> {len(symbols)}개 심볼")
-                        await self._send_message(connection_type, message)
-                        self.logger.info(f"구독 메시지 전송 성공 ({connection_type}): {data_type.value}")
-                    except Exception as e:
-                        self.logger.error(f"개별 구독 전송 실패 ({connection_type}, {data_type.value}): {e}")
-                        # 하나 실패해도 다른 구독은 계속 시도
-                        continue
+            # v6.2 통합 메시지 생성 및 전송
+            # v6.2: 통합 메시지 생성 (리얼타임 + 스냅샷)
+            unified_message = await self._create_unified_message_v6_2(connection_type, streams)
+
+            total_symbols = sum(len(symbols) for symbols in streams.values())
+            self.logger.info(f"📤 통합 스트림 메시지 전송 ({connection_type}): {len(streams)}개 타입, {total_symbols}개 심볼")
+
+            await self._send_message(connection_type, unified_message)
+            self.logger.info(f"✅ 통합 스트림 메시지 전송 성공 ({connection_type})")
 
         except Exception as e:
-            self.logger.error(f"구독 전송 실패 ({connection_type}): {e}")
+            self.logger.error(f"통합 구독 전송 실패 ({connection_type}): {e}")
             raise
+
+    async def _create_unified_message_v6_2(self, connection_type: WebSocketType, streams: Dict[DataType, set]) -> str:
+        """
+        v6.2 통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청)
+
+        Args:
+            connection_type: WebSocket 연결 타입
+            streams: {DataType: {symbols}} 형태의 리얼타임 스트림 목록
+
+        Returns:
+            JSON 문자열 형태의 통합 메시지
+        """
+        try:
+            if not self._subscription_manager:
+                return self._create_empty_subscription_message()
+
+            # format_utils의 create_unified_message 활용
+            from ..support.format_utils import UpbitMessageFormatter
+            formatter = UpbitMessageFormatter()
+
+            # streams를 UpbitMessageFormatter가 기대하는 형식으로 변환
+            subscriptions_dict = {
+                data_type: list(symbols) for data_type, symbols in streams.items()
+            }
+
+            return formatter.create_unified_message(
+                ws_type=connection_type.value,
+                subscriptions=subscriptions_dict
+            )
+
+        except Exception as e:
+            self.logger.error(f"v6.2 통합 메시지 생성 실패: {e}")
+            # 폴백: 기존 방식
+            if streams:
+                first_type, first_symbols = next(iter(streams.items()))
+                return self._create_subscription_message(first_type, list(first_symbols))
+            else:
+                return self._create_empty_subscription_message()
+
+    def _create_empty_subscription_message(self) -> str:
+        """빈 구독 메시지 생성 (오류 상황 대응)"""
+        message = [
+            {"ticket": f"upbit_empty_{int(time.time())}"},
+            {"format": "DEFAULT"}
+        ]
+        return json.dumps(message)
 
     def _create_subscription_message(self, data_type: DataType, symbols: List[str]) -> str:
         """구독 메시지 생성 - v5 호환 (올바른 업비트 형식)"""

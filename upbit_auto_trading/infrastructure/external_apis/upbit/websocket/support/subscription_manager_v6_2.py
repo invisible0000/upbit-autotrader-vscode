@@ -1,10 +1,8 @@
 """
-WebSocket v6.2 구독 관리자 (리얼타임 스트림 중심)
-===============================================
+WebSocket v6.2 리얼타임 스트림 중심 구독 관리자
+=============================================
 
 핵심 개념:
-- 주 책임: WebSocket 구독 관리 (Subscription Management)
-- 내부 구현: 리얼타임 스트림 중심 처리
 - 관리되어야 하는 현 구독상태는 상항 리얼타임 스트림 목록
 - 스냅샷 요청이 있을때 관리해서 통합하여 메세지를 보내야 함
 - SIMPLE 형식은 일방향 변환만 (SIMPLE→DEFAULT)
@@ -16,29 +14,15 @@ from datetime import datetime
 from typing import Dict, List, Set, Optional, Callable, Any
 from dataclasses import dataclass
 
-from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_types import (
-    DataType, ComponentSubscription, SubscriptionSpec, WebSocketType
+from upbit_auto_trading.domain.entities.trading.trading_data import DataType
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.support.websocket_types import (
+    ComponentSubscription,
+    SubscriptionSpec,
+    SubscriptionChange,
+    SubscriptionComplexity,
+    WebSocketType
 )
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-
-
-@dataclass
-class SubscriptionChange:
-    """구독 변경 정보"""
-    data_type: DataType
-    old_symbols: Set[str]
-    new_symbols: Set[str]
-    change_type: str  # "added", "removed", "modified"
-
-
-@dataclass
-class SubscriptionComplexity:
-    """구독 복잡성 정보"""
-    symbol: str
-    data_types: Set[DataType]
-    components: Set[str]
-    complexity_score: float
-    optimization_suggestion: str
 
 
 @dataclass
@@ -52,11 +36,11 @@ class RealtimeStreamState:
     last_updated: datetime
 
 
-class SubscriptionManager:
+class RealtimeStreamManager:
     """v6.2 리얼타임 스트림 중심 구독 관리자"""
 
     def __init__(self):
-        self.logger = create_component_logger("SubscriptionManager")
+        self.logger = create_component_logger("RealtimeStreamManager")
 
         # 동시성 제어
         self._lock = asyncio.Lock()
@@ -182,20 +166,16 @@ class SubscriptionManager:
     async def consume_snapshot_requests(self, ws_type: WebSocketType, data_type: DataType) -> Set[str]:
         """스냅샷 요청 소비 및 클리어"""
         async with self._lock:
-            return self._consume_snapshot_requests_unlocked(ws_type, data_type)
+            symbols = self._snapshot_requests[ws_type].get(data_type, set()).copy()
+            if data_type in self._snapshot_requests[ws_type]:
+                del self._snapshot_requests[ws_type][data_type]
 
-    def _consume_snapshot_requests_unlocked(self, ws_type: WebSocketType, data_type: DataType) -> Set[str]:
-        """스냅샷 요청 소비 (락 없이 - 내부용)"""
-        symbols = self._snapshot_requests[ws_type].get(data_type, set()).copy()
-        if data_type in self._snapshot_requests[ws_type]:
-            del self._snapshot_requests[ws_type][data_type]
+            self._metrics['total_snapshot_requests'] = self._count_snapshot_requests()
 
-        self._metrics['total_snapshot_requests'] = self._count_snapshot_requests()
+            if symbols:
+                self.logger.debug(f"스냅샷 요청 처리: {ws_type.value}/{data_type.value} ({len(symbols)}개)")
 
-        if symbols:
-            self.logger.debug(f"스냅샷 요청 처리: {ws_type.value}/{data_type.value} ({len(symbols)}개)")
-
-        return symbols
+            return symbols
 
     def get_pending_snapshots(self, ws_type: WebSocketType) -> Dict[DataType, Set[str]]:
         """대기 중인 스냅샷 요청 목록"""
@@ -214,8 +194,8 @@ class SubscriptionManager:
             # 리얼타임 스트림 심볼
             realtime_symbols = self.get_all_realtime_symbols(ws_type, data_type)
 
-            # 스냅샷 요청 심볼 (일회성 소비) - 락 없이 호출
-            snapshot_symbols = self._consume_snapshot_requests_unlocked(ws_type, data_type)
+            # 스냅샷 요청 심볼 (일회성 소비)
+            snapshot_symbols = await self.consume_snapshot_requests(ws_type, data_type)
 
             # 통합 (리얼타임 + 스냅샷)
             all_symbols = realtime_symbols | snapshot_symbols
@@ -253,16 +233,12 @@ class SubscriptionManager:
             self._component_refs[component_id] = weakref.ref(component_ref, cleanup)
 
             # 구독 스펙에 따라 리얼타임 스트림 추가
-            for spec in subscription.subscriptions:
-                # 데이터 타입에 따라 WebSocket 타입 결정
-                ws_type = (WebSocketType.PRIVATE if spec.data_type in [DataType.MYORDER, DataType.MYASSET]
-                           else WebSocketType.PUBLIC)
-
+            for spec in subscription.subscription_specs:
                 await self.add_realtime_stream(
-                    ws_type, spec.data_type, set(spec.symbols), component_id
+                    spec.ws_type, spec.data_type, spec.symbols, component_id
                 )
 
-            self.logger.info(f"컴포넌트 등록: {component_id} ({len(subscription.subscriptions)}개 스펙)")
+            self.logger.info(f"컴포넌트 등록: {component_id} ({len(subscription.subscription_specs)}개 스펙)")
 
     async def unregister_component(self, component_id: str) -> None:
         """컴포넌트 등록 해제"""
@@ -277,13 +253,9 @@ class SubscriptionManager:
             subscription = self._component_subscriptions[component_id]
 
             # 관련 리얼타임 스트림 제거
-            for spec in subscription.subscriptions:
-                # 데이터 타입에 따라 WebSocket 타입 결정
-                ws_type = (WebSocketType.PRIVATE if spec.data_type in [DataType.MYORDER, DataType.MYASSET]
-                           else WebSocketType.PUBLIC)
-
+            for spec in subscription.subscription_specs:
                 await self.remove_realtime_stream(
-                    ws_type, spec.data_type, set(spec.symbols), component_id
+                    spec.ws_type, spec.data_type, spec.symbols, component_id
                 )
 
             # 정리
