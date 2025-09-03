@@ -255,6 +255,9 @@ class MainWindow(QMainWindow):
 
         self.style_manager.apply_theme()
 
+        # WebSocket v6 초기화 (UI 로드 완료 후)
+        self._initialize_websocket_async()
+
     def _log_info(self, message: str) -> None:
         """IL 스마트 로깅 - INFO 레벨"""
         if self.logger:
@@ -348,6 +351,80 @@ class MainWindow(QMainWindow):
 
         # 저장된 창 상태 로드 (WindowStateService 사용)
         self.window_state_service.load_window_state(self, self.settings_service)
+
+    def _initialize_websocket_async(self):
+        """WebSocket v6 Application Service 비동기 초기화"""
+        import asyncio
+
+        # QTimer를 사용해서 이벤트 루프가 준비된 후 WebSocket 초기화
+        from PyQt6.QtCore import QTimer
+
+        def start_websocket_init():
+            """WebSocket 초기화를 비동기적으로 시작"""
+            try:
+                # 현재 이벤트 루프 확인
+                try:
+                    asyncio.get_running_loop()
+                    # 비동기 초기화 태스크 생성
+                    asyncio.create_task(self._perform_websocket_initialization())
+                    self._log_info("🔄 WebSocket v6 초기화 태스크 생성 완료")
+                except RuntimeError:
+                    self._log_warning("⚠️ 이벤트 루프가 실행되지 않음 - WebSocket 초기화 연기")
+                    # 100ms 후 재시도
+                    QTimer.singleShot(100, start_websocket_init)
+
+            except Exception as e:
+                self._log_error(f"❌ WebSocket 초기화 태스크 생성 실패: {e}")
+
+        # 100ms 후에 WebSocket 초기화 시작 (UI 로드 완료 후)
+        QTimer.singleShot(100, start_websocket_init)
+
+    async def _perform_websocket_initialization(self):
+        """실제 WebSocket 초기화 수행"""
+        try:
+            self._log_info("🚀 WebSocket v6 Application Service 초기화 시작")
+
+            from upbit_auto_trading.application.services.websocket_application_service import (
+                get_websocket_service,
+                WebSocketServiceConfig
+            )
+
+            # API 키 확인 (WebSocket Private 연결 결정)
+            api_key_available = False
+            try:
+                if self.di_container:
+                    from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
+                    api_key_service = self.di_container.resolve(IApiKeyService)
+                    if api_key_service:
+                        access_key, secret_key, _ = api_key_service.load_api_keys()
+                        api_key_available = bool(access_key and secret_key)
+                        self._log_info(f"🔑 API 키 상태: {'사용 가능' if api_key_available else '없음'}")
+            except Exception as api_check_error:
+                self._log_warning(f"⚠️ API 키 확인 실패: {api_check_error}")
+
+            # WebSocket v6 서비스 설정
+            websocket_config = WebSocketServiceConfig(
+                auto_start_on_init=True,
+                enable_public_connection=True,
+                enable_private_connection=api_key_available,  # API 키가 있을 때만 Private 연결
+                reconnect_on_failure=True,
+                health_check_interval=30.0
+            )
+
+            self._log_info(f"🌐 WebSocket 연결 설정 - Public: ✅, Private: {'✅' if api_key_available else '❌'}")
+
+            # WebSocket v6 서비스 초기화 및 시작
+            websocket_service = await get_websocket_service(websocket_config)
+
+            # MainWindow에 서비스 저장 (필요시 사용)
+            self.websocket_service = websocket_service
+
+            self._log_info("✅ WebSocket v6 Application Service 초기화 완료")
+
+        except Exception as e:
+            self._log_error(f"❌ WebSocket v6 Application Service 초기화 실패: {e}")
+            # WebSocket 실패는 치명적이지 않으므로 계속 진행
+            self._log_warning("⚠️ WebSocket v6 없이 계속 진행합니다")
 
     # Legacy 창 상태 로드 메서드가 제거되었습니다. WindowStateService에서 처리됩니다.
 

@@ -135,8 +135,8 @@ class UpbitAuthenticator:
             if not self._secret_key:
                 raise AuthenticationError("Secret key is None")
 
-            # JWT 토큰 생성
-            token = jwt.encode(payload, self._secret_key, algorithm='HS256')
+            # JWT 토큰 생성 (업비트 공식 권장: HS512 알고리즘)
+            token = jwt.encode(payload, self._secret_key, algorithm='HS512')
             return token  # Bearer 접두사 제거 (헤더에서 추가)
         except Exception as e:
             self._logger.error(f"JWT 토큰 생성 실패: {e}")

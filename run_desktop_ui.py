@@ -308,21 +308,38 @@ async def run_application_async(app: QApplication) -> int:
         # 3. UI 서비스 등록 (Repository Container 전달)
         register_ui_services(app_context, repository_container)
 
-        # 4. WebSocket v6 Application Service 초기화 (새로 추가)
+        # 4. WebSocket v6 Application Service 초기화 (API 키 로드 후 실행)
+        logger.info("🔧 WebSocket v6 Application Service 초기화 시작...")
         try:
             from upbit_auto_trading.application.services.websocket_application_service import (
                 get_websocket_service,
                 WebSocketServiceConfig
             )
 
-            # WebSocket v6 서비스 설정
+            # API 키 확인 (WebSocket Private 연결 결정)
+            api_key_available = False
+            try:
+                if repository_container:
+                    from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
+                    secure_keys_repo = repository_container.get_secure_keys_repository()
+                    if secure_keys_repo:
+                        api_key_service = ApiKeyService(secure_keys_repo)
+                        access_key, secret_key, _ = api_key_service.load_api_keys()
+                        api_key_available = bool(access_key and secret_key)
+                        logger.info(f"🔑 API 키 상태: {'사용 가능' if api_key_available else '없음'}")
+            except Exception as api_check_error:
+                logger.warning(f"⚠️ API 키 확인 실패: {api_check_error}")
+
+            # WebSocket v6 서비스 설정 (API 키 상태에 따라 Private 연결 결정)
             websocket_config = WebSocketServiceConfig(
                 auto_start_on_init=True,
                 enable_public_connection=True,
-                enable_private_connection=True,  # API 키가 있으면 자동 활성화
+                enable_private_connection=api_key_available,  # API 키가 있을 때만 Private 연결
                 reconnect_on_failure=True,
                 health_check_interval=30.0
             )
+
+            logger.info(f"🌐 WebSocket 연결 설정 - Public: ✅, Private: {'✅' if api_key_available else '❌'}")
 
             # WebSocket v6 서비스 초기화 및 시작
             websocket_service = await get_websocket_service(websocket_config)
@@ -336,7 +353,7 @@ async def run_application_async(app: QApplication) -> int:
         except Exception as e:
             logger.error(f"❌ WebSocket v6 Application Service 초기화 실패: {e}")
             # WebSocket 실패는 치명적이지 않으므로 계속 진행
-            logger.warning("WebSocket v6 없이 계속 진행합니다")
+            logger.warning("⚠️ WebSocket v6 없이 계속 진행합니다")
 
         # 5. Application Container 초기화 및 설정 (TASK-13: MVP 패턴 지원)
         try:

@@ -81,7 +81,85 @@ AI 코드 생성 → Pylance 검증 → 통합 최적화 (타입 안전성, 아�
 
 ---
 
-## 🔁 작업 프로세스 (전문가 가이드라인)
+## 🔁 작업 프로세스 (전문가 가이드라인) + Ryan-Style 3-Step Vibe Coding
+
+### 작업 분류 & 프로세스 결정 매트릭스
+**GitHub Copilot은 요청을 받으면 먼저 아래 분류에 따라 적절한 프로세스를 제안합니다:**
+
+#### 🚀 Ryan-Style 3-Step 트리거 조건
+- **새 기능 또는 아키텍처 변경**: "이 작업에는 체계적인 계획이 필요합니다. Ryan-Style 3-Step Vibe Coding 프로세스를 진행할까요?"
+- **복잡한 시스템 통합**: "다중 컴포넌트 영향 분석이 필요합니다. 3-Step 프로세스로 진행하시겠습니까?"
+- **불확실한 요구사항**: "요구사항 명확화를 위해 PRD부터 시작하는 것이 좋겠습니다. 3-Step으로 진행할까요?"
+
+#### ⚡ 즉시 실행 조건
+- **간단한 버그 수정/UI 개선**: 기존 "테스트·품질 게이트" 규칙에 따라 최소 수정 후 검증
+- **설정 변경/단순 리팩터링**: 짧은 설명 후 바로 구현
+
+### Ryan-Style 3-Step Vibe Coding 프로세스
+
+#### Step 1: PRD 작성 (제품 요구서)
+새 기능이나 아키텍처 변경 시 다음 구조로 PRD 작성:
+- **Problem & Users**: 문제/사용자/가치
+- **Goals & Non-goals**: 목표/비목표
+- **Scope & UX flows**: 범위/주요 흐름
+- **Constraints**: API Rate-limit/Security/Performance 제약
+- **Dependencies**: 의존성 분석
+- **Acceptance Criteria**: 테스트 가능한 수용 기준
+- **Observability**: 로그/메트릭/리커버리 계획
+- **Risks & Rollback**: 위험 요소/롤백 전략
+
+**프로세스**: PRD 작성 → 최대 3개 명확화 질문 → 승인 대기
+
+#### Step 2: Task 분해
+PRD 승인 후 계층적 태스크 리스트 생성:
+- **번호 체계**: 1, 1.1, 1.2, 2, 2.1...
+- **각 태스크 포함사항**:
+  - Description (무엇을/왜)
+  - Acceptance Criteria (검증 기준)
+  - Test Plan (테스트 단계/샘플)
+  - Risk & Rollback (위험/되돌리기)
+  - Effort (난이도/예상시간)
+  - Touch Points (수정 파일/모듈 예상)
+- **tasks/active/*.md 문서 생성/업데이트** ([ ]/[-]/[x] 마커 사용)
+
+#### Step 3: 순차 실행 (한 번에 하나씩)
+각 태스크별 루프:
+1. **Plan**: 정확한 변경사항과 영향 범위 요약
+2. **Implement**: 패치/diff 제안, 생성/수정 파일 리스트
+3. **Self-test**: 테스트 실행 또는 설명, 결과/로그 표시
+4. **Verify**: 결과를 Acceptance Criteria에 매핑, 잔여 위험 기록
+5. **Ask**: "승인/수정/중단?" 대기
+   - 승인 시: 태스크 완료 마킹 후 다음 태스크 제안
+   - 수정 시: 요청사항만 적용, 새 diff/결과 표시
+   - 차단/정보 부족 시: 정확한 질문 (최대 3개)
+
+### 🛡️ 3-Step 프로세스 가드레일
+- **한 번에 하나의 태스크만**: 절대 여러 태스크 동시 처리 금지
+- **비밀 정보 보호**: API 키 등은 환경변수/플레이스홀더로 요청
+- **아키텍처 준수**: DDD 계층, 3-DB 분리, Dry-Run 기본값 유지
+- **기술적 제약 존중**: Rate-limit, Security, Performance 제약 준수
+
+### 🔗 Ryan-Style과 기존 룰의 통합
+- **모든 구현은 기존 Golden Rules와 Must Do/Must Not Do 준수**
+- **Infrastructure 로깅**: create_component_logger 사용 필수
+- **테스트**: 비즈니스 로직, 도메인 규칙, 데이터 변환에 pytest 적용
+- **최종 검증**: `python run_desktop_ui.py`로 7규칙 전략 무결성 확인
+
+### 📋 작업 시작 가이드
+사용자가 요청하면 Copilot은 다음과 같이 판단하고 제안:
+
+```
+"이 요청을 분석해보니 [새 기능/아키텍처 변경/복잡한 통합] 작업입니다.
+체계적인 접근을 위해 Ryan-Style 3-Step Vibe Coding 프로세스를 진행하시겠습니까?
+
+Step 1: PRD 작성 → Step 2: 태스크 분해 → Step 3: 순차 실행
+
+아니면 바로 구현하시겠습니까?"
+```
+
+**참고 파일**: `.github/vibe_coding_3-step.md`
+
+### 기존 프로세스 (Ryan-Style 미적용 시)
 1) **즉시 실행 우선**: 짧은 설명 후 바로 구현. 명확하지 않은 부분만 질문 (최대 3개)
 2) **합리적 기본값**: 심볼 KRW-BTC, TF 1m/5m/15m, 수수료 0.05%, 슬리피지 1틱, 로컬 3-DB, dry-run
 3) **상황별 적응형 출력** (전문가 판단으로 필요한 것만):
@@ -122,10 +200,6 @@ Get-ChildItem upbit_auto_trading -Recurse -Include *.py | Select-String -Pattern
 $env:UPBIT_CONSOLE_OUTPUT = "true"
 $env:UPBIT_LOG_SCOPE = "verbose"
 $env:UPBIT_COMPONENT_FOCUS = "ComponentName"
-
-# API 키 설정 (예시)
-$env:UPBIT_ACCESS_KEY = "your_access_key"
-$env:UPBIT_SECRET_KEY = "your_secret_key"
 
 # PowerShell Here-String 방식 (권장)
 $pythonScript = @"

@@ -2,19 +2,24 @@
 WebSocket Application Service (DDD 아키텍처 통합)
 ==================================================
 
-WebSocket v6.0 전역 관리자를 Application Layer에서 관리하는 서비스
+WebSocket v6.0 Infrastructure Layer를 Application Layer에서 관리하는 서비스
 프로그램 시작 시 자동 초기화 및 생명주기 관리
+DDD 계층 경계를 준수하며 Infrastructure의 WebSocketManager를 추상화
 """
 
 import asyncio
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
 from upbit_auto_trading.application.services.base_application_service import BaseApplicationService
-from upbit_auto_trading.infrastructure.external_apis.upbit.websocket_v6 import (
-    GlobalWebSocketManager,
-    get_global_websocket_manager,
-    BaseWebSocketEvent
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_manager import (
+    WebSocketManager, get_websocket_manager
+)
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_types import (
+    HealthStatus
+)
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_client import (
+    WebSocketClient
 )
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -35,10 +40,10 @@ class WebSocketApplicationService(BaseApplicationService):
     WebSocket Application Service
 
     역할:
-    - 전역 WebSocket Manager 생명주기 관리
+    - WebSocket Manager 생명주기 관리 (Infrastructure Layer 추상화)
     - Application Layer에서 WebSocket 기능 제공
     - 다른 Application Service들이 실시간 데이터를 쉽게 구독할 수 있도록 지원
-    - DDD 계층 간 경계 준수
+    - DDD 계층 간 경계 준수 (Infrastructure -> Application)
     """
 
     def __init__(self, config: Optional[WebSocketServiceConfig] = None):
@@ -48,8 +53,11 @@ class WebSocketApplicationService(BaseApplicationService):
         # 설정
         self.config = config or WebSocketServiceConfig()
 
-        # 전역 관리자
-        self._global_manager: Optional[GlobalWebSocketManager] = None
+        # Infrastructure Layer WebSocket Manager (싱글톤 패턴)
+        self._manager: Optional[WebSocketManager] = None
+
+        # Application Layer 클라이언트들 (컴포넌트별 관리)
+        self._clients: Dict[str, WebSocketClient] = {}
 
         # 서비스 상태
         self._is_initialized = False
@@ -61,7 +69,7 @@ class WebSocketApplicationService(BaseApplicationService):
         # 구독 상태 추적 (Application Layer 레벨)
         self._active_subscriptions: Dict[str, Dict] = {}
 
-        self.logger.info("WebSocket Application Service 초기화 완료")
+        self.logger.info("WebSocket Application Service 생성 완료")
 
     async def initialize(self) -> bool:
         """
@@ -73,10 +81,16 @@ class WebSocketApplicationService(BaseApplicationService):
             return True
 
         try:
-            self.logger.info("WebSocket Application Service 초기화 시작")
+            self.logger.info("🚀 WebSocket Application Service 초기화 시작")
 
-            # 전역 WebSocket Manager 획득
-            self._global_manager = await get_global_websocket_manager()
+            # Infrastructure Layer WebSocket Manager 획득 (싱글톤)
+            self._manager = await get_websocket_manager()
+
+            if not self._manager:
+                self.logger.error("WebSocket Manager 획득 실패")
+                return False
+
+            self.logger.debug("✅ WebSocket Manager 연결 완료")
 
             # 자동 시작 설정
             if self.config.auto_start_on_init:
@@ -87,7 +101,7 @@ class WebSocketApplicationService(BaseApplicationService):
             return True
 
         except Exception as e:
-            self.logger.error(f"WebSocket Application Service 초기화 실패: {e}")
+            self.logger.error(f"❌ WebSocket Application Service 초기화 실패: {e}")
             return False
 
     async def start(self) -> bool:
@@ -101,14 +115,12 @@ class WebSocketApplicationService(BaseApplicationService):
             return True
 
         try:
-            self.logger.info("WebSocket Application Service 시작")
+            self.logger.info("🔄 WebSocket Application Service 시작")
 
-            # 연결 초기화
-            if self.config.enable_public_connection:
-                await self._ensure_public_connection()
-
-            if self.config.enable_private_connection:
-                await self._ensure_private_connection()
+            # Infrastructure Manager 시작
+            if self._manager:
+                await self._manager.start()
+                self.logger.debug("✅ Infrastructure WebSocket Manager 시작 완료")
 
             # 헬스 체크 시작
             if self.config.health_check_interval > 0:
@@ -119,7 +131,7 @@ class WebSocketApplicationService(BaseApplicationService):
             return True
 
         except Exception as e:
-            self.logger.error(f"WebSocket Application Service 시작 실패: {e}")
+            self.logger.error(f"❌ WebSocket Application Service 시작 실패: {e}")
             return False
 
     async def stop(self) -> None:
@@ -128,7 +140,7 @@ class WebSocketApplicationService(BaseApplicationService):
             return
 
         try:
-            self.logger.info("WebSocket Application Service 중지 시작")
+            self.logger.info("🔄 WebSocket Application Service 중지 시작")
 
             # 헬스 체크 중지
             if self._health_check_task:
@@ -138,111 +150,85 @@ class WebSocketApplicationService(BaseApplicationService):
                 except asyncio.CancelledError:
                     pass
 
-            # 모든 구독 해제
-            await self._cleanup_all_subscriptions()
+            # 모든 구독 및 클라이언트 정리
+            await self._cleanup_all_clients()
 
-            # 전역 관리자 정리
-            if self._global_manager:
-                await self._global_manager.shutdown(timeout=10.0)
+            # Infrastructure Manager 중지
+            if self._manager:
+                await self._manager.stop()
 
             self._is_running = False
             self.logger.info("✅ WebSocket Application Service 중지 완료")
 
         except Exception as e:
-            self.logger.error(f"서비스 중지 중 오류: {e}")
+            self.logger.error(f"❌ 서비스 중지 중 오류: {e}")
 
     # ================================================================
     # Public API - 다른 Application Service에서 사용
     # ================================================================
 
-    async def subscribe_ticker(
-        self,
-        symbols: List[str],
-        callback: Callable[[BaseWebSocketEvent], None],
-        component_id: str = "default"
-    ) -> Optional[str]:
+    async def create_client(self, component_id: str) -> Optional[WebSocketClient]:
         """
-        현재가 데이터 구독
+        새로운 WebSocket 클라이언트 생성
 
         Args:
-            symbols: 구독할 심볼 리스트
-            callback: 데이터 수신 콜백
-            component_id: 구독 컴포넌트 식별자
+            component_id: 컴포넌트 고유 식별자 (예: "chart_btc", "dashboard_main")
 
         Returns:
-            구독 ID (해제 시 사용)
+            WebSocketClient 인스턴스 또는 None (실패 시)
         """
         if not self._is_running:
             self.logger.error("서비스가 실행되지 않음")
             return None
 
         try:
-            # 전역 관리자를 통한 구독
-            subscription_id = await self._global_manager.subscribe_ticker(symbols)
+            if component_id in self._clients:
+                self.logger.warning(f"이미 존재하는 클라이언트: {component_id}")
+                return self._clients[component_id]
 
-            if subscription_id:
-                # Application Layer에서 구독 추적
-                self._active_subscriptions[subscription_id] = {
-                    'type': 'ticker',
-                    'symbols': symbols,
-                    'callback': callback,
-                    'component_id': component_id
-                }
+            # 새 클라이언트 생성
+            client = WebSocketClient(component_id)
+            self._clients[component_id] = client
 
-                self.logger.info(f"✅ 현재가 구독 완료 - ID: {subscription_id}, 심볼: {symbols}")
-
-            return subscription_id
+            self.logger.info(f"✅ WebSocket 클라이언트 생성 완료: {component_id}")
+            return client
 
         except Exception as e:
-            self.logger.error(f"현재가 구독 실패: {e}")
+            self.logger.error(f"❌ 클라이언트 생성 실패 ({component_id}): {e}")
             return None
 
-    async def subscribe_orderbook(
-        self,
-        symbols: List[str],
-        callback: Callable[[BaseWebSocketEvent], None],
-        component_id: str = "default"
-    ) -> Optional[str]:
-        """호가창 데이터 구독"""
-        if not self._is_running:
-            self.logger.error("서비스가 실행되지 않음")
-            return None
+    async def remove_client(self, component_id: str) -> bool:
+        """
+        WebSocket 클라이언트 제거
 
+        Args:
+            component_id: 제거할 컴포넌트 식별자
+
+        Returns:
+            성공 여부
+        """
         try:
-            subscription_id = await self._global_manager.subscribe_orderbook(symbols)
+            if component_id not in self._clients:
+                self.logger.warning(f"존재하지 않는 클라이언트: {component_id}")
+                return True
 
-            if subscription_id:
-                self._active_subscriptions[subscription_id] = {
-                    'type': 'orderbook',
-                    'symbols': symbols,
-                    'callback': callback,
-                    'component_id': component_id
-                }
+            # 클라이언트 정리
+            client = self._clients[component_id]
+            await client.cleanup()
 
-                self.logger.info(f"✅ 호가창 구독 완료 - ID: {subscription_id}, 심볼: {symbols}")
+            # 추적에서 제거
+            del self._clients[component_id]
 
-            return subscription_id
-
-        except Exception as e:
-            self.logger.error(f"호가창 구독 실패: {e}")
-            return None
-
-    async def unsubscribe(self, subscription_id: str) -> bool:
-        """구독 해제"""
-        try:
-            # 전역 관리자에서 구독 해제
-            success = await self._global_manager.unsubscribe(subscription_id)
-
-            # Application Layer 추적 제거
-            if subscription_id in self._active_subscriptions:
-                del self._active_subscriptions[subscription_id]
-                self.logger.info(f"✅ 구독 해제 완료 - ID: {subscription_id}")
-
-            return success
+            self.logger.info(f"✅ WebSocket 클라이언트 제거 완료: {component_id}")
+            return True
 
         except Exception as e:
-            self.logger.error(f"구독 해제 실패: {e}")
+            self.logger.error(f"❌ 클라이언트 제거 실패 ({component_id}): {e}")
             return False
+
+    async def get_client(self, component_id: str) -> Optional[WebSocketClient]:
+        """기존 WebSocket 클라이언트 조회"""
+        return self._clients.get(component_id)
 
     async def get_service_status(self) -> Dict[str, Any]:
         """서비스 상태 조회"""
@@ -250,79 +236,56 @@ class WebSocketApplicationService(BaseApplicationService):
             status = {
                 'is_initialized': self._is_initialized,
                 'is_running': self._is_running,
-                'active_subscriptions_count': len(self._active_subscriptions),
+                'active_clients_count': len(self._clients),
+                'active_clients': list(self._clients.keys()),
                 'config': {
                     'auto_start': self.config.auto_start_on_init,
                     'public_enabled': self.config.enable_public_connection,
-                    'private_enabled': self.config.enable_private_connection
+                    'private_enabled': self.config.enable_private_connection,
+                    'health_check_interval': self.config.health_check_interval
                 }
             }
 
-            # 전역 관리자 상태 추가
-            if self._global_manager:
-                health_status = self._global_manager.get_health_status()
-                # performance_metrics는 현재 WebSocketManager에 없으므로 제거
-
+            # Infrastructure Manager 상태 추가
+            if self._manager:
+                health_status = self._manager.get_health_status()
                 status.update({
-                    'global_manager_health': health_status.status,
-                    'manager_state': self._global_manager.get_state().value if self._global_manager.get_state() else "unknown"
+                    'infrastructure_health': health_status.status if health_status else 'unknown',
+                    'infrastructure_details': {
+                        'total_messages': health_status.total_messages_processed if health_status else 0,
+                        'connection_errors': health_status.connection_errors if health_status else 0,
+                        'last_error': health_status.last_error if health_status else None
+                    }
                 })
 
             return status
 
         except Exception as e:
-            self.logger.error(f"상태 조회 실패: {e}")
+            self.logger.error(f"❌ 상태 조회 실패: {e}")
             return {'error': str(e)}
+
+    async def get_health_status(self) -> Dict[str, Any]:
+        """헬스 상태 조회"""
+        try:
+            if not self._manager:
+                return {'status': 'unhealthy', 'reason': 'manager_not_available'}
+
+            health = self._manager.get_health_status()
+
+            return {
+                'status': 'healthy' if self._is_running else 'stopped',
+                'infrastructure_health': health.status if health else 'unknown',
+                'clients_count': len(self._clients),
+                'is_running': self._is_running
+            }
+
+        except Exception as e:
+            self.logger.error(f"❌ 헬스 상태 조회 실패: {e}")
+            return {'status': 'error', 'error': str(e)}
 
     # ================================================================
     # Private Methods
     # ================================================================
-
-    async def _ensure_public_connection(self) -> bool:
-        """Public 연결 보장"""
-        try:
-            if self._global_manager:
-                # 연결 초기화 시도
-                success = await self._global_manager.initialize_public_connection()
-                if success:
-                    self.logger.info("✅ Public 연결 초기화 완료")
-                    return True
-                else:
-                    self.logger.warning("Public 연결 실패")
-                    return False
-
-            self.logger.warning("GlobalWebSocketManager가 없음")
-            return False
-
-        except Exception as e:
-            self.logger.error(f"Public 연결 보장 실패: {e}")
-            return False
-
-    async def _ensure_private_connection(self) -> bool:
-        """Private 연결 보장"""
-        try:
-            if self._global_manager:
-                # Private API 지원 확인
-                is_private_available = await self._global_manager.is_private_available()
-                if not is_private_available:
-                    self.logger.info("API 키 없음 - Private 연결 스킵")
-                    return True
-
-                # 연결 초기화 시도
-                success = await self._global_manager.initialize_private_connection()
-                if success:
-                    self.logger.info("✅ Private 연결 초기화 완료")
-                    return True
-                else:
-                    self.logger.warning("Private 연결 실패")
-                    return False
-
-            self.logger.warning("GlobalWebSocketManager가 없음")
-            return False
-
-        except Exception as e:
-            self.logger.error(f"Private 연결 보장 실패: {e}")
-            return False
 
     def _start_health_check(self) -> None:
         """헬스 체크 태스크 시작"""
@@ -331,10 +294,10 @@ class WebSocketApplicationService(BaseApplicationService):
                 try:
                     await asyncio.sleep(self.config.health_check_interval)
 
-                    if self._global_manager:
-                        health_status = self._global_manager.get_health_status()
-                        if health_status.status != "healthy":
-                            self.logger.warning(f"WebSocket 상태 이상: {health_status.status}")
+                    if self._manager:
+                        health = self._manager.get_health_status()
+                        if health and health.status != "healthy":
+                            self.logger.warning(f"WebSocket Infrastructure 상태 이상: {health.status}")
 
                             # 재연결 시도
                             if self.config.reconnect_on_failure:
@@ -343,38 +306,37 @@ class WebSocketApplicationService(BaseApplicationService):
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
-                    self.logger.error(f"헬스 체크 중 오류: {e}")
+                    self.logger.error(f"❌ 헬스 체크 중 오류: {e}")
 
         self._health_check_task = asyncio.create_task(health_check_loop())
+        self.logger.debug("✅ 헬스 체크 태스크 시작")
 
     async def _attempt_reconnection(self) -> None:
         """재연결 시도"""
         try:
-            self.logger.info("WebSocket 재연결 시도")
+            self.logger.info("🔄 WebSocket 재연결 시도")
 
-            # Public 연결 재시도
-            if self.config.enable_public_connection:
-                await self._ensure_public_connection()
-
-            # Private 연결 재시도
-            if self.config.enable_private_connection:
-                await self._ensure_private_connection()
+            if self._manager:
+                # Infrastructure Manager를 통한 재시작 (stop -> start)
+                await self._manager.stop()
+                await self._manager.start()
+                self.logger.info("✅ WebSocket 재연결 완료")
 
         except Exception as e:
-            self.logger.error(f"재연결 시도 실패: {e}")
+            self.logger.error(f"❌ 재연결 시도 실패: {e}")
 
-    async def _cleanup_all_subscriptions(self) -> None:
-        """모든 구독 정리"""
+    async def _cleanup_all_clients(self) -> None:
+        """모든 클라이언트 정리"""
         try:
-            subscription_ids = list(self._active_subscriptions.keys())
+            client_ids = list(self._clients.keys())
 
-            for subscription_id in subscription_ids:
-                await self.unsubscribe(subscription_id)
+            for client_id in client_ids:
+                await self.remove_client(client_id)
 
-            self.logger.info(f"✅ 모든 구독 정리 완료 - {len(subscription_ids)}개")
+            self.logger.info(f"✅ 모든 클라이언트 정리 완료 - {len(client_ids)}개")
 
         except Exception as e:
-            self.logger.error(f"구독 정리 실패: {e}")
+            self.logger.error(f"❌ 클라이언트 정리 실패: {e}")
 
 
 # ================================================================
