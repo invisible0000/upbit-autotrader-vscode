@@ -47,7 +47,7 @@ AI 코드 생성 → Pylance 검증 → 통합 최적화 (타입 안전성, 아�
 - TDD 우선: 테스트 스텁 → 최소 구현 → 리팩터링 (pytest, Given-When-Then)
 - Dry-Run 기본: 모든 주문은 기본 dry_run=True, 실거래는 dry_run=False + 2단계 확인
 - DTO 엄격: @dataclass(frozen=True) + 명확한 타입힌트
-- 보안: API 키는 환경변수, 코드/로그/테스트에 노출 금지; Decimal 정밀도 고정; Rate limit 백오프
+- 보안: API 키는 ApiKeyService를 통한 암호화 저장 (메모리 TTL 5분), 코드/로그/테스트에 노출 금지; Decimal 정밀도 고정; Rate limit 백오프
 
 ---
 
@@ -135,7 +135,7 @@ PRD 승인 후 계층적 태스크 리스트 생성:
 
 ### 🛡️ 3-Step 프로세스 가드레일
 - **한 번에 하나의 태스크만**: 절대 여러 태스크 동시 처리 금지
-- **비밀 정보 보호**: API 키 등은 환경변수/플레이스홀더로 요청
+- **비밀 정보 보호**: API 키 등은 ApiKeyService 암호화 저장/플레이스홀더로 요청
 - **아키텍처 준수**: DDD 계층, 3-DB 분리, Dry-Run 기본값 유지
 - **기술적 제약 존중**: Rate-limit, Security, Performance 제약 준수
 
@@ -195,6 +195,13 @@ python tools/super_db_table_viewer.py market_data
 # 계층 위반 탐지 (PowerShell)
 Get-ChildItem upbit_auto_trading/domain -Recurse -Include *.py | Select-String -Pattern "import sqlite3|import requests|from PyQt6"
 Get-ChildItem upbit_auto_trading -Recurse -Include *.py | Select-String -Pattern "print\("
+
+# API 키 관리 상태 확인
+python -c "
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_auth import UpbitAuthenticator
+auth = UpbitAuthenticator()
+print(f'🔐 API 키 인증 가능: {auth.is_authenticated()}')
+"
 
 # 로깅 환경변수
 $env:UPBIT_CONSOLE_OUTPUT = "true"
