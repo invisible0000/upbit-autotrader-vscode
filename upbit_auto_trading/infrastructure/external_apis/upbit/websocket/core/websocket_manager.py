@@ -596,9 +596,18 @@ class WebSocketManager:
 
             # v6.2: 리얼타임 스트림 등록
             if subscriptions and self._subscription_manager:
+                # 🔧 타입 변환: List[SubscriptionSpec] → ComponentSubscription
+                from .websocket_types import ComponentSubscription
+                component_subscription = ComponentSubscription(
+                    component_id=component_id,
+                    subscriptions=subscriptions,
+                    callback=None,  # 필요시 콜백 설정
+                    stream_filter=None  # 필요시 필터 설정
+                )
+
                 await self._subscription_manager.register_component(
                     component_id,
-                    subscriptions,
+                    component_subscription,  # ✅ 올바른 타입
                     component_ref
                 )
 
