@@ -108,15 +108,31 @@ class DynamicUpbitRateLimiter:
             print("🔍 동적 조정 모니터링 시작")
 
     async def stop_monitoring(self):
-        """모니터링 중지"""
+        """모니터링 중지 (개선된 정리 - 이벤트 루프 안전성)"""
         self._running = False
-        if self._recovery_task:
-            self._recovery_task.cancel()
+        if self._recovery_task and not self._recovery_task.done():
             try:
-                await self._recovery_task
-            except asyncio.CancelledError:
+                # 현재 이벤트 루프 확인
+                current_loop = asyncio.get_running_loop()
+                task_loop = getattr(self._recovery_task, '_loop', None)
+
+                if task_loop is not None and task_loop != current_loop:
+                    print("⚠️  다른 이벤트 루프의 Task 감지 - 안전하게 스킵")
+                    self._recovery_task = None
+                    return
+
+                # 같은 루프의 Task이면 정상 취소
+                self._recovery_task.cancel()
+                await asyncio.wait_for(self._recovery_task, timeout=2.0)
+
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                # 정상적인 정리 또는 타임아웃
                 pass
-            print("⏹️  동적 조정 모니터링 중지")
+            except Exception as e:
+                print(f"⚠️  모니터링 정리 중 오류: {e}")
+            finally:
+                self._recovery_task = None
+        print("⏹️  동적 조정 모니터링 중지")
 
     async def acquire(self, endpoint: str, method: str = 'GET', **kwargs):
         """Rate Limit 획득 (동적 조정 포함)"""

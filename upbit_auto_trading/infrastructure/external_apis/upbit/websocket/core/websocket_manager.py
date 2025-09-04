@@ -237,17 +237,43 @@ class WebSocketManager:
             self.logger.warning(f"Rate Limiter 오류 (계속 진행): {e}")
             # Rate Limiter 실패 시에도 계속 진행 (안전성 확보)
 
+    async def _check_rate_limiter_availability(self) -> bool:
+        """Rate Limiter 즉시 사용 가능 여부 확인 (디바운스 최적화)"""
+        if not self._rate_limiter_enabled:
+            return True  # Rate Limiter 비활성화 시 즉시 사용 가능
+
+        try:
+            # 매우 짧은 타임아웃으로 실제 사용 가능 여부 테스트
+            start_time = time.monotonic()
+
+            if self._dynamic_limiter:
+                # 동적 Rate Limiter로 즉시 사용 가능 여부 확인
+                await self._dynamic_limiter.acquire('websocket_availability_check', 'WS', max_wait=0.05)
+            else:
+                # 기본 Rate Limiter로 확인
+                await gate_websocket('websocket_availability_check', max_wait=0.05)
+
+            check_time = time.monotonic() - start_time
+            # 50ms 이내에 성공하면 즉시 사용 가능
+            return check_time < 0.05
+
+        except Exception:
+            # 타임아웃이나 에러 발생 시 대기가 필요함을 의미
+            return False
+
     def _on_subscription_change(self, changes: Dict) -> None:
         """구독 변경 콜백 (v6.1 Pending State 기반 배치 처리)"""
         try:
+            self.logger.info(f"🔔 구독 변경 콜백 수신: {len(changes)}개 변경사항")
+
             # 🎯 Pending State 확인: 이미 처리 중인 Task가 있으면 새로 생성하지 않음
             if not self._pending_subscription_task or self._pending_subscription_task.done():
-                self.logger.debug("📝 새로운 구독 변경 처리 Task 생성")
+                self.logger.info("📝 새로운 구독 변경 처리 Task 생성")
                 self._pending_subscription_task = asyncio.create_task(
                     self._debounced_subscription_handler()
                 )
             else:
-                self.logger.debug("⏳ 이미 처리 중인 구독 Task 있음 - 자동 통합됨")
+                self.logger.info("⏳ 이미 처리 중인 구독 Task 있음 - 자동 통합됨")
 
             # ✅ 새 요청이 와도 SubscriptionManager가 즉시 상태 통합
             # ✅ 기존 Task가 깨어날 때 최신 통합 상태를 한 번에 전송
@@ -256,17 +282,24 @@ class WebSocketManager:
             self.logger.error(f"구독 변경 콜백 실패: {e}")
 
     async def _debounced_subscription_handler(self) -> None:
-        """디바운스된 구독 처리 (Pending State 핵심 로직)"""
+        """디바운스된 구독 처리 (Pending State 핵심 로직) - Rate Limiter 최적화"""
         try:
-            # 🔄 짧은 디바운스 대기 (추가 요청들을 모으기 위해)
-            await asyncio.sleep(self._debounce_delay)
+            # � Rate Limiter 즉시 사용 가능 여부 확인 (100ms 지연 최적화)
+            can_proceed_immediately = await self._check_rate_limiter_availability()
 
-            self.logger.debug("🚀 통합된 구독 상태 전송 시작")
+            if can_proceed_immediately:
+                self.logger.info("⚡ Rate Limiter 즉시 사용 가능 - 디바운스 지연 스킵")
+            else:
+                # �🔄 Rate Limiter 대기 중 - 짧은 디바운스로 추가 요청 수집
+                self.logger.info(f"⏳ Rate Limiter 대기 중 - {self._debounce_delay}s 디바운스 적용")
+                await asyncio.sleep(self._debounce_delay)
+
+            self.logger.info("🚀 통합된 구독 상태 전송 시작")
 
             # 📡 최신 통합 상태 기반으로 전송 (Rate Limiter 적용)
             await self._send_latest_subscriptions()
 
-            self.logger.debug("✅ 구독 상태 전송 완료")
+            self.logger.info("✅ 구독 상태 전송 완료")
 
         except Exception as e:
             self.logger.error(f"디바운스된 구독 처리 실패: {e}")
@@ -357,7 +390,7 @@ class WebSocketManager:
             raise
 
     async def stop(self) -> None:
-        """WebSocket 매니저 정지"""
+        """WebSocket 매니저 정지 (개선된 태스크 관리)"""
         if self._state == GlobalManagerState.IDLE:
             return
 
@@ -365,27 +398,45 @@ class WebSocketManager:
             self._state = GlobalManagerState.SHUTTING_DOWN
             self.logger.info("WebSocket 매니저 정지")
 
-            # 모든 연결 종료
-            await self._disconnect_all()
-
-            # Rate Limiter 모니터링 정지
-            if self._dynamic_limiter:
-                await self._dynamic_limiter.stop_monitoring()
-
-            # 연결 모니터링 중지
-            if self._monitoring_task:
-                self._monitoring_task.cancel()
+            # 1️⃣ 연결 모니터링 중지 (가장 먼저)
+            if self._monitoring_task and not self._monitoring_task.done():
                 try:
-                    await self._monitoring_task
-                except asyncio.CancelledError:
-                    pass
+                    # 현재 이벤트 루프 확인
+                    current_loop = asyncio.get_running_loop()
+                    task_loop = getattr(self._monitoring_task, '_loop', None)
+
+                    if task_loop is not None and task_loop != current_loop:
+                        self.logger.warning("다른 이벤트 루프의 모니터링 Task - 안전하게 스킵")
+                        self._monitoring_task = None
+                    else:
+                        self._monitoring_task.cancel()
+                        await asyncio.wait_for(self._monitoring_task, timeout=1.0)
+
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    self.logger.debug("모니터링 태스크 정리 완료")
+                except Exception as e:
+                    self.logger.warning(f"모니터링 태스크 정리 중 오류: {e}")
+
+            # 2️⃣ Rate Limiter 모니터링 정지 (두 번째)
+            if self._dynamic_limiter:
+                try:
+                    # 매우 짧은 타임아웃으로 빠른 정리
+                    await asyncio.wait_for(self._dynamic_limiter.stop_monitoring(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    self.logger.warning("Rate Limiter 정지 타임아웃 (강제 진행)")
+                except Exception as e:
+                    self.logger.warning(f"Rate Limiter 정지 중 오류: {e}")
+
+            # 3️⃣ 모든 연결 종료 (마지막)
+            await self._disconnect_all()
 
             self._state = GlobalManagerState.IDLE
             self.logger.info("WebSocket 매니저 정지 완료")
 
         except Exception as e:
-            self._state = GlobalManagerState.ERROR
             self.logger.error(f"정지 실패: {e}")
+            # 에러가 있어도 IDLE 상태로 변경 (다음 시작을 위해)
+            self._state = GlobalManagerState.IDLE
 
     # ================================================================
     # 연결 지속성 관리
@@ -477,7 +528,7 @@ class WebSocketManager:
             self.logger.error(f"WebSocket 재연결 실패 ({connection_type}): {e}")
 
     async def _is_connection_healthy(self, connection_type: WebSocketType) -> bool:
-        """연결 건강도 확인"""
+        """연결 건강도 확인 (구독 상태 고려)"""
         try:
             connection = self._connections.get(connection_type)
 
@@ -490,20 +541,94 @@ class WebSocketManager:
                 self.logger.warning(f"{connection_type} 연결 상태 비정상: state={connection.state}")
                 return False
 
-            # 3️⃣ 최근 응답성 확인 (60초 이내 메시지 수신)
-            last_activity = self._last_message_times.get(connection_type)
-            if last_activity and time.time() - last_activity > 60:
-                self.logger.warning(f"{connection_type} 연결: 60초간 메시지 없음")
-                return False
-
-            # 4️⃣ 연결 상태가 CONNECTED인지 확인
+            # 3️⃣ 연결 상태가 CONNECTED인지 확인
             if self._connection_states[connection_type] != ConnectionState.CONNECTED:
                 return False
 
-            return True
+            # 4️⃣ 구독 상태 고려한 응답성 확인
+            return await self._check_connection_responsiveness(connection_type)
 
         except Exception as e:
             self.logger.error(f"연결 헬스체크 실패 ({connection_type}): {e}")
+            return False
+
+    async def _check_connection_responsiveness(self, connection_type: WebSocketType) -> bool:
+        """연결 응답성 확인 (구독 여부 고려)"""
+        try:
+            # 활성 구독 상태 확인
+            has_active_subscriptions = self._has_active_subscriptions(connection_type)
+            last_activity = self._last_message_times.get(connection_type)
+            current_time = time.time()
+
+            # 구독이 없는 경우: 연결 자체는 건강한 것으로 간주
+            if not has_active_subscriptions:
+                self.logger.debug(f"{connection_type} 연결: 구독 없음, 건강한 상태로 간주")
+                # Ping으로 연결 상태만 간단히 확인
+                return await self._verify_connection_with_ping(connection_type)
+
+            # 구독이 있는 경우: 메시지 수신 시간 확인 (더 엄격)
+            # None 체크로 Float-NoneType 에러 방지
+            if last_activity is not None and current_time - last_activity > 60:
+                self.logger.warning(f"{connection_type} 연결: 구독 있지만 60초간 메시지 없음")
+                return False
+
+            # last_activity가 None인 경우 (연결 후 아직 메시지 없음)
+            if last_activity is None:
+                self.logger.debug(f"{connection_type} 연결: 구독 있음, 첫 메시지 대기 중")
+                return True  # 연결 직후로 간주
+
+            # 구독이 있고 최근에 메시지를 받았으면 건강
+            return True
+
+        except Exception as e:
+            self.logger.error(f"연결 응답성 확인 실패 ({connection_type}): {e}")
+            return False
+
+    def _has_active_subscriptions(self, connection_type: WebSocketType) -> bool:
+        """활성 구독 존재 여부 확인"""
+        try:
+            if not self._subscription_manager:
+                return False
+
+            # 리얼타임 스트림 확인
+            streams = self._subscription_manager.get_realtime_streams(connection_type)
+            for data_type, symbols in streams.items():
+                if symbols:  # 심볼이 있으면 활성 구독
+                    return True
+
+            # 펜딩 스냅샷 확인
+            pending = self._subscription_manager.get_pending_snapshots(connection_type)
+            for data_type, symbols in pending.items():
+                if symbols:  # 펜딩 스냅샷이 있으면 활성
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.logger.debug(f"구독 상태 확인 실패 ({connection_type}): {e}")
+            return False
+
+    async def _verify_connection_with_ping(self, connection_type: WebSocketType) -> bool:
+        """Ping으로 연결 상태 실제 확인 (개선된 방법)"""
+        try:
+            connection = self._connections.get(connection_type)
+            if not connection:
+                return False
+
+            # 사용자 제시 방법: ping()의 pong_waiter를 wait_for로 감싸기
+            self.logger.debug(f"🏓 {connection_type} Ping 전송 중...")
+            pong_waiter = await connection.ping()
+            await asyncio.wait_for(pong_waiter, timeout=3.0)
+
+            # Pong 응답 받음
+            self.logger.debug(f"✅ {connection_type} Pong 응답 받음 - 연결 살아있음")
+            return True
+
+        except asyncio.TimeoutError:
+            self.logger.warning(f"❌ {connection_type} Ping 응답 없음 - 연결 문제?")
+            return False
+        except Exception as e:
+            self.logger.warning(f"🚨 {connection_type} Ping 오류: {e}")
             return False
 
     async def _should_maintain_private_connection(self) -> bool:
@@ -579,6 +704,8 @@ class WebSocketManager:
     ) -> None:
         """컴포넌트 등록"""
         try:
+            self.logger.info(f"🔄 컴포넌트 등록 시작: {component_id} (구독 {len(subscriptions or [])}개)")
+
             # WeakRef로 컴포넌트 저장 (안전한 콜백으로 수정)
             def safe_cleanup_callback(ref):
                 try:
@@ -593,9 +720,12 @@ class WebSocketManager:
                     self.logger.error(f"컴포넌트 자동 정리 오류: {e}")
 
             self._components[component_id] = weakref.ref(component_ref, safe_cleanup_callback)
+            self.logger.debug(f"📝 WeakRef 컴포넌트 저장 완료: {component_id}")
 
             # v6.2: 리얼타임 스트림 등록
             if subscriptions and self._subscription_manager:
+                self.logger.debug(f"📊 구독 정보 변환 시작: {len(subscriptions)}개")
+
                 # 🔧 타입 변환: List[SubscriptionSpec] → ComponentSubscription
                 from .websocket_types import ComponentSubscription
                 component_subscription = ComponentSubscription(
@@ -604,14 +734,26 @@ class WebSocketManager:
                     callback=None,  # 필요시 콜백 설정
                     stream_filter=None  # 필요시 필터 설정
                 )
+                self.logger.debug("✅ ComponentSubscription 생성 완료")
 
+                self.logger.debug("🎯 SubscriptionManager.register_component() 호출")
                 await self._subscription_manager.register_component(
                     component_id,
                     component_subscription,  # ✅ 올바른 타입
                     component_ref
                 )
+                self.logger.info("✅ SubscriptionManager.register_component() 완료")
 
-            self.logger.debug(f"컴포넌트 등록: {component_id}")
+                # ✅ Pending State 메커니즘에 의한 자동 전송 활용
+                # _on_subscription_change() 콜백이 자동으로 호출되어 통합 전송됨
+                self.logger.info(f"🚀 구독 등록 완료: {component_id} - Pending State 메커니즘 활용")
+            else:
+                if not subscriptions:
+                    self.logger.warning(f"⚠️ 구독 정보 없음: {component_id}")
+                if not self._subscription_manager:
+                    self.logger.error(f"❌ SubscriptionManager 없음: {component_id}")
+
+            self.logger.info(f"✅ 전체 컴포넌트 등록 완료: {component_id}")
 
         except Exception as e:
             self.logger.error(f"컴포넌트 등록 실패 ({component_id}): {e}")
@@ -1090,7 +1232,7 @@ class WebSocketManager:
                 health_score -= min(consecutive_errors * 0.1, 0.5)
 
                 # 최근 활동에 따른 감점
-                if last_message:
+                if last_message is not None:
                     inactive_seconds = time.time() - last_message
                     if inactive_seconds > 60:  # 1분 이상 비활성
                         health_score -= min(inactive_seconds / 300, 0.3)  # 최대 5분에서 0.3 감점

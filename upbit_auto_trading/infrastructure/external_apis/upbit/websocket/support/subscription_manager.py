@@ -80,6 +80,12 @@ class SubscriptionManager:
         # 변경 알림 콜백
         self._change_callbacks: List[Callable[[Dict[DataType, SubscriptionChange]], None]] = []
 
+        # 🔍 변경 감지를 위한 이전 상태 저장 (하드웨어 여유 활용)
+        self._previous_stream_state: Dict[WebSocketType, Dict[DataType, Set[str]]] = {
+            WebSocketType.PUBLIC: {},
+            WebSocketType.PRIVATE: {}
+        }
+
         # 성능 메트릭
         self._metrics = {
             'total_realtime_streams': 0,
@@ -97,33 +103,48 @@ class SubscriptionManager:
 
     async def add_realtime_stream(self, ws_type: WebSocketType, data_type: DataType,
                                   symbols: Set[str], component_id: str) -> None:
-        """리얼타임 스트림 추가/확장"""
+        """리얼타임 스트림 추가/확장 (Public API - 락 획득)"""
+        self.logger.debug(f"🎯 add_realtime_stream() 호출: {ws_type.value}/{data_type.value} {symbols} by {component_id}")
+
         async with self._lock:
-            now = datetime.now()
+            self.logger.debug(f"🔒 락 획득 완료: {ws_type.value}/{data_type.value}")
+            await self._add_realtime_stream_unlocked(ws_type, data_type, symbols, component_id)
 
-            if data_type not in self._realtime_streams[ws_type]:
-                # 새 스트림 생성
-                self._realtime_streams[ws_type][data_type] = RealtimeStreamState(
-                    ws_type=ws_type,
-                    data_type=data_type,
-                    symbols=symbols.copy(),
-                    components={component_id},
-                    created_at=now,
-                    last_updated=now
-                )
-                self.logger.info(f"새 리얼타임 스트림 생성: {ws_type.value}/{data_type.value} ({len(symbols)}개 심볼)")
-            else:
-                # 기존 스트림 확장
-                stream = self._realtime_streams[ws_type][data_type]
-                new_symbols = symbols - stream.symbols
-                stream.symbols.update(symbols)
-                stream.components.add(component_id)
-                stream.last_updated = now
+    async def _add_realtime_stream_unlocked(self, ws_type: WebSocketType, data_type: DataType,
+                                            symbols: Set[str], component_id: str) -> None:
+        """리얼타임 스트림 추가/확장 (Internal API - 락 없이)"""
+        self.logger.debug(f"🎯 _add_realtime_stream_unlocked() 시작: {ws_type.value}/{data_type.value}")
+        now = datetime.now()
 
-                if new_symbols:
-                    self.logger.info(f"리얼타임 스트림 확장: {ws_type.value}/{data_type.value} (+{len(new_symbols)}개)")
+        if data_type not in self._realtime_streams[ws_type]:
+            # 새 스트림 생성
+            self._realtime_streams[ws_type][data_type] = RealtimeStreamState(
+                ws_type=ws_type,
+                data_type=data_type,
+                symbols=symbols.copy(),
+                components={component_id},
+                created_at=now,
+                last_updated=now
+            )
+            self.logger.info(f"새 리얼타임 스트림 생성: {ws_type.value}/{data_type.value} ({len(symbols)}개 심볼)")
+        else:
+            # 기존 스트림 확장
+            stream = self._realtime_streams[ws_type][data_type]
+            new_symbols = symbols - stream.symbols
+            stream.symbols.update(symbols)
+            stream.components.add(component_id)
+            stream.last_updated = now
 
-            self._update_metrics()
+            if new_symbols:
+                self.logger.info(f"리얼타임 스트림 확장: {ws_type.value}/{data_type.value} (+{len(new_symbols)}개)")
+
+        self._update_metrics()
+        self.logger.debug(f"📊 메트릭 업데이트 완료: {ws_type.value}/{data_type.value}")
+
+        # 🔄 실제 변경사항만 감지하여 알림 (하드웨어 여유 활용)
+        self.logger.debug(f"🔔 변경 감지 호출 시작: {ws_type.value}/{data_type.value}")
+        self._detect_and_notify_changes(ws_type, data_type, symbols)
+        self.logger.debug(f"✅ 변경 감지 호출 완료: {ws_type.value}/{data_type.value}")
 
     async def remove_realtime_stream(self, ws_type: WebSocketType, data_type: DataType,
                                      symbols: Set[str], component_id: str) -> None:
@@ -243,26 +264,37 @@ class SubscriptionManager:
     async def register_component(self, component_id: str, subscription: ComponentSubscription,
                                  component_ref: Any) -> None:
         """컴포넌트 등록"""
+        self.logger.info(f"📝 SubscriptionManager.register_component() 시작: {component_id}")
+
         async with self._lock:
             self._component_subscriptions[component_id] = subscription
+            self.logger.debug(f"📊 컴포넌트 구독 저장 완료: {component_id}")
 
             # WeakRef로 자동 정리
-            def cleanup():
+            def cleanup(ref):
                 asyncio.create_task(self._cleanup_component(component_id))
 
             self._component_refs[component_id] = weakref.ref(component_ref, cleanup)
+            self.logger.debug(f"🔗 WeakRef 설정 완료: {component_id}")
 
             # 구독 스펙에 따라 리얼타임 스트림 추가
-            for spec in subscription.subscriptions:
+            for i, spec in enumerate(subscription.subscriptions):
+                self.logger.debug(
+                    f"🎯 구독 스펙 {i + 1}/{len(subscription.subscriptions)} 처리: "
+                    f"{spec.data_type.value} {spec.symbols}"
+                )
+
                 # 데이터 타입에 따라 WebSocket 타입 결정
                 ws_type = (WebSocketType.PRIVATE if spec.data_type in [DataType.MYORDER, DataType.MYASSET]
                            else WebSocketType.PUBLIC)
+                self.logger.debug(f"📡 WebSocket 타입 결정: {ws_type.value}")
 
-                await self.add_realtime_stream(
+                await self._add_realtime_stream_unlocked(
                     ws_type, spec.data_type, set(spec.symbols), component_id
                 )
+                self.logger.debug(f"✅ 리얼타임 스트림 추가 완료: {spec.data_type.value}")
 
-            self.logger.info(f"컴포넌트 등록: {component_id} ({len(subscription.subscriptions)}개 스펙)")
+            self.logger.info(f"✅ SubscriptionManager 컴포넌트 등록 완료: {component_id} ({len(subscription.subscriptions)}개 스펙)")
 
     async def unregister_component(self, component_id: str) -> None:
         """컴포넌트 등록 해제"""
@@ -395,10 +427,85 @@ class SubscriptionManager:
         if callback in self._change_callbacks:
             self._change_callbacks.remove(callback)
 
-    async def _notify_changes(self, changes: Dict[DataType, SubscriptionChange]) -> None:
+    def _notify_changes(self, changes: Dict[DataType, SubscriptionChange]) -> None:
         """변경사항 알림"""
-        for callback in self._change_callbacks:
+        self.logger.info(f"📢 변경 알림 전송 시작: {len(self._change_callbacks)}개 콜백")
+
+        for i, callback in enumerate(self._change_callbacks):
             try:
+                self.logger.debug(f"📞 콜백 {i + 1}/{len(self._change_callbacks)} 호출 중...")
                 callback(changes)
+                self.logger.debug(f"✅ 콜백 {i + 1} 호출 완료")
             except Exception as e:
                 self.logger.error(f"변경 알림 콜백 오류: {e}")
+
+        if self._change_callbacks:
+            self.logger.info(f"✅ 변경 알림 전송 완료: {len(self._change_callbacks)}개 콜백")
+        else:
+            self.logger.warning("⚠️ 등록된 변경 알림 콜백이 없음!")
+
+    def _detect_and_notify_changes(self, ws_type: WebSocketType, data_type: DataType,
+                                   new_symbols: Set[str]) -> None:
+        """실제 변경사항 감지 및 알림 (하드웨어 여유 활용)"""
+        self.logger.debug(f"🔍 _detect_and_notify_changes() 시작: {ws_type.value}/{data_type.value}")
+        try:
+            # 현재 상태 가져오기
+            self.logger.debug(f"📊 현재 상태 조회: {ws_type.value}/{data_type.value}")
+            current_symbols = set()
+            if data_type in self._realtime_streams[ws_type]:
+                current_symbols = self._realtime_streams[ws_type][data_type].symbols.copy()
+            self.logger.debug(f"📊 현재 심볼: {current_symbols}")
+
+            # 이전 상태와 비교
+            self.logger.debug(f"📊 이전 상태 조회: {ws_type.value}/{data_type.value}")
+            previous_symbols = self._previous_stream_state[ws_type].get(data_type, set())
+            self.logger.debug(f"📊 이전 심볼: {previous_symbols}")
+
+            # 실제 변경 여부 확인
+            if current_symbols == previous_symbols:
+                self.logger.debug(f"변경 없음: {ws_type.value}/{data_type.value} - 알림 스킵")
+                return
+
+            self.logger.debug(f"🔄 변경 감지됨: {ws_type.value}/{data_type.value}")
+
+            # 변경 유형 분석
+            added_symbols = current_symbols - previous_symbols
+            removed_symbols = previous_symbols - current_symbols
+
+            if added_symbols or removed_symbols:
+                change_type = "modified"
+                if not previous_symbols:
+                    change_type = "added"
+                elif not current_symbols:
+                    change_type = "removed"
+
+                self.logger.info(f"🔔 변경 감지: {ws_type.value}/{data_type.value} - "
+                                 f"추가: {len(added_symbols)}, 제거: {len(removed_symbols)}")
+
+                # 변경사항 알림
+                self.logger.debug("📢 SubscriptionChange 객체 생성 중...")
+                changes = {data_type: SubscriptionChange(
+                    data_type=data_type,
+                    old_symbols=previous_symbols,
+                    new_symbols=current_symbols,
+                    change_type=change_type
+                )}
+                self.logger.debug("📢 변경 알림 전송 중...")
+                self._notify_changes(changes)
+                self.logger.debug("📢 변경 알림 전송 완료")
+
+                # 이전 상태 업데이트
+                self.logger.debug("📊 이전 상태 업데이트 중...")
+                self._previous_stream_state[ws_type][data_type] = current_symbols.copy()
+                self.logger.debug("📊 이전 상태 업데이트 완료")
+
+        except Exception as e:
+            self.logger.error(f"변경 감지 중 오류: {e}")
+            # 에러 시에도 이전 상태는 업데이트하여 다음 비교를 위해 준비
+            try:
+                current_symbols = set()
+                if data_type in self._realtime_streams[ws_type]:
+                    current_symbols = self._realtime_streams[ws_type][data_type].symbols.copy()
+                self._previous_stream_state[ws_type][data_type] = current_symbols.copy()
+            except Exception:
+                pass
