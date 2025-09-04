@@ -9,9 +9,11 @@ config.py + exceptions.py 통합 모듈
 """
 
 import os
+import yaml
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 from enum import Enum
+from pathlib import Path
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -180,6 +182,26 @@ class RateLimiterConfig:
 
 
 @dataclass
+class SimpleFormatConfig:
+    """Simple Format 설정 (네트워크 사용량 최적화)"""
+    enable_simple_mode: bool = False  # 기본값: 비활성화
+    auto_convert_incoming: bool = True  # 수신 데이터 자동 변환
+    force_simple_format: bool = False  # 모든 요청에 format=SIMPLE 강제 적용
+    enable_compression_with_simple: bool = True  # SIMPLE 모드에서도 압축 사용
+    debug_format_conversion: bool = False  # 포맷 변환 디버깅
+
+    def validate(self) -> None:
+        """설정 검증"""
+        # Simple Mode가 활성화된 경우 auto_convert_incoming은 필수
+        if self.enable_simple_mode and not self.auto_convert_incoming:
+            logger.warning("Simple Mode 활성화 시 auto_convert_incoming 권장")
+
+        # force_simple_format은 enable_simple_mode가 활성화된 경우에만 의미
+        if self.force_simple_format and not self.enable_simple_mode:
+            raise ValueError("force_simple_format은 enable_simple_mode가 활성화된 경우에만 사용 가능")
+
+
+@dataclass
 class WebSocketConfig:
     """WebSocket v6 통합 설정"""
     environment: Environment = Environment.DEVELOPMENT
@@ -188,6 +210,7 @@ class WebSocketConfig:
     auth: AuthConfig = field(default_factory=AuthConfig)
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
     rate_limiter: RateLimiterConfig = field(default_factory=RateLimiterConfig)
+    simple_format: SimpleFormatConfig = field(default_factory=SimpleFormatConfig)
 
     def validate(self) -> None:
         """전체 설정 검증"""
@@ -196,6 +219,7 @@ class WebSocketConfig:
         self.auth.validate()
         self.monitoring.validate()
         self.rate_limiter.validate()
+        self.simple_format.validate()
 
     def apply_environment_overrides(self) -> None:
         """환경변수 오버라이드 적용"""
@@ -247,6 +271,22 @@ class WebSocketConfig:
             except ValueError:
                 logger.warning(f"잘못된 UPBIT_WEBSOCKET_ERROR_THRESHOLD 값: {error_threshold}")
 
+        # Simple Format 설정
+        if enable_simple := os.getenv('UPBIT_WEBSOCKET_SIMPLE_MODE'):
+            self.simple_format.enable_simple_mode = enable_simple.lower() in ('true', '1', 'yes')
+
+        if auto_convert := os.getenv('UPBIT_WEBSOCKET_AUTO_CONVERT_INCOMING'):
+            self.simple_format.auto_convert_incoming = auto_convert.lower() in ('true', '1', 'yes')
+
+        if force_simple := os.getenv('UPBIT_WEBSOCKET_FORCE_SIMPLE_FORMAT'):
+            self.simple_format.force_simple_format = force_simple.lower() in ('true', '1', 'yes')
+
+        if compression_with_simple := os.getenv('UPBIT_WEBSOCKET_COMPRESSION_WITH_SIMPLE'):
+            self.simple_format.enable_compression_with_simple = compression_with_simple.lower() in ('true', '1', 'yes')
+
+        if debug_format := os.getenv('UPBIT_WEBSOCKET_DEBUG_FORMAT_CONVERSION'):
+            self.simple_format.debug_format_conversion = debug_format.lower() in ('true', '1', 'yes')
+
     def to_dict(self) -> Dict[str, Any]:
         """Dict 형식으로 변환"""
         return {
@@ -289,6 +329,13 @@ class WebSocketConfig:
                 'recovery_delay': self.rate_limiter.recovery_delay,
                 'recovery_step': self.rate_limiter.recovery_step,
                 'recovery_interval': self.rate_limiter.recovery_interval
+            },
+            'simple_format': {
+                'enable_simple_mode': self.simple_format.enable_simple_mode,
+                'auto_convert_incoming': self.simple_format.auto_convert_incoming,
+                'force_simple_format': self.simple_format.force_simple_format,
+                'enable_compression_with_simple': self.simple_format.enable_compression_with_simple,
+                'debug_format_conversion': self.simple_format.debug_format_conversion
             }
         }
 
@@ -309,6 +356,10 @@ def create_development_config() -> WebSocketConfig:
     config.monitoring.health_check_interval = 15.0
     config.monitoring.metrics_update_interval = 5.0
 
+    # Simple Mode: 개발 시 디버깅 용이성 우선
+    config.simple_format.enable_simple_mode = False
+    config.simple_format.debug_format_conversion = True
+
     return config
 
 
@@ -323,6 +374,10 @@ def create_testing_config() -> WebSocketConfig:
     config.reconnection.base_delay = 0.1
     config.monitoring.health_check_interval = 5.0
     config.monitoring.metrics_update_interval = 1.0
+
+    # Simple Mode: 테스트에서 SIMPLE 모드 검증
+    config.simple_format.enable_simple_mode = True
+    config.simple_format.debug_format_conversion = True
 
     return config
 
@@ -340,6 +395,11 @@ def create_production_config() -> WebSocketConfig:
     config.monitoring.health_check_interval = 60.0
     config.monitoring.metrics_update_interval = 30.0
 
+    # Simple Mode: 프로덕션에서 네트워크 최적화 최대화
+    config.simple_format.enable_simple_mode = True
+    config.simple_format.force_simple_format = True
+    config.simple_format.debug_format_conversion = False
+
     return config
 
 
@@ -347,8 +407,120 @@ def create_production_config() -> WebSocketConfig:
 # 설정 로딩 및 관리
 # ================================================================
 
+def load_yaml_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """YAML 설정 파일 로딩"""
+    if config_path is None:
+        # 프로젝트 루트에서 config 폴더 찾기
+        current_path = Path(__file__)
+        # upbit-autotrader-vscode 프로젝트 루트 찾기
+        while current_path.parent != current_path and current_path.name != "upbit-autotrader-vscode":
+            current_path = current_path.parent
+        config_path = str(current_path / "config" / "websocket_config.yaml")
+
+    config_file = Path(config_path)
+
+    if not config_file.exists():
+        logger.warning(f"YAML 설정 파일 없음: {config_file}")
+        return {}
+
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            yaml_config = yaml.safe_load(f) or {}
+        logger.info(f"YAML 설정 로딩 완료: {config_file}")
+        return yaml_config
+    except Exception as e:
+        logger.error(f"YAML 설정 로딩 실패: {e}")
+        return {}
+
+
+def apply_yaml_config_to_instance(config: WebSocketConfig, yaml_config: Dict[str, Any]) -> None:
+    """YAML 설정을 WebSocketConfig 인스턴스에 적용"""
+    # 환경별 설정 우선 적용
+    env_name = config.environment.value
+    env_config = yaml_config.get(env_name, {})
+
+    # 기본 설정과 환경별 설정 병합
+    merged_config = {**yaml_config}
+    for key, value in env_config.items():
+        if isinstance(value, dict) and key in merged_config:
+            merged_config[key] = {**merged_config.get(key, {}), **value}
+        else:
+            merged_config[key] = value
+
+    # 각 설정 섹션 적용
+    if 'connection' in merged_config:
+        conn = merged_config['connection']
+        config.connection.public_url = conn.get('public_url', config.connection.public_url)
+        config.connection.private_url = conn.get('private_url', config.connection.private_url)
+        config.connection.connect_timeout = conn.get('connect_timeout', config.connection.connect_timeout)
+        config.connection.heartbeat_interval = conn.get('heartbeat_interval', config.connection.heartbeat_interval)
+        config.connection.enable_compression = conn.get('enable_compression', config.connection.enable_compression)
+        config.connection.max_message_size = conn.get('max_message_size', config.connection.max_message_size)
+        config.connection.compression_threshold = conn.get('compression_threshold', config.connection.compression_threshold)
+
+    if 'reconnection' in merged_config:
+        reconn = merged_config['reconnection']
+        config.reconnection.max_attempts = reconn.get('max_attempts', config.reconnection.max_attempts)
+        config.reconnection.base_delay = reconn.get('base_delay', config.reconnection.base_delay)
+        config.reconnection.max_delay = reconn.get('max_delay', config.reconnection.max_delay)
+        config.reconnection.exponential_base = reconn.get('exponential_base', config.reconnection.exponential_base)
+        config.reconnection.jitter = reconn.get('jitter', config.reconnection.jitter)
+
+    if 'auth' in merged_config:
+        auth = merged_config['auth']
+        config.auth.jwt_refresh_threshold = auth.get('jwt_refresh_threshold', config.auth.jwt_refresh_threshold)
+        config.auth.max_auth_retries = auth.get('max_auth_retries', config.auth.max_auth_retries)
+        config.auth.auth_timeout = auth.get('auth_timeout', config.auth.auth_timeout)
+
+    if 'monitoring' in merged_config:
+        monitor = merged_config['monitoring']
+        config.monitoring.enable_health_check = monitor.get(
+            'enable_health_check', config.monitoring.enable_health_check)
+        config.monitoring.health_check_interval = monitor.get(
+            'health_check_interval', config.monitoring.health_check_interval)
+        config.monitoring.enable_performance_metrics = monitor.get(
+            'enable_performance_metrics', config.monitoring.enable_performance_metrics)
+        config.monitoring.metrics_update_interval = monitor.get(
+            'metrics_update_interval', config.monitoring.metrics_update_interval)
+        config.monitoring.enable_connection_metrics = monitor.get(
+            'enable_connection_metrics', config.monitoring.enable_connection_metrics)
+        config.monitoring.cleanup_interval = monitor.get(
+            'cleanup_interval', config.monitoring.cleanup_interval)
+
+    if 'rate_limiter' in merged_config:
+        rate = merged_config['rate_limiter']
+        config.rate_limiter.enable_rate_limiter = rate.get(
+            'enable_rate_limiter', config.rate_limiter.enable_rate_limiter)
+        config.rate_limiter.enable_dynamic_adjustment = rate.get(
+            'enable_dynamic_adjustment', config.rate_limiter.enable_dynamic_adjustment)
+        config.rate_limiter.strategy = rate.get('strategy', config.rate_limiter.strategy)
+        config.rate_limiter.error_threshold = rate.get(
+            'error_threshold', config.rate_limiter.error_threshold)
+        config.rate_limiter.reduction_ratio = rate.get(
+            'reduction_ratio', config.rate_limiter.reduction_ratio)
+        config.rate_limiter.recovery_delay = rate.get(
+            'recovery_delay', config.rate_limiter.recovery_delay)
+        config.rate_limiter.recovery_step = rate.get(
+            'recovery_step', config.rate_limiter.recovery_step)
+        config.rate_limiter.recovery_interval = rate.get(
+            'recovery_interval', config.rate_limiter.recovery_interval)
+
+    if 'simple_format' in merged_config:
+        simple = merged_config['simple_format']
+        config.simple_format.enable_simple_mode = simple.get(
+            'enable_simple_mode', config.simple_format.enable_simple_mode)
+        config.simple_format.auto_convert_incoming = simple.get(
+            'auto_convert_incoming', config.simple_format.auto_convert_incoming)
+        config.simple_format.force_simple_format = simple.get(
+            'force_simple_format', config.simple_format.force_simple_format)
+        config.simple_format.enable_compression_with_simple = simple.get(
+            'enable_compression_with_simple', config.simple_format.enable_compression_with_simple)
+        config.simple_format.debug_format_conversion = simple.get(
+            'debug_format_conversion', config.simple_format.debug_format_conversion)
+
+
 def load_config_from_env() -> WebSocketConfig:
-    """환경변수에서 설정 로딩"""
+    """환경변수와 YAML에서 설정 로딩 (통합)"""
     env_name = os.getenv('UPBIT_ENVIRONMENT', 'development').lower()
 
     try:
@@ -367,7 +539,12 @@ def load_config_from_env() -> WebSocketConfig:
     else:
         config = WebSocketConfig(environment=environment)
 
-    # 환경변수 오버라이드 적용
+    # YAML 설정 로딩 및 적용
+    yaml_config = load_yaml_config()
+    if yaml_config:
+        apply_yaml_config_to_instance(config, yaml_config)
+
+    # 환경변수 오버라이드 적용 (최종 우선순위)
     config.apply_environment_overrides()
 
     # 설정 검증
@@ -378,6 +555,7 @@ def load_config_from_env() -> WebSocketConfig:
         raise
 
     logger.info(f"WebSocket 설정 로딩 완료: {environment.value}")
+    logger.info(f"Simple Mode: {config.simple_format.enable_simple_mode}")
     return config
 
 
@@ -432,3 +610,29 @@ def get_connection_config() -> ConnectionConfig:
 def get_reconnection_config() -> ReconnectionConfig:
     """재연결 설정 반환"""
     return get_config().reconnection
+
+
+def get_simple_format_config() -> SimpleFormatConfig:
+    """Simple Format 설정 반환"""
+    return get_config().simple_format
+
+
+def is_simple_mode_enabled() -> bool:
+    """Simple Mode 활성화 여부 확인"""
+    return get_config().simple_format.enable_simple_mode
+
+
+def should_force_simple_format() -> bool:
+    """SIMPLE 포맷 강제 적용 여부 확인"""
+    config = get_config().simple_format
+    return config.enable_simple_mode and config.force_simple_format
+
+
+def should_auto_convert_incoming() -> bool:
+    """수신 데이터 자동 변환 여부 확인"""
+    return get_config().simple_format.auto_convert_incoming
+
+
+def is_format_debug_enabled() -> bool:
+    """포맷 변환 디버깅 활성화 여부"""
+    return get_config().simple_format.debug_format_conversion

@@ -1161,6 +1161,30 @@ class WebSocketManager:
                         message_str = message
                     data = json.loads(message_str)
 
+                    # SIMPLE 포맷 자동 변환 (Simple Mode 수신 데이터 처리)
+                    from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.support.websocket_config import (
+                        should_auto_convert_incoming
+                    )
+
+                    if should_auto_convert_incoming():
+                        try:
+                            from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.support.format_utils import (
+                                UpbitMessageFormatter
+                            )
+
+                            # UpbitMessageFormatter 인스턴스가 없으면 생성
+                            if not hasattr(self, '_format_converter'):
+                                self._format_converter = UpbitMessageFormatter()
+
+                            # SIMPLE 포맷인지 감지하고 변환
+                            simple_type = self._format_converter._detect_simple_type(data)
+                            if simple_type:
+                                self.logger.debug(f"🗜️ SIMPLE 포맷 감지 ({simple_type}): 자동 변환 시작")
+                                data = self._format_converter.convert_simple_to_default(data)
+                                self.logger.debug("✅ DEFAULT 포맷으로 변환 완료")
+                        except Exception as e:
+                            self.logger.warning(f"⚠️ SIMPLE 포맷 변환 실패 (원본 데이터 사용): {e}")
+
                     # stream_type 확인을 위한 디버깅
                     if 'stream_type' in data:
                         self.logger.info(f"🎯 stream_type 발견: {data.get('stream_type')} (타입: {data.get('type')})")

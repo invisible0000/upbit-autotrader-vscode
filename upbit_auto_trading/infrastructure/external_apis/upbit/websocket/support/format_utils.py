@@ -357,8 +357,18 @@ class UpbitMessageFormatter:
                     self.logger.debug(f"  - 파트 {i + 1}: {part}")
                 message_parts.extend(legacy_parts)
 
-            # 3. 포맷 지정 (DEFAULT 고정)
-            format_part = {"format": "DEFAULT"}
+            # 3. 포맷 지정 (Simple Mode 설정에 따라 동적 결정)
+            from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.support.websocket_config import (
+                is_simple_mode_enabled
+            )
+
+            if is_simple_mode_enabled():
+                format_part = {"format": "SIMPLE"}
+                self.logger.debug("🗜️ Simple Mode 활성화: SIMPLE 포맷 적용")
+            else:
+                format_part = {"format": "DEFAULT"}
+                self.logger.debug("📝 기본 모드: DEFAULT 포맷 적용")
+
             message_parts.append(format_part)
 
             unified_message = json.dumps(message_parts, ensure_ascii=False)
