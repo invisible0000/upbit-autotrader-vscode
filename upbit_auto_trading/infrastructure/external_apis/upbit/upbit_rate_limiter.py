@@ -222,6 +222,8 @@ class UpbitGCRARateLimiter:
         # ============================================
         'websocket_connect': UpbitRateLimitGroup.WEBSOCKET,
         'websocket_message': UpbitRateLimitGroup.WEBSOCKET,
+        'websocket_availability_check': UpbitRateLimitGroup.WEBSOCKET,  # 디바운스 최적화용
+        'websocket_subscription': UpbitRateLimitGroup.WEBSOCKET,        # 구독 요청용
         'test_message': UpbitRateLimitGroup.WEBSOCKET,  # 테스트용
     }
 

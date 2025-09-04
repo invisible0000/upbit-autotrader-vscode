@@ -438,6 +438,21 @@ class WebSocketManager:
             # 에러가 있어도 IDLE 상태로 변경 (다음 시작을 위해)
             self._state = GlobalManagerState.IDLE
 
+    @classmethod
+    async def reset_instance(cls) -> None:
+        """싱글톤 인스턴스 리셋 (테스트용)"""
+        async with cls._lock:
+            if cls._instance is not None:
+                try:
+                    await cls._instance.stop()
+                except Exception as e:
+                    # 로깅용 임시 logger
+                    import logging
+                    logger = logging.getLogger("WebSocketManager")
+                    logger.warning(f"인스턴스 정지 중 오류 (무시): {e}")
+                finally:
+                    cls._instance = None
+
     # ================================================================
     # 연결 지속성 관리
     # ================================================================
@@ -1071,10 +1086,20 @@ class WebSocketManager:
                     # 마지막 메시지 수신 시간 업데이트 (헬스체크용)
                     self._last_message_times[connection_type] = time.time()
 
-                    self.logger.debug(f"📨 WebSocket 메시지 수신 ({connection_type}): {message}")
+                    # 메시지 로깅 (처음 50자만 표시, 바이트/문자열 호환)
+                    if isinstance(message, bytes):
+                        message_str = message.decode('utf-8')
+                    else:
+                        message_str = message
+                    message_preview = message_str[:50] + "..." if len(message_str) > 50 else message_str
+                    self.logger.debug(f"📨 WebSocket 메시지 수신 ({connection_type}): {message_preview}")
 
-                    # JSON 파싱
-                    data = json.loads(message)
+                    # JSON 파싱 (바이트/문자열 호환)
+                    if isinstance(message, bytes):
+                        message_str = message.decode('utf-8')
+                    else:
+                        message_str = message
+                    data = json.loads(message_str)
 
                     # stream_type 확인을 위한 디버깅
                     if 'stream_type' in data:
@@ -1102,11 +1127,23 @@ class WebSocketManager:
                         await self._broadcast_event_to_components(event)
 
                 except json.JSONDecodeError as e:
+                    # 메시지를 안전하게 문자열로 변환
+                    if isinstance(message, bytes):
+                        message_safe = message.decode('utf-8', errors='replace')
+                    else:
+                        message_safe = message
+                    message_preview = message_safe[:50] + "..." if len(message_safe) > 50 else message_safe
                     self.logger.warning(f"JSON 파싱 실패 ({connection_type}): {e}")
-                    self.logger.warning(f"원본 메시지: {message}")
+                    self.logger.warning(f"원본 메시지: {message_preview}")
                 except Exception as e:
+                    # 메시지를 안전하게 문자열로 변환
+                    if isinstance(message, bytes):
+                        message_safe = message.decode('utf-8', errors='replace')
+                    else:
+                        message_safe = message
+                    message_preview = message_safe[:50] + "..." if len(message_safe) > 50 else message_safe
                     self.logger.error(f"메시지 처리 실패 ({connection_type}): {e}")
-                    self.logger.error(f"원본 메시지: {message}")
+                    self.logger.error(f"원본 메시지: {message_preview}")
 
         except Exception as e:
             if WEBSOCKETS_AVAILABLE and websockets and hasattr(websockets, 'exceptions'):
@@ -1125,6 +1162,9 @@ class WebSocketManager:
         """등록된 모든 컴포넌트에게 이벤트 브로드캐스트"""
         self.logger.debug(f"🔄 컴포넌트 브로드캐스트 시작: 등록된 컴포넌트 수 {len(self._components)}")
 
+        # 무효 컴포넌트 ID 수집
+        invalid_component_ids = []
+
         for component_id, component_ref in list(self._components.items()):
             try:
                 component = component_ref()  # WeakRef에서 실제 객체 가져오기
@@ -1133,11 +1173,30 @@ class WebSocketManager:
                     await component.handle_event(event)
                 else:
                     self.logger.warning(f"⚠️ 컴포넌트 {component_id}: handle_event 메서드 없음 또는 객체 무효")
+                    invalid_component_ids.append(component_id)
             except Exception as e:
                 self.logger.error(f"컴포넌트 {component_id} 이벤트 전달 실패: {e}")
-                # WeakRef가 무효화되었을 수 있으므로 정리
+                # WeakRef가 무효화되었을 수 있으므로 정리 대상에 추가
                 if component_ref() is None:
-                    await self._cleanup_component(component_id)
+                    invalid_component_ids.append(component_id)
+
+        # 무효 컴포넌트 즉시 정리 (강화된 정리)
+        if invalid_component_ids:
+            self.logger.info(f"🧹 무효 컴포넌트 {len(invalid_component_ids)}개 즉시 정리: {invalid_component_ids}")
+            for component_id in invalid_component_ids:
+                try:
+                    # WeakRef 제거
+                    if component_id in self._components:
+                        del self._components[component_id]
+                        self.logger.debug(f"🗑️ WeakRef 제거 완료: {component_id}")
+
+                    # SubscriptionManager에서도 제거
+                    if self._subscription_manager:
+                        await self._subscription_manager.unregister_component(component_id)
+                        self.logger.debug(f"📤 SubscriptionManager에서 제거 완료: {component_id}")
+
+                except Exception as e:
+                    self.logger.error(f"컴포넌트 정리 실패 ({component_id}): {e}")
 
     def _create_event(self, connection_type: WebSocketType, data: Dict) -> Optional[BaseWebSocketEvent]:
         """이벤트 생성"""

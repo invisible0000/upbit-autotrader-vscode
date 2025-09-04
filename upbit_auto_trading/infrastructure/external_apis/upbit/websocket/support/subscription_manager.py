@@ -270,9 +270,20 @@ class SubscriptionManager:
             self._component_subscriptions[component_id] = subscription
             self.logger.debug(f"📊 컴포넌트 구독 저장 완료: {component_id}")
 
-            # WeakRef로 자동 정리
+            # WeakRef로 자동 정리 (안전한 콜백)
             def cleanup(ref):
-                asyncio.create_task(self._cleanup_component(component_id))
+                try:
+                    # 이벤트 루프가 실행 중인지 확인
+                    loop = asyncio.get_running_loop()
+                    if loop and not loop.is_closed():
+                        asyncio.create_task(self._cleanup_component(component_id))
+                    else:
+                        self.logger.debug(f"컴포넌트 자동 정리 스킵 (이벤트 루프 없음): {component_id}")
+                except RuntimeError:
+                    # 이벤트 루프가 없거나 종료됨, 무시
+                    self.logger.debug(f"컴포넌트 자동 정리 스킵 (이벤트 루프 없음): {component_id}")
+                except Exception as e:
+                    self.logger.error(f"컴포넌트 자동 정리 오류: {e}")
 
             self._component_refs[component_id] = weakref.ref(component_ref, cleanup)
             self.logger.debug(f"🔗 WeakRef 설정 완료: {component_id}")
