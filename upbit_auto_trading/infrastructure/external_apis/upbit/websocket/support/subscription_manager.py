@@ -505,18 +505,63 @@ class SubscriptionManager:
                 self._notify_changes(changes)
                 self.logger.debug("📢 변경 알림 전송 완료")
 
-                # 이전 상태 업데이트
-                self.logger.debug("📊 이전 상태 업데이트 중...")
-                self._previous_stream_state[ws_type][data_type] = current_symbols.copy()
-                self.logger.debug("📊 이전 상태 업데이트 완료")
+                # 🎯 상태 업데이트는 메시지 전송 완료 후 commit_subscription_state_update()에서 수행
 
         except Exception as e:
             self.logger.error(f"변경 감지 중 오류: {e}")
-            # 에러 시에도 이전 상태는 업데이트하여 다음 비교를 위해 준비
-            try:
-                current_symbols = set()
-                if data_type in self._realtime_streams[ws_type]:
-                    current_symbols = self._realtime_streams[ws_type][data_type].symbols.copy()
-                self._previous_stream_state[ws_type][data_type] = current_symbols.copy()
-            except Exception:
-                pass
+            # 🎯 에러 시에도 상태 업데이트는 WebSocketManager에서 처리
+
+    def get_subscription_classification(self, ws_type: WebSocketType) -> Dict[DataType, Dict[str, List[str]]]:
+        """
+        현재 구독을 신규/기존으로 분류하여 반환 (상태 업데이트 없음)
+
+        Args:
+            ws_type: WebSocket 타입
+
+        Returns:
+            {DataType: {'existing': [symbols], 'new': [symbols]}} 형태
+        """
+        classification = {}
+
+        try:
+            # 동기적으로 처리 (읽기 전용 작업)
+            for data_type, stream_info in self._realtime_streams[ws_type].items():
+                current_symbols = stream_info.symbols.copy()
+                previous_symbols = self._previous_stream_state[ws_type].get(data_type, set())
+
+                existing_symbols = list(current_symbols & previous_symbols)  # 교집합: 기존 구독
+                new_symbols = list(current_symbols - previous_symbols)       # 차집합: 신규 구독
+
+                if existing_symbols or new_symbols:
+                    classification[data_type] = {
+                        'existing': existing_symbols,
+                        'new': new_symbols
+                    }
+
+                    self.logger.debug(f"📊 구독 분류 ({data_type.value}): "
+                                      f"기존 {len(existing_symbols)}개, 신규 {len(new_symbols)}개")
+
+        except Exception as e:
+            self.logger.error(f"구독 분류 중 오류: {e}")
+
+        return classification
+
+    def commit_subscription_state_update(self, ws_type: WebSocketType) -> None:
+        """
+        메시지 전송 완료 후 _previous_stream_state 업데이트
+
+        Args:
+            ws_type: WebSocket 타입
+        """
+        try:
+            current_streams = self._realtime_streams[ws_type]
+
+            for data_type, stream_info in current_streams.items():
+                current_symbols = stream_info.symbols.copy()
+                self._previous_stream_state[ws_type][data_type] = current_symbols
+
+                self.logger.debug(f"📊 상태 업데이트 완료 ({data_type.value}): "
+                                  f"{len(current_symbols)}개 심볼을 이전 상태로 저장")
+
+        except Exception as e:
+            self.logger.error(f"구독 상태 업데이트 중 오류 ({ws_type}): {e}")

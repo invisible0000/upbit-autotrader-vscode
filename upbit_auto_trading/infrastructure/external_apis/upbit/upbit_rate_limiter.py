@@ -147,8 +147,8 @@ class UpbitGCRARateLimiter:
         UpbitRateLimitGroup.WEBSOCKET: [
             # 5 RPS 제한 (최대 버스트 허용)
             GCRAConfig.from_rps(5.0, burst_capacity=5),
-            # 100 RPM 제한 (버스트 제거로 안전성 확보)
-            GCRAConfig.from_rpm(100, burst_capacity=1)  # 분당 100요청, 버스트 제거
+            # 100 RPM 제한 (WebSocket 특성 고려 대용량 버스트 허용)
+            GCRAConfig.from_rpm(100, burst_capacity=50)  # 분당 100요청, 50개 버스트로 즉시성 확보
         ]
     }
 
@@ -222,7 +222,8 @@ class UpbitGCRARateLimiter:
         # ============================================
         'websocket_connect': UpbitRateLimitGroup.WEBSOCKET,
         'websocket_message': UpbitRateLimitGroup.WEBSOCKET,
-        'websocket_availability_check': UpbitRateLimitGroup.WEBSOCKET,  # 디바운스 최적화용
+        'websocket_availability_check': UpbitRateLimitGroup.WEBSOCKET,  # 구 디바운스 최적화용 (deprecated)
+        'websocket_delay_check': UpbitRateLimitGroup.WEBSOCKET,         # 새 실제 지연 측정용
         'websocket_subscription': UpbitRateLimitGroup.WEBSOCKET,        # 구독 요청용
         'test_message': UpbitRateLimitGroup.WEBSOCKET,  # 테스트용
     }

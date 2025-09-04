@@ -117,11 +117,10 @@ class WebSocketManager:
             'rate_limit_errors': 0
         }
 
-        # ===== v6.1 Pending State 기반 배치 처리 =====
+        # ===== v6.2 안전한 Pending State 기반 처리 =====
         self._pending_subscription_task: Optional[asyncio.Task] = None
-        self._debounce_delay: float = 0.1  # 100ms 디바운스 (추가 요청 수집용)
 
-        self.logger.info("WebSocketManager 초기화 완료 (v6.1 Pending State 지원)")
+        self.logger.info("WebSocketManager 초기화 완료 (v6.2 안전한 Pending State)")
 
     @classmethod
     async def get_instance(cls) -> 'WebSocketManager':
@@ -237,62 +236,89 @@ class WebSocketManager:
             self.logger.warning(f"Rate Limiter 오류 (계속 진행): {e}")
             # Rate Limiter 실패 시에도 계속 진행 (안전성 확보)
 
-    async def _check_rate_limiter_availability(self) -> bool:
-        """Rate Limiter 즉시 사용 가능 여부 확인 (디바운스 최적화)"""
+    async def _get_rate_limiter_delay(self) -> float:
+        """Rate Limiter 실제 지연 시간 측정 (안전한 병합 제어)"""
         if not self._rate_limiter_enabled:
-            return True  # Rate Limiter 비활성화 시 즉시 사용 가능
+            return 0.0  # Rate Limiter 비활성화 시 지연 없음
 
         try:
-            # 매우 짧은 타임아웃으로 실제 사용 가능 여부 테스트
+            # 실제 Rate Limiter 지연 시간 측정
             start_time = time.monotonic()
 
             if self._dynamic_limiter:
-                # 동적 Rate Limiter로 즉시 사용 가능 여부 확인
-                await self._dynamic_limiter.acquire('websocket_availability_check', 'WS', max_wait=0.05)
+                # 실제 acquire로 정확한 지연 시간 측정
+                await self._dynamic_limiter.acquire('websocket_delay_check', 'WS', max_wait=15.0)
             else:
-                # 기본 Rate Limiter로 확인
-                await gate_websocket('websocket_availability_check', max_wait=0.05)
+                # 기본 Rate Limiter로 측정
+                await gate_websocket('websocket_delay_check', max_wait=15.0)
 
-            check_time = time.monotonic() - start_time
-            # 50ms 이내에 성공하면 즉시 사용 가능
-            return check_time < 0.05
+            actual_delay = time.monotonic() - start_time
 
-        except Exception:
-            # 타임아웃이나 에러 발생 시 대기가 필요함을 의미
-            return False
+            # 지연이 발생했으면 실제 지연 시간 반환
+            if actual_delay > 0.01:  # 10ms 이상이면 실제 지연으로 간주
+                self.logger.debug(f"🕐 Rate Limiter 실제 지연: {actual_delay:.3f}s")
+                return actual_delay
+            else:
+                return 0.0  # 즉시 사용 가능
+
+        except Exception as e:
+            self.logger.warning(f"Rate Limiter 지연 측정 실패: {e}")
+            return 0.1  # 오류 시 안전한 기본값
 
     def _on_subscription_change(self, changes: Dict) -> None:
-        """구독 변경 콜백 (v6.1 Pending State 기반 배치 처리)"""
+        """구독 변경 콜백 (안전한 즉시 처리 방식)"""
         try:
             self.logger.info(f"🔔 구독 변경 콜백 수신: {len(changes)}개 변경사항")
 
-            # 🎯 Pending State 확인: 이미 처리 중인 Task가 있으면 새로 생성하지 않음
+            # 🚀 안전한 방식: Pending 없이 즉시 처리 (무한 병합 방지)
             if not self._pending_subscription_task or self._pending_subscription_task.done():
                 self.logger.info("📝 새로운 구독 변경 처리 Task 생성")
                 self._pending_subscription_task = asyncio.create_task(
-                    self._debounced_subscription_handler()
+                    self._immediate_subscription_handler()
                 )
             else:
-                self.logger.info("⏳ 이미 처리 중인 구독 Task 있음 - 자동 통합됨")
-
-            # ✅ 새 요청이 와도 SubscriptionManager가 즉시 상태 통합
-            # ✅ 기존 Task가 깨어날 때 최신 통합 상태를 한 번에 전송
+                self.logger.info("⏳ 기존 구독 Task 완료 대기 중 - 새 요청은 다음 처리 주기에서 반영")
+                # 중요: 기존 Task가 끝나면 최신 상태가 자동으로 반영됨
+                # 무한 병합 없이 안전하게 처리됨
 
         except Exception as e:
             self.logger.error(f"구독 변경 콜백 실패: {e}")
 
-    async def _debounced_subscription_handler(self) -> None:
-        """디바운스된 구독 처리 (Pending State 핵심 로직) - Rate Limiter 최적화"""
+    async def _immediate_subscription_handler(self) -> None:
+        """즉시 구독 처리 (Rate Limiter 실제 지연 동기화)"""
         try:
-            # � Rate Limiter 즉시 사용 가능 여부 확인 (100ms 지연 최적화)
-            can_proceed_immediately = await self._check_rate_limiter_availability()
+            self.logger.info("🚀 즉시 구독 상태 전송 시작")
 
-            if can_proceed_immediately:
-                self.logger.info("⚡ Rate Limiter 즉시 사용 가능 - 디바운스 지연 스킵")
+            # 📡 Rate Limiter와 동기화된 안전한 전송
+            await self._send_latest_subscriptions()
+
+            self.logger.info("✅ 구독 상태 전송 완료")
+
+        except Exception as e:
+            self.logger.error(f"즉시 구독 처리 실패: {e}")
+        finally:
+            # 🔄 Pending 상태 해제
+            self._pending_subscription_task = None
+
+    async def _debounced_subscription_handler(self) -> None:
+        """안전한 구독 처리 (Rate Limiter 실제 지연 기반 병합)"""
+        try:
+            # 🔍 Rate Limiter 실제 지연 시간 측정
+            rate_limiter_delay = await self._get_rate_limiter_delay()
+
+            if rate_limiter_delay == 0.0:
+                self.logger.info("⚡ Rate Limiter 즉시 사용 가능 - 바로 전송")
             else:
-                # �🔄 Rate Limiter 대기 중 - 짧은 디바운스로 추가 요청 수집
-                self.logger.info(f"⏳ Rate Limiter 대기 중 - {self._debounce_delay}s 디바운스 적용")
-                await asyncio.sleep(self._debounce_delay)
+                # 🎯 실제 지연 시간 기반 추가 수집 시간 (최대 0.1초)
+                additional_collect_time = min(rate_limiter_delay * 0.5, 0.1)
+                self.logger.info(
+                    f"⏳ Rate Limiter 지연 감지 ({rate_limiter_delay:.3f}s) - "
+                    f"추가 수집: {additional_collect_time:.3f}s"
+                )
+
+                # 실제 지연에 맞춘 최소한의 추가 수집
+                if additional_collect_time > 0.01:  # 10ms 이상만 대기
+                    await asyncio.sleep(additional_collect_time)
 
             self.logger.info("🚀 통합된 구독 상태 전송 시작")
 
@@ -302,7 +328,7 @@ class WebSocketManager:
             self.logger.info("✅ 구독 상태 전송 완료")
 
         except Exception as e:
-            self.logger.error(f"디바운스된 구독 처리 실패: {e}")
+            self.logger.error(f"구독 처리 실패: {e}")
         finally:
             # 🔄 Pending 상태 해제
             self._pending_subscription_task = None
@@ -962,13 +988,18 @@ class WebSocketManager:
             await self._send_message(connection_type, unified_message)
             self.logger.info(f"✅ 통합 스트림 메시지 전송 성공 ({connection_type})")
 
+            # 🎯 메시지 전송 완료 후 구독 상태 업데이트 (지연 업데이트)
+            if self._subscription_manager:
+                self._subscription_manager.commit_subscription_state_update(connection_type)
+                self.logger.debug(f"🔄 구독 상태 업데이트 완료 ({connection_type})")
+
         except Exception as e:
             self.logger.error(f"통합 구독 전송 실패 ({connection_type}): {e}")
             raise
 
     async def _create_unified_message_v6_2(self, connection_type: WebSocketType, streams: Dict[DataType, set]) -> str:
         """
-        v6.2 통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청)
+        v6.2 통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청, 기존/신규 구독 분리 지원)
 
         Args:
             connection_type: WebSocket 연결 타입
@@ -990,10 +1021,39 @@ class WebSocketManager:
                 data_type: list(symbols) for data_type, symbols in streams.items()
             }
 
-            return formatter.create_unified_message(
-                ws_type=connection_type.value,
-                subscriptions=subscriptions_dict
-            )
+            # 구독 분류 정보 가져오기 (Phase 1에서 구현한 API 활용)
+            subscription_classification = self._subscription_manager.get_subscription_classification(connection_type)
+
+            # 🔍 디버그: 분류 정보 상세 로깅
+            self.logger.debug("🔍 구독 분류 정보 조회 결과:")
+            self.logger.debug(f"  - 분류 정보 존재: {subscription_classification is not None}")
+            if subscription_classification:
+                self.logger.debug(f"  - 분류된 타입 수: {len(subscription_classification)}")
+                for data_type, classification in subscription_classification.items():
+                    existing = classification.get('existing', [])
+                    new = classification.get('new', [])
+                    self.logger.debug(f"  - {data_type.value}: 기존={existing}, 신규={new}")
+            else:
+                self.logger.debug(f"  - 분류 정보 없음, subscriptions_dict={subscriptions_dict}")
+
+            # 분류 정보가 있으면 새로운 방식으로, 없으면 기존 방식으로 처리
+            if subscription_classification:
+                self.logger.debug(f"🎯 분류된 구독 정보 활용: {len(subscription_classification)}개 타입")
+                unified_message = formatter.create_unified_message(
+                    ws_type=connection_type.value,
+                    subscriptions=subscriptions_dict,
+                    subscription_classification=subscription_classification
+                )
+                self.logger.debug(f"🎯 분류 방식 결과 메시지: {unified_message}")
+                return unified_message
+            else:
+                self.logger.debug("📝 기존 방식으로 통합 메시지 생성 (분류 정보 없음)")
+                unified_message = formatter.create_unified_message(
+                    ws_type=connection_type.value,
+                    subscriptions=subscriptions_dict
+                )
+                self.logger.debug(f"📝 기존 방식 결과 메시지: {unified_message}")
+                return unified_message
 
         except Exception as e:
             self.logger.error(f"v6.2 통합 메시지 생성 실패: {e}")
@@ -1041,7 +1101,7 @@ class WebSocketManager:
             raise RuntimeError(f"WebSocket 연결 상태가 잘못됨: {connection_type} - {connection_state}")
 
         try:
-            self.logger.debug(f"WebSocket 메시지 전송 시도 ({connection_type}): {message[:100]}...")
+            self.logger.debug(f"WebSocket 메시지 전송 시도 ({connection_type}): {message}")
 
             # Rate Limiter 적용 (메시지 전송)
             self.logger.debug("Rate Limiter 적용 중...")

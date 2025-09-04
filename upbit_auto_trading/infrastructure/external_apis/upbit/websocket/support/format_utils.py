@@ -309,15 +309,17 @@ class UpbitMessageFormatter:
         self,
         ws_type: str,
         subscriptions: Dict[DataType, List[str]],
-        snapshot_requests: Optional[Dict[DataType, List[str]]] = None
+        snapshot_requests: Optional[Dict[DataType, List[str]]] = None,
+        subscription_classification: Optional[Dict[DataType, Dict[str, List[str]]]] = None
     ) -> str:
         """
-        통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청 통합)
+        통합 메시지 생성 (리얼타임 스트림 + 스냅샷 요청 통합, 기존/신규 구독 분리 지원)
 
         Args:
             ws_type: WebSocket 타입 ("public" 또는 "private")
             subscriptions: 리얼타임 구독 목록 (기본 상태)
             snapshot_requests: 스냅샷 요청 목록 (일시적)
+            subscription_classification: 기존/신규 구독 분류 정보
 
         Returns:
             JSON 문자열 형태의 통합 메시지
@@ -333,42 +335,164 @@ class UpbitMessageFormatter:
             ticket = {"ticket": f"upbit_websocket_v6_{ws_type}_{int(time.time() * 1000)}"}
             message_parts.append(ticket)
 
-            # 2. 리얼타임 구독 + 스냅샷 요청 통합 처리
-            combined_subscriptions = self._merge_realtime_and_snapshot(subscriptions, snapshot_requests)
+            # 2. 기존/신규 구독 분리 처리
+            if subscription_classification:
+                self.logger.debug("🎯 분류된 구독 처리 시작")
+                self.logger.debug(f"  - 분류 정보: {subscription_classification}")
+                classified_parts = self._create_classified_subscription_parts(subscription_classification, snapshot_requests)
+                self.logger.debug(f"  - 생성된 분류 파트 수: {len(classified_parts)}")
+                for i, part in enumerate(classified_parts):
+                    self.logger.debug(f"  - 파트 {i + 1}: {part}")
+                message_parts.extend(classified_parts)
+            else:
+                self.logger.debug("📝 기존 로직 처리 시작")
+                self.logger.debug(f"  - subscriptions: {subscriptions}")
+                self.logger.debug(f"  - snapshot_requests: {snapshot_requests}")
+                # 기존 로직 유지 (하위 호환성)
+                combined_subscriptions = self._merge_realtime_and_snapshot(subscriptions, snapshot_requests)
+                self.logger.debug(f"  - 통합된 구독: {combined_subscriptions}")
+                legacy_parts = self._create_legacy_subscription_parts(combined_subscriptions)
+                self.logger.debug(f"  - 생성된 레거시 파트 수: {len(legacy_parts)}")
+                for i, part in enumerate(legacy_parts):
+                    self.logger.debug(f"  - 파트 {i + 1}: {part}")
+                message_parts.extend(legacy_parts)
 
-            # 3. 통합된 구독을 메시지에 포함
-            for data_type, subscription_info in combined_subscriptions.items():
-                symbols = subscription_info['symbols']
-                is_snapshot_only = subscription_info.get('snapshot_only', False)
-
-                if symbols:
-                    type_part = {
-                        "type": data_type.value,
-                        "codes": list(symbols) if not data_type.is_private() else None
-                    }
-
-                    # 스냅샷 전용 요청인 경우에만 명시
-                    if is_snapshot_only:
-                        type_part["isOnlySnapshot"] = True
-
-                    # Private 타입의 경우 codes 제거
-                    if data_type.is_private():
-                        type_part.pop("codes", None)
-
-                    message_parts.append(type_part)
-
-            # 4. 포맷 지정 (DEFAULT 고정)
+            # 3. 포맷 지정 (DEFAULT 고정)
             format_part = {"format": "DEFAULT"}
             message_parts.append(format_part)
 
             unified_message = json.dumps(message_parts, ensure_ascii=False)
 
-            self.logger.debug(f"통합 메시지 생성 완료: {len(combined_subscriptions)}개 타입")
+            subscription_count = len(subscription_classification) if subscription_classification else len(subscriptions)
+            self.logger.debug(f"통합 메시지 생성 완료: {subscription_count}개 타입 (분류 모드: {bool(subscription_classification)})")
             return unified_message
 
         except Exception as e:
             self.logger.error(f"통합 메시지 생성 실패: {e}")
             return self._create_empty_message()
+
+    def _create_classified_subscription_parts(
+        self,
+        subscription_classification: Dict[DataType, Dict[str, List[str]]],
+        snapshot_requests: Optional[Dict[DataType, List[str]]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        분류된 구독 정보를 기반으로 메시지 부분들 생성
+
+        Args:
+            subscription_classification: {DataType: {'existing': [symbols], 'new': [symbols]}} 형태
+            snapshot_requests: 추가 스냅샷 요청
+
+        Returns:
+            메시지 부분 리스트 (type 부분들)
+        """
+        message_parts = []
+
+        for data_type, classification in subscription_classification.items():
+            existing_symbols = classification.get('existing', [])
+            new_symbols = classification.get('new', [])
+
+            # 기존 구독: isOnlyRealtime=true (SNAPSHOT 재전송 방지)
+            if existing_symbols:
+                existing_part: Dict[str, Any] = {
+                    "type": data_type.value
+                }
+
+                # Public 타입만 codes 포함 (필드 순서: type → codes → isOnlyRealtime)
+                if not data_type.is_private():
+                    existing_part["codes"] = existing_symbols
+
+                existing_part["isOnlyRealtime"] = True
+
+                message_parts.append(existing_part)
+                self.logger.debug(f"📊 기존 구독 ({data_type.value}): {len(existing_symbols)}개 심볼, isOnlyRealtime=true")
+
+            # 신규 구독: 기본값 (SNAPSHOT + REALTIME)
+            if new_symbols:
+                new_part: Dict[str, Any] = {
+                    "type": data_type.value
+                }
+
+                # Public 타입만 codes 포함 (필드 순서: type → codes)
+                if not data_type.is_private():
+                    new_part["codes"] = new_symbols
+
+                message_parts.append(new_part)
+                self.logger.debug(
+                    f"📊 신규 구독 ({data_type.value}): {len(new_symbols)}개 심볼, 기본값 (SNAPSHOT+REALTIME)"
+                )
+
+        # 추가 스냅샷 요청 처리
+        if snapshot_requests:
+            for data_type, symbols in snapshot_requests.items():
+                # 이미 분류에 포함된 심볼 제외
+                if data_type in subscription_classification:
+                    existing_symbols = set(subscription_classification[data_type].get('existing', []))
+                    new_symbols = set(subscription_classification[data_type].get('new', []))
+                    additional_symbols = list(set(symbols) - existing_symbols - new_symbols)
+
+                    if additional_symbols:
+                        snapshot_part = {
+                            "type": data_type.value,
+                            "isOnlySnapshot": True
+                        }
+
+                        if not data_type.is_private():
+                            snapshot_part["codes"] = additional_symbols
+
+                        message_parts.append(snapshot_part)
+                        self.logger.debug(f"📊 추가 스냅샷 ({data_type.value}): {len(additional_symbols)}개 심볼")
+                else:
+                    # 전혀 새로운 타입의 스냅샷 요청
+                    snapshot_part = {
+                        "type": data_type.value,
+                        "isOnlySnapshot": True
+                    }
+
+                    if not data_type.is_private():
+                        snapshot_part["codes"] = symbols
+
+                    message_parts.append(snapshot_part)
+                    self.logger.debug(f"📊 신규 스냅샷 ({data_type.value}): {len(symbols)}개 심볼")
+
+        return message_parts
+
+    def _create_legacy_subscription_parts(
+        self,
+        combined_subscriptions: Dict[DataType, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        기존 방식으로 구독 메시지 부분들 생성 (하위 호환성)
+
+        Args:
+            combined_subscriptions: 통합된 구독 정보
+
+        Returns:
+            메시지 부분 리스트 (type 부분들)
+        """
+        message_parts = []
+
+        for data_type, subscription_info in combined_subscriptions.items():
+            symbols = subscription_info['symbols']
+            is_snapshot_only = subscription_info.get('snapshot_only', False)
+
+            if symbols:
+                type_part = {
+                    "type": data_type.value,
+                    "codes": list(symbols) if not data_type.is_private() else None
+                }
+
+                # 스냅샷 전용 요청인 경우에만 명시
+                if is_snapshot_only:
+                    type_part["isOnlySnapshot"] = True
+
+                # Private 타입의 경우 codes 제거
+                if data_type.is_private():
+                    type_part.pop("codes", None)
+
+                message_parts.append(type_part)
+
+        return message_parts
 
     def _merge_realtime_and_snapshot(
         self,
