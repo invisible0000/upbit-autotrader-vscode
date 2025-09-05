@@ -7,13 +7,10 @@ DDD Infrastructure 계층 컴포넌트
 - 429 오류 자동 처리 및 재시도
 - Infrastructure 로깅 시스템 준수
 - 인증이 불필요한 공개 API 전담
-- gzip 압축 지원으로 대역폭 최적화
 """
 import asyncio
 import aiohttp
 import time
-import gzip
-import json
 from typing import List, Dict, Any, Optional, Union
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -50,8 +47,7 @@ class UpbitPublicClient:
     def __init__(self,
                  use_dynamic_limiter: bool = True,
                  dynamic_config: Optional[DynamicConfig] = None,
-                 legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None,
-                 enable_gzip: bool = True):
+                 legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
@@ -59,12 +55,10 @@ class UpbitPublicClient:
             use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
             dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
             legacy_rate_limiter: 기존 GCRA Rate Limiter (동적 비활성화 시)
-            enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약 가능)
 
         Note:
             공개 API 클라이언트는 인증이 불필요하며,
             모든 업비트 공개 데이터 조회 기능을 제공합니다.
-            gzip 압축을 통해 대역폭 사용량을 크게 줄일 수 있습니다.
         """
         # Infrastructure 로깅 초기화
         self._logger = create_component_logger("UpbitPublicClient")
@@ -75,9 +69,6 @@ class UpbitPublicClient:
         self._legacy_rate_limiter = legacy_rate_limiter
         self._dynamic_config = dynamic_config or DynamicConfig(strategy=AdaptiveStrategy.BALANCED)
 
-        # gzip 압축 설정
-        self._enable_gzip = enable_gzip
-
         # HTTP 세션 관리
         self._session: Optional[aiohttp.ClientSession] = None
 
@@ -87,14 +78,10 @@ class UpbitPublicClient:
             'total_429_retries': 0,
             'last_request_429_retries': 0,
             'average_response_time_ms': 0.0,
-            'last_http_response_time_ms': 0.0,
-            'gzip_enabled': enable_gzip,
-            'total_bytes_received': 0,
-            'total_compressed_bytes': 0
+            'last_http_response_time_ms': 0.0
         }
 
-        self._logger.info(f"✅ UpbitPublicClient 초기화 완료 (동적 Rate Limiter: {use_dynamic_limiter}, "
-                         f"gzip: {enable_gzip})")
+        self._logger.info(f"✅ UpbitPublicClient 초기화 완료 (동적 Rate Limiter: {use_dynamic_limiter})")
 
     def __repr__(self):
         return (f"UpbitPublicClient("
@@ -113,7 +100,7 @@ class UpbitPublicClient:
     # ================================================================
 
     async def _ensure_session(self) -> None:
-        """HTTP 세션 확보 - 연결 풀링, 타임아웃 및 gzip 압축 최적화"""
+        """HTTP 세션 확보 - 연결 풀링 및 타임아웃 최적화"""
         if not self._session or self._session.closed:
             connector = aiohttp.TCPConnector(
                 limit=100,           # 전체 연결 제한
@@ -126,23 +113,15 @@ class UpbitPublicClient:
                 connect=10,    # 연결 타임아웃
                 sock_read=20   # 소켓 읽기 타임아웃
             )
-
-            # 기본 헤더 설정 (gzip 압축 지원 포함)
-            headers = {
-                'Accept': 'application/json',
-                'User-Agent': 'upbit-autotrader-vscode/1.0'
-            }
-
-            # gzip 압축 요청 (대역폭 83% 절약 가능)
-            if self._enable_gzip:
-                headers['Accept-Encoding'] = 'gzip, deflate'
-
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
-                headers=headers
+                headers={
+                    'Accept': 'application/json',
+                    'User-Agent': 'upbit-autotrader-vscode/1.0'
+                }
             )
-            self._logger.debug(f"🌐 HTTP 세션 초기화 완료 (gzip: {self._enable_gzip})")
+            self._logger.debug("🌐 HTTP 세션 초기화 완료")
 
     async def _ensure_rate_limiter(self) -> Union[DynamicUpbitRateLimiter, UpbitGCRARateLimiter]:
         """Rate Limiter 확보 (동적 우선, 전역 공유 대체)"""
@@ -256,28 +235,8 @@ class UpbitPublicClient:
                         )
 
                     if response.status == 200:
-                        # gzip 압축 통계 업데이트
-                        content_encoding = response.headers.get('Content-Encoding', '')
-                        content_length = response.headers.get('Content-Length')
-
-                        # 응답 데이터 읽기
                         response_data = await response.json()
-
-                        # 압축 통계 추적 (가능한 경우)
-                        if content_length:
-                            compressed_size = int(content_length)
-                            self._stats['total_compressed_bytes'] += compressed_size
-
-                            # 압축 효율 로깅
-                            if 'gzip' in content_encoding.lower() and self._enable_gzip:
-                                self._logger.debug(f"✅ gzip 압축 응답: {endpoint} "
-                                                 f"({compressed_size} bytes, {response_time_ms:.1f}ms)")
-                            else:
-                                self._logger.debug(f"✅ 일반 응답: {endpoint} "
-                                                 f"({compressed_size} bytes, {response_time_ms:.1f}ms)")
-                        else:
-                            self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
-
+                        self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
                         return response_data
 
                     elif response.status == 429:
@@ -968,8 +927,7 @@ class UpbitPublicClient:
 
 def create_upbit_public_client(
     use_dynamic_limiter: bool = True,
-    dynamic_config: Optional[DynamicConfig] = None,
-    enable_gzip: bool = True
+    dynamic_config: Optional[DynamicConfig] = None
 ) -> UpbitPublicClient:
     """
     업비트 공개 API 클라이언트 생성 (편의 함수)
@@ -977,33 +935,30 @@ def create_upbit_public_client(
     Args:
         use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
         dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
-        enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약)
 
     Returns:
         UpbitPublicClient: 설정된 클라이언트 인스턴스
 
     Examples:
-        # 기본 설정으로 생성 (gzip 압축 포함)
+        # 기본 설정으로 생성
         client = create_upbit_public_client()
 
         # 보수적 전략으로 생성
         config = DynamicConfig(strategy=AdaptiveStrategy.CONSERVATIVE)
         client = create_upbit_public_client(dynamic_config=config)
 
-        # 레거시 Rate Limiter + gzip 비활성화
-        client = create_upbit_public_client(use_dynamic_limiter=False, enable_gzip=False)
+        # 레거시 Rate Limiter 사용
+        client = create_upbit_public_client(use_dynamic_limiter=False)
     """
     return UpbitPublicClient(
         use_dynamic_limiter=use_dynamic_limiter,
-        dynamic_config=dynamic_config,
-        enable_gzip=enable_gzip
+        dynamic_config=dynamic_config
     )
 
 
 async def create_upbit_public_client_async(
     use_dynamic_limiter: bool = True,
-    dynamic_config: Optional[DynamicConfig] = None,
-    enable_gzip: bool = True
+    dynamic_config: Optional[DynamicConfig] = None
 ) -> UpbitPublicClient:
     """
     업비트 공개 API 클라이언트 비동기 생성 (편의 함수)
@@ -1011,19 +966,16 @@ async def create_upbit_public_client_async(
     Args:
         use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
         dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
-        enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약)
 
     Returns:
         UpbitPublicClient: 초기화된 클라이언트 인스턴스
 
     Note:
         세션을 미리 초기화하여 첫 번째 요청 시 지연을 줄입니다.
-        gzip 압축을 통해 데이터 전송량을 83% 절약할 수 있습니다.
     """
     client = UpbitPublicClient(
         use_dynamic_limiter=use_dynamic_limiter,
-        dynamic_config=dynamic_config,
-        enable_gzip=enable_gzip
+        dynamic_config=dynamic_config
     )
 
     # 세션 미리 초기화
