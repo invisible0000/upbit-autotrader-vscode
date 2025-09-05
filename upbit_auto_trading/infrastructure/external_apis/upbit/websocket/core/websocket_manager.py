@@ -1067,7 +1067,7 @@ class WebSocketManager:
     def _create_empty_subscription_message(self) -> str:
         """빈 구독 메시지 생성 (오류 상황 대응)"""
         message = [
-            {"ticket": f"upbit_empty_{int(time.time())}"},
+            {"ticket": "public"},
             {"format": "DEFAULT"}
         ]
         return json.dumps(message)
@@ -1075,7 +1075,7 @@ class WebSocketManager:
     def _create_subscription_message(self, data_type: DataType, symbols: List[str]) -> str:
         """구독 메시지 생성 - v5 호환 (올바른 업비트 형식)"""
         message = [
-            {"ticket": f"upbit_websocket_v6_{int(time.time())}"},
+            {"ticket": "public"},
             {
                 "type": data_type.value,
                 "codes": symbols

@@ -332,7 +332,7 @@ class UpbitMessageFormatter:
             message_parts = []
 
             # 1. 티켓 (고유 식별자)
-            ticket = {"ticket": f"upbit_websocket_v6_{ws_type}_{int(time.time() * 1000)}"}
+            ticket = {"ticket": ws_type if ws_type in ["public", "private"] else "public"}
             message_parts.append(ticket)
 
             # 2. 기존/신규 구독 분리 처리
@@ -548,7 +548,7 @@ class UpbitMessageFormatter:
     def _create_empty_message(self) -> str:
         """빈 구독 메시지 생성 (오류 상황 대응)"""
         empty_parts = [
-            {"ticket": f"upbit_empty_{int(time.time() * 1000)}"},
+            {"ticket": "public"},
             {"format": "DEFAULT"}
         ]
         return json.dumps(empty_parts)
@@ -638,7 +638,7 @@ class UpbitMessageFormatter:
             업비트 형식의 구독 메시지 배열
         """
         ticket = {
-            "ticket": f"upbit_ws_v6_{int(time.time() * 1000)}"
+            "ticket": "public"
         }
 
         type_message = {
@@ -670,7 +670,7 @@ class UpbitMessageFormatter:
             업비트 형식의 구독 해제 메시지
         """
         ticket = {
-            "ticket": f"upbit_ws_v6_unsub_{int(time.time() * 1000)}"
+            "ticket": "public"
         }
 
         type_message = {
@@ -949,7 +949,7 @@ class UpbitMessageFormatter:
             Ping 메시지
         """
         return {
-            "ticket": f"upbit_ping_{int(time.time() * 1000)}",
+            "ticket": "public",
             "type": "ping"
         }
 
