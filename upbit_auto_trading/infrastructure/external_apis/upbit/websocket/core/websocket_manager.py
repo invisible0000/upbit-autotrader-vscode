@@ -13,7 +13,7 @@ import asyncio
 import weakref
 import time
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set
 
 try:
     import websockets
@@ -74,6 +74,12 @@ class WebSocketManager:
 
         # 연결 모니터링 태스크
         self._monitoring_task: Optional[asyncio.Task] = None
+
+        # 🔧 Background Tasks Set (Weak Reference 방지 - 공식 Python 패턴)
+        self._background_tasks: Set[asyncio.Task] = set()
+
+        # 🔧 Graceful Shutdown을 위한 Event 기반 중단 메커니즘
+        self._shutdown_event: asyncio.Event = asyncio.Event()
 
         # 연결 헬스체크를 위한 마지막 메시지 수신 시간 추적
         self._last_message_times: Dict[WebSocketType, Optional[float]] = {
@@ -151,6 +157,22 @@ class WebSocketManager:
         except Exception as e:
             self.logger.error(f"초기화 실패: {e}")
             raise
+
+    def _create_background_task(self, coro, name: str = "background_task") -> asyncio.Task:
+        """
+        Background Task 생성 및 관리 (Weak Reference 방지)
+        Python 공식 권장 패턴 적용
+        """
+        task = asyncio.create_task(coro, name=name)
+
+        # Strong Reference 유지
+        self._background_tasks.add(task)
+
+        # 완료 시 자동 정리
+        task.add_done_callback(self._background_tasks.discard)
+
+        self.logger.debug(f"🎯 Background Task 생성: {name} (총 {len(self._background_tasks)}개)")
+        return task
 
     async def _initialize_rate_limiter(self) -> None:
         """Rate Limiter 시스템 초기화"""
@@ -417,33 +439,71 @@ class WebSocketManager:
 
     async def stop(self) -> None:
         """WebSocket 매니저 정지 (개선된 태스크 관리)"""
+        self.logger.info("🚀 WebSocketManager.stop() 메서드 시작")
+        self.logger.info(f"📊 현재 상태: {self._state}")
+
         if self._state == GlobalManagerState.IDLE:
+            self.logger.info("⚠️ 매니저가 이미 IDLE 상태")
             return
 
         try:
             self._state = GlobalManagerState.SHUTTING_DOWN
             self.logger.info("WebSocket 매니저 정지")
+            self.logger.info(f"📊 shutdown_event 설정 전 상태: {self._shutdown_event.is_set()}")
 
-            # 1️⃣ 연결 모니터링 중지 (가장 먼저)
+            # 🔧 Event 기반 중단 신호 전송 (즉시 반응)
+            self.logger.info("🛑 Graceful Shutdown 이벤트 설정")
+            self._shutdown_event.set()
+            self.logger.info(f"📊 shutdown_event 설정 후 상태: {self._shutdown_event.is_set()}")
+            self._shutdown_event.set()
+
+            # 1️⃣ 연결 모니터링 중지 (Event 기반으로 즉시 반응)
             if self._monitoring_task and not self._monitoring_task.done():
                 try:
-                    # 현재 이벤트 루프 확인
-                    current_loop = asyncio.get_running_loop()
-                    task_loop = getattr(self._monitoring_task, '_loop', None)
+                    self.logger.info("🛑 모니터링 태스크 Event 기반 중지 시작")
 
-                    if task_loop is not None and task_loop != current_loop:
-                        self.logger.warning("다른 이벤트 루프의 모니터링 Task - 안전하게 스킵")
-                        self._monitoring_task = None
-                    else:
+                    # Event가 설정되었으므로 태스크가 자연스럽게 종료될 때까지 대기
+                    try:
+                        await asyncio.wait_for(self._monitoring_task, timeout=2.0)
+                        self.logger.info("✅ 모니터링 태스크 Event 기반 정상 종료")
+                    except asyncio.TimeoutError:
+                        self.logger.warning("⚠️ 모니터링 태스크 Event 응답 타임아웃 - 강제 취소")
                         self._monitoring_task.cancel()
-                        await asyncio.wait_for(self._monitoring_task, timeout=1.0)
+                        try:
+                            await asyncio.wait_for(self._monitoring_task, timeout=1.0)
+                        except (asyncio.TimeoutError, asyncio.CancelledError):
+                            pass
+
+                    self._monitoring_task = None
 
                 except (asyncio.CancelledError, asyncio.TimeoutError):
-                    self.logger.debug("모니터링 태스크 정리 완료")
+                    self.logger.info("✅ 모니터링 태스크 정리 완료")
+                    self._monitoring_task = None
                 except Exception as e:
-                    self.logger.warning(f"모니터링 태스크 정리 중 오류: {e}")
+                    self.logger.warning(f"⚠️ 모니터링 태스크 정리 중 오류: {e}")
+                    self._monitoring_task = None            # 2️⃣ Rate Limiter 모니터링 정지 (두 번째)
 
-            # 2️⃣ Rate Limiter 모니터링 정지 (두 번째)
+            # 3️⃣ Background Tasks 정리 (Weak Reference 방지용)
+            if self._background_tasks:
+                self.logger.info(f"🧹 Background Tasks 정리 시작 ({len(self._background_tasks)}개)")
+
+                # 모든 Background Task 취소
+                for task in list(self._background_tasks):
+                    if not task.done():
+                        task.cancel()
+
+                # 취소 완료 대기 (최대 2초)
+                if self._background_tasks:
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*self._background_tasks, return_exceptions=True),
+                            timeout=2.0
+                        )
+                        self.logger.info("✅ Background Tasks 정리 완료")
+                    except asyncio.TimeoutError:
+                        self.logger.warning("⚠️ Background Tasks 정리 타임아웃")
+
+                self._background_tasks.clear()
             if self._dynamic_limiter:
                 try:
                     # 매우 짧은 타임아웃으로 빠른 정리
@@ -484,40 +544,83 @@ class WebSocketManager:
     # ================================================================
 
     async def _start_connection_monitoring(self) -> None:
-        """연결 상태 모니터링 시작 (지속성 보장)"""
+        """연결 상태 모니터링 시작 (Event 기반 Graceful Shutdown)"""
+        self.logger.info("🚀 _start_connection_monitoring() 메서드 시작")
+
         async def monitor_connections():
+            self.logger.info("🔍 Event 기반 연결 모니터링 시작")
+            self.logger.info(f"📊 shutdown_event 상태: {self._shutdown_event.is_set()}")
+
             while self._state == GlobalManagerState.ACTIVE:
                 try:
-                    # 주기적으로 연결 상태 확인 (30초마다)
-                    await asyncio.sleep(30.0)
+                    # 🔧 Event 기반 대기: 30초 또는 shutdown_event 중 먼저 발생하는 것
+                    try:
+                        await asyncio.wait_for(self._shutdown_event.wait(), timeout=30.0)
+                        # shutdown_event가 설정되면 즉시 종료
+                        self.logger.info("🛑 Shutdown Event 감지 - 모니터링 루프 즉시 종료")
+                        break
+                    except asyncio.TimeoutError:
+                        # 30초 타임아웃 - 정상적인 헬스체크 수행
+                        self.logger.debug("⏰ 30초 헬스체크 타이머 - 연결 상태 확인")
+
+                    # 상태가 변경되었으면 루프 종료
+                    if self._state != GlobalManagerState.ACTIVE:
+                        self.logger.info("🏁 GlobalManagerState 변경 감지 - 모니터링 루프 종료")
+                        break
 
                     # Public 연결 헬스체크
                     if not await self._is_connection_healthy(WebSocketType.PUBLIC):
                         self.logger.warning("Public 연결 헬스체크 실패, 복구 시작")
-                        asyncio.create_task(self._recover_connection_with_backoff(WebSocketType.PUBLIC))
+                        self._create_background_task(
+                            self._recover_connection_with_backoff(WebSocketType.PUBLIC),
+                            "public_recovery"
+                        )
 
                     # Private 연결 헬스체크 (API 키 유효성 포함)
                     if await self._should_maintain_private_connection():
+                        # API 키가 유효하면 헬스체크 수행
                         if not await self._is_connection_healthy(WebSocketType.PRIVATE):
                             self.logger.warning("Private 연결 헬스체크 실패, 복구 시작")
-                            asyncio.create_task(self._recover_connection_with_backoff(WebSocketType.PRIVATE))
-                        else:
-                            # API 키가 없거나 유효하지 않으면 Private 연결 해제
-                            if self._connection_states[WebSocketType.PRIVATE] == ConnectionState.CONNECTED:
-                                self.logger.info("API 키 없음/무효, Private 연결 해제")
-                                await self._disconnect_websocket(WebSocketType.PRIVATE)
+                            self._create_background_task(
+                                self._recover_connection_with_backoff(WebSocketType.PRIVATE),
+                                "private_recovery"
+                            )
+                    else:
+                        # API 키가 없거나 유효하지 않으면 Private 연결 해제
+                        if self._connection_states[WebSocketType.PRIVATE] == ConnectionState.CONNECTED:
+                            self.logger.info("API 키 없음/무효, Private 연결 해제")
+                            await self._disconnect_websocket(WebSocketType.PRIVATE)
 
-                    # Ping 전송 (연결 유지)
+                    # Ping 전송 (연결 유지) - 상태 재확인
+                    if self._state != GlobalManagerState.ACTIVE:
+                        break
                     await self._send_ping_if_needed()
 
                 except asyncio.CancelledError:
+                    self.logger.info("🛑 모니터링 태스크 취소 신호 수신 - 정상 종료")
                     break
                 except Exception as e:
+                    import traceback
                     self.logger.error(f"연결 모니터링 중 오류: {e}")
-                    await asyncio.sleep(10.0)  # 오류 시 10초 대기 후 재시도
+                    self.logger.error(f"스택 트레이스: {traceback.format_exc()}")
+                    # 오류 시에도 상태 확인 후 대기
+                    if self._state != GlobalManagerState.ACTIVE:
+                        break
+                    # 오류 시 Event 기반 대기 (10초 또는 shutdown_event)
+                    try:
+                        await asyncio.wait_for(self._shutdown_event.wait(), timeout=10.0)
+                        self.logger.info("🛑 오류 처리 중 Shutdown Event 감지")
+                        break
+                    except asyncio.TimeoutError:
+                        pass  # 10초 후 재시도
+
+            self.logger.info("🏁 Event 기반 모니터링 루프 완전 종료")
+
 
         self._monitoring_task = asyncio.create_task(monitor_connections())
-        self.logger.info("✅ 연결 지속성 모니터링 시작")
+        self.logger.info("✅ Event 기반 연결 지속성 모니터링 태스크 생성 완료")
+        self.logger.info(f"📊 모니터링 태스크 상태: {self._monitoring_task}")
+        self.logger.info("✅ Event 기반 연결 지속성 모니터링 시작")
 
     async def _send_ping_if_needed(self) -> None:
         """필요 시 Ping 전송 (연결 유지)"""
@@ -535,6 +638,11 @@ class WebSocketManager:
 
             metrics = self._connection_metrics[connection_type]
             last_ping = metrics.get('last_ping_sent', 0)
+
+            # None 값 처리
+            if last_ping is None:
+                last_ping = 0
+                metrics['last_ping_sent'] = 0
 
             # Ping 간격 확인
             if current_time - last_ping >= ping_interval:
@@ -676,11 +784,14 @@ class WebSocketManager:
         """Private 연결 유지 필요 여부 확인"""
         try:
             if not self._jwt_manager:
+                self.logger.debug("JWT Manager 없음")
                 return False
 
             # API 키 유효성 확인
             token = await self._jwt_manager.get_valid_token()
-            return token is not None
+            has_token = token is not None
+            self.logger.debug(f"JWT 토큰 확인 결과: {has_token} (토큰 길이: {len(token) if token else 0})")
+            return has_token
 
         except Exception as e:
             self.logger.warning(f"Private 연결 필요성 확인 실패: {e}")
@@ -753,7 +864,10 @@ class WebSocketManager:
                     # 이벤트 루프가 실행 중인지 확인
                     loop = asyncio.get_running_loop()
                     if loop and not loop.is_closed():
-                        asyncio.create_task(self._cleanup_component(component_id))
+                        self._create_background_task(
+                            self._cleanup_component(component_id),
+                            f"cleanup_{component_id}"
+                        )
                 except RuntimeError:
                     # 이벤트 루프가 없거나 종료됨, 무시
                     self.logger.debug(f"컴포넌트 자동 정리 스킵 (이벤트 루프 없음): {component_id}")
@@ -950,6 +1064,11 @@ class WebSocketManager:
             self._connection_states[connection_type] = ConnectionState.DISCONNECTED
             self._message_tasks[connection_type] = None
 
+            # 메트릭스 리셋
+            if connection_type in self._connection_metrics:
+                self._connection_metrics[connection_type]['connected_at'] = None
+                self._connection_metrics[connection_type]['uptime_seconds'] = 0.0
+
             self.logger.info(f"WebSocket 연결 해제: {connection_type}")
 
         except Exception as e:
@@ -1047,22 +1166,28 @@ class WebSocketManager:
                 self.logger.debug(f"🎯 분류 방식 결과 메시지: {unified_message}")
                 return unified_message
             else:
-                self.logger.debug("📝 기존 방식으로 통합 메시지 생성 (분류 정보 없음)")
-                unified_message = formatter.create_unified_message(
-                    ws_type=connection_type.value,
-                    subscriptions=subscriptions_dict
-                )
-                self.logger.debug(f"📝 기존 방식 결과 메시지: {unified_message}")
-                return unified_message
+                # � 분류 정보 없음 - 이는 시스템 버그이거나 지원하지 않는 타입
+                if subscriptions_dict:
+                    unsupported_types = list(subscriptions_dict.keys())
+                    self.logger.error(f"🚨 지원하지 않는 데이터 타입 감지: {unsupported_types}")
+                    self.logger.error("🚨 이는 시스템 버그이거나 업비트 API 변경으로 인한 문제일 수 있습니다")
+
+                    # 안전을 위해 빈 메시지 반환 (잘못된 구독 방지)
+                    self.logger.warning("⚠️  안전을 위해 구독 요청을 차단합니다")
+                    return self._create_empty_subscription_message()
+                else:
+                    # 빈 구독은 정상 (모든 컴포넌트가 구독 해제된 상태)
+                    self.logger.debug("📝 빈 구독 상태 - 정상")
+                    return self._create_empty_subscription_message()
 
         except Exception as e:
             self.logger.error(f"v6.2 통합 메시지 생성 실패: {e}")
-            # 폴백: 기존 방식
-            if streams:
-                first_type, first_symbols = next(iter(streams.items()))
-                return self._create_subscription_message(first_type, list(first_symbols))
-            else:
-                return self._create_empty_subscription_message()
+            self.logger.error("예외 발생 위치: _create_unified_message_v6_2")
+            self.logger.error(f"예외 타입: {type(e).__name__}")
+
+            # 🚨 안전을 위해 빈 메시지 반환 - 잘못된 구독 전송 방지
+            self.logger.error("🚨 안전을 위해 구독 요청을 차단합니다 (예외 발생)")
+            return self._create_empty_subscription_message()
 
     def _create_empty_subscription_message(self) -> str:
         """빈 구독 메시지 생성 (오류 상황 대응)"""
@@ -1360,7 +1485,7 @@ class WebSocketManager:
 
             # 연결 지속 시간 계산
             connected_at = base_metrics.get('connected_at')
-            if connected_at and self._connection_states[connection_type] == ConnectionState.CONNECTED:
+            if connected_at is not None and self._connection_states[connection_type] == ConnectionState.CONNECTED:
                 base_metrics['uptime_seconds'] = time.time() - connected_at
             else:
                 base_metrics['uptime_seconds'] = 0.0
@@ -1379,6 +1504,9 @@ class WebSocketManager:
                     inactive_seconds = time.time() - last_message
                     if inactive_seconds > 60:  # 1분 이상 비활성
                         health_score -= min(inactive_seconds / 300, 0.3)  # 최대 5분에서 0.3 감점
+                else:
+                    # last_message가 None인 경우: 새 연결로 간주하여 감점 없음
+                    pass
 
                 health_score = max(0.0, health_score)
 
@@ -1458,6 +1586,12 @@ async def get_global_websocket_manager() -> WebSocketManager:
     if _global_manager is None:
         _global_manager = await WebSocketManager.get_instance()
     return _global_manager
+
+
+def get_websocket_manager_sync() -> Optional[WebSocketManager]:
+    """동기식 매니저 반환 (데드락 방지용 - stop() 전용)"""
+    global _global_manager
+    return _global_manager  # Lock 없이 기존 인스턴스만 반환
 
 
 async def get_websocket_manager() -> WebSocketManager:

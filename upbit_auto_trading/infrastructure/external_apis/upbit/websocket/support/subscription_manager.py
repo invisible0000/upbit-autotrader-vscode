@@ -150,25 +150,30 @@ class SubscriptionManager:
                                      symbols: Set[str], component_id: str) -> None:
         """리얼타임 스트림 제거/축소"""
         async with self._lock:
-            if data_type not in self._realtime_streams[ws_type]:
-                return
+            await self._remove_realtime_stream_unlocked(ws_type, data_type, symbols, component_id)
 
-            stream = self._realtime_streams[ws_type][data_type]
-            stream.components.discard(component_id)
+    async def _remove_realtime_stream_unlocked(self, ws_type: WebSocketType, data_type: DataType,
+                                               symbols: Set[str], component_id: str) -> None:
+        """리얼타임 스트림 제거/축소 (Lock 없는 내부 메서드)"""
+        if data_type not in self._realtime_streams[ws_type]:
+            return
 
-            # 컴포넌트가 없으면 해당 심볼들 제거
-            if not stream.components:
-                stream.symbols -= symbols
+        stream = self._realtime_streams[ws_type][data_type]
+        stream.components.discard(component_id)
 
-                # 스트림이 완전히 비었으면 삭제
-                if not stream.symbols:
-                    del self._realtime_streams[ws_type][data_type]
-                    self.logger.info(f"리얼타임 스트림 삭제: {ws_type.value}/{data_type.value}")
-                else:
-                    stream.last_updated = datetime.now()
-                    self.logger.info(f"리얼타임 스트림 축소: {ws_type.value}/{data_type.value} (-{len(symbols)}개)")
+        # 컴포넌트가 없으면 해당 심볼들 제거
+        if not stream.components:
+            stream.symbols -= symbols
 
-            self._update_metrics()
+            # 스트림이 완전히 비었으면 삭제
+            if not stream.symbols:
+                del self._realtime_streams[ws_type][data_type]
+                self.logger.info(f"리얼타임 스트림 삭제: {ws_type.value}/{data_type.value}")
+            else:
+                stream.last_updated = datetime.now()
+                self.logger.info(f"리얼타임 스트림 축소: {ws_type.value}/{data_type.value} (-{len(symbols)}개)")
+
+        self._update_metrics()
 
     def get_realtime_streams(self, ws_type: WebSocketType) -> Dict[DataType, Set[str]]:
         """현재 리얼타임 스트림 목록 반환"""
@@ -325,7 +330,8 @@ class SubscriptionManager:
                 ws_type = (WebSocketType.PRIVATE if spec.data_type in [DataType.MYORDER, DataType.MYASSET]
                            else WebSocketType.PUBLIC)
 
-                await self.remove_realtime_stream(
+                # 🔧 Lock 없는 내부 메서드 사용으로 재귀 Lock 문제 해결
+                await self._remove_realtime_stream_unlocked(
                     ws_type, spec.data_type, set(spec.symbols), component_id
                 )
 
@@ -529,17 +535,36 @@ class SubscriptionManager:
                 current_symbols = stream_info.symbols.copy()
                 previous_symbols = self._previous_stream_state[ws_type].get(data_type, set())
 
-                existing_symbols = list(current_symbols & previous_symbols)  # 교집합: 기존 구독
-                new_symbols = list(current_symbols - previous_symbols)       # 차집합: 신규 구독
+                # Private 타입 (myAsset, myOrder)은 심볼이 없으므로 스트림 존재 여부로 판단
+                if data_type.is_private():
+                    # Private 타입: 이전 상태 존재 여부로 신규/기존 구분
+                    if data_type in self._previous_stream_state[ws_type]:
+                        # 이전에 구독한 적이 있음 -> 기존 구독
+                        classification[data_type] = {
+                            'existing': [],  # Private 타입은 심볼 없음
+                            'new': []
+                        }
+                        self.logger.debug(f"📊 Private 구독 분류 ({data_type.value}): 기존 구독")
+                    else:
+                        # 처음 구독 -> 신규 구독
+                        classification[data_type] = {
+                            'existing': [],
+                            'new': []  # Private 타입은 심볼 없지만 신규로 분류
+                        }
+                        self.logger.debug(f"📊 Private 구독 분류 ({data_type.value}): 신규 구독")
+                else:
+                    # Public 타입: 기존 로직 (심볼 기반 분류)
+                    existing_symbols = list(current_symbols & previous_symbols)  # 교집합: 기존 구독
+                    new_symbols = list(current_symbols - previous_symbols)       # 차집합: 신규 구독
 
-                if existing_symbols or new_symbols:
-                    classification[data_type] = {
-                        'existing': existing_symbols,
-                        'new': new_symbols
-                    }
+                    if existing_symbols or new_symbols:
+                        classification[data_type] = {
+                            'existing': existing_symbols,
+                            'new': new_symbols
+                        }
 
-                    self.logger.debug(f"📊 구독 분류 ({data_type.value}): "
-                                      f"기존 {len(existing_symbols)}개, 신규 {len(new_symbols)}개")
+                        self.logger.debug(f"📊 Public 구독 분류 ({data_type.value}): "
+                                          f"기존 {len(existing_symbols)}개, 신규 {len(new_symbols)}개")
 
         except Exception as e:
             self.logger.error(f"구독 분류 중 오류: {e}")

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from upbit_auto_trading.application.services.base_application_service import BaseApplicationService
 from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_manager import (
-    WebSocketManager, get_websocket_manager
+    WebSocketManager, get_websocket_manager, get_websocket_manager_sync
 )
 from upbit_auto_trading.infrastructure.external_apis.upbit.websocket.core.websocket_types import (
     HealthStatus
@@ -135,8 +135,11 @@ class WebSocketApplicationService(BaseApplicationService):
             return False
 
     async def stop(self) -> None:
-        """서비스 중지"""
+        """서비스 중지 (데드락 방지 최적화)"""
+        self.logger.info("🚀 WebSocketApplicationService.stop() 메서드 시작")
+
         if not self._is_running:
+            self.logger.info("⚠️ 서비스가 이미 중지된 상태")
             return
 
         try:
@@ -144,6 +147,7 @@ class WebSocketApplicationService(BaseApplicationService):
 
             # 헬스 체크 중지
             if self._health_check_task:
+                self.logger.info("🛑 헬스 체크 태스크 중지")
                 self._health_check_task.cancel()
                 try:
                     await self._health_check_task
@@ -151,11 +155,17 @@ class WebSocketApplicationService(BaseApplicationService):
                     pass
 
             # 모든 구독 및 클라이언트 정리
+            self.logger.info("🧹 모든 구독 및 클라이언트 정리")
             await self._cleanup_all_clients()
 
-            # Infrastructure Manager 중지
-            if self._manager:
-                await self._manager.stop()
+            # Infrastructure Manager 중지 (Lock 없는 동기식 접근으로 데드락 방지)
+            manager = get_websocket_manager_sync()
+            if manager:
+                self.logger.info("🛑 Infrastructure WebSocketManager 중지 호출 (sync)")
+                await manager.stop()
+                self.logger.info("✅ Infrastructure WebSocketManager 중지 완료")
+            else:
+                self.logger.warning("⚠️ WebSocketManager가 None 상태 (sync access)")
 
             self._is_running = False
             self.logger.info("✅ WebSocket Application Service 중지 완료")
