@@ -20,7 +20,7 @@ from collections import defaultdict, deque
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from .websocket_types import (
     BaseWebSocketEvent, DataType, BackpressureStrategy, BackpressureConfig,
-    TickerEvent, OrderbookEvent, TradeEvent, CandleEvent, MyOrderEvent, MyAssetEvent
+    TickerEvent, OrderbookEvent, TradeEvent, CandleEvent, MyOrderEvent, MyAssetEvent, AdminResponseEvent
 )
 
 
@@ -318,6 +318,10 @@ class DataProcessor:
 
     async def _update_data_pool(self, event: BaseWebSocketEvent) -> None:
         """데이터 풀 업데이트"""
+        # AdminResponseEvent는 일회성 응답이므로 데이터 풀에서 제외
+        if isinstance(event, AdminResponseEvent):
+            return
+
         symbol = getattr(event, 'symbol', None)
         if not symbol:
             return
@@ -382,6 +386,8 @@ class DataProcessor:
             return DataType.MYORDER
         elif isinstance(event, MyAssetEvent):
             return DataType.MYASSET
+        elif isinstance(event, AdminResponseEvent):
+            return DataType.ADMIN_RESPONSE
 
         return None
 

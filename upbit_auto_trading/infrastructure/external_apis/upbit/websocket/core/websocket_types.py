@@ -70,6 +70,9 @@ class DataType(str, Enum):
     MYORDER = "myOrder"
     MYASSET = "myAsset"
 
+    # 관리 응답
+    ADMIN_RESPONSE = "admin_response"
+
     @classmethod
     def get_public_types(cls) -> List['DataType']:
         """Public 연결용 데이터 타입들"""
@@ -333,6 +336,22 @@ class MyAssetEvent(BaseWebSocketEvent):
 
     # 스트림 타입
     stream_type: Optional[str] = None
+
+
+@dataclass
+class AdminResponseEvent(BaseWebSocketEvent):
+    """관리 명령어 응답 이벤트 (LIST_SUBSCRIPTIONS 등)"""
+    # 응답 메서드
+    method: Optional[str] = None
+
+    # 응답 결과
+    result: Optional[List[Dict]] = None
+
+    # 티켓
+    ticket: Optional[str] = None
+
+    # 원본 데이터
+    raw_data: Optional[Dict] = None
 
 
 # ================================================================
@@ -863,6 +882,26 @@ def create_myorder_event(data: Dict[str, Any], epoch: int = 0,
     )
 
 
+def create_admin_response_event(data: Dict[str, Any], epoch: int = 0,
+                                timestamp: Optional[float] = None) -> AdminResponseEvent:
+    """관리 응답 이벤트 생성 (LIST_SUBSCRIPTIONS 등)"""
+    import time
+    if timestamp is None:
+        timestamp = time.time()
+
+    return AdminResponseEvent(
+        # 공통 필드
+        epoch=epoch,
+        timestamp=timestamp,
+
+        # 관리 응답 필드
+        method=data.get('method'),
+        result=data.get('result', []),
+        ticket=data.get('ticket'),
+
+        # 원본 데이터 보존
+        raw_data=data
+    )
 # ================================================================
 # 타입 감지 함수들 - format_utils.py로 이관됨
 # ================================================================
@@ -931,7 +970,7 @@ __all__ = [
 
     # 이벤트 클래스
     'BaseWebSocketEvent', 'TickerEvent', 'OrderbookEvent', 'OrderbookUnit',
-    'TradeEvent', 'CandleEvent', 'MyOrderEvent', 'MyAssetEvent', 'AssetItem',
+    'TradeEvent', 'CandleEvent', 'MyOrderEvent', 'MyAssetEvent', 'AssetItem', 'AdminResponseEvent',
 
     # 구독 및 성능
     'SubscriptionSpec', 'ComponentSubscription', 'PerformanceMetrics',
@@ -943,6 +982,7 @@ __all__ = [
 
     # 유틸리티 함수
     'create_ticker_event', 'create_trade_event', 'create_candle_event', 'create_orderbook_event',
-    'create_myasset_event', 'create_myorder_event', 'get_data_type_from_message', 'infer_message_type',
+    'create_myasset_event', 'create_myorder_event', 'create_admin_response_event',
+    'get_data_type_from_message', 'infer_message_type',
     'convert_dict_to_event', 'validate_symbols', 'normalize_symbols'
 ]

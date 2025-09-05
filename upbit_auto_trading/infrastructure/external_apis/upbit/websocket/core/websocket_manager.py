@@ -1210,6 +1210,23 @@ class WebSocketManager:
         ]
         return json.dumps(message)
 
+    async def send_raw_message(self, connection_type: WebSocketType, message_data: list) -> None:
+        """
+        원시 메시지 직접 전송 (구독 목록 조회 등 특수 용도)
+
+        Args:
+            connection_type: WebSocket 연결 타입 (PUBLIC/PRIVATE)
+            message_data: 전송할 메시지 데이터 (list 형태)
+        """
+        try:
+            message_json = json.dumps(message_data)
+            self.logger.debug(f"📤 원시 메시지 전송: {connection_type.value}, 내용: {message_json}")
+            await self._send_message(connection_type, message_json)
+            self.logger.info(f"✅ 원시 메시지 전송 완료: {connection_type.value}")
+        except Exception as e:
+            self.logger.error(f"💥 원시 메시지 전송 실패 ({connection_type.value}): {e}")
+            raise
+
     async def _send_message(self, connection_type: WebSocketType, message: str) -> None:
         """메시지 전송"""
         connection = self._connections[connection_type]
@@ -1314,7 +1331,11 @@ class WebSocketManager:
                     if 'stream_type' in data:
                         self.logger.info(f"🎯 stream_type 발견: {data.get('stream_type')} (타입: {data.get('type')})")
                     else:
-                        self.logger.warning(f"⚠️ stream_type 누락: {data.get('type')} - {list(data.keys())}")
+                        # 관리 응답 메시지는 stream_type이 없어도 정상
+                        if 'method' in data:
+                            self.logger.debug(f"🔧 관리 응답 메시지: {data.get('method')} (stream_type 불필요)")
+                        else:
+                            self.logger.warning(f"⚠️ stream_type 누락: {data.get('type')} - {list(data.keys())}")
 
                     # 업비트 에러 메시지 확인
                     if 'error' in data:
@@ -1410,6 +1431,13 @@ class WebSocketManager:
     def _create_event(self, connection_type: WebSocketType, data: Dict) -> Optional[BaseWebSocketEvent]:
         """이벤트 생성"""
         try:
+            # 관리 응답 메시지 처리 (LIST_SUBSCRIPTIONS 등)
+            if 'method' in data:
+                from .websocket_types import create_admin_response_event
+                event = create_admin_response_event(data)
+                self.logger.debug(f"🔧 관리 응답 이벤트 생성: {data.get('method')}")
+                return event
+
             # 메시지 타입 확인
             data_type = data.get('type') or data.get('ty')
 
@@ -1433,9 +1461,9 @@ class WebSocketManager:
                 return create_trade_event(data)
             elif data_type.startswith('candle'):
                 return create_candle_event(data)
-            elif data_type == 'myorder':
+            elif data_type == 'myOrder':  # 정확한 케이스 매칭
                 return create_myorder_event(data)
-            elif data_type == 'myasset':
+            elif data_type == 'myAsset':  # 정확한 케이스 매칭
                 return create_myasset_event(data)
             else:
                 self.logger.warning(f"알 수 없는 데이터 타입: {data_type}")
@@ -1448,13 +1476,19 @@ class WebSocketManager:
 
     def _detect_data_type(self, data: Dict) -> Optional[DataType]:
         """데이터 타입 감지"""
+        # 'ty' 필드 우선 확인 (기존 방식)
         if 'ty' in data:
             type_value = data['ty']
+        # 'type' 필드 확인 (Private WebSocket의 경우)
+        elif 'type' in data:
+            type_value = data['type']
+        else:
+            return None
 
-            # 정확한 매칭
-            for data_type in DataType:
-                if data_type.value == type_value:
-                    return data_type
+        # 정확한 매칭
+        for data_type in DataType:
+            if data_type.value == type_value:
+                return data_type
 
         return None
 

@@ -224,6 +224,57 @@ class WebSocketClient:
             callback=callback
         )
 
+    async def list_subscriptions(self, ws_type: str = "private", callback: Optional[Callable[[dict], None]] = None) -> bool:
+        """
+        WebSocket 구독 목록 조회
+
+        Args:
+            ws_type: WebSocket 타입 ("public" 또는 "private")
+            callback: 구독 목록 응답 수신 콜백 함수 (선택사항)
+
+        Returns:
+            bool: 요청 성공 여부
+        """
+        try:
+            await self._ensure_manager()
+
+            # WebSocket 타입 검증
+            if ws_type not in ["public", "private"]:
+                self.logger.error(f"❌ 잘못된 WebSocket 타입: {ws_type} (public 또는 private만 가능)")
+                return False
+
+            # 구독 목록 조회 메시지 생성
+            request_message = [
+                {"ticket": ws_type},  # 고정된 티켓 사용
+                {"method": "LIST_SUBSCRIPTIONS"}
+            ]
+
+            # 콜백이 있으면 등록
+            if callback:
+                callback_key = f"list_subscriptions_{ws_type}_{int(time.time() * 1000)}"
+                self._callbacks[callback_key] = callback
+
+            # 매니저에게 직접 메시지 전송 요청
+            if self._manager:
+                from .websocket_types import WebSocketType
+                target_ws_type = WebSocketType.PRIVATE if ws_type == "private" else WebSocketType.PUBLIC
+
+                # 매니저의 메시지 전송 메서드가 있는지 확인 후 호출
+                if hasattr(self._manager, 'send_raw_message'):
+                    await self._manager.send_raw_message(target_ws_type, request_message)
+                    self.logger.info(f"📤 {ws_type.upper()} WebSocket 구독 목록 조회 요청 전송")
+                    return True
+                else:
+                    self.logger.warning("⚠️ 매니저에 raw 메시지 전송 기능이 없어 구독 목록 조회 불가")
+                    return False
+            else:
+                self.logger.error("❌ WebSocket 매니저가 없어서 구독 목록 조회 불가")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"💥 구독 목록 조회 실패: {e}")
+            return False
+
     # ================================================================
     # 내부 구현
     # ================================================================

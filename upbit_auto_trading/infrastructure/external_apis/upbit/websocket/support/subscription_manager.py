@@ -478,38 +478,84 @@ class SubscriptionManager:
             previous_symbols = self._previous_stream_state[ws_type].get(data_type, set())
             self.logger.debug(f"📊 이전 심볼: {previous_symbols}")
 
-            # 실제 변경 여부 확인
-            if current_symbols == previous_symbols:
-                self.logger.debug(f"변경 없음: {ws_type.value}/{data_type.value} - 알림 스킵")
-                return
+            # Private 타입의 경우 특별 처리 (심볼과 무관하게 스트림 존재 여부로 판단)
+            if data_type.is_private():
+                # Private 타입: 스트림이 새로 추가되었는지 확인
+                stream_exists_now = data_type in self._realtime_streams[ws_type]
+                stream_existed_before = data_type in self._previous_stream_state[ws_type]
 
-            self.logger.debug(f"🔄 변경 감지됨: {ws_type.value}/{data_type.value}")
+                if stream_exists_now and not stream_existed_before:
+                    self.logger.debug(f"🔄 Private 구독 신규 추가: {ws_type.value}/{data_type.value}")
 
-            # 변경 유형 분석
-            added_symbols = current_symbols - previous_symbols
-            removed_symbols = previous_symbols - current_symbols
+                    # Private 타입도 변경 알림 전송
+                    self.logger.info(f"🔔 변경 감지: {ws_type.value}/{data_type.value} - "
+                                     f"Private 구독 신규 추가")
 
-            if added_symbols or removed_symbols:
-                change_type = "modified"
-                if not previous_symbols:
-                    change_type = "added"
-                elif not current_symbols:
-                    change_type = "removed"
+                    # 변경사항 알림
+                    self.logger.debug("📢 SubscriptionChange 객체 생성 중...")
+                    changes = {data_type: SubscriptionChange(
+                        data_type=data_type,
+                        old_symbols=previous_symbols,
+                        new_symbols=current_symbols,
+                        change_type="added"
+                    )}
+                    self.logger.debug("📢 변경 알림 전송 중...")
+                    self._notify_changes(changes)
+                    self.logger.debug("📢 변경 알림 전송 완료")
 
-                self.logger.info(f"🔔 변경 감지: {ws_type.value}/{data_type.value} - "
-                                 f"추가: {len(added_symbols)}, 제거: {len(removed_symbols)}")
+                elif stream_exists_now and stream_existed_before:
+                    self.logger.debug(f"변경 없음: {ws_type.value}/{data_type.value} - 알림 스킵")
+                    return
+                else:
+                    # Private 스트림이 제거된 경우
+                    if stream_existed_before and not stream_exists_now:
+                        self.logger.info(f"🔔 변경 감지: {ws_type.value}/{data_type.value} - "
+                                         f"Private 구독 제거")
 
-                # 변경사항 알림
-                self.logger.debug("📢 SubscriptionChange 객체 생성 중...")
-                changes = {data_type: SubscriptionChange(
-                    data_type=data_type,
-                    old_symbols=previous_symbols,
-                    new_symbols=current_symbols,
-                    change_type=change_type
-                )}
-                self.logger.debug("📢 변경 알림 전송 중...")
-                self._notify_changes(changes)
-                self.logger.debug("📢 변경 알림 전송 완료")
+                        # 변경사항 알림
+                        self.logger.debug("📢 SubscriptionChange 객체 생성 중...")
+                        changes = {data_type: SubscriptionChange(
+                            data_type=data_type,
+                            old_symbols=previous_symbols,
+                            new_symbols=current_symbols,
+                            change_type="removed"
+                        )}
+                        self.logger.debug("📢 변경 알림 전송 중...")
+                        self._notify_changes(changes)
+                        self.logger.debug("📢 변경 알림 전송 완료")
+            else:
+                # Public 타입: 기존 심볼 기반 비교
+                if current_symbols == previous_symbols:
+                    self.logger.debug(f"변경 없음: {ws_type.value}/{data_type.value} - 알림 스킵")
+                    return
+
+                self.logger.debug(f"🔄 변경 감지됨: {ws_type.value}/{data_type.value}")
+
+                # 변경 유형 분석
+                added_symbols = current_symbols - previous_symbols
+                removed_symbols = previous_symbols - current_symbols
+
+                if added_symbols or removed_symbols:
+                    change_type = "modified"
+                    if not previous_symbols:
+                        change_type = "added"
+                    elif not current_symbols:
+                        change_type = "removed"
+
+                    self.logger.info(f"🔔 변경 감지: {ws_type.value}/{data_type.value} - "
+                                     f"추가: {len(added_symbols)}, 제거: {len(removed_symbols)}")
+
+                    # 변경사항 알림
+                    self.logger.debug("📢 SubscriptionChange 객체 생성 중...")
+                    changes = {data_type: SubscriptionChange(
+                        data_type=data_type,
+                        old_symbols=previous_symbols,
+                        new_symbols=current_symbols,
+                        change_type=change_type
+                    )}
+                    self.logger.debug("📢 변경 알림 전송 중...")
+                    self._notify_changes(changes)
+                    self.logger.debug("📢 변경 알림 전송 완료")
 
                 # 🎯 상태 업데이트는 메시지 전송 완료 후 commit_subscription_state_update()에서 수행
 

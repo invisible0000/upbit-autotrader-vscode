@@ -106,6 +106,15 @@ MYASSET_ASSETS_SIMPLE_MAPPING = {
     'currency': 'cu', 'balance': 'b', 'locked': 'l',
 }
 
+# LIST_SUBSCRIPTIONS SIMPLE 매핑 (관리 응답)
+LIST_SUBSCRIPTIONS_SIMPLE_MAPPING = {
+    'method': 'mth', 'result': 'rst', 'ticket': 'tck',
+}
+
+LIST_SUBSCRIPTIONS_RESULT_SIMPLE_MAPPING = {
+    'type': 'ty', 'codes': 'cds',
+}
+
 # 역방향 매핑 생성
 TICKER_SIMPLE_REVERSE = {v: k for k, v in TICKER_SIMPLE_MAPPING.items()}
 TRADE_SIMPLE_REVERSE = {v: k for k, v in TRADE_SIMPLE_MAPPING.items()}
@@ -115,6 +124,8 @@ CANDLE_SIMPLE_REVERSE = {v: k for k, v in CANDLE_SIMPLE_MAPPING.items()}
 MYORDER_SIMPLE_REVERSE = {v: k for k, v in MYORDER_SIMPLE_MAPPING.items()}
 MYASSET_SIMPLE_REVERSE = {v: k for k, v in MYASSET_SIMPLE_MAPPING.items()}
 MYASSET_ASSETS_SIMPLE_REVERSE = {v: k for k, v in MYASSET_ASSETS_SIMPLE_MAPPING.items()}
+LIST_SUBSCRIPTIONS_SIMPLE_REVERSE = {v: k for k, v in LIST_SUBSCRIPTIONS_SIMPLE_MAPPING.items()}
+LIST_SUBSCRIPTIONS_RESULT_SIMPLE_REVERSE = {v: k for k, v in LIST_SUBSCRIPTIONS_RESULT_SIMPLE_MAPPING.items()}
 
 
 class UpbitMessageFormatter:
@@ -157,6 +168,8 @@ class UpbitMessageFormatter:
                 return self._convert_mapping(data, MYORDER_SIMPLE_REVERSE)
             elif data_type == 'myasset':
                 return self._convert_myasset_simple_to_default(data)
+            elif data_type == 'list_subscriptions':
+                return self._convert_list_subscriptions_simple_to_default(data)
             else:
                 self.logger.warning(f"지원하지 않는 SIMPLE 타입: {data_type}")
                 return data
@@ -195,6 +208,8 @@ class UpbitMessageFormatter:
                 return self._convert_mapping(data, MYORDER_SIMPLE_MAPPING)
             elif data_type == 'myasset':
                 return self._convert_myasset_default_to_simple(data)
+            elif data_type == 'list_subscriptions':
+                return self._convert_list_subscriptions_default_to_simple(data)
             else:
                 self.logger.warning(f"지원하지 않는 DEFAULT 타입: {data_type}")
                 return data
@@ -205,13 +220,31 @@ class UpbitMessageFormatter:
 
     def _detect_simple_type(self, data: Dict[str, Any]) -> Optional[str]:
         """SIMPLE 포맷 타입 감지"""
+        # 일반 데이터 타입 (ty 필드)
         type_val = data.get('ty', data.get('type'))
-        return type_val.lower() if type_val else None
+        if type_val:
+            return type_val.lower()
+
+        # LIST_SUBSCRIPTIONS 응답 감지 (mth 필드)
+        method_val = data.get('mth', data.get('method'))
+        if method_val == 'LIST_SUBSCRIPTIONS':
+            return 'list_subscriptions'
+
+        return None
 
     def _detect_default_type(self, data: Dict[str, Any]) -> Optional[str]:
         """DEFAULT 포맷 타입 감지"""
+        # 일반 데이터 타입 (type 필드)
         type_val = data.get('type', data.get('ty'))
-        return type_val.lower() if type_val else None
+        if type_val:
+            return type_val.lower()
+
+        # LIST_SUBSCRIPTIONS 응답 감지 (method 필드)
+        method_val = data.get('method', data.get('mth'))
+        if method_val == 'LIST_SUBSCRIPTIONS':
+            return 'list_subscriptions'
+
+        return None
 
     def _convert_mapping(self, data: Dict[str, Any], mapping: Dict[str, str]) -> Dict[str, Any]:
         """매핑 테이블을 사용한 필드 변환"""
@@ -298,6 +331,46 @@ class UpbitMessageFormatter:
                     else:
                         converted_assets.append(asset)
                 result['ast'] = converted_assets
+
+        return result
+
+    def _convert_list_subscriptions_simple_to_default(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """LIST_SUBSCRIPTIONS SIMPLE → DEFAULT 변환 (result 배열 처리 포함)"""
+        result = self._convert_mapping(data, LIST_SUBSCRIPTIONS_SIMPLE_REVERSE)
+
+        # result 배열 변환
+        if 'result' in result:
+            result_list = result['result']
+            if isinstance(result_list, list):
+                converted_results = []
+                for item in result_list:
+                    if isinstance(item, dict):
+                        converted_results.append(
+                            self._convert_mapping(item, LIST_SUBSCRIPTIONS_RESULT_SIMPLE_REVERSE)
+                        )
+                    else:
+                        converted_results.append(item)
+                result['result'] = converted_results
+
+        return result
+
+    def _convert_list_subscriptions_default_to_simple(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """LIST_SUBSCRIPTIONS DEFAULT → SIMPLE 변환 (result 배열 처리 포함)"""
+        result = self._convert_mapping(data, LIST_SUBSCRIPTIONS_SIMPLE_MAPPING)
+
+        # result 배열 변환
+        if 'rst' in result:  # SIMPLE 키
+            result_list = result['rst']
+            if isinstance(result_list, list):
+                converted_results = []
+                for item in result_list:
+                    if isinstance(item, dict):
+                        converted_results.append(
+                            self._convert_mapping(item, LIST_SUBSCRIPTIONS_RESULT_SIMPLE_MAPPING)
+                        )
+                    else:
+                        converted_results.append(item)
+                result['rst'] = converted_results
 
         return result
 
