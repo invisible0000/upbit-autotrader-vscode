@@ -617,10 +617,83 @@ class UpbitPublicClient:
         return response
 
     # ================================================================
-    # 캔들 정보 API - 분봉, 일봉, 주봉, 월봉
+    # 캔들 정보 API - 초봉, 분봉, 일봉, 주봉, 월봉, 연봉
     # ================================================================
 
-    async def get_candles_minutes(self, unit: int, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_candles_seconds(self, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        초봉 정보 조회
+
+        특정 마켓의 초봉 데이터를 조회합니다.
+
+        Args:
+            market: 마켓 코드 (예: 'KRW-BTC')
+            count: 조회할 캔들 개수 (기본값: 200, 최대: 200)
+            to: 마지막 캔들 시각 (ISO 8601 형식, 예: '2023-01-01T00:00:00Z')
+                None이면 가장 최근 캔들부터 조회
+
+        Returns:
+            List[Dict[str, Any]]: 초봉 데이터 리스트 (과거순 → 최신순)
+                [
+                    {
+                        'market': 'KRW-BTC',              # 마켓 코드
+                        'candle_date_time_utc': '2023-01-01T12:00:00',  # 캔들 기준 시각 (UTC)
+                        'candle_date_time_kst': '2023-01-01T21:00:00',  # 캔들 기준 시각 (KST)
+                        'opening_price': 19000000.0,       # 시가
+                        'high_price': 19200000.0,          # 고가
+                        'low_price': 18900000.0,           # 저가
+                        'trade_price': 19100000.0,         # 종가
+                        'timestamp': 1672574400000,        # 타임스탬프
+                        'candle_acc_trade_price': 123456789.0,  # 누적 거래 금액
+                        'candle_acc_trade_volume': 6.78901234   # 누적 거래량
+                    },
+                    ...
+                ]
+
+        Examples:
+            # 초봉 200개 조회
+            candles = await client.get_candles_seconds('KRW-BTC')
+
+            # 초봉 100개 조회
+            candles = await client.get_candles_seconds('KRW-BTC', count=100)
+
+            # 특정 시각부터 초봉 조회
+            candles = await client.get_candles_seconds(
+                'KRW-BTC',
+                count=50,
+                to='2023-01-01T00:00:00Z'
+            )
+
+        Raises:
+            ValueError: 마켓 코드가 비어있거나 count가 200을 초과하는 경우
+            Exception: API 오류
+
+        Note:
+            초 캔들 조회는 최대 3개월 이내 데이터만 제공됩니다.
+            조회 가능 기간을 초과한 경우 빈 리스트가 반환될 수 있습니다.
+        """
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        if count > 200:
+            raise ValueError("조회 가능한 최대 캔들 개수는 200개입니다")
+
+        params = {'market': market, 'count': str(count)}
+        if to:
+            params['to'] = to
+
+        response = await self._make_request('/candles/seconds', params=params)
+
+        self._logger.debug(f"⚡ 초봉 조회 완료: {market}, {len(response)}개 캔들")
+        return response
+
+    async def get_candles_minutes(
+        self,
+        unit: int,
+        market: str,
+        count: int = 200,
+        to: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         분봉 정보 조회
 
@@ -690,7 +763,13 @@ class UpbitPublicClient:
         self._logger.debug(f"🕐 {unit}분봉 조회 완료: {market}, {len(response)}개 캔들")
         return response
 
-    async def get_candles_days(self, market: str, count: int = 200, to: Optional[str] = None, converting_price_unit: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_candles_days(
+        self,
+        market: str,
+        count: int = 200,
+        to: Optional[str] = None,
+        converting_price_unit: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         일봉 정보 조회
 
@@ -839,6 +918,65 @@ class UpbitPublicClient:
         response = await self._make_request('/candles/months', params=params)
 
         self._logger.debug(f"📆 월봉 조회 완료: {market}, {len(response)}개 캔들")
+        return response
+
+    async def get_candles_years(self, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        연봉 정보 조회
+
+        특정 마켓의 연봉 데이터를 조회합니다.
+
+        Args:
+            market: 마켓 코드 (예: 'KRW-BTC')
+            count: 조회할 캔들 개수 (기본값: 200, 최대: 200)
+            to: 마지막 캔들 시각 (ISO 8601 형식, 예: '2023-01-01T00:00:00Z')
+
+        Returns:
+            List[Dict[str, Any]]: 연봉 데이터 리스트 (과거순 → 최신순)
+                [
+                    {
+                        'market': 'KRW-BTC',              # 마켓 코드
+                        'candle_date_time_utc': '2023-01-01T00:00:00',  # 캔들 기준 시각 (UTC)
+                        'candle_date_time_kst': '2023-01-01T09:00:00',  # 캔들 기준 시각 (KST)
+                        'opening_price': 19000000.0,       # 시가
+                        'high_price': 19500000.0,          # 고가
+                        'low_price': 18500000.0,           # 저가
+                        'trade_price': 19200000.0,         # 종가
+                        'timestamp': 1672531200000,        # 타임스탬프
+                        'candle_acc_trade_price': 15432109876.0,  # 누적 거래 금액
+                        'candle_acc_trade_volume': 1234.56789012,  # 누적 거래량
+                        'prev_closing_price': 19100000.0,  # 전년 종가
+                        'change_price': 100000.0,          # 전년 대비 가격
+                        'change_rate': 0.00523560209,      # 전년 대비 등락률
+                        'first_day_of_period': '2023-01-01'  # 캔들 집계 시작일자
+                    },
+                    ...
+                ]
+
+        Examples:
+            # 연봉 200개 조회
+            candles = await client.get_candles_years('KRW-BTC')
+
+            # 연봉 10개 조회 (10년)
+            candles = await client.get_candles_years('KRW-BTC', count=10)
+
+        Raises:
+            ValueError: 마켓 코드가 비어있거나 count가 200을 초과하는 경우
+            Exception: API 오류
+        """
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        if count > 200:
+            raise ValueError("한 번에 조회할 수 있는 캔들은 최대 200개입니다")
+
+        params = {'market': market, 'count': str(count)}
+        if to:
+            params['to'] = to
+
+        response = await self._make_request('/candles/years', params=params)
+
+        self._logger.debug(f"📊 연봉 조회 완료: {market}, {len(response)}개 캔들")
         return response
 
     # ================================================================

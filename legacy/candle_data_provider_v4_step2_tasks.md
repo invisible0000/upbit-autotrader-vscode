@@ -38,37 +38,36 @@
 
 ---
 
-### **2. 개별 테이블 관리 시스템** 💾
-**목표**: 심볼별 개별 테이블 동적 생성 및 INSERT OR IGNORE 기반 중복 제거
+### **2. DDD Repository 패턴 구현** 💾
+**목표**: Domain 인터페이스 + Infrastructure 구현체로 DDD 준수하면서 성능 최적화
 
-#### **2.1 CandleTableManager 구현** [ ]
-- **Description**: `candles_{SYMBOL}_{TIMEFRAME}` 패턴 테이블 동적 생성 및 관리
+#### **2.1 Domain Repository Interface 생성** [ ]
+- **Description**: Domain Layer에 CandleRepositoryInterface 정의로 DDD 준수
 - **Acceptance Criteria**:
-  - ensure_table_exists("KRW-BTC", "1m") → "candles_KRW_BTC_1m" 테이블 생성/확인
-  - candle_date_time_utc PRIMARY KEY 정확 설정
-  - 인덱스 자동 생성 (timestamp, created_at)
+  - CandleRepositoryInterface 추상 클래스 정의
+  - save_candles(), get_candles() 메서드 시그니처 정의
+  - Domain Layer 순수성 보장 (외부 의존성 없음)
 - **Test Plan**:
-  - 새 심볼/timeframe 조합 테이블 생성 테스트
-  - 기존 테이블 존재 확인 테스트
-  - 스키마 검증 테스트
-- **Risk & Rollback**: 테이블 생성 실패 시 예외 처리, 기존 데이터 영향 없음
-- **Effort**: 4시간 (Medium)
-- **Touch Points**: `candle_repository.py` (새 파일)
+  - 인터페이스 정의 검증
+  - 추상 메서드 시그니처 확인
+  - Domain Layer 의존성 검사
+- **Risk & Rollback**: 인터페이스 변경 시 구현체 수정 필요
+- **Effort**: 1시간 (Low)
+- **Touch Points**: `upbit_auto_trading/domain/repositories/candle_repository_interface.py`
 
-#### **2.2 CandleRepository 구현** [ ]
-#### **2.2 CandleRepository 구현** [ ]
-- **Description**: DDD Repository 패턴으로 INSERT OR IGNORE 기반 캔들 저장 구현
+#### **2.2 Infrastructure Repository 구현체** [ ]
+- **Description**: DatabaseManager 활용하는 SqliteCandleRepository 구현으로 DDD + 성능 최적화
 - **Acceptance Criteria**:
-  - save_candles() → 중복 시 무시, 새 데이터만 삽입
-  - executemany() 배치 처리로 성능 최적화
-  - 삽입된 행 수 정확 반환
+  - DatabaseManager 의존성 주입으로 Connection Pooling + WAL 모드 활용
+  - 개별 테이블 구조 + INSERT OR IGNORE 최적화 유지
+  - RepositoryContainer에 등록 가능한 구조
 - **Test Plan**:
-  - 중복 데이터 저장 테스트 (0개 삽입 확인)
-  - 새 데이터 저장 테스트 (정확한 개수 삽입)
-  - 배치 성능 테스트 (1000개 < 100ms)
-- **Risk & Rollback**: INSERT OR IGNORE 실패 시 기존 INSERT 방식 사용
-- **Effort**: 6시간 (Medium)
-- **Touch Points**: `candle_repository.py`, `models.py`
+  - DatabaseManager 연동 테스트
+  - 개별 테이블 생성/관리 테스트
+  - 성능 벤치마크 (기존 대비 30-90% 향상)
+- **Risk & Rollback**: DatabaseManager 연동 실패 시 직접 SQLite 접근
+- **Effort**: 5시간 (Medium)
+- **Touch Points**: `upbit_auto_trading/infrastructure/repositories/sqlite_candle_repository.py`
 
 ---
 
@@ -318,14 +317,15 @@
 
 ## 📝 **Persistent Notes**
 
-### **Touched Files** (구현 진행 중 업데이트)
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/time_utils.py` - 확장됨
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_repository.py` - 신규 생성
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/overlap_optimizer.py` - 신규 생성
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_client.py` - 신규 생성
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_cache.py` - 기존 이관
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider.py` - 신규 생성
-- [ ] `upbit_auto_trading/infrastructure/market_data/candle/models.py` - 신규 생성
+### **Touched Files** (DDD 준수 구조)
+- [ ] `upbit_auto_trading/domain/repositories/candle_repository_interface.py` - **Domain Layer** Repository 인터페이스
+- [ ] `upbit_auto_trading/infrastructure/repositories/sqlite_candle_repository.py` - **Infrastructure Layer** Repository 구현체
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/time_utils.py` - 확장됨 (Infrastructure Layer)
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/overlap_optimizer.py` - 신규 생성 (Infrastructure Layer)
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_client.py` - 신규 생성 (Infrastructure Layer)
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_cache.py` - 기존 이관 (Infrastructure Layer)
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider.py` - **Application Service** Facade
+- [ ] `upbit_auto_trading/infrastructure/market_data/candle/models.py` - 신규 생성 (Infrastructure Layer)
 
 ### **Unexpected Findings** (구현 중 발견사항)
 - (구현 진행 중 업데이트 예정)
