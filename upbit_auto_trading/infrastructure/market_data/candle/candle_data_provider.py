@@ -77,8 +77,10 @@ class CandleDataProvider:
         self.upbit_client = upbit_client
         self._client_owned = upbit_client is None  # 클라이언트 소유권 추적
 
-        # 캐시 (추후 구현 예정)
-        self.cache = None
+        # 캐시 초기화 (60초 TTL, 100MB 제한)
+        from upbit_auto_trading.infrastructure.market_data.candle.candle_cache import CandleCache
+        self.cache = CandleCache(max_memory_mb=100, default_ttl_seconds=60)
+        logger.debug("CandleCache 초기화 완료 - 100MB, 60초 TTL")
 
         # 겹침 분석기 (추후 구현 예정)
         self.overlap_analyzer = None
@@ -204,8 +206,13 @@ class CandleDataProvider:
 
             logger.debug(f"📋 표준화된 요청: start={final_start_time}, end={final_end_time}, count={final_count}")
 
-            # 2. 캐시 우선 확인 (추후 구현)
-            # cache_result = await self._check_cache_complete_range(symbol, timeframe, final_start_time, final_count)
+            # 2. 캐시 우선 확인 (완전 데이터 존재시 즉시 반환)
+            cache_result = await self._check_cache_complete_range(symbol, timeframe, final_start_time, final_count)
+            if cache_result:
+                response_time = (time.perf_counter() - request_start_time) * 1000
+                self.stats['cache_hits'] += 1
+                logger.info(f"💨 캐시 히트! 즉시 반환: {len(cache_result)}개 캔들, {response_time:.2f}ms")
+                return create_success_response(cache_result, "cache", response_time)
             # if cache_result:
             #     return self._create_cache_response(cache_result, time.perf_counter() - request_start_time)
 
@@ -313,6 +320,74 @@ class CandleDataProvider:
         adjusted_start = TimeUtils.get_before_candle_time(start_time, timeframe)
         logger.debug(f"🎯 사용자 start_time 포함 조정: {start_time} → {adjusted_start} (timeframe: {timeframe})")
         return adjusted_start
+
+    # ================================================================
+    # 캐시 관련 메서드
+    # ================================================================
+
+    async def _check_cache_complete_range(self, symbol: str, timeframe: str,
+                                          start_time: datetime, count: int) -> Optional[List[CandleData]]:
+        """
+        캐시에서 완전한 범위의 데이터가 있는지 확인하고 반환
+
+        Args:
+            symbol: 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            count: 요청 개수
+
+        Returns:
+            캐시된 완전한 데이터 또는 None
+        """
+        try:
+            if not self.cache:
+                return None
+
+            # 완전 범위 확인
+            if self.cache.has_complete_range(symbol, timeframe, start_time, count):
+                cached_data = self.cache.get_cached_chunk(symbol, timeframe, start_time, count)
+                if cached_data and len(cached_data) >= count:
+                    logger.debug(f"💾 캐시 완전 히트: {symbol} {timeframe} ({count}개)")
+                    return cached_data[:count]  # 정확한 개수만 반환
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"캐시 확인 중 오류: {e}")
+            return None
+
+    async def _store_chunk_in_cache(self, symbol: str, timeframe: str,
+                                    start_time: datetime, candles: List[CandleData]) -> None:
+        """
+        수집한 청크를 캐시에 저장
+
+        Args:
+            symbol: 심볼
+            timeframe: 타임프레임
+            start_time: 시작 시간
+            candles: 캔들 데이터
+        """
+        try:
+            if not self.cache or not candles:
+                return
+
+            success = self.cache.store_chunk(symbol, timeframe, start_time, candles)
+            if success:
+                logger.debug(f"💾 캐시 저장 완료: {symbol} {timeframe} ({len(candles)}개)")
+            else:
+                logger.warning(f"캐시 저장 실패: {symbol} {timeframe}")
+
+        except Exception as e:
+            logger.warning(f"캐시 저장 중 오류: {e}")
+
+    def get_cache_stats(self) -> dict:
+        """캐시 통계 정보 반환"""
+        if not self.cache:
+            return {"cache_enabled": False}
+
+        cache_info = self.cache.get_cache_info()
+        cache_info["cache_enabled"] = True
+        return cache_info
 
     # ================================================================
     # 청크 분할 및 순차 수집
@@ -476,6 +551,9 @@ class CandleDataProvider:
                 await self.repository.save_candle_chunk(chunk.symbol, chunk.timeframe, collected_candles)
                 self.stats['db_queries'] += 1
 
+                # 캐시에 저장
+                await self._store_chunk_in_cache(chunk.symbol, chunk.timeframe, chunk.start_time, collected_candles)
+
             collection_time_ms = (time.perf_counter() - collection_start_time) * 1000
 
             return CollectionResult(
@@ -536,6 +614,10 @@ class CandleDataProvider:
         """
         symbol = chunk.symbol
         count = chunk.count
+
+        # upbit_client가 None이 아님을 타입 체킹으로 보장
+        if self.upbit_client is None:
+            raise RuntimeError("업비트 클라이언트가 초기화되지 않았습니다. _ensure_upbit_client()를 먼저 호출하세요.")
 
         # 업비트 API: to 파라미터 없이 호출하면 최신 데이터부터 count개 반환
         # 현재는 단순 구현으로 to 파라미터 제외 (추후 정확한 시간 범위 처리 개선)

@@ -28,9 +28,7 @@ def cleanup_test_tables():
 
     # 2단계: 보존할 테이블 정의 (기본 테스트용)
     preserve_tables = {
-        'candles_KRW_BTC_1m',
-        'candles_KRW_ETH_1m',
-        'candles_KRW_DOGE_1m'
+        'candles_KRW_BTC_1m'
     }
 
     # 3단계: 모든 캔들 테이블 목록 조회
