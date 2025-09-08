@@ -9,6 +9,7 @@
 """
 
 from datetime import datetime, timedelta
+import time
 from typing import List, Optional, Tuple, Dict, Any
 from dataclasses import dataclass, field
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -53,6 +54,16 @@ class OptimizationStep:
 
 
 @dataclass(frozen=True)
+class FragmentationResult:
+    """파편화 확인 결과 - 결과 재사용의 핵심 구조체"""
+    has_fragmentation: bool
+    gap_count: int
+    first_gap_position: Optional[datetime]  # 첫 번째 끊어짐 위치 (연결된 끝 찾기에서 재사용)
+    threshold_seconds: float  # 사용된 임계값 (디버깅용)
+    query_time_ms: float = 0.0  # 쿼리 실행 시간 (성능 모니터링)
+
+
+@dataclass(frozen=True)
 class OptimizationResult:
     """4단계 최적화 결과"""
     symbol: str
@@ -66,7 +77,7 @@ class OptimizationResult:
     completion_status: str = "completed"  # completed, partial, failed
 
 
-class UpbitOverlapOptimizer:
+class OverlapOptimizer:
     """업비트 겹침 최적화기 v4.0 - 실용 구현"""
 
     def __init__(self, repository, time_utils, api_client):
@@ -80,12 +91,25 @@ class UpbitOverlapOptimizer:
         self.time_utils = time_utils
         self.api_client = api_client
 
-        # 성능 메트릭
+        # 성능 메트릭 (최적화 강화)
         self._metrics = {
             "total_optimizations": 0,
             "total_api_calls": 0,
             "total_candles_collected": 0,
-            "strategy_usage": {}
+            "strategy_usage": {},
+            # 새로운 성능 메트릭
+            "query_performance": {
+                "start_overlap_ms": [],
+                "complete_overlap_ms": [],
+                "fragmentation_ms": [],
+                "connected_end_ms": []
+            },
+            "optimization_savings": {
+                "early_termination_count": 0,
+                "result_reuse_count": 0,
+                "total_query_time_saved_ms": 0.0
+            },
+            "timeframe_performance": {}  # timeframe별 성능 추적
         }
 
         # timeframe 캐시 (성능 최적화)
@@ -99,6 +123,47 @@ class UpbitOverlapOptimizer:
             self._timeframe_cache[timeframe] = self.time_utils.get_timeframe_seconds(timeframe)
         return self._timeframe_cache[timeframe]
 
+    def _get_fragmentation_threshold(self, timeframe: str) -> float:
+        """적응형 파편화 임계값 계산
+
+        Args:
+            timeframe: 타임프레임 (1s, 1m, 5m, 15m, 1h, 4h, 1d, 1w, 1M, 1y)
+
+        Returns:
+            float: timeframe의 1.5배 임계값 (초 단위)
+
+        Examples:
+            1s → 1.5초, 1m → 90초, 5m → 450초
+        """
+        timeframe_seconds = self._get_timeframe_seconds(timeframe)
+        threshold = timeframe_seconds * 1.5
+
+        logger.debug(f"적응형 임계값 계산: {timeframe} → {timeframe_seconds}s × 1.5 = {threshold}s")
+
+        return threshold
+
+    def _record_query_performance(self, query_type: str, execution_time_ms: float, timeframe: Optional[str] = None) -> None:
+        """쿼리 성능 기록"""
+        if query_type in self._metrics["query_performance"]:
+            self._metrics["query_performance"][query_type].append(execution_time_ms)
+
+        if timeframe:
+            if timeframe not in self._metrics["timeframe_performance"]:
+                self._metrics["timeframe_performance"][timeframe] = {
+                    "query_times": [],
+                    "optimizations": 0
+                }
+            self._metrics["timeframe_performance"][timeframe]["query_times"].append(execution_time_ms)
+
+    def _record_optimization_saving(self, saving_type: str, time_saved_ms: float = 0.0) -> None:
+        """최적화 절약 효과 기록"""
+        if saving_type == "early_termination":
+            self._metrics["optimization_savings"]["early_termination_count"] += 1
+        elif saving_type == "result_reuse":
+            self._metrics["optimization_savings"]["result_reuse_count"] += 1
+
+        self._metrics["optimization_savings"]["total_query_time_saved_ms"] += time_saved_ms
+
     async def optimize_and_collect_candles(
         self,
         symbol: str,
@@ -109,7 +174,7 @@ class UpbitOverlapOptimizer:
         """4단계 최적화로 캔들 데이터 수집"""
         optimization_start = datetime.now()
         logger.info(f"4단계 최적화 시작: {symbol} {timeframe} "
-                   f"{start_time} ~ {end_time}")
+                    f"{start_time} ~ {end_time}")
 
         result = OptimizationResult(
             symbol=symbol,
@@ -141,10 +206,13 @@ class UpbitOverlapOptimizer:
                     )
                     strategy = "COMPLETE_OVERLAP"
 
-                # 3단계: 파편화 확인
-                elif self._check_fragmentation(symbol, timeframe, current_start, end_time):
-                    api_request, candles_inserted, next_start = await self._handle_fragmentation(
-                        symbol, timeframe, current_start, end_time
+                # 3단계: 파편화 확인 (최적화된 결과 재사용)
+                fragmentation_result = self._check_fragmentation_with_position(
+                    symbol, timeframe, current_start, end_time
+                )
+                if fragmentation_result.has_fragmentation:
+                    api_request, candles_inserted, next_start = await self._handle_fragmentation_optimized(
+                        symbol, timeframe, current_start, end_time, fragmentation_result
                     )
                     strategy = "FRAGMENTATION"
 
@@ -201,8 +269,8 @@ class UpbitOverlapOptimizer:
             self._update_metrics(result)
 
             logger.info(f"4단계 최적화 완료: {symbol} {timeframe} "
-                       f"단계={len(optimization_steps)}, API={total_api_calls}회, "
-                       f"캔들={total_candles}개, 시간={processing_time:.1f}ms")
+                        f"단계={len(optimization_steps)}, API={total_api_calls}회, "
+                        f"캔들={total_candles}개, 시간={processing_time:.1f}ms")
 
             return result
 
@@ -225,7 +293,9 @@ class UpbitOverlapOptimizer:
     # ========== 4단계 최적화 메서드들 ==========
 
     def _check_start_overlap(self, symbol: str, timeframe: str, start_time: datetime) -> bool:
-        """1단계: 시작점 200개 내 겹침 확인"""
+        """1단계: 시작점 200개 내 겹침 확인 (성능 모니터링 포함)"""
+        query_start = datetime.now()
+
         try:
             table_name = f"candles_{symbol.replace('-', '_')}_{timeframe}"
             timeframe_seconds = self._get_timeframe_seconds(timeframe)
@@ -242,12 +312,18 @@ class UpbitOverlapOptimizer:
                 (start_time.isoformat(), end_time.isoformat())
             )
 
+            query_time = (datetime.now() - query_start).total_seconds() * 1000
+            self._record_query_performance("start_overlap_ms", query_time, timeframe)
+
             has_overlap = len(result) > 0
-            logger.debug(f"시작점 겹침 확인: {symbol} {timeframe} -> {has_overlap}")
+            logger.debug(f"시작점 겹침 확인: {symbol} {timeframe} -> {has_overlap}, "
+                         f"쿼리시간={query_time:.1f}ms")
 
             return has_overlap
 
         except Exception as e:
+            query_time = (datetime.now() - query_start).total_seconds() * 1000
+            self._record_query_performance("start_overlap_ms", query_time, timeframe)
             logger.error(f"시작점 겹침 확인 실패: {e}")
             return False
 
@@ -298,6 +374,7 @@ class UpbitOverlapOptimizer:
         end_time: datetime
     ) -> bool:
         """2단계: 완전 겹침 확인"""
+        query_start = time.time()
         try:
             table_name = f"candles_{symbol.replace('-', '_')}_{timeframe}"
             timeframe_seconds = self._get_timeframe_seconds(timeframe)
@@ -324,8 +401,13 @@ class UpbitOverlapOptimizer:
             actual_count = result[0][0] if result else 0
             is_complete = actual_count >= expected_count
 
+            # 성능 측정 기록
+            query_time = (time.time() - query_start) * 1000
+            self._record_query_performance("complete_overlap", query_time, timeframe)
+
             logger.debug(f"완전 겹침 확인: {symbol} {timeframe} "
-                        f"실제={actual_count}, 예상={expected_count}, 완전={is_complete}")
+                         f"실제={actual_count}, 예상={expected_count}, 완전={is_complete}, "
+                         f"쿼리시간={query_time:.1f}ms")
 
             return is_complete
 
@@ -352,14 +434,16 @@ class UpbitOverlapOptimizer:
 
         return None, 0, next_start  # API 호출 없음
 
-    def _check_fragmentation(
+    def _check_fragmentation_with_position(
         self,
         symbol: str,
         timeframe: str,
         start_time: datetime,
         end_time: datetime
-    ) -> bool:
-        """3단계: 파편화 겹침 확인"""
+    ) -> FragmentationResult:
+        """3단계: 파편화 확인 + 첫 번째 끊어짐 위치 반환 (조기 종료 최적화)"""
+        query_start = time.time()
+
         try:
             table_name = f"candles_{symbol.replace('-', '_')}_{timeframe}"
             timeframe_seconds = self._get_timeframe_seconds(timeframe)
@@ -370,7 +454,11 @@ class UpbitOverlapOptimizer:
                 start_time + timedelta(seconds=timeframe_seconds * (UPBIT_API_LIMIT - 1))
             )
 
-            fragmentation_query = f"""
+            # 적응형 임계값 사용
+            fragmentation_threshold = self._get_fragmentation_threshold(timeframe)
+
+            # 조기 종료 + 첫 번째 끊어짐 위치 반환 쿼리
+            optimized_fragmentation_query = f"""
             WITH gaps AS (
                 SELECT
                     candle_date_time_utc,
@@ -379,30 +467,147 @@ class UpbitOverlapOptimizer:
                 FROM {table_name}
                 WHERE candle_date_time_utc BETWEEN ? AND ?
                 ORDER BY timestamp
+            ),
+            significant_gaps AS (
+                SELECT
+                    candle_date_time_utc,
+                    gap_seconds,
+                    ROW_NUMBER() OVER (ORDER BY candle_date_time_utc) as gap_rank
+                FROM gaps
+                WHERE prev_timestamp IS NOT NULL AND gap_seconds > ?
+                LIMIT 2  -- 조기 종료: 최대 2개만 확인
             )
-            SELECT COUNT(CASE WHEN gap_seconds > ? THEN 1 END) as significant_gaps
-            FROM gaps
-            WHERE prev_timestamp IS NOT NULL
+            SELECT
+                COUNT(*) as gap_count,
+                MIN(CASE WHEN gap_rank = 1 THEN candle_date_time_utc END) as first_gap_position
+            FROM significant_gaps
             """
 
-            # 파편화 임계값: timeframe의 1.5배 (유연한 기준)
-            fragmentation_threshold = timeframe_seconds * 1.5
-
             result = self.repository._execute_query(
-                fragmentation_query,
+                optimized_fragmentation_query,
                 (start_time.isoformat(), chunk_end.isoformat(), fragmentation_threshold)
             )
 
-            gap_count = result[0][0] if result else 0
-            has_fragmentation = gap_count >= 2
+            query_time = (time.time() - query_start) * 1000
 
-            logger.debug(f"파편화 확인: {symbol} {timeframe} 간격={gap_count}, 파편화={has_fragmentation}")
+            if result and len(result) > 0:
+                gap_count = result[0][0] or 0
+                first_gap_str = result[0][1] if len(result[0]) > 1 else None
 
-            return has_fragmentation
+                # 첫 번째 끊어짐 위치 파싱
+                first_gap_position = None
+                if first_gap_str:
+                    try:
+                        first_gap_position = datetime.fromisoformat(first_gap_str.replace('Z', '+00:00'))
+                    except Exception as e:
+                        logger.warning(f"첫 번째 끊어짐 위치 파싱 실패: {first_gap_str} - {e}")
+
+                has_fragmentation = gap_count >= 2
+
+                fragmentation_result = FragmentationResult(
+                    has_fragmentation=has_fragmentation,
+                    gap_count=gap_count,
+                    first_gap_position=first_gap_position,
+                    threshold_seconds=fragmentation_threshold,
+                    query_time_ms=query_time
+                )
+
+                # 성능 측정 기록
+                self._record_query_performance("fragmentation", query_time, timeframe)
+                if has_fragmentation:
+                    self._record_optimization_saving("early_termination_fragmentation")
+
+                logger.debug(f"파편화 확인 최적화: {symbol} {timeframe} "
+                             f"간격={gap_count}, 파편화={has_fragmentation}, "
+                             f"첫 끊어짐={first_gap_position}, 쿼리시간={query_time:.1f}ms")
+
+                return fragmentation_result
+
+            # 결과가 없는 경우
+            return FragmentationResult(
+                has_fragmentation=False,
+                gap_count=0,
+                first_gap_position=None,
+                threshold_seconds=fragmentation_threshold,
+                query_time_ms=query_time
+            )
 
         except Exception as e:
-            logger.error(f"파편화 확인 실패: {e}")
-            return False
+            query_time = (time.time() - query_start) * 1000
+            logger.error(f"파편화 확인 최적화 실패: {e}")
+
+            # 에러 시 안전한 기본값 반환
+            return FragmentationResult(
+                has_fragmentation=False,
+                gap_count=0,
+                first_gap_position=None,
+                threshold_seconds=self._get_fragmentation_threshold(timeframe),
+                query_time_ms=query_time
+            )
+
+    def _check_fragmentation(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> bool:
+        """3단계: 파편화 겹침 확인 (하위 호환성 유지)"""
+        fragmentation_result = self._check_fragmentation_with_position(
+            symbol, timeframe, start_time, end_time
+        )
+        return fragmentation_result.has_fragmentation
+
+    async def _handle_fragmentation_optimized(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime,
+        fragmentation_result: FragmentationResult
+    ) -> Tuple[Optional[ApiRequest], int, datetime]:
+        """3단계 처리 최적화: FragmentationResult 재사용으로 연속된 끝부터 200개 요청"""
+
+        # 최적화된 연결된 끝 찾기 (중복 계산 제거)
+        connected_end = self._find_connected_end_optimized(
+            fragmentation_result, symbol, timeframe, start_time, end_time
+        )
+
+        if connected_end and connected_end > start_time:
+            # 연결된 끝부터 요청 시작
+            api_start_time = connected_end
+        else:
+            # 연결된 끝이 없으면 원래 시작점부터
+            api_start_time = start_time
+
+        timeframe_seconds = self._get_timeframe_seconds(timeframe)
+
+        # TimeUtils를 활용한 정확한 캔들 개수 계산
+        base_count = self.time_utils.calculate_candle_count(api_start_time, end_time, timeframe)
+        api_count = min(UPBIT_API_LIMIT, base_count + 1)  # +1: 안전 버퍼
+
+        api_request = ApiRequest(
+            symbol=symbol,
+            timeframe=timeframe,
+            start_time=api_start_time,
+            count=api_count,
+            target_start=api_start_time,
+            expected_end=api_start_time + timedelta(seconds=timeframe_seconds * (api_count - 1))
+        )
+
+        # 실제 API 호출 및 INSERT OR IGNORE
+        candles_data = await self.api_client(**api_request.to_upbit_params())
+        candles_inserted = await self.repository.save_candles(symbol, timeframe, candles_data)
+
+        # 다음 시작점
+        next_start = api_start_time + timedelta(seconds=timeframe_seconds * UPBIT_API_LIMIT)
+        if next_start >= end_time:
+            next_start = end_time
+
+        logger.info(f"3단계 최적화 완료: {symbol} 파편화 구간, 캔들 {candles_inserted}개, "
+                    f"쿼리시간={fragmentation_result.query_time_ms:.1f}ms")
+
+        return api_request, candles_inserted, next_start
 
     async def _handle_fragmentation(
         self,
@@ -450,6 +655,42 @@ class UpbitOverlapOptimizer:
 
         return api_request, candles_inserted, next_start
 
+    def _find_connected_end_optimized(
+        self,
+        fragmentation_result: FragmentationResult,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> Optional[datetime]:
+        """연결된 끝 찾기 최적화 - FragmentationResult 재사용"""
+
+        # 파편화가 없으면 전체 구간이 연결되어 있음
+        if not fragmentation_result.has_fragmentation:
+            # 최적화 절약 기록 (중복 쿼리 회피)
+            self._record_optimization_saving("fragmentation_result_reuse")
+            logger.debug(f"연결된 끝 최적화: {symbol} {timeframe} - 파편화 없음, 전체 연결")
+            return end_time
+
+        # 첫 번째 끊어짐 위치가 있으면 그 직전까지가 연결된 구간
+        if fragmentation_result.first_gap_position:
+            timeframe_seconds = self._get_timeframe_seconds(timeframe)
+            # 첫 번째 끊어짐 직전이 연결된 끝
+            connected_end = fragmentation_result.first_gap_position - timedelta(seconds=timeframe_seconds)
+
+            # 최적화 절약 기록 (중복 쿼리 회피)
+            self._record_optimization_saving("fragmentation_result_reuse")
+
+            logger.debug(f"연결된 끝 최적화: {symbol} {timeframe} - "
+                         f"첫 끊어짐={fragmentation_result.first_gap_position}, "
+                         f"연결끝={connected_end}")
+
+            return connected_end if connected_end >= start_time else None
+
+        # 파편화는 있지만 첫 번째 위치가 없는 경우 (예외 상황)
+        logger.warning(f"연결된 끝 최적화: {symbol} {timeframe} - 파편화 있으나 위치 없음, 기존 방식 사용")
+        return self._find_connected_end(symbol, timeframe, start_time, end_time)
+
     def _find_connected_end(
         self,
         symbol: str,
@@ -457,7 +698,8 @@ class UpbitOverlapOptimizer:
         start_time: datetime,
         end_time: datetime
     ) -> Optional[datetime]:
-        """연결된 끝 찾기 (공통 메서드)"""
+        """연결된 끝 찾기 (공통 메서드 - 하위 호환성 유지)"""
+        query_start = time.time()
         try:
             table_name = f"candles_{symbol.replace('-', '_')}_{timeframe}"
             timeframe_seconds = self._get_timeframe_seconds(timeframe)
@@ -495,15 +737,22 @@ class UpbitOverlapOptimizer:
                 (start_timestamp, start_time.isoformat(), chunk_end.isoformat())
             )
 
+            # 성능 측정 기록
+            query_time = (time.time() - query_start) * 1000
+            self._record_query_performance("connected_end_legacy", query_time, timeframe)
+
             if result:
                 connected_end_str = result[0][0]
                 connected_end = datetime.fromisoformat(connected_end_str.replace('Z', '+00:00'))
-                logger.debug(f"연결된 끝 발견: {symbol} {timeframe} -> {connected_end}")
+                logger.debug(f"연결된 끝 발견: {symbol} {timeframe} -> {connected_end}, "
+                             f"쿼리시간={query_time:.1f}ms")
                 return connected_end
 
             return None
 
         except Exception as e:
+            query_time = (time.time() - query_start) * 1000
+            self._record_query_performance("connected_end_legacy", query_time, timeframe)
             logger.error(f"연결된 끝 찾기 실패: {e}")
             return None
 
