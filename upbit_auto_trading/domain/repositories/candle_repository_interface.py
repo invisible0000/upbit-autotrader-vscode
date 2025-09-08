@@ -1,10 +1,10 @@
 """
-CandleDataProvider v4.0 - Minimal Domain Repository Interface
-OverlapAnalyzer 전용 최소한의 인터페이스
+CandleDataProvider v4.0 - Enhanced Domain Repository Interface
+OverlapAnalyzer 지원 + 새로운 CandleData 모델 지원
 
 설계 원칙:
-- OverlapAnalyzer 요구사항에만 집중
-- 필요한 기능을 하나씩 점진적으로 추가
+- OverlapAnalyzer 기존 메서드 완전 호환 유지
+- 새로운 CandleData 모델 지원 메서드 추가
 - DDD Domain Layer 순수성 유지
 """
 
@@ -24,7 +24,9 @@ class DataRange:
 
 
 class CandleRepositoryInterface(ABC):
-    """캔들 데이터 Repository 인터페이스 - OverlapAnalyzer 전용 최소 구현"""
+    """캔들 데이터 Repository 인터페이스 - OverlapAnalyzer + CandleDataProvider v4.0 지원"""
+
+    # === OverlapAnalyzer 전용 메서드들 (기존 호환성 보장) ===
 
     @abstractmethod
     async def get_data_ranges(self,
@@ -117,6 +119,66 @@ class CandleRepositoryInterface(ABC):
 
         Note:
             - overlap_analyzer의 find_connected_end 단순화 버전
-            - 효율적인 MAX 쿼리 활용
+            - 효율적인 LEAD 윈도우 함수 활용 (309x 최적화)
+        """
+        pass
+
+    # === CandleDataProvider v4.0 새로운 메서드들 ===
+
+    @abstractmethod
+    async def ensure_table_exists(self, symbol: str, timeframe: str) -> str:
+        """캔들 테이블 생성 (새로운 스키마 적용)
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+
+        Returns:
+            str: 생성된 테이블명
+
+        Note:
+            - 업비트 API 호환 스키마 적용
+            - PRIMARY KEY (candle_date_time_utc) 사용
+            - timeframe_specific_data JSON 컬럼 포함
+        """
+        pass
+
+    @abstractmethod
+    async def save_candle_chunk(self, symbol: str, timeframe: str, candles) -> int:
+        """캔들 데이터 청크 저장
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            candles: CandleData 객체 리스트
+
+        Returns:
+            int: 저장된 캔들 개수
+
+        Note:
+            - 새로운 CandleData 모델 지원
+            - INSERT OR IGNORE 방식으로 중복 처리 (중복시 삽입 무시)
+            - UTC 시간 PRIMARY KEY + 업비트 데이터 불변성 활용
+            - 배치 삽입으로 성능 최적화
+        """
+        pass
+
+    @abstractmethod
+    async def get_candles_by_range(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> List:
+        """지정 범위의 캔들 데이터 조회 (새로운 CandleData 모델 반환)
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            start_time: 조회 시작 시간
+            end_time: 조회 종료 시간
+
+        Returns:
+            List[CandleData]: 새로운 CandleData 모델 리스트
+
+        Note:
+            - PRIMARY KEY 범위 스캔 활용
+            - JSON 필드 파싱 포함
+            - 시간순 정렬 보장
         """
         pass

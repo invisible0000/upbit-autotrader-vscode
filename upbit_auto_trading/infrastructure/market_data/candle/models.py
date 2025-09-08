@@ -6,7 +6,6 @@ Created: 2025-01-08
 Purpose: Infrastructure Service 간 데이터 교환용 모델 정의
 """
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -97,36 +96,20 @@ class CandleData:
         )
 
     def to_db_dict(self) -> dict:
-        """DB 저장용 딕셔너리 변환"""
-        # 공통 필드
-        base_data = {
-            "symbol": self.symbol,
-            "timeframe": self.timeframe,
-            "timestamp": self.timestamp,
+        """DB 저장용 딕셔너리 변환 (공통 필드만, Repository 스키마와 통일)"""
+        return {
+            # 업비트 API 공통 필드 (Repository 스키마와 1:1 매칭)
+            "market": self.market,
             "candle_date_time_utc": self.candle_date_time_utc,
             "candle_date_time_kst": self.candle_date_time_kst,
             "opening_price": self.opening_price,
             "high_price": self.high_price,
             "low_price": self.low_price,
             "trade_price": self.trade_price,
+            "timestamp": self.timestamp,
             "candle_acc_trade_price": self.candle_acc_trade_price,
             "candle_acc_trade_volume": self.candle_acc_trade_volume,
         }
-
-        # 타임프레임별 고유 데이터 (JSON)
-        timeframe_specific = {}
-        optional_fields = [
-            "unit", "prev_closing_price", "change_price", "change_rate",
-            "first_day_of_period", "converted_trade_price"
-        ]
-
-        for field in optional_fields:
-            value = getattr(self, field, None)
-            if value is not None:
-                timeframe_specific[field] = value
-
-        base_data["timeframe_specific_data"] = json.dumps(timeframe_specific) if timeframe_specific else None
-        return base_data
 
 
 # === 요청/응답 모델 ===

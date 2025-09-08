@@ -313,8 +313,173 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         raise NotImplementedError("count_candles는 추후 구현 예정")
 
     async def ensure_table_exists(self, symbol: str, timeframe: str) -> str:
-        """테이블 생성 (추후 구현)"""
-        raise NotImplementedError("ensure_table_exists는 추후 구현 예정")
+        """캔들 테이블 생성 (단순한 공통 스키마)
+
+        공통 필드만 저장하여 통일성 확보:
+        - PRIMARY KEY (candle_date_time_utc): 시간 정렬 + 중복 방지
+        - 업비트 API 공통 필드만 지원 (추가 필드는 제외)
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        create_table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            -- ✅ 단일 PRIMARY KEY (시간 정렬 + 중복 방지)
+            candle_date_time_utc TEXT NOT NULL PRIMARY KEY,
+
+            -- 업비트 API 공통 필드들
+            market TEXT NOT NULL,
+            candle_date_time_kst TEXT NOT NULL,
+            opening_price REAL NOT NULL,
+            high_price REAL NOT NULL,
+            low_price REAL NOT NULL,
+            trade_price REAL NOT NULL,
+            timestamp INTEGER NOT NULL,
+            candle_acc_trade_price REAL NOT NULL,
+            candle_acc_trade_volume REAL NOT NULL,
+
+            -- 메타데이터
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                conn.execute(create_table_sql)
+                conn.commit()
+                logger.debug(f"테이블 확인/생성 완료: {table_name}")
+                return table_name
+
+        except Exception as e:
+            logger.error(f"테이블 생성 실패: {table_name}, {e}")
+            raise
+
+    async def save_candle_chunk(self, symbol: str, timeframe: str, candles) -> int:
+        """캔들 데이터 청크 저장 (공통 필드만 저장)
+
+        INSERT OR IGNORE 방식으로 중복 처리하며 배치 삽입으로 성능 최적화
+        - UTC 시간이 PRIMARY KEY이므로 중복시 자동으로 무시됨
+        - 업비트 서버 데이터는 불변이므로 REPLACE 불필요
+        - 공통 필드만 저장하여 통일성 확보
+        """
+        if not candles:
+            logger.debug(f"저장할 캔들 없음: {symbol} {timeframe}")
+            return 0
+
+        # 테이블 존재 확인 및 생성
+        table_name = await self.ensure_table_exists(symbol, timeframe)
+
+        # CandleData 객체들을 DB 형식으로 변환 (공통 필드만)
+        db_records = []
+        for candle in candles:
+            if hasattr(candle, 'to_db_dict'):
+                # 새로운 CandleData 모델에서 공통 필드만 추출
+                db_dict = candle.to_db_dict()
+                db_records.append((
+                    db_dict['candle_date_time_utc'],
+                    db_dict['market'],
+                    db_dict['candle_date_time_kst'],
+                    db_dict['opening_price'],
+                    db_dict['high_price'],
+                    db_dict['low_price'],
+                    db_dict['trade_price'],
+                    db_dict['timestamp'],
+                    db_dict['candle_acc_trade_price'],
+                    db_dict['candle_acc_trade_volume']
+                ))
+            else:
+                # 호환성을 위한 기존 형식 지원 (추후 제거 예정)
+                logger.warning(f"기존 형식 캔들 데이터 감지: {type(candle)}")
+                raise ValueError("새로운 CandleData 모델만 지원됩니다")
+
+        insert_sql = f"""
+        INSERT OR IGNORE INTO {table_name} (
+            candle_date_time_utc, market, candle_date_time_kst,
+            opening_price, high_price, low_price, trade_price,
+            timestamp, candle_acc_trade_price, candle_acc_trade_volume
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.executemany(insert_sql, db_records)
+                saved_count = cursor.rowcount
+                conn.commit()
+
+                logger.debug(f"캔들 청크 저장 완료: {symbol} {timeframe}, {saved_count}개")
+                return saved_count
+
+        except Exception as e:
+            logger.error(f"캔들 청크 저장 실패: {symbol} {timeframe}, {e}")
+            raise
+
+    async def get_candles_by_range(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> List:
+        """지정 범위의 캔들 데이터 조회 (공통 필드만 조회)
+
+        PRIMARY KEY 범위 스캔을 활용하여 최고 성능 달성
+        """
+        if not await self.table_exists(symbol, timeframe):
+            logger.debug(f"테이블 없음: {symbol} {timeframe}")
+            return []
+
+        table_name = self._get_table_name(symbol, timeframe)
+
+        # PRIMARY KEY 범위 스캔 쿼리 (ORDER BY 불필요 - 이미 정렬됨)
+        select_sql = f"""
+        SELECT
+            candle_date_time_utc, market, candle_date_time_kst,
+            opening_price, high_price, low_price, trade_price,
+            timestamp, candle_acc_trade_price, candle_acc_trade_volume
+        FROM {table_name}
+        WHERE candle_date_time_utc BETWEEN ? AND ?
+        """
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.execute(select_sql, (
+                    start_time.isoformat(),
+                    end_time.isoformat()
+                ))
+
+                rows = cursor.fetchall()
+                if not rows:
+                    logger.debug(f"조회 결과 없음: {symbol} {timeframe} ({start_time} ~ {end_time})")
+                    return []
+
+                # DB 레코드를 CandleData 객체로 변환 (공통 필드만)
+                candles = []
+                for row in rows:
+                    try:
+                        # 동적 import로 순환 참조 방지
+                        from upbit_auto_trading.infrastructure.market_data.candle.models import CandleData
+
+                        candle = CandleData(
+                            market=row[1],
+                            candle_date_time_utc=row[0],
+                            candle_date_time_kst=row[2],
+                            opening_price=row[3],
+                            high_price=row[4],
+                            low_price=row[5],
+                            trade_price=row[6],
+                            timestamp=row[7],
+                            candle_acc_trade_price=row[8],
+                            candle_acc_trade_volume=row[9],
+
+                            # 편의성 필드
+                            symbol=row[1],  # market과 동일
+                            timeframe=timeframe
+                        )
+                        candles.append(candle)
+
+                    except Exception as e:
+                        logger.warning(f"캔들 데이터 변환 실패: {row[0]}, {e}")
+                        continue
+
+                logger.debug(f"캔들 조회 완료: {symbol} {timeframe}, {len(candles)}개")
+                return candles
+
+        except Exception as e:
+            logger.error(f"캔들 조회 실패: {symbol} {timeframe}, {e}")
+            return []
 
     async def get_table_stats(self, symbol: str, timeframe: str):
         """테이블 통계 (추후 구현)"""

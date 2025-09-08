@@ -189,7 +189,8 @@ class SqliteCandleRepository:
     # === 데이터 저장 ===
     async def save_candle_chunk(symbol: str, timeframe: str, candles: List[CandleData]) -> bool:
         # 청크 단위 캔들 데이터 저장
-        # INSERT OR IGNORE 방식으로 중복 방지
+        # INSERT OR IGNORE 방식으로 중복 처리 (중복시 삽입 무시)
+        # 🎯 이유: UTC 시간이 PRIMARY KEY + 업비트 서버 데이터 불변
         # 심볼별 개별 테이블 관리
 
     # === 기존 데이터 조회 ===
