@@ -217,6 +217,11 @@ class UpbitPublicClient:
         Raises:
             Exception: API 오류 또는 네트워크 오류
         """
+        # 🔍 디버깅: 실제 업비트 서버에 보내는 파라미터 로깅
+        self._logger.debug(f"🌐 업비트 API 요청: {method} {endpoint}")
+        if params:
+            self._logger.debug(f"📝 요청 파라미터: {params}")
+
         await self._ensure_session()
 
         if not self._session:

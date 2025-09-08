@@ -73,7 +73,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 """, (start_time.isoformat(), end_time.isoformat()))
 
                 exists = cursor.fetchone() is not None
-                logger.debug(f"데이터 존재 확인: {symbol} {timeframe} ({start_time} ~ {end_time}) -> {exists}")
+                # 업비트 방향 (latest → past): end_time이 latest, start_time이 past
+                logger.debug(f"데이터 존재 확인: {symbol} {timeframe} (latest={end_time} → past={start_time}) -> {exists}")
                 return exists
 
         except Exception as e:

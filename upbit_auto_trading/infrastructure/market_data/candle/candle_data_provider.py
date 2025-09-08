@@ -82,17 +82,23 @@ class CandleDataProvider:
         self.cache = CandleCache(max_memory_mb=100, default_ttl_seconds=60)
         logger.debug("CandleCache 초기화 완료 - 100MB, 60초 TTL")
 
-        # 겹침 분석기 (추후 구현 예정)
-        self.overlap_analyzer = None
+        # 겹침 분석기 초기화 (DB/API 혼합 최적화)
+        from upbit_auto_trading.infrastructure.market_data.candle.overlap_analyzer import OverlapAnalyzer
+        self.overlap_analyzer = OverlapAnalyzer(self.repository, TimeUtils)
 
-        # 성능 통계
+        # 성능 통계 (DB/API 혼합 최적화 추가)
         self.stats = {
             'total_requests': 0,
             'cache_hits': 0,
             'api_requests': 0,
             'db_queries': 0,
             'chunks_processed': 0,
-            'average_response_time_ms': 0.0
+            'average_response_time_ms': 0.0,
+            # 새로운 혼합 최적화 통계
+            'mixed_optimizations': 0,        # DB/API 혼합 최적화 횟수
+            'db_only_hits': 0,               # DB 전용 조회 횟수
+            'overlap_analysis_count': 0,     # 겹침 분석 실행 횟수
+            'api_requests_saved': 0          # 최적화로 절약된 API 요청 수
         }
 
         logger.info("✅ CandleDataProvider v4.0 초기화 완료")
@@ -204,7 +210,8 @@ class CandleDataProvider:
             )
             final_start_time, final_end_time, final_count = validated_params
 
-            logger.debug(f"📋 표준화된 요청: start={final_start_time}, end={final_end_time}, count={final_count}")
+            # 업비트 방향 (latest → past): end_time이 latest, start_time이 past
+            logger.debug(f"📋 표준화된 요청 (업비트 방향): latest={final_end_time} → past={final_start_time}, count={final_count}")
 
             # 2. 캐시 우선 확인 (완전 데이터 존재시 즉시 반환)
             cache_result = await self._check_cache_complete_range(symbol, timeframe, final_start_time, final_count)
@@ -221,11 +228,12 @@ class CandleDataProvider:
             logger.debug(f"📦 청크 분할: {len(chunks)}개 청크 (200개씩)")
 
             # 4. 청크들을 순차 수집 (target_end_time 도달시 중단)
-            collected_candles = await self._collect_chunks_sequentially(chunks, final_end_time)
+            collected_candles, data_sources = await self._collect_chunks_sequentially(chunks, final_end_time)
 
             # 5. 최종 응답 조합
             response = await self._assemble_response(
                 collected_candles,
+                data_sources,
                 request_start_time,
                 len(chunks)
             )
@@ -402,7 +410,7 @@ class CandleDataProvider:
         end_time: datetime
     ) -> List[CandleChunk]:
         """
-        전체 요청을 200개 청크로 분할
+        전체 요청을 200개 청크로 분할 - TimeUtils 고급 기능 활용
 
         Args:
             symbol: 심볼
@@ -414,59 +422,47 @@ class CandleDataProvider:
         Returns:
             List[CandleChunk]: 청크 리스트
         """
-        chunks = []
-        chunk_size = 200
-        current_start = start_time
-        remaining_count = count
-        chunk_index = 0
+        # TimeUtils의 고급 기능 활용하여 정확한 청크 분할
+        time_chunks = TimeUtils.calculate_chunk_boundaries(
+            start_time=start_time,
+            end_time=end_time,
+            timeframe=timeframe,
+            chunk_size=200
+        )
 
-        while remaining_count > 0:
-            # 현재 청크의 캔들 개수 결정
-            current_chunk_count = min(chunk_size, remaining_count)
-
-            # 청크 생성
-            chunk = CandleChunk(
+        # TimeChunk를 CandleChunk로 변환
+        candle_chunks = []
+        for idx, time_chunk in enumerate(time_chunks):
+            candle_chunk = CandleChunk(
                 symbol=symbol,
                 timeframe=timeframe,
-                start_time=current_start,
-                count=current_chunk_count,
-                chunk_index=chunk_index
+                start_time=time_chunk.start_time,
+                count=time_chunk.expected_count,
+                chunk_index=idx
             )
-            chunks.append(chunk)
+            candle_chunks.append(candle_chunk)
 
-            # 다음 청크 시작점 계산
-            if remaining_count > chunk_size:
-                # TimeUtils로 다음 시작점 계산
-                chunk_time_span = TimeUtils.get_timeframe_seconds(timeframe) * current_chunk_count
-                current_start = current_start + timedelta(seconds=chunk_time_span)
-
-                # end_time 도달 검사
-                if current_start >= end_time:
-                    logger.debug(f"📍 end_time 도달로 청크 분할 중단: {current_start} >= {end_time}")
-                    break
-
-            remaining_count -= current_chunk_count
-            chunk_index += 1
-
-        logger.debug(f"📦 청크 분할 완료: {len(chunks)}개 청크, 예상 총 {sum(c.count for c in chunks)}개 캔들")
-        return chunks
+        logger.debug(f"� TimeUtils 기반 청크 분할 완료: {len(candle_chunks)}개 청크, "
+                     f"예상 총 {sum(c.count for c in candle_chunks)}개 캔들")
+        return candle_chunks
 
     async def _collect_chunks_sequentially(
         self,
         chunks: List[CandleChunk],
         target_end_time: datetime
-    ) -> List[CandleData]:
+    ) -> Tuple[List[CandleData], List[str]]:
         """
-        청크들을 순서대로 하나씩 수집
+        청크들을 순서대로 하나씩 수집 - 데이터 소스 추적 개선
 
         Args:
             chunks: 청크 리스트
             target_end_time: 목표 종료 시간 (이 시점 도달시 수집 중단)
 
         Returns:
-            List[CandleData]: 수집된 모든 캔들 데이터
+            Tuple[List[CandleData], List[str]]: (수집된 캔들 데이터, 데이터 소스 리스트)
         """
         all_collected_candles = []
+        data_sources = []  # 각 청크별 데이터 소스 추적
         connected_end = None  # 연속된 데이터의 끝점 추적
 
         for chunk_idx, chunk in enumerate(chunks):
@@ -479,13 +475,13 @@ class CandleDataProvider:
 
                 if collection_result.collected_candles:
                     all_collected_candles.extend(collection_result.collected_candles)
+                    data_sources.append(collection_result.data_source)
 
                     # 수집된 캔들의 마지막 시간으로 connected_end 업데이트
                     last_candle = collection_result.collected_candles[-1]
                     logger.debug(f"🔍 last_candle.candle_date_time_utc 원본: '{last_candle.candle_date_time_utc}'")
 
                     # UTC 시간대 정보를 명시적으로 추가
-                    # API에서 오는 시간이 'Z' 없이 UTC이므로 직접 timezone 설정
                     if 'Z' in last_candle.candle_date_time_utc:
                         # Z가 있는 경우: Z를 +00:00으로 변환
                         utc_time_str = last_candle.candle_date_time_utc.replace('Z', '+00:00')
@@ -501,6 +497,7 @@ class CandleDataProvider:
                                  f"소스={collection_result.data_source}, connected_end={connected_end}")
                 else:
                     logger.warning(f"⚠️ 청크 {chunk_idx + 1} 수집 결과 없음")
+                    data_sources.append("empty")
 
                 # target_end_time 도달 검사 (시간대 정보 맞춤)
                 if connected_end and target_end_time:
@@ -518,11 +515,12 @@ class CandleDataProvider:
 
             except Exception as e:
                 logger.error(f"❌ 청크 {chunk_idx + 1} 수집 실패: {e}")
+                data_sources.append("error")
                 # 청크 실패시에도 계속 진행 (부분 성공 허용)
                 continue
 
         logger.info(f"📊 전체 청크 수집 완료: {len(all_collected_candles)}개 캔들")
-        return all_collected_candles
+        return all_collected_candles, data_sources
 
     async def _collect_single_chunk(
         self,
@@ -530,7 +528,7 @@ class CandleDataProvider:
         connected_end: Optional[datetime]
     ) -> CollectionResult:
         """
-        단일 청크 수집 로직
+        단일 청크 수집 로직 - OverlapAnalyzer 활용 DB/API 혼합 최적화
 
         Args:
             chunk: 수집할 청크
@@ -542,11 +540,41 @@ class CandleDataProvider:
         collection_start_time = time.perf_counter()
 
         try:
-            # 현재는 단순히 API에서만 수집 (추후 OverlapAnalyzer 연동)
-            # TODO: OverlapAnalyzer를 통한 겹침 분석 및 DB/API 혼합 수집
-            collected_candles = await self._collect_from_api_only(chunk)
+            # OverlapAnalyzer로 겹침 분석하여 최적화된 수집 전략 결정
+            self.stats['overlap_analysis_count'] += 1
+            overlap_result = await self.overlap_analyzer.analyze_overlap(
+                symbol=chunk.symbol,
+                timeframe=chunk.timeframe,
+                target_start=chunk.start_time,
+                target_count=chunk.count
+            )
 
-            # Repository에 저장
+            # 겹침 상태에 따른 최적화된 데이터 수집
+            if overlap_result.status.value == "complete_overlap":
+                # 완전 겹침: DB에서만 조회 (API 요청 없음)
+                collected_candles = await self._collect_from_db_only(chunk)
+                data_source = "db"
+                api_requests = 0
+                self.stats['db_only_hits'] += 1
+                self.stats['api_requests_saved'] += 1  # API 요청 1회 절약
+                logger.debug(f"✅ 완전 겹침 DB 조회: {chunk.symbol} {chunk.timeframe}, {len(collected_candles)}개")
+
+            elif overlap_result.status.value == "partial_overlap" and overlap_result.connected_end:
+                # 부분 겹침: DB + API 혼합 최적화
+                collected_candles = await self._collect_mixed_optimized(chunk, overlap_result.connected_end)
+                data_source = "mixed"
+                api_requests = 1  # 최적화된 API 요청 1회
+                self.stats['mixed_optimizations'] += 1
+                logger.debug(f"🔄 혼합 최적화: {chunk.symbol} {chunk.timeframe}, connected_end={overlap_result.connected_end}")
+
+            else:
+                # 겹침 없음: API에서만 수집 (기존 로직)
+                collected_candles = await self._collect_from_api_only(chunk)
+                data_source = "api"
+                api_requests = 1
+                logger.debug(f"🆕 API 전용 수집: {chunk.symbol} {chunk.timeframe}, {len(collected_candles)}개")
+
+            # Repository에 저장 (중복 방지 - INSERT OR IGNORE)
             if collected_candles:
                 await self.repository.save_candle_chunk(chunk.symbol, chunk.timeframe, collected_candles)
                 self.stats['db_queries'] += 1
@@ -559,8 +587,8 @@ class CandleDataProvider:
             return CollectionResult(
                 chunk=chunk,
                 collected_candles=collected_candles,
-                data_source="api",  # 현재는 API만 사용
-                api_requests_made=1,
+                data_source=data_source,
+                api_requests_made=api_requests,
                 collection_time_ms=collection_time_ms
             )
 
@@ -570,7 +598,7 @@ class CandleDataProvider:
 
     async def _collect_from_api_only(self, chunk: CandleChunk) -> List[CandleData]:
         """
-        API에서만 캔들 데이터 수집 (현재 구현)
+        API에서만 캔들 데이터 수집 (기존 구현)
 
         Args:
             chunk: 수집할 청크
@@ -602,6 +630,111 @@ class CandleDataProvider:
 
         return candles
 
+    async def _collect_from_db_only(self, chunk: CandleChunk) -> List[CandleData]:
+        """
+        DB에서만 캔들 데이터 수집 (완전 겹침시)
+
+        Args:
+            chunk: 수집할 청크
+
+        Returns:
+            List[CandleData]: DB에서 조회된 캔들 데이터
+        """
+        # 청크 범위의 종료 시간 계산
+        timeframe_seconds = TimeUtils.get_timeframe_seconds(chunk.timeframe)
+        chunk_end_time = chunk.start_time + timedelta(seconds=timeframe_seconds * (chunk.count - 1))
+
+        # Repository에서 범위 조회
+        db_candles = await self.repository.get_candles_by_range(
+            symbol=chunk.symbol,
+            timeframe=chunk.timeframe,
+            start_time=chunk.start_time,
+            end_time=chunk_end_time
+        )
+
+        self.stats['db_queries'] += 1
+        logger.debug(f"💾 DB 조회 완료: {chunk.symbol} {chunk.timeframe}, {len(db_candles)}개")
+
+        return db_candles
+
+    async def _collect_mixed_optimized(self, chunk: CandleChunk, connected_end: datetime) -> List[CandleData]:
+        """
+        DB/API 혼합 최적화 수집 (부분 겹침시)
+
+        Args:
+            chunk: 수집할 청크
+            connected_end: 연속된 데이터의 끝점 (OverlapAnalyzer 제공)
+
+        Returns:
+            List[CandleData]: DB + API 혼합 수집된 캔들 데이터
+        """
+        # 시간대 정보 보정 - connected_end UTC 확보
+        if connected_end.tzinfo is None:
+            connected_end = connected_end.replace(tzinfo=timezone.utc)
+        elif connected_end.tzinfo != timezone.utc:
+            connected_end = connected_end.astimezone(timezone.utc)
+
+        # 1. DB에서 기존 데이터 조회 (connected_end까지)
+        db_candles = await self.repository.get_candles_by_range(
+            symbol=chunk.symbol,
+            timeframe=chunk.timeframe,
+            start_time=chunk.start_time,
+            end_time=connected_end
+        )
+
+        # 2. TimeUtils로 API 요청 시작점 최적화
+        api_start = TimeUtils.adjust_start_from_connection(
+            connected_end=connected_end,
+            timeframe=chunk.timeframe,
+            count=200  # 기본 청크 크기
+        )
+
+        # 3. 청크 범위 종료 시간 계산 (시간대 보정)
+        timeframe_seconds = TimeUtils.get_timeframe_seconds(chunk.timeframe)
+        chunk_end_time = chunk.start_time + timedelta(seconds=timeframe_seconds * (chunk.count - 1))
+
+        # chunk_end_time 시간대 보정
+        if chunk_end_time.tzinfo is None:
+            chunk_end_time = chunk_end_time.replace(tzinfo=timezone.utc)
+        elif chunk_end_time.tzinfo != timezone.utc:
+            chunk_end_time = chunk_end_time.astimezone(timezone.utc)
+
+        # 4. API에서 신규 데이터 수집 (필요한 경우에만)
+        api_candles = []
+        if api_start <= chunk_end_time:
+            # 최적화된 API 요청용 청크 생성
+            api_count = int((chunk_end_time - api_start).total_seconds() // timeframe_seconds) + 1
+            api_chunk = CandleChunk(
+                symbol=chunk.symbol,
+                timeframe=chunk.timeframe,
+                start_time=api_start,
+                count=min(api_count, 200),  # 최대 200개로 제한
+                chunk_index=chunk.chunk_index
+            )
+
+            api_candles = await self._collect_from_api_only(api_chunk)
+
+        # 5. DB + API 데이터 통합
+        all_candles = db_candles + api_candles
+
+        # 6. 중복 제거 및 시간순 정렬
+        unique_candles = {}
+        for candle in all_candles:
+            key = f"{candle.symbol}_{candle.timeframe}_{candle.candle_date_time_utc}"
+            if key not in unique_candles:
+                unique_candles[key] = candle
+
+        sorted_candles = sorted(
+            unique_candles.values(),
+            key=lambda c: c.candle_date_time_utc
+        )
+
+        self.stats['db_queries'] += 1
+        logger.debug(f"🔄 혼합 최적화 완료: {chunk.symbol} {chunk.timeframe}, "
+                     f"DB={len(db_candles)}개 + API={len(api_candles)}개 = 총 {len(sorted_candles)}개")
+
+        return sorted_candles
+
     async def _call_upbit_api(self, chunk: CandleChunk) -> List[dict]:
         """
         업비트 API 호출 (타임프레임별 엔드포인트 매핑)
@@ -619,11 +752,12 @@ class CandleDataProvider:
         if self.upbit_client is None:
             raise RuntimeError("업비트 클라이언트가 초기화되지 않았습니다. _ensure_upbit_client()를 먼저 호출하세요.")
 
-        # 업비트 API: to 파라미터 없이 호출하면 최신 데이터부터 count개 반환
-        # 현재는 단순 구현으로 to 파라미터 제외 (추후 정확한 시간 범위 처리 개선)
-        to_time = None  # 임시로 None 사용하여 최신 데이터 조회
+        # 청크의 시작 시간을 기반으로 정확한 to_time 계산
+        to_time = self._calculate_chunk_end_time(chunk)
 
-        logger.debug(f"📡 API 호출: {symbol} {chunk.timeframe}, count={count}, to={to_time}")
+        # 업비트 방향: to_time이 latest(시작점), start가 과거 방향 참고용
+        logger.debug(f"📡 API 호출 (업비트 방향): {symbol} {chunk.timeframe}, count={count}, "
+                    f"latest(to)={to_time}, past_ref={chunk.start_time}")
 
         try:
             if chunk.timeframe == '1s':
@@ -690,6 +824,40 @@ class CandleDataProvider:
         """
         return current_end >= target_end
 
+    def _calculate_chunk_end_time(self, chunk: CandleChunk) -> Optional[str]:
+        """
+        청크의 정확한 종료 시간을 계산하여 업비트 API 'to' 파라미터 형식으로 반환
+
+        업비트 API는 'to' 파라미터로 지정한 시각 **이전** 캔들을 조회하므로,
+        chunk.start_time + (count * timeframe_duration)로 정확한 범위 계산
+
+        Args:
+            chunk: 청크 정보
+
+        Returns:
+            str: ISO 8601 UTC 형식의 종료 시간 (예: "2025-01-08T10:30:00Z")
+        """
+        try:
+            # 타임프레임별 1개 캔들의 시간 간격(초) 계산
+            timeframe_seconds = TimeUtils.get_timeframe_seconds(chunk.timeframe)
+
+            # 청크의 종료 시간 = 시작 시간 + (캔들 개수 * 타임프레임 간격)
+            chunk_end_time = chunk.start_time + timedelta(seconds=timeframe_seconds * chunk.count)
+
+            # UTC 시간대 보정
+            if chunk_end_time.tzinfo is None:
+                chunk_end_time = chunk_end_time.replace(tzinfo=timezone.utc)
+            elif chunk_end_time.tzinfo != timezone.utc:
+                chunk_end_time = chunk_end_time.astimezone(timezone.utc)
+
+            # ISO 8601 UTC 형식으로 변환 (업비트 API 호환)
+            return chunk_end_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        except Exception as e:
+            logger.warning(f"청크 종료 시간 계산 실패: {e}, chunk: {chunk.symbol} {chunk.timeframe}")
+            # 계산 실패시 None 반환하여 최신 데이터 조회로 폴백
+            return None
+
     # ================================================================
     # 응답 조합 및 통계
     # ================================================================
@@ -697,14 +865,16 @@ class CandleDataProvider:
     async def _assemble_response(
         self,
         collected_candles: List[CandleData],
+        data_sources: List[str],
         request_start_time: float,
         chunks_count: int
     ) -> CandleDataResponse:
         """
-        수집된 모든 청크를 하나의 응답으로 조합
+        수집된 모든 청크를 하나의 응답으로 조합 - 데이터 소스 추적 개선
 
         Args:
             collected_candles: 수집된 모든 캔들 데이터
+            data_sources: 각 청크별 데이터 소스 리스트
             request_start_time: 요청 시작 시간
             chunks_count: 처리된 청크 개수
 
@@ -736,8 +906,16 @@ class CandleDataProvider:
                 0.9 * self.stats['average_response_time_ms'] + 0.1 * response_time_ms
             )
 
-        # 데이터 소스 결정 (현재는 API만)
-        data_source = "api"  # 추후 "mixed", "db", "cache" 추가
+        # 데이터 소스 결정 (데이터 소스 리스트 기반)
+        unique_sources = set(data_sources)
+        if len(unique_sources) > 1:
+            data_source = "mixed"  # 여러 소스 혼합
+        elif "db" in unique_sources:
+            data_source = "db"     # DB 위주
+        elif "api" in unique_sources:
+            data_source = "api"    # API 위주
+        else:
+            data_source = "api"    # 기본값
 
         return create_success_response(
             candles=sorted_candles,

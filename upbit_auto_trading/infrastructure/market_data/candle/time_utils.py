@@ -96,12 +96,14 @@ class TimeUtils:
             logger.debug(f"count만 제공 → 현재시간 역순: {calculated_start} ~ {aligned_end} ({count}개)")
             return calculated_start, aligned_end, count
 
-        # 3. start_time + count → end_time 계산
+        # 3. start_time + count → end_time 계산 (과거 방향)
         elif start_time is not None and count is not None and end_time is None:
             aligned_start = TimeUtils._align_to_candle_boundary(start_time, timeframe)
-            calculated_end = aligned_start + timedelta(seconds=timeframe_seconds * (count - 1))
-            logger.debug(f"start_time + count → end_time 계산: {aligned_start} ~ {calculated_end} ({count}개)")
-            return aligned_start, calculated_end, count
+            # 업비트 API는 start_time부터 과거로 수집하므로 end_time은 더 과거여야 함
+            calculated_end = aligned_start - timedelta(seconds=timeframe_seconds * (count - 1))
+            # 업비트 방향 (latest → past): start_time이 latest, calculated_end가 past
+            logger.debug(f"start_time + count → end_time 계산 (과거 방향): {aligned_start} → {calculated_end} ({count}개)")
+            return calculated_end, aligned_start, count
 
         # 4. start_time + end_time → count 계산
         elif start_time is not None and end_time is not None and count is None:
