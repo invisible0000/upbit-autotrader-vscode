@@ -171,9 +171,9 @@ DB 상태: |11----| or |11-1--|
 has_start = await self.has_data_in_start(symbol, timeframe, target_start)
 
 if has_start:
-    # 연속된 끝점 찾기
+    # 연속된 끝점 찾기 (안전한 범위 제한)
     partial_end = await self.repository.find_last_continuous_time(
-        symbol, timeframe, target_start
+        symbol, timeframe, target_start, target_end
     )
 
     if partial_end and partial_end < target_end:
@@ -290,9 +290,9 @@ class OverlapAnalyzer:
         """범위 완전성 확인 (기존 구현 활용)"""
         return await self.repository.is_range_complete(symbol, timeframe, start_time, end_time, count)
 
-    async def find_last_continuous_time(self, symbol, timeframe, start_time) -> Optional[datetime]:
-        """연속 데이터 끝점 찾기 (기존 구현 활용)"""
-        return await self.repository.find_last_continuous_time(symbol, timeframe, start_time)
+    async def find_last_continuous_time(self, symbol, timeframe, start_time, end_time=None) -> Optional[datetime]:
+        """연속 데이터 끝점 찾기 (기존 구현 활용, 안전한 범위 제한)"""
+        return await self.repository.find_last_continuous_time(symbol, timeframe, start_time, end_time)
 ```
 
 ### 🆕 **새로운 Repository 메서드 구현 필요**
@@ -371,10 +371,12 @@ async def find_data_start_in_range(self, symbol: str, timeframe: str,
 ### 🆕 **새로운 보조 메서드**
 ```python
     # === 제안된 로직을 위한 새로운 메서드 ===
+    # 시작 시점 데이터 존재 확인
     async def has_data_in_start(self, symbol: str, timeframe: str, start_time: datetime) -> bool:
         """target_start에 데이터 존재 여부 확인 (특정 시점 정확 검사)"""
         return await self.repository.has_data_at_time(symbol, timeframe, start_time)
 
+    # 범위 내 데이터 시작점 찾기
     async def find_data_start_in_range(self, symbol: str, timeframe: str,
                                       start_time: datetime, end_time: datetime) -> Optional[datetime]:
         """범위 내 데이터 시작점 찾기 (MAX 쿼리)
@@ -384,16 +386,12 @@ async def find_data_start_in_range(self, symbol: str, timeframe: str,
         """
         return await self.repository.find_data_start_in_range(symbol, timeframe, start_time, end_time)
 
+    # end_time까지 연속성 확인 (안전한 범위 제한)
     async def is_continue_till_end(self, symbol: str, timeframe: str,
                                   start_time: datetime, end_time: datetime) -> bool:
-        """start_time부터 end_time까지 연속성 확인"""
+        """start_time부터 end_time까지 연속성 확인 (안전한 범위 제한)"""
         connected_end = await self.repository.find_last_continuous_time(
-            symbol, timeframe, start_time
-        )
-        return connected_end is not None and connected_end >= end_time
-```
-        connected_end = await self.repository.find_last_continuous_time(
-            symbol, timeframe, start_time
+            symbol, timeframe, start_time, end_time
         )
         return connected_end is not None and connected_end >= end_time
 ```
@@ -530,7 +528,7 @@ async def analyze_overlap(self, request: OverlapRequest) -> OverlapResult:
 async def _handle_start_overlap(self, request: OverlapRequest) -> OverlapResult:
     """시작 겹침 처리 (PARTIAL_START)"""
     partial_end = await self.repository.find_last_continuous_time(
-        request.symbol, request.timeframe, request.target_start
+        request.symbol, request.timeframe, request.target_start, request.target_end
     )
 
     if partial_end and partial_end < request.target_end:
