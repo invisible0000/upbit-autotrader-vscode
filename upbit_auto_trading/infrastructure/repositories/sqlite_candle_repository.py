@@ -295,6 +295,71 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             logger.error(f"캔들 개수 조회 실패: {symbol} {timeframe}, {e}")
             return 0
 
+    # === OverlapAnalyzer v5.0 전용 새로운 메서드들 ===
+
+    async def has_data_at_time(self, symbol: str, timeframe: str, target_time: datetime) -> bool:
+        """특정 시점에 캔들 데이터 존재 여부 확인 (LIMIT 1 최적화)
+
+        target_start에 정확히 해당하는 candle_date_time_utc가 있는지 확인하는 가장 빠른 방법
+        """
+        if not await self.table_exists(symbol, timeframe):
+            logger.debug(f"테이블 없음: {symbol} {timeframe}")
+            return False
+
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                # PRIMARY KEY 점검색으로 가장 빠른 성능
+                cursor = conn.execute(f"""
+                    SELECT 1 FROM {table_name}
+                    WHERE candle_date_time_utc = ?
+                    LIMIT 1
+                """, (target_time.isoformat(),))
+
+                exists = cursor.fetchone() is not None
+                logger.debug(f"특정 시점 데이터 확인: {symbol} {timeframe} {target_time} -> {exists}")
+                return exists
+
+        except Exception as e:
+            logger.error(f"특정 시점 데이터 확인 실패: {symbol} {timeframe}, {e}")
+            return False
+
+    async def find_data_start_in_range(self, symbol: str, timeframe: str,
+                                       start_time: datetime, end_time: datetime) -> Optional[datetime]:
+        """범위 내 데이터 시작점 찾기 (업비트 내림차순 특성 반영)
+
+        업비트 서버 응답: 최신 → 과거 순 (내림차순)
+        따라서 MAX(candle_date_time_utc)가 업비트 기준 '시작점'
+        """
+        if not await self.table_exists(symbol, timeframe):
+            logger.debug(f"테이블 없음: {symbol} {timeframe}")
+            return None
+
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                # candle_date_time_utc PRIMARY KEY 인덱스 활용으로 빠른 성능
+                cursor = conn.execute(f"""
+                    SELECT MAX(candle_date_time_utc)
+                    FROM {table_name}
+                    WHERE candle_date_time_utc BETWEEN ? AND ?
+                """, (start_time.isoformat(), end_time.isoformat()))
+
+                result = cursor.fetchone()
+                if result and result[0]:
+                    data_start = datetime.fromisoformat(result[0].replace('Z', '+00:00'))
+                    logger.debug(f"범위 내 데이터 시작점: {symbol} {timeframe} -> {data_start}")
+                    return data_start
+
+                logger.debug(f"범위 내 데이터 없음: {symbol} {timeframe} ({start_time} ~ {end_time})")
+                return None
+
+        except Exception as e:
+            logger.error(f"데이터 시작점 조회 실패: {symbol} {timeframe}, {e}")
+            return None
+
     # === Interface 호환을 위한 최소 구현들 ===
 
     async def save_candles(self, symbol: str, timeframe: str, candles) -> int:

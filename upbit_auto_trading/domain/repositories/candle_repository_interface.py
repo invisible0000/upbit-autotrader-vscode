@@ -123,6 +123,45 @@ class CandleRepositoryInterface(ABC):
         """
         pass
 
+    @abstractmethod
+    async def has_data_at_time(self, symbol: str, timeframe: str, target_time: datetime) -> bool:
+        """특정 시점에 캔들 데이터 존재 여부 확인
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            target_time: 확인할 특정 시점
+
+        Returns:
+            bool: 해당 시점에 데이터 존재 여부
+
+        Note:
+            - OverlapAnalyzer v5.0의 has_data_in_start용
+            - PRIMARY KEY 점검색으로 최고 성능
+        """
+        pass
+
+    @abstractmethod
+    async def find_data_start_in_range(self, symbol: str, timeframe: str,
+                                       start_time: datetime, end_time: datetime) -> Optional[datetime]:
+        """범위 내 데이터 시작점 찾기
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.')
+            start_time: 조회 시작 시간
+            end_time: 조회 종료 시간
+
+        Returns:
+            Optional[datetime]: 범위 내 가장 최신 데이터 시점 (없으면 None)
+
+        Note:
+            - OverlapAnalyzer v5.0의 중간 겹침 분석용
+            - 업비트 서버 내림차순 특성: MAX가 '시작점'
+            - PRIMARY KEY 인덱스 활용으로 빠른 성능
+        """
+        pass
+
     # === CandleDataProvider v4.0 새로운 메서드들 ===
 
     @abstractmethod
