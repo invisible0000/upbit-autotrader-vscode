@@ -91,19 +91,21 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
         try:
             with self.db_manager.get_connection("market_data") as conn:
+                # 업비트 내림차순: start_time(미래) > end_time(과거)
+                # SQLite BETWEEN은 작은값 AND 큰값 순서를 요구하므로 end_time과 start_time 순서로
                 cursor = conn.execute(f"""
                     SELECT 1 FROM {table_name}
                     WHERE candle_date_time_utc BETWEEN ? AND ?
                     LIMIT 1
-                """, (_to_utc_iso(start_time), _to_utc_iso(end_time)))
+                """, (_to_utc_iso(end_time), _to_utc_iso(start_time)))
 
                 exists = cursor.fetchone() is not None
-                # 업비트 방향 (latest → past): end_time이 latest, start_time이 past
-                logger.debug(f"데이터 존재 확인: {symbol} {timeframe} (latest={end_time} → past={start_time}) -> {exists}")
+                # 업비트 내림차순: start_time(미래) > end_time(과거)
+                logger.debug(f"데이터 존재 확인: {symbol} {timeframe} (latest={start_time} → past={end_time}) -> {exists}")
                 return exists
 
-        except Exception:
-            logger.debug(f"데이터 존재 확인 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"데이터 존재 확인 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return False
 
     async def is_range_complete(self,
@@ -119,21 +121,23 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
         try:
             with self.db_manager.get_connection("market_data") as conn:
+                # 업비트 내림차순: start_time(미래) > end_time(과거)
+                # SQLite BETWEEN은 작은값 AND 큰값 순서를 요구하므로 end_time과 start_time 순서로
                 cursor = conn.execute(f"""
                     SELECT COUNT(*) FROM {table_name}
                     WHERE candle_date_time_utc BETWEEN ? AND ?
-                """, (_to_utc_iso(start_time), _to_utc_iso(end_time)))
+                """, (_to_utc_iso(end_time), _to_utc_iso(start_time)))
 
                 result = cursor.fetchone()
                 actual_count = result[0] if result else 0
                 is_complete = actual_count >= expected_count
 
                 logger.debug(f"완전성 확인: {symbol} {timeframe}, "
-                             f"실제={actual_count}, 예상={expected_count}, 완전={is_complete}")
+                             f"실제={actual_count}, 목표={expected_count}, 완전={is_complete}")
                 return is_complete
 
-        except Exception:
-            logger.debug(f"완전성 확인 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"완전성 확인 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return False
 
     async def find_last_continuous_time(self,
@@ -220,7 +224,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                         OR (next_timestamp IS NULL)
                     ORDER BY timestamp DESC
                     LIMIT 1
-                    """, (_to_utc_iso(start_time), _to_utc_iso(end_time), gap_threshold_ms))
+                    """, (_to_utc_iso(end_time), _to_utc_iso(start_time), gap_threshold_ms))
                 else:
                     # 호환성을 위한 무제한 쿼리 (주의: 대용량 데이터에서 느릴 수 있음)
                     logger.warning(f"end_time 없이 연속성 확인: {symbol} {timeframe} - 성능 저하 가능")
@@ -257,8 +261,74 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
         except Exception as e:
             range_info = f"({start_time} ~ {end_time})" if end_time else f"(>= {start_time})"
-            logger.debug(f"연속 데이터 끝점 조회 실패 (테이블 없음 포함): {symbol} {timeframe} {range_info}, {e}")
+            logger.debug(f"연속 데이터 끝점 조회 실패: {symbol} {timeframe} {range_info} - {type(e).__name__}: {e}")
             return None
+
+    async def is_continue_till_end(self,
+                                   symbol: str,
+                                   timeframe: str,
+                                   start_time: datetime,
+                                   end_time: datetime) -> bool:
+        """start_time부터 end_time까지 연속성 확인 (범위 제한)
+
+        find_last_continuous_time과 달리 특정 범위 내에서만 연속성을 확인합니다.
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            start_time: 연속성 확인 시작점 (포함)
+            end_time: 연속성 확인 종료점 (포함) - 필수
+
+        Returns:
+            True: start_time부터 end_time까지 완전히 연속
+            False: 중간에 Gap 존재 또는 end_time까지 데이터 부족
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        # timeframe별 gap 임계값
+        gap_threshold_ms_map = {
+            '1s': 1500, '1m': 90000, '3m': 270000, '5m': 450000, '10m': 900000,
+            '15m': 1350000, '30m': 2700000, '60m': 5400000, '240m': 21600000,
+            '1h': 5400000, '4h': 21600000, '1d': 129600000, '1w': 907200000,
+            '1M': 3888000000, '1y': 47304000000
+        }
+        gap_threshold_ms = gap_threshold_ms_map.get(timeframe, 90000)
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                # 범위 제한된 연속성 확인: Gap 발생 시점 찾기 (NULL 포함)
+                cursor = conn.execute(f"""
+                WITH gap_check AS (
+                    SELECT
+                        candle_date_time_utc,
+                        timestamp,
+                        LEAD(timestamp) OVER (ORDER BY timestamp DESC) as next_timestamp
+                    FROM {table_name}
+                    WHERE candle_date_time_utc BETWEEN ? AND ?
+                    ORDER BY timestamp DESC
+                )
+                SELECT candle_date_time_utc as gap_start_time
+                FROM gap_check
+                WHERE
+                    -- Gap이 있으면 Gap 시작점, 데이터 끝(NULL)도 Gap으로 간주
+                    (timestamp - next_timestamp > ?)
+                    OR (next_timestamp IS NULL AND candle_date_time_utc > ?)
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """, (_to_utc_iso(end_time), _to_utc_iso(start_time), gap_threshold_ms, _to_utc_iso(end_time)))
+
+                result = cursor.fetchone()
+                # Gap이 발견되지 않으면 연속, Gap이 있으면 비연속
+                is_continuous = (result is None)
+
+                gap_info = f"Gap at {result[0]}" if result else "연속"
+                logger.debug(f"범위 연속성 확인: {symbol} {timeframe} ({start_time} ~ {end_time}) "
+                             f"-> {gap_info}, 연속={is_continuous}")
+                return is_continuous
+
+        except Exception as e:
+            logger.debug(f"범위 연속성 확인 실패: {symbol} {timeframe} ({start_time} ~ {end_time}) - {type(e).__name__}: {e}")
+            return False
 
     # === OverlapAnalyzer 핵심 메서드 ===
 
@@ -315,8 +385,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 logger.debug(f"데이터 범위 발견: {symbol} {timeframe}, {candle_count}개 캔들")
                 return [data_range]
 
-        except Exception:
-            logger.debug(f"데이터 범위 조회 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"데이터 범위 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return []
 
     # === 유용한 추가 메서드들 ===
@@ -342,8 +412,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 logger.debug(f"범위 내 캔들 개수: {symbol} {timeframe} -> {count}개")
                 return count
 
-        except Exception:
-            logger.debug(f"캔들 개수 조회 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"캔들 개수 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return 0
 
     # === OverlapAnalyzer v5.0 전용 새로운 메서드들 ===
@@ -368,8 +438,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 logger.debug(f"특정 시점 데이터 확인: {symbol} {timeframe} {target_time} -> {exists}")
                 return exists
 
-        except Exception:
-            logger.debug(f"특정 시점 데이터 확인 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"특정 시점 데이터 확인 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return False
 
     async def find_data_start_in_range(self, symbol: str, timeframe: str,
@@ -388,7 +458,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                     SELECT MAX(candle_date_time_utc)
                     FROM {table_name}
                     WHERE candle_date_time_utc BETWEEN ? AND ?
-                """, (_to_utc_iso(start_time), _to_utc_iso(end_time)))
+                """, (_to_utc_iso(end_time), _to_utc_iso(start_time)))
 
                 result = cursor.fetchone()
                 if result and result[0]:
@@ -399,8 +469,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 logger.debug(f"범위 내 데이터 없음: {symbol} {timeframe} ({start_time} ~ {end_time})")
                 return None
 
-        except Exception:
-            logger.debug(f"데이터 시작점 조회 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"데이터 시작점 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return None
 
     # === Interface 호환을 위한 최소 구현들 ===
@@ -593,8 +663,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 logger.debug(f"캔들 조회 완료: {symbol} {timeframe}, {len(candles)}개")
                 return candles
 
-        except Exception:
-            logger.debug(f"캔들 조회 실패 (테이블 없음 포함): {symbol} {timeframe}")
+        except Exception as e:
+            logger.debug(f"캔들 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return []
 
     async def get_table_stats(self, symbol: str, timeframe: str):

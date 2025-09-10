@@ -1,14 +1,15 @@
 """
-CandleDataProvider v4.0 - OverlapAnalyzer
-API 요청 최적화 분석 엔진
+OverlapAnalyzer v5.0 - 5가지 상태 분류 분석 엔진
+제안된 로직의 정확한 5개 상태 분류를 구현
 
-핵심 목적: overlap_optimizer의 효율적 쿼리 패턴을 활용하여
-이미 존재하는 데이터는 API 요청하지 않고 DB에서 조회하여 효율성 극대화
+핵심 목적: 겹침 상태를 5가지로 정확히 분류하여 API 요청 최적화
+- NO_OVERLAP, COMPLETE_OVERLAP, PARTIAL_START, PARTIAL_MIDDLE_FRAGMENT, PARTIAL_MIDDLE_CONTINUOUS
 
 설계 원칙:
 - Repository 패턴 활용: DDD 계층 분리 준수
-- 단순한 인터페이스: analyze_overlap 하나로 모든 정보 제공
-- 효율적 쿼리: overlap_optimizer의 검증된 SQL 패턴 활용
+- 시간 중심 처리: target_start/target_end 기준 판단
+- 성능 최적화: 단계별 조기 종료 로직
+- 임시 검증: 개발 초기 안정성 확보 (안정화 후 제거)
 """
 
 from datetime import datetime, timedelta
@@ -23,119 +24,304 @@ logger = create_component_logger("OverlapAnalyzer")
 
 
 class OverlapStatus(Enum):
-    """겹침 상태"""
-    NO_OVERLAP = "no_overlap"              # 겹침 없음 → 전체 구간 API 요청 필요
-    PARTIAL_OVERLAP = "partial_overlap"     # 부분 겹침 → 일부는 DB 조회, 일부는 API 요청
-    COMPLETE_OVERLAP = "complete_overlap"   # 완전 겹침 → API 요청 없이 DB에서만 조회
+    """겹침 상태 - 제안된 로직의 정확한 5개 분류"""
+    NO_OVERLAP = "no_overlap"                        # 1. 겹침 없음
+    COMPLETE_OVERLAP = "complete_overlap"            # 2.1. 완전 겹침
+    PARTIAL_START = "partial_start"                  # 2.2.1. 시작 겹침
+    PARTIAL_MIDDLE_FRAGMENT = "partial_middle_fragment"    # 2.2.2.1. 중간 겹침 (파편)
+    PARTIAL_MIDDLE_CONTINUOUS = "partial_middle_continuous"  # 2.2.2.2. 중간 겹침 (말단)
+
+
+@dataclass(frozen=True)
+class OverlapRequest:
+    """겹침 분석 요청"""
+    symbol: str                    # 거래 심볼 (예: 'KRW-BTC')
+    timeframe: str                 # 타임프레임 ('1m', '5m', '15m', etc.)
+    target_start: datetime         # 요청 시작 시간
+    target_end: datetime           # 요청 종료 시간
+    target_count: int              # 요청 캔들 개수 (1~200)
 
 
 @dataclass(frozen=True)
 class OverlapResult:
-    """겹침 분석 결과 - API 요청 최적화 정보"""
-    status: OverlapStatus
-    connected_end: Optional[datetime]  # 연속된 데이터의 끝점 (이 시점까지는 DB 조회 가능)
+    """겹침 분석 결과"""
+    status: OverlapStatus          # 겹침 상태 (5가지)
+
+    # API 요청 범위 (필요시만)
+    api_start: Optional[datetime] = None  # API 요청 시작점
+    api_end: Optional[datetime] = None    # API 요청 종료점
+
+    # DB 조회 범위 (필요시만)
+    db_start: Optional[datetime] = None   # DB 조회 시작점
+    db_end: Optional[datetime] = None     # DB 조회 종료점
+
+    # 추가 정보
+    partial_end: Optional[datetime] = None    # 연속 데이터의 끝점
+    partial_start: Optional[datetime] = None  # 데이터 시작점 (중간 겹침용)
 
 
 class OverlapAnalyzer:
     """
-    API 요청 최적화 분석 엔진 (overlap_optimizer 효율적 쿼리 기반)
+    OverlapAnalyzer v5.0 - 5가지 상태 분류 분석 엔진
 
-    핵심 목적: 이미 존재하는 데이터는 API 요청하지 않고 DB에서 조회하여 효율성 극대화
+    제안된 로직의 정확한 5개 상태 분류 구현:
+    1. NO_OVERLAP: 겹침 없음
+    2. COMPLETE_OVERLAP: 완전 겹침
+    3. PARTIAL_START: 시작 겹침
+    4. PARTIAL_MIDDLE_FRAGMENT: 중간 겹침 (파편)
+    5. PARTIAL_MIDDLE_CONTINUOUS: 중간 겹침 (말단)
 
-    역할:
-    - Repository 패턴을 통한 효율적 DB 조회
-    - overlap_optimizer의 검증된 쿼리 패턴 활용
-    - 단순하고 명확한 겹침 상태 반환
+    성능 최적화: 단계별 조기 종료로 불필요한 쿼리 방지
     """
 
-    def __init__(self, repository: CandleRepositoryInterface, time_utils):
+    def __init__(self, repository: CandleRepositoryInterface, time_utils, enable_validation: bool = True):
         """
         Args:
-            repository: 캔들 데이터 저장소 (DDD Repository 패턴)
-            time_utils: 시간 유틸리티 (timeframe 계산용)
+            repository: CandleRepositoryInterface 구현체
+            time_utils: 시간 유틸리티 (타임프레임 초 계산용)
+            enable_validation: 임시 검증 활성화 (개발 초기용, 안정화 후 False)
         """
         self.repository = repository
         self.time_utils = time_utils
+        self.enable_validation = enable_validation
+        logger.info("OverlapAnalyzer v5.0 초기화 완료 - 5가지 상태 분류 지원")
 
-        logger.info("OverlapAnalyzer 초기화 완료 - overlap_optimizer 효율적 쿼리 기반")
-
-    async def analyze_overlap(
-        self,
-        symbol: str,
-        timeframe: str,
-        target_start: datetime,
-        target_count: int
-    ) -> OverlapResult:
+    async def analyze_overlap(self, request: OverlapRequest) -> OverlapResult:
         """
-        효율적 겹침 분석: overlap_optimizer 패턴을 Repository로 활용
+        제안된 5단계 겹침 분석 알고리즘
 
-        Args:
-            symbol: 거래 심볼 (예: 'KRW-BTC')
-            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
-            target_start: 요청 시작 시간
-            target_count: 요청 캔들 개수
-
-        Returns:
-            OverlapResult: 겹침 상태 + connected_end
-
-        동작 원리 (overlap_optimizer 기반):
-        1. has_any_data_in_range: 데이터 존재 여부 확인 (LIMIT 1)
-        2. is_range_complete: 완전 겹침 확인 (COUNT vs expected)
-        3. find_last_continuous_time: 연속된 끝점 찾기 (MAX 쿼리)
+        성능 최적화: 단계별 조기 종료로 불필요한 쿼리 방지
         """
-        logger.debug(f"겹침 분석 시작: {symbol} {timeframe} {target_start} ~ {target_count}개")
+        # 0. 임시 검증 (개발 초기에만)
+        if self.enable_validation:
+            self._validate_request(request)
 
-        # 요청 범위 계산
-        timeframe_seconds = self.time_utils.get_timeframe_seconds(timeframe)
-        target_end = target_start + timedelta(seconds=timeframe_seconds * (target_count - 1))
+        logger.debug(f"겹침 분석 시작: {request.symbol} {request.timeframe} "
+                    f"{request.target_start} ~ {request.target_end} ({request.target_count}개) [업비트 내림차순]")
 
-        # 1. 단순한 데이터 존재 확인 (overlap_optimizer _check_start_overlap 방식)
+        # 1. 겹침 없음 확인 (LIMIT 1 쿼리)
         has_data = await self.repository.has_any_data_in_range(
-            symbol, timeframe, target_start, target_end
+            request.symbol, request.timeframe,
+            request.target_start, request.target_end
         )
 
         if not has_data:
-            logger.debug("데이터 없음 → NO_OVERLAP")
-            return OverlapResult(status=OverlapStatus.NO_OVERLAP, connected_end=None)
+            logger.debug("→ NO_OVERLAP: 범위 내 데이터 없음")
+            return self._create_no_overlap_result(request)
 
-        # 2. 완전 겹침 확인 (overlap_optimizer _check_complete_overlap 방식)
+        # 2. 완전성 확인 (COUNT 쿼리)
         is_complete = await self.repository.is_range_complete(
-            symbol, timeframe, target_start, target_end, target_count
+            request.symbol, request.timeframe,
+            request.target_start, request.target_end, request.target_count
         )
 
         if is_complete:
-            logger.debug("완전 겹침 → COMPLETE_OVERLAP")
-            return OverlapResult(status=OverlapStatus.COMPLETE_OVERLAP, connected_end=target_end)
+            logger.debug("→ COMPLETE_OVERLAP: 완전한 데이터 존재")
+            return self._create_complete_overlap_result(request)
 
-        # 3. 부분 겹침 - 연속된 끝점 찾기 (효율적 MAX 쿼리)
-        connected_end = await self.repository.find_last_continuous_time(
-            symbol, timeframe, target_start
+        # 3. 일부 겹침 - 시작점 확인
+        has_start = await self.has_data_in_start(
+            request.symbol, request.timeframe, request.target_start
         )
 
-        logger.debug(f"부분 겹침 → PARTIAL_OVERLAP, connected_end={connected_end}")
-        return OverlapResult(status=OverlapStatus.PARTIAL_OVERLAP, connected_end=connected_end)
+        if has_start:
+            # 3.1. 시작 겹침 처리
+            logger.debug("→ 시작점에 데이터 존재: PARTIAL_START 처리")
+            return await self._handle_start_overlap(request)
+        else:
+            # 3.2. 중간 겹침 처리
+            logger.debug("→ 시작점에 데이터 없음: 중간 겹침 처리")
+            return await self._handle_middle_overlap(request)
 
-    def get_overlap_summary(self, result: OverlapResult, target_count: int) -> str:
+    # === 개발 초기 임시 검증 (안정화 후 제거) ===
+
+    def _validate_request(self, request: OverlapRequest) -> None:
+        """개발 초기 임시 검증 - 기능 안정화 후 제거 가능"""
+
+        # 1. count 범위 검증
+        if request.target_count <= 1:
+            raise ValueError(f"count는 1보다 커야 합니다: {request.target_count}")
+
+        if request.target_count > 200:
+            raise ValueError(f"count는 200 이하여야 합니다: {request.target_count}")
+
+        # 2. 시간 순서 검증 (업비트 내림차순: start > end)
+        if request.target_start <= request.target_end:
+            raise ValueError(
+                f"업비트 내림차순: target_start가 target_end보다 커야 합니다: "
+                f"{request.target_start} <= {request.target_end}"
+            )
+
+        # 3. 카운트 계산 일치성 검증
+        expected_count = self.calculate_expected_count(
+            request.target_start, request.target_end, request.timeframe
+        )
+        if expected_count != request.target_count:
+            raise ValueError(
+                f"시간 범위와 count가 일치하지 않습니다: "
+                f"계산된 count={expected_count}, 요청 count={request.target_count}"
+            )
+
+    # === 시작점/중간점 겹침 처리 ===
+
+    async def _handle_start_overlap(self, request: OverlapRequest) -> OverlapResult:
+        """시작 겹침 처리 (PARTIAL_START)"""
+        partial_end = await self.repository.find_last_continuous_time(
+            request.symbol, request.timeframe, request.target_start, request.target_end
+        )
+
+        if partial_end and partial_end < request.target_end:
+            dt_seconds = self.get_timeframe_dt(request.timeframe)
+            api_start = partial_end + timedelta(seconds=dt_seconds)  # 다음 캔들부터 API 요청
+
+            logger.debug(f"→ PARTIAL_START: DB({partial_end}~{request.target_start}) + API({request.target_end}~{api_start}) [업비트순]")
+            return OverlapResult(
+                status=OverlapStatus.PARTIAL_START,
+                api_start=api_start,
+                api_end=request.target_end,
+                db_start=request.target_start,
+                db_end=partial_end,
+                partial_end=partial_end
+            )
+        else:
+            # 예상치 못한 케이스 → 전체 API 요청
+            logger.warning("예상치 못한 시작 겹침 케이스 → 폴백")
+            return self._create_fallback_result(request)
+
+    async def _handle_middle_overlap(self, request: OverlapRequest) -> OverlapResult:
+        """중간 겹침 처리 (PARTIAL_MIDDLE_*)"""
+        # 데이터 시작점 찾기
+        partial_start = await self.find_data_start_in_range(
+            request.symbol, request.timeframe,
+            request.target_start, request.target_end
+        )
+
+        if not partial_start:
+            # 데이터 시작점을 찾을 수 없음 → 전체 API 요청
+            logger.warning("데이터 시작점 없음 → 폴백")
+            return self._create_fallback_result(request)
+
+        # 연속성 확인
+        is_continuous = await self.is_continue_till_end(
+            request.symbol, request.timeframe, partial_start, request.target_end
+        )
+
+        if is_continuous:
+            # 말단 겹침 (PARTIAL_MIDDLE_CONTINUOUS)
+            dt_seconds = self.get_timeframe_dt(request.timeframe)
+            api_end = partial_start + timedelta(seconds=dt_seconds)  # 다음 캔들까지 API 요청
+
+            logger.debug(f"→ PARTIAL_MIDDLE_CONTINUOUS: API({request.target_start}~{api_end}) + "
+                         f"DB({partial_start}~{request.target_end}) [업비트순]")
+            return OverlapResult(
+                status=OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS,
+                api_start=request.target_start,
+                api_end=api_end,
+                db_start=partial_start,
+                db_end=request.target_end,
+                partial_start=partial_start
+            )
+        else:
+            # 파편 겹침 (PARTIAL_MIDDLE_FRAGMENT)
+            logger.debug(f"→ PARTIAL_MIDDLE_FRAGMENT: 2번째 gap 발견 → 전체 API 요청")
+            return OverlapResult(
+                status=OverlapStatus.PARTIAL_MIDDLE_FRAGMENT,
+                api_start=request.target_start,
+                api_end=request.target_end,
+                db_start=None,
+                db_end=None,
+                partial_start=partial_start
+            )
+
+    # === 결과 생성 헬퍼 메서드들 ===
+
+    def _create_no_overlap_result(self, request: OverlapRequest) -> OverlapResult:
+        """겹침 없음 결과 생성"""
+        return OverlapResult(
+            status=OverlapStatus.NO_OVERLAP,
+            api_start=request.target_start,
+            api_end=request.target_end,
+            db_start=None,
+            db_end=None
+        )
+
+    def _create_complete_overlap_result(self, request: OverlapRequest) -> OverlapResult:
+        """완전 겹침 결과 생성"""
+        return OverlapResult(
+            status=OverlapStatus.COMPLETE_OVERLAP,
+            api_start=None,
+            api_end=None,
+            db_start=request.target_start,
+            db_end=request.target_end
+        )
+
+    def _create_fallback_result(self, request: OverlapRequest) -> OverlapResult:
+        """예상치 못한 케이스 → 전체 API 요청으로 폴백"""
+        logger.warning("예상치 못한 케이스 → PARTIAL_MIDDLE_FRAGMENT 폴백")
+        return OverlapResult(
+            status=OverlapStatus.PARTIAL_MIDDLE_FRAGMENT,  # 안전한 폴백
+            api_start=request.target_start,
+            api_end=request.target_end,
+            db_start=None,
+            db_end=None
+        )
+
+    # === 보조 메서드들 ===
+
+    async def has_data_in_start(self, symbol: str, timeframe: str, start_time: datetime) -> bool:
+        """target_start에 데이터 존재 여부 확인 (특정 시점 정확 검사)"""
+        return await self.repository.has_data_at_time(symbol, timeframe, start_time)
+
+    async def find_data_start_in_range(self, symbol: str, timeframe: str,
+                                      start_time: datetime, end_time: datetime) -> Optional[datetime]:
+        """범위 내 데이터 시작점 찾기 (MAX 쿼리)
+
+        업비트 서버 내림차순 특성: 최신 시간이 데이터의 '시작점'
+        target_start ~ target_end 범위에서 candle_date_time_utc의 MAX 값 반환
         """
-        겹침 분석 결과 요약 (디버깅/로깅용)
+        return await self.repository.find_data_start_in_range(symbol, timeframe, start_time, end_time)
 
-        Args:
-            result: 겹침 분석 결과
-            target_count: 요청한 캔들 개수
+    async def is_continue_till_end(self, symbol: str, timeframe: str,
+                                  start_time: datetime, end_time: datetime) -> bool:
+        """start_time부터 end_time까지 연속성 확인 (안전한 범위 제한)"""
+        return await self.repository.is_continue_till_end(symbol, timeframe, start_time, end_time)
 
-        Returns:
-            str: 사람이 읽기 쉬운 요약 메시지
+    def get_timeframe_dt(self, timeframe: str) -> int:
+        """타임프레임 → 초 단위 변환 (time_utils 연동)"""
+        return self.time_utils.get_timeframe_seconds(timeframe)
+
+    def calculate_expected_count(self, start_time: datetime, end_time: datetime, timeframe: str) -> int:
+        """시간 범위 → 예상 캔들 개수 계산 (업비트 내림차순: start > end)"""
+        dt_seconds = self.get_timeframe_dt(timeframe)
+        time_diff = int((start_time - end_time).total_seconds())  # start > end이므로 start - end
+        return (time_diff // dt_seconds) + 1
+
+    # === 구 버전 호환성 유지 (deprecated) ===
+
+    async def analyze(self, symbol: str, timeframe: str, start_time: datetime, count: int) -> dict:
+        """구 버전 호환성 유지 (deprecated)
+
+        새 코드는 analyze_overlap()을 사용하세요.
         """
-        if result.status == OverlapStatus.NO_OVERLAP:
-            return f"겹침 없음 → 전체 {target_count}개 API 요청 필요"
+        logger.warning("analyze() 메서드는 deprecated입니다. analyze_overlap()을 사용하세요.")
 
-        elif result.status == OverlapStatus.COMPLETE_OVERLAP:
-            return f"완전 겹침 → API 요청 없이 DB에서 {target_count}개 조회 가능"
+        end_time = start_time + timedelta(seconds=(count - 1) * self.get_timeframe_dt(timeframe))
+        request = OverlapRequest(
+            symbol=symbol,
+            timeframe=timeframe,
+            target_start=start_time,
+            target_end=end_time,
+            target_count=count
+        )
 
-        elif result.status == OverlapStatus.PARTIAL_OVERLAP:
-            if result.connected_end:
-                return "부분 겹침 → connected_end까지 DB 조회, 그 이후 API 요청"
-            else:
-                return "부분 겹침 → 하지만 연속 데이터 없음, API 요청 필요"
+        result = await self.analyze_overlap(request)
 
-        return "알 수 없는 겹침 상태"
+        # 구 버전 형식으로 변환
+        return {
+            "status": result.status.value,
+            "connected_end": result.partial_end or result.db_end,
+            "api_start": result.api_start,
+            "api_end": result.api_end,
+            "db_start": result.db_start,
+            "db_end": result.db_end
+        }

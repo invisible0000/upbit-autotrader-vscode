@@ -106,13 +106,15 @@ class CandleRepositoryInterface(ABC):
     async def find_last_continuous_time(self,
                                         symbol: str,
                                         timeframe: str,
-                                        start_time: datetime) -> Optional[datetime]:
+                                        start_time: datetime,
+                                        end_time: Optional[datetime] = None) -> Optional[datetime]:
         """시작점부터 연속된 데이터의 마지막 시점 조회
 
         Args:
             symbol: 거래 심볼 (예: 'KRW-BTC')
             timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
             start_time: 시작 시점
+            end_time: 종료 시점 (선택적, None이면 무제한)
 
         Returns:
             Optional[datetime]: 연속된 데이터의 마지막 시점 (없으면 None)
@@ -120,6 +122,33 @@ class CandleRepositoryInterface(ABC):
         Note:
             - overlap_analyzer의 find_connected_end 단순화 버전
             - 효율적인 LEAD 윈도우 함수 활용 (309x 최적화)
+            - end_time 제한으로 무한 추적 방지
+        """
+        pass
+
+    @abstractmethod
+    async def is_continue_till_end(self,
+                                   symbol: str,
+                                   timeframe: str,
+                                   start_time: datetime,
+                                   end_time: datetime) -> bool:
+        """start_time부터 end_time까지 연속성 확인 (범위 제한)
+
+        find_last_continuous_time과 달리 특정 범위 내에서만 연속성을 확인합니다.
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            start_time: 연속성 확인 시작점 (포함)
+            end_time: 연속성 확인 종료점 (포함) - 필수
+
+        Returns:
+            bool: True=완전 연속, False=Gap 존재 또는 데이터 부족
+
+        Note:
+            - OverlapAnalyzer의 is_continue_till_end 전용
+            - 범위 제한으로 안전하고 명확한 연속성 판단
+            - find_last_continuous_time과 명확히 구분된 목적
         """
         pass
 
