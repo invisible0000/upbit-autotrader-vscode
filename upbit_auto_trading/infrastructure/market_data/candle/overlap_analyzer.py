@@ -14,50 +14,12 @@ OverlapAnalyzer v5.0 - 5가지 상태 분류 분석 엔진
 
 from datetime import datetime, timedelta
 from typing import Optional
-from dataclasses import dataclass
-from enum import Enum
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from .candle_models import OverlapStatus, OverlapResult, OverlapRequest
 
 logger = create_component_logger("OverlapAnalyzer")
-
-
-class OverlapStatus(Enum):
-    """겹침 상태 - 제안된 로직의 정확한 5개 분류"""
-    NO_OVERLAP = "no_overlap"                        # 1. 겹침 없음
-    COMPLETE_OVERLAP = "complete_overlap"            # 2.1. 완전 겹침
-    PARTIAL_START = "partial_start"                  # 2.2.1. 시작 겹침
-    PARTIAL_MIDDLE_FRAGMENT = "partial_middle_fragment"    # 2.2.2.1. 중간 겹침 (파편)
-    PARTIAL_MIDDLE_CONTINUOUS = "partial_middle_continuous"  # 2.2.2.2. 중간 겹침 (말단)
-
-
-@dataclass(frozen=True)
-class OverlapRequest:
-    """겹침 분석 요청"""
-    symbol: str                    # 거래 심볼 (예: 'KRW-BTC')
-    timeframe: str                 # 타임프레임 ('1m', '5m', '15m', etc.)
-    target_start: datetime         # 요청 시작 시간
-    target_end: datetime           # 요청 종료 시간
-    target_count: int              # 요청 캔들 개수 (1~200)
-
-
-@dataclass(frozen=True)
-class OverlapResult:
-    """겹침 분석 결과"""
-    status: OverlapStatus          # 겹침 상태 (5가지)
-
-    # API 요청 범위 (필요시만)
-    api_start: Optional[datetime] = None  # API 요청 시작점
-    api_end: Optional[datetime] = None    # API 요청 종료점
-
-    # DB 조회 범위 (필요시만)
-    db_start: Optional[datetime] = None   # DB 조회 시작점
-    db_end: Optional[datetime] = None     # DB 조회 종료점
-
-    # 추가 정보
-    partial_end: Optional[datetime] = None    # 연속 데이터의 끝점
-    partial_start: Optional[datetime] = None  # 데이터 시작점 (중간 겹침용)
 
 
 class OverlapAnalyzer:

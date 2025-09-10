@@ -475,21 +475,9 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
     # === Interface 호환을 위한 최소 구현들 ===
 
-    async def save_candles(self, symbol: str, timeframe: str, candles) -> int:
-        """캔들 저장 (추후 구현)"""
-        raise NotImplementedError("save_candles는 추후 구현 예정")
-
-    async def get_candles(self, symbol: str, timeframe: str, **kwargs):
-        """캔들 조회 (추후 구현)"""
-        raise NotImplementedError("get_candles는 추후 구현 예정")
-
     async def get_latest_candle(self, symbol: str, timeframe: str):
         """최신 캔들 조회 (추후 구현)"""
         raise NotImplementedError("get_latest_candle는 추후 구현 예정")
-
-    async def count_candles(self, symbol: str, timeframe: str, **kwargs) -> int:
-        """캔들 개수 조회 (추후 구현)"""
-        raise NotImplementedError("count_candles는 추후 구현 예정")
 
     async def ensure_table_exists(self, symbol: str, timeframe: str) -> str:
         """캔들 테이블 생성 (단순한 공통 스키마)
@@ -636,7 +624,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 for row in rows:
                     try:
                         # 동적 import로 순환 참조 방지
-                        from upbit_auto_trading.infrastructure.market_data.candle.models import CandleData
+                        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import CandleData
 
                         candle = CandleData(
                             market=row[1],
@@ -674,28 +662,3 @@ class SqliteCandleRepository(CandleRepositoryInterface):
     async def get_all_candle_tables(self):
         """전체 테이블 목록 (추후 구현)"""
         raise NotImplementedError("get_all_candle_tables는 추후 구현 예정")
-
-    async def check_complete_overlap(self, symbol: str, timeframe: str, start_time: datetime, count: int) -> bool:
-        """완전 겹침 확인 (추후 구현)"""
-        raise NotImplementedError("check_complete_overlap는 추후 구현 예정")
-
-    async def check_fragmentation(self,
-                                  symbol: str,
-                                  timeframe: str,
-                                  start_time: datetime,
-                                  count: int,
-                                  gap_threshold_seconds: int) -> int:
-        """파편화 확인 (추후 구현)"""
-        raise NotImplementedError("check_fragmentation는 추후 구현 예정")
-
-    async def find_connected_end(self, symbol: str, timeframe: str, start_time: datetime, max_count: int = 200):
-        """연결된 끝 찾기 (추후 구현)"""
-        raise NotImplementedError("find_connected_end는 추후 구현 예정")
-
-    async def get_performance_metrics(self, symbol: str, timeframe: str):
-        """성능 지표 (추후 구현)"""
-        raise NotImplementedError("get_performance_metrics는 추후 구현 예정")
-
-    async def validate_data_integrity(self, symbol: str, timeframe: str):
-        """데이터 무결성 검증 (추후 구현)"""
-        raise NotImplementedError("validate_data_integrity는 추후 구현 예정")

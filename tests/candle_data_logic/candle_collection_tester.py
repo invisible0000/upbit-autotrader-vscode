@@ -13,7 +13,7 @@ from upbit_auto_trading.infrastructure.market_data.candle.candle_data_provider i
     create_candle_data_provider_async,
     CandleDataProvider
 )
-from upbit_auto_trading.infrastructure.market_data.candle.models import CandleDataResponse
+from upbit_auto_trading.infrastructure.market_data.candle.candle_models import CandleDataResponse
 
 
 @dataclass

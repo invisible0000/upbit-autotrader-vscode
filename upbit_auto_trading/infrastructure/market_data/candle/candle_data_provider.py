@@ -16,7 +16,7 @@ from upbit_auto_trading.infrastructure.database.database_manager import Database
 from upbit_auto_trading.infrastructure.repositories.sqlite_candle_repository import SqliteCandleRepository
 from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-from upbit_auto_trading.infrastructure.market_data.candle.models import (
+from upbit_auto_trading.infrastructure.market_data.candle.candle_models import (
     CandleData, CandleDataResponse, CandleChunk, CollectionResult,
     create_success_response, create_error_response
 )

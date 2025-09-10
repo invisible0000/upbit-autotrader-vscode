@@ -4,6 +4,12 @@
 
 Created: 2025-01-08
 Purpose: Infrastructure Service 간 데이터 교환용 모델 정의
+
+🔍 VALIDATION POLICY:
+- 현재: 업비트 데이터 무결성 검증 활성화
+- 향후: 업비트 데이터 안정성 확인 시 "🔍 VALIDATION ZONE" 블록 제거로 성능 최적화
+- 검증 제거 시 예상 성능 향상: 캔들 1000개 처리 시간 30-50% 단축
+- 검증 블록 위치: 각 @dataclass의 __post_init__ 메서드 내 표시됨
 """
 
 from dataclasses import dataclass
@@ -15,9 +21,12 @@ from typing import List, Optional
 # === Enum 모델 ===
 
 class OverlapStatus(Enum):
-    """겹침 분석 상태"""
-    NO_OVERLAP = "no_overlap"      # 겹침 없음 → 전체 API 요청 필요
-    HAS_OVERLAP = "has_overlap"    # 겹침 있음 → 일부 DB, 일부 API
+    """겹침 상태 - OverlapAnalyzer v5.0과 정확히 일치하는 5개 분류"""
+    NO_OVERLAP = "no_overlap"                        # 1. 겹침 없음
+    COMPLETE_OVERLAP = "complete_overlap"            # 2.1. 완전 겹침
+    PARTIAL_START = "partial_start"                  # 2.2.1. 시작 겹침
+    PARTIAL_MIDDLE_FRAGMENT = "partial_middle_fragment"    # 2.2.2.1. 중간 겹침 (파편)
+    PARTIAL_MIDDLE_CONTINUOUS = "partial_middle_continuous"  # 2.2.2.2. 중간 겹침 (말단)
 
 
 # === 도메인 모델 ===
@@ -51,6 +60,9 @@ class CandleData:
 
     def __post_init__(self):
         """데이터 검증 및 변환"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
         # 기본 가격 검증
         prices = [self.opening_price, self.high_price, self.low_price, self.trade_price]
         if any(p <= 0 for p in prices):
@@ -61,8 +73,11 @@ class CandleData:
             raise ValueError("고가는 시가/종가/저가보다 높아야 합니다")
         if self.low_price > min(self.opening_price, self.trade_price, self.high_price):
             raise ValueError("저가는 시가/종가/고가보다 낮아야 합니다")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
 
-        # 편의성 필드 설정
+        # 편의성 필드 설정 (유지 필요)
         if not self.symbol and self.market:
             self.symbol = self.market
 
@@ -126,12 +141,18 @@ class CandleDataResponse:
 
     def __post_init__(self):
         """응답 데이터 검증"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
         if self.success and not self.candles:
             raise ValueError("성공 응답인데 캔들 데이터가 없습니다")
         if not self.success and self.error_message is None:
             raise ValueError("실패 응답인데 에러 메시지가 없습니다")
         if self.total_count != len(self.candles):
             raise ValueError(f"총 개수({self.total_count})와 실제 캔들 개수({len(self.candles)})가 다릅니다")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
 
 
 @dataclass
@@ -145,40 +166,71 @@ class CandleChunk:
 
     def __post_init__(self):
         """청크 데이터 검증"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
         if self.count <= 0 or self.count > 200:
             raise ValueError(f"청크 크기는 1-200 사이여야 합니다: {self.count}")
         if self.chunk_index < 0:
             raise ValueError(f"청크 인덱스는 0 이상이어야 합니다: {self.chunk_index}")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
 
 
 # === 분석 결과 모델 ===
 
+@dataclass(frozen=True)
+class OverlapRequest:
+    """겹침 분석 요청 - OverlapAnalyzer v5.0 호환"""
+    symbol: str                    # 거래 심볼 (예: 'KRW-BTC')
+    timeframe: str                 # 타임프레임 ('1m', '5m', '15m', etc.)
+    target_start: datetime         # 요청 시작 시간
+    target_end: datetime           # 요청 종료 시간
+    target_count: int              # 요청 캔들 개수 (1~200)
+
+
 @dataclass
 class OverlapResult:
-    """겹침 분석 결과 (API 요청 최적화용)"""
+    """겹침 분석 결과 - OverlapAnalyzer v5.0 호환"""
     status: OverlapStatus
-    connected_end: Optional[datetime]  # 연속된 데이터의 끝점 (이 시점까지는 DB 조회 가능)
+
+    # API 요청 범위 (필요시만)
+    api_start: Optional[datetime] = None  # API 요청 시작점
+    api_end: Optional[datetime] = None    # API 요청 종료점
+
+    # DB 조회 범위 (필요시만)
+    db_start: Optional[datetime] = None   # DB 조회 시작점
+    db_end: Optional[datetime] = None     # DB 조회 종료점
+
+    # 추가 정보
+    partial_end: Optional[datetime] = None    # 연속 데이터의 끝점
+    partial_start: Optional[datetime] = None  # 데이터 시작점 (중간 겹침용)
+
+    # 하위 호환성 유지
+    connected_end: Optional[datetime] = None  # deprecated: partial_end 사용 권장
 
     def __post_init__(self):
-        """분석 결과 검증"""
-        if self.status == OverlapStatus.HAS_OVERLAP and self.connected_end is None:
-            raise ValueError("겹침이 있는데 연속 데이터 끝점이 없습니다")
+        """분석 결과 검증 - v5.0 로직"""
+        # 하위 호환성: connected_end가 있으면 partial_end에 복사 (유지 필요)
+        if self.connected_end is not None and self.partial_end is None:
+            object.__setattr__(self, 'partial_end', self.connected_end)
 
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
+        # 완전 겹침: API 요청 없음
+        if self.status == OverlapStatus.COMPLETE_OVERLAP:
+            if self.api_start is not None or self.api_end is not None:
+                raise ValueError("COMPLETE_OVERLAP에서는 API 요청이 없어야 합니다")
 
-@dataclass
-class DataRange:
-    """기존 DB 데이터 범위"""
-    start_time: datetime
-    end_time: datetime
-    candle_count: int
-    is_continuous: bool           # 연속된 데이터인지 여부
-
-    def __post_init__(self):
-        """데이터 범위 검증"""
-        if self.start_time >= self.end_time:
-            raise ValueError("시작 시간이 종료 시간보다 늦습니다")
-        if self.candle_count <= 0:
-            raise ValueError(f"캔들 개수는 1 이상이어야 합니다: {self.candle_count}")
+        # 겹침 없음: DB 조회 없음
+        if self.status == OverlapStatus.NO_OVERLAP:
+            if self.db_start is not None or self.db_end is not None:
+                raise ValueError("NO_OVERLAP에서는 DB 조회가 없어야 합니다")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
 
 
 # === 시간 관련 모델 ===
