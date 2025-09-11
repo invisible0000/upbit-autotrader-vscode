@@ -168,6 +168,7 @@
   },
   "active": "f240a362df9e0cab",
   "lastOpenFiles": [
+    "logs/session_20250911_154717_PID49444.log",
     "tasks/active/TASK_20250911_08-performance_monitoring_tool.md",
     "tasks/active/TASK_20250911_07-candle_provider_final_integration.md",
     "tasks/active/TASK_20250911_06-sqlite_repository_completion.md",
@@ -195,7 +196,6 @@
     "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_backup.py",
     "upbit_auto_trading/infrastructure/market_data/candle/OVERLAP_ANALYZER_V5_SIMPLIFIED_DESIGN.md",
     "legacy/캔들 데이터 제공자 기능 기획_v1.md",
-    "legacy/캔들 데이터 제공자 기능 기획.md",
     "enhanced_simple_smart_router_design.py",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",

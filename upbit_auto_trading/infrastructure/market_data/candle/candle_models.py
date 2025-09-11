@@ -15,7 +15,7 @@ Purpose: Infrastructure Service 간 데이터 교환용 모델 정의
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 # === Enum 모델 ===
@@ -350,6 +350,332 @@ class CacheStats:
     def get_memory_mb(self) -> float:
         """메모리 사용량 MB 반환"""
         return self.total_memory_bytes / (1024 * 1024)
+
+
+# === CandleDataProvider v4.0 전용 모델 ===
+
+RequestType = Literal["count_only", "count_with_to", "to_with_end", "end_only"]
+
+
+@dataclass(frozen=True)
+class RequestInfo:
+    """
+    CandleDataProvider v4.0 요청 정보 표준화 모델
+
+    4가지 업비트 API 파라미터 조합 완벽 지원:
+    1. count_only: count만 사용 (최신 데이터부터)
+    2. count_with_to: count + to 조합
+    3. to_with_end: to + end 조합
+    4. end_only: end만 사용 (특정 시점까지 최대 200개)
+    """
+    # === 필수 파라미터 ===
+    symbol: str                           # 거래 심볼 (예: 'KRW-BTC')
+    timeframe: str                        # 타임프레임 ('1m', '5m', '1h' 등)
+    request_type: RequestType             # 요청 타입 분류
+
+    # === 선택적 파라미터 (상호 배타적 조합) ===
+    count: Optional[int] = None           # 요청 캔들 개수 (1~200)
+    to: Optional[datetime] = None         # 마지막 캔들 시간 (이 시간까지)
+    end: Optional[datetime] = None        # 종료 시간 (이 시간부터 과거로)
+
+    def __post_init__(self):
+        """요청 정보 검증 - 업비트 API 규칙 준수"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
+
+        # 1. 기본 파라미터 검증
+        if not self.symbol:
+            raise ValueError("심볼은 필수입니다")
+        if not self.timeframe:
+            raise ValueError("타임프레임은 필수입니다")
+
+        # 2. count 범위 검증 (업비트 API 제한)
+        if self.count is not None and (self.count < 1 or self.count > 200):
+            raise ValueError(f"count는 1~200 범위여야 합니다: {self.count}")
+
+        # 3. 요청 타입별 파라미터 조합 검증
+        if self.request_type == "count_only":
+            if self.count is None:
+                raise ValueError("count_only 타입에는 count가 필수입니다")
+            if self.to is not None or self.end is not None:
+                raise ValueError("count_only 타입에는 to, end를 사용할 수 없습니다")
+
+        elif self.request_type == "count_with_to":
+            if self.count is None or self.to is None:
+                raise ValueError("count_with_to 타입에는 count와 to가 필수입니다")
+            if self.end is not None:
+                raise ValueError("count_with_to 타입에는 end를 사용할 수 없습니다")
+
+        elif self.request_type == "to_with_end":
+            if self.to is None or self.end is None:
+                raise ValueError("to_with_end 타입에는 to와 end가 필수입니다")
+            if self.count is not None:
+                raise ValueError("to_with_end 타입에는 count를 사용할 수 없습니다")
+            if self.to <= self.end:
+                raise ValueError("to_with_end 타입에서 to는 end보다 나중이어야 합니다")
+
+        elif self.request_type == "end_only":
+            if self.end is None:
+                raise ValueError("end_only 타입에는 end가 필수입니다")
+            if self.count is not None or self.to is not None:
+                raise ValueError("end_only 타입에는 count, to를 사용할 수 없습니다")
+        else:
+            raise ValueError(f"지원하지 않는 요청 타입: {self.request_type}")
+
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
+
+    @classmethod
+    def create_count_only(cls, symbol: str, timeframe: str, count: int) -> 'RequestInfo':
+        """count만 사용하는 요청 생성 (최신 데이터부터)"""
+        return cls(
+            symbol=symbol,
+            timeframe=timeframe,
+            request_type="count_only",
+            count=count
+        )
+
+    @classmethod
+    def create_count_with_to(cls, symbol: str, timeframe: str, count: int, to: datetime) -> 'RequestInfo':
+        """count + to 조합 요청 생성"""
+        return cls(
+            symbol=symbol,
+            timeframe=timeframe,
+            request_type="count_with_to",
+            count=count,
+            to=to
+        )
+
+    @classmethod
+    def create_to_with_end(cls, symbol: str, timeframe: str, to: datetime, end: datetime) -> 'RequestInfo':
+        """to + end 조합 요청 생성"""
+        return cls(
+            symbol=symbol,
+            timeframe=timeframe,
+            request_type="to_with_end",
+            to=to,
+            end=end
+        )
+
+    @classmethod
+    def create_end_only(cls, symbol: str, timeframe: str, end: datetime) -> 'RequestInfo':
+        """end만 사용하는 요청 생성 (특정 시점까지 최대 200개)"""
+        return cls(
+            symbol=symbol,
+            timeframe=timeframe,
+            request_type="end_only",
+            end=end
+        )
+
+
+@dataclass(frozen=True)
+class ChunkPlan:
+    """
+    CandleDataProvider v4.0 청크 분할 계획
+
+    요청 정규화 후 생성되는 전체 청크 처리 계획.
+    200개 단위 청크로 분할하여 순차 처리.
+    """
+    # === 전체 계획 정보 ===
+    original_request: RequestInfo         # 원본 요청 정보 (불변 보존)
+    total_chunks: int                     # 총 청크 개수
+    total_expected_candles: int           # 총 예상 캔들 개수
+
+    # === 청크 리스트 ===
+    chunks: List['ChunkInfo']             # 개별 청크 정보 리스트
+
+    # === 처리 메타정보 ===
+    plan_created_at: datetime             # 계획 생성 시간
+    estimated_completion_time: float      # 예상 완료 시간 (초)
+
+    def __post_init__(self):
+        """청크 계획 검증"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
+        if self.total_chunks <= 0:
+            raise ValueError(f"총 청크 개수는 1 이상이어야 합니다: {self.total_chunks}")
+        if self.total_expected_candles <= 0:
+            raise ValueError(f"총 예상 캔들 개수는 1 이상이어야 합니다: {self.total_expected_candles}")
+        if len(self.chunks) != self.total_chunks:
+            raise ValueError(f"청크 리스트 길이({len(self.chunks)})와 총 청크 개수({self.total_chunks})가 다릅니다")
+        if self.estimated_completion_time < 0:
+            raise ValueError(f"예상 완료 시간은 0 이상이어야 합니다: {self.estimated_completion_time}")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
+
+    def get_chunk_by_index(self, index: int) -> 'ChunkInfo':
+        """인덱스로 청크 조회"""
+        if index < 0 or index >= len(self.chunks):
+            raise IndexError(f"청크 인덱스 범위 초과: {index}")
+        return self.chunks[index]
+
+    def get_total_estimated_candles(self) -> int:
+        """모든 청크의 예상 캔들 개수 합계"""
+        return sum(chunk.expected_candles for chunk in self.chunks)
+
+
+@dataclass(frozen=False)  # 실시간 조정을 위해 mutable
+class ChunkInfo:
+    """
+    CandleDataProvider v4.0 개별 청크 정보
+
+    실시간 시간 조정이 가능한 개별 청크 메타정보.
+    이전 청크 결과에 따라 동적으로 시간 범위 조정.
+    """
+    # === 청크 식별 정보 ===
+    chunk_id: str                         # 청크 고유 식별자
+    chunk_index: int                      # 청크 순서 (0부터 시작)
+    symbol: str                           # 거래 심볼
+    timeframe: str                        # 타임프레임
+
+    # === 청크 파라미터 (실시간 조정 가능) ===
+    count: int                            # 이 청크에서 요청할 캔들 개수
+    to: Optional[datetime] = None         # 이 청크의 마지막 캔들 시간
+    end: Optional[datetime] = None        # 이 청크의 종료 시간
+
+    # === 처리 상태 정보 ===
+    status: str = "pending"               # pending, processing, completed, failed
+    expected_candles: int = 200           # 예상 캔들 개수 (기본 200개)
+
+    # === 연결 정보 ===
+    previous_chunk_id: Optional[str] = None   # 이전 청크 ID
+    next_chunk_id: Optional[str] = None       # 다음 청크 ID
+
+    def __post_init__(self):
+        """청크 정보 검증"""
+        # ============================================
+        # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
+        # ============================================
+        if not self.chunk_id:
+            raise ValueError("청크 ID는 필수입니다")
+        if self.chunk_index < 0:
+            raise ValueError(f"청크 인덱스는 0 이상이어야 합니다: {self.chunk_index}")
+        if self.count < 1 or self.count > 200:
+            raise ValueError(f"청크 count는 1~200 범위여야 합니다: {self.count}")
+        if self.expected_candles < 1:
+            raise ValueError(f"예상 캔들 개수는 1 이상이어야 합니다: {self.expected_candles}")
+        if self.status not in ["pending", "processing", "completed", "failed"]:
+            raise ValueError(f"잘못된 상태값: {self.status}")
+        # ============================================
+        # 🔍 END VALIDATION ZONE
+        # ============================================
+
+    def adjust_times(self, new_to: Optional[datetime] = None, new_end: Optional[datetime] = None) -> None:
+        """실시간 시간 조정 (이전 청크 결과 반영)"""
+        if new_to is not None:
+            self.to = new_to
+        if new_end is not None:
+            self.end = new_end
+
+    def mark_processing(self) -> None:
+        """처리 중 상태로 변경"""
+        self.status = "processing"
+
+    def mark_completed(self) -> None:
+        """완료 상태로 변경"""
+        self.status = "completed"
+
+    def mark_failed(self) -> None:
+        """실패 상태로 변경"""
+        self.status = "failed"
+
+    def is_pending(self) -> bool:
+        """대기 중 상태 확인"""
+        return self.status == "pending"
+
+    def is_completed(self) -> bool:
+        """완료 상태 확인"""
+        return self.status == "completed"
+
+    @classmethod
+    def create_chunk(cls, chunk_index: int, symbol: str, timeframe: str, count: int,
+                     to: Optional[datetime] = None, end: Optional[datetime] = None) -> 'ChunkInfo':
+        """새 청크 생성 헬퍼"""
+        chunk_id = f"{symbol}_{timeframe}_{chunk_index:03d}"
+        return cls(
+            chunk_id=chunk_id,
+            chunk_index=chunk_index,
+            symbol=symbol,
+            timeframe=timeframe,
+            count=count,
+            to=to,
+            end=end,
+            expected_candles=count
+        )
+
+
+@dataclass
+class ProcessingStats:
+    """
+    CandleDataProvider v4.0 처리 통계
+
+    전체 처리 과정의 성능 및 상태 정보.
+    """
+    # === 기본 정보 ===
+    total_chunks_planned: int             # 계획된 총 청크 수
+    processing_start_time: datetime       # 처리 시작 시간
+    chunks_completed: int = 0             # 완료된 청크 수
+    chunks_failed: int = 0                # 실패한 청크 수
+
+    # === 시간 정보 ===
+    processing_end_time: Optional[datetime] = None  # 처리 완료 시간
+
+    # === API 통계 ===
+    total_api_requests: int = 0           # 총 API 요청 수
+    api_request_time_ms: float = 0.0      # 총 API 요청 시간
+
+    # === 캐시 통계 ===
+    cache_hits: int = 0                   # 캐시 히트 수
+    cache_misses: int = 0                 # 캐시 미스 수
+
+    # === 데이터 통계 ===
+    total_candles_collected: int = 0      # 수집된 총 캔들 수
+
+    def __post_init__(self):
+        """통계 검증"""
+        if self.total_chunks_planned <= 0:
+            raise ValueError(f"계획된 총 청크 수는 1 이상이어야 합니다: {self.total_chunks_planned}")
+        if any(count < 0 for count in [self.chunks_completed, self.chunks_failed,
+                                       self.total_api_requests, self.cache_hits,
+                                       self.cache_misses, self.total_candles_collected]):
+            raise ValueError("모든 통계 값은 0 이상이어야 합니다")
+
+    def get_completion_rate(self) -> float:
+        """완료율 계산 (0.0 ~ 1.0)"""
+        if self.total_chunks_planned == 0:
+            return 0.0
+        return self.chunks_completed / self.total_chunks_planned
+
+    def get_cache_hit_rate(self) -> float:
+        """캐시 히트율 계산 (0.0 ~ 1.0)"""
+        total_cache_requests = self.cache_hits + self.cache_misses
+        if total_cache_requests == 0:
+            return 0.0
+        return self.cache_hits / total_cache_requests
+
+    def get_average_api_time_ms(self) -> float:
+        """평균 API 요청 시간 (ms)"""
+        if self.total_api_requests == 0:
+            return 0.0
+        return self.api_request_time_ms / self.total_api_requests
+
+    def get_total_processing_time_ms(self) -> float:
+        """총 처리 시간 (ms)"""
+        if self.processing_end_time is None:
+            end_time = datetime.now()
+        else:
+            end_time = self.processing_end_time
+
+        delta = end_time - self.processing_start_time
+        return delta.total_seconds() * 1000
+
+    def mark_completed(self) -> None:
+        """처리 완료 마킹"""
+        self.processing_end_time = datetime.now()
 
 
 # === 유틸리티 함수 ===
