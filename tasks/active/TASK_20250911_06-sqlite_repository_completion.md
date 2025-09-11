@@ -1,4 +1,4 @@
-# 📋 TASK_20250911_03: SqliteCandleRepository 미구현 메서드 완성
+# 📋 TASK_06: SqliteCandleRepository 미구현 메서드 완성
 
 ## 🎯 태스크 목표
 - **주요 목표**: SqliteCandleRepository의 미구현 메서드 3개 완성
@@ -44,16 +44,16 @@
 - [ ] 로깅 및 에러 처리
 
 ### Phase 2: get_table_stats 메서드 구현
-- [ ] 테이블 통계 정보 데이터 모델 정의 (TableStats)
 - [ ] 캔들 개수, 데이터 범위, 테이블 크기 조회 쿼리
 - [ ] 첫 번째/마지막 캔들 시간 조회
 - [ ] 연속성 통계 (gap 개수) 계산
+- [ ] dict 형태로 통계 정보 반환
 
 ### Phase 3: get_all_candle_tables 메서드 구현
 - [ ] sqlite_master에서 캔들 테이블 목록 조회
 - [ ] 테이블명 파싱 (symbol, timeframe 추출)
-- [ ] CandleTableInfo 데이터 모델 정의
 - [ ] 각 테이블의 기본 정보 수집
+- [ ] list[dict] 형태로 테이블 정보 반환
 
 ### Phase 4: 최종 검증
 - [ ] 3개 메서드 기본 동작 확인
@@ -61,12 +61,12 @@
 - [ ] 성능 최적화 확인
 
 ## 🛠️ 개발할 도구
-- `table_stats.py`: TableStats, CandleTableInfo 데이터 모델
+- SqliteCandleRepository 내 미구현 메서드 3개 (별도 데이터 모델 불필요)
 
 ## 🎯 성공 기준
 - ✅ get_latest_candle: 최신 캔들 정확 조회, 없을 때 None 반환
-- ✅ get_table_stats: 완전한 테이블 통계 정보 제공
-- ✅ get_all_candle_tables: 모든 캔들 테이블 목록과 메타정보 조회
+- ✅ get_table_stats: dict 형태로 완전한 테이블 통계 정보 제공
+- ✅ get_all_candle_tables: list[dict] 형태로 모든 캔들 테이블 목록과 메타정보 조회
 - ✅ 기존 메서드와 일관된 로깅 및 에러 처리 패턴
 - ✅ PRIMARY KEY 인덱스 활용한 최적화된 성능
 
@@ -82,14 +82,14 @@
 - try/except 블록에서 동일한 에러 처리 방식
 
 ### 데이터 모델
-- @dataclass(frozen=True) 사용
-- 명확한 타입 힌트 적용
+- 간단한 dict, list[dict] 구조 사용
+- 명확한 타입 힌트 적용 (Dict[str, Any], List[Dict[str, str]])
 - CandleData 모델과 호환성 유지
 
 ## 🚀 즉시 시작할 작업
 1. 현재 NotImplementedError 메서드들 확인
-2. TableStats, CandleTableInfo 데이터 모델 설계
-3. get_latest_candle 메서드부터 구현 시작
+2. get_latest_candle 메서드부터 구현 시작 (CandleData 반환)
+3. get_table_stats, get_all_candle_tables는 간단한 dict 구조로 설계
 
 ```powershell
 # 현재 미구현 메서드 확인
@@ -102,6 +102,8 @@ db = DatabaseManager()
 with db.get_connection('market_data') as conn:
     tables = conn.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'candles_%'\").fetchall()
     print(f'✅ 캔들 테이블 {len(tables)}개 발견')
+    for table in tables[:3]:
+        print(f'  - {table[0]}')
 "
 ```
 
