@@ -88,7 +88,7 @@
 #### 2. ChunkPlan (@dataclass(frozen=True))
 **목적**: 청크 분할 계획 전체 관리
 - ✅ **원본 요청 보존**: original_request 필드로 RequestInfo 불변 저장
-- ✅ **메타정보**: total_chunks, total_expected_candles, estimated_completion_time
+- ✅ **메타정보**: total_chunks, total_expected_candles, plan_created_at
 - ✅ **청크 리스트**: List[ChunkInfo] 전체 청크 정보
 - ✅ **접근 메서드**: get_chunk_by_index, get_total_estimated_candles
 

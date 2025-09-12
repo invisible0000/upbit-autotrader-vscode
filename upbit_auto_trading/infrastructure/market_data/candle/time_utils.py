@@ -17,6 +17,7 @@ class TimeUtils:
         "1m": timedelta(minutes=1),
         "3m": timedelta(minutes=3),
         "5m": timedelta(minutes=5),
+        "10m": timedelta(minutes=10),
         "15m": timedelta(minutes=15),
         "30m": timedelta(minutes=30),
 
@@ -40,6 +41,7 @@ class TimeUtils:
         "1m": 60,
         "3m": 180,
         "5m": 300,
+        "10m": 600,
         "15m": 900,
         "30m": 1800,
 
@@ -93,7 +95,7 @@ class TimeUtils:
             get_aligned_time_by_ticks(now, '1w', -2)  # 2주 전 일요일
         """
         # 1. 기준 시간을 해당 타임프레임으로 정렬
-        aligned_base = TimeUtils._align_to_candle_boundary(base_time, timeframe)
+        aligned_base = TimeUtils.align_to_candle_boundary(base_time, timeframe)
 
         # 2. tick_count가 0이면 정렬된 기준 시간 반환
         if tick_count == 0:
@@ -109,7 +111,7 @@ class TimeUtils:
                     result_time = aligned_base + tick_delta
                 else:
                     result_time = aligned_base - tick_delta
-                return TimeUtils._align_to_candle_boundary(result_time, timeframe)
+                return TimeUtils.align_to_candle_boundary(result_time, timeframe)
 
             elif timeframe == '1M':
                 # 월봉: 정확한 월 단위 계산
@@ -160,7 +162,7 @@ class TimeUtils:
             return []
 
         # 시작 시간 정렬
-        aligned_start = TimeUtils._align_to_candle_boundary(start_time, timeframe)
+        aligned_start = TimeUtils.align_to_candle_boundary(start_time, timeframe)
 
         # 시퀀스 생성
         sequence = []
@@ -186,7 +188,7 @@ class TimeUtils:
             return []
 
         # 시작점 정렬
-        aligned_start = TimeUtils._align_to_candle_boundary(start_time, timeframe)
+        aligned_start = TimeUtils.align_to_candle_boundary(start_time, timeframe)
 
         # 예상 개수 계산
         expected_count = TimeUtils.calculate_expected_count(aligned_start, end_time, timeframe)
@@ -225,7 +227,7 @@ class TimeUtils:
         return TimeUtils._TIMEFRAME_SECONDS[timeframe]
 
     @staticmethod
-    def _align_to_candle_boundary(dt: datetime, timeframe: str) -> datetime:
+    def align_to_candle_boundary(dt: datetime, timeframe: str) -> datetime:
         """
         업비트 캔들 경계에 맞춰 시간 내림 정렬 (FLOOR)
 
@@ -271,11 +273,12 @@ class TimeUtils:
                 # 일봉: 자정으로 정렬
                 return dt.replace(hour=0, minute=0, second=0, microsecond=0)
             elif timeframe == "1w":
-                # 주봉: 해당 주의 일요일로 정렬 (업비트 기준)
-                # 인터넷 표준 방식: (weekday + 1) % 7로 일요일 기준 계산
-                days_since_sunday = (dt.weekday() + 1) % 7
-                sunday = dt - timedelta(days=days_since_sunday)
-                return sunday.replace(hour=0, minute=0, second=0, microsecond=0)
+                # 주봉: 해당 주의 월요일로 정렬 (업비트 기준 - ISO 8601 표준)
+                # Python weekday(): 월=0, 화=1, ..., 일=6
+                # 월요일(0)부터의 경과 일수를 계산
+                days_since_monday = dt.weekday()
+                monday = dt - timedelta(days=days_since_monday)
+                return monday.replace(hour=0, minute=0, second=0, microsecond=0)
             elif timeframe == "1M":
                 # 월봉: 해당 월의 1일로 정렬
                 return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -289,56 +292,89 @@ class TimeUtils:
     @staticmethod
     def calculate_expected_count(start_time: datetime, end_time: datetime, timeframe: str) -> int:
         """
-        시간 범위에서 예상 캔들 개수 계산
+        시간 범위에서 예상 캔들 개수 계산 (업비트 구조: start_time > end_time)
 
-        최종 최적화 버전:
-        - 월/년봉: datetime 직접 계산으로 정확성 보장
-        - 분/시/일/주봉: timedelta 계산으로 고성능 유지
+        업비트 API 구조에 맞춘 정확한 캔들 개수 계산:
+        - start_time(최신) > end_time(과거) 정방향
+        - 양쪽 시간 모두 정렬하여 정확성 보장
+        - 월/년봉: 실제 월/년 수 계산
+        - 일/주봉: days 단위 최적화
+        - 분/시봉: seconds 단위 계산
 
         Args:
-            start_time: 시작 시간 (자동으로 정렬됨)
-            end_time: 종료 시간
+            start_time: 시작 시간 (최신, 자동 정렬됨)
+            end_time: 종료 시간 (과거, 자동 정렬됨)
             timeframe: 타임프레임
 
         Returns:
             int: 예상 캔들 개수
         """
-        if start_time >= end_time:
-            return 0
+        # 🔧 업비트 캔들 구조 검증: start_time(최신) > end_time(과거)가 정상
+        if start_time < end_time:
+            raise ValueError(
+                f"업비트 캔들 구조에서 start_time은 end_time보다 최신이어야 합니다. "
+                f"start_time={start_time}, end_time={end_time}"
+            )
 
-        # 시작 시간을 타임프레임에 맞게 정렬 (핵심 개선)
-        aligned_start = TimeUtils._align_to_candle_boundary(start_time, timeframe)
+        # 양쪽 시간 모두 타임프레임에 맞게 정렬 (정확성 핵심)
+        aligned_start = TimeUtils.align_to_candle_boundary(start_time, timeframe)
+        aligned_end = TimeUtils.align_to_candle_boundary(end_time, timeframe)
 
-        # 월/년봉은 실제 캔들 범위 계산 (정확성 우선)
+        # 정렬 후 동일한 시간인 경우 1개 캔들
+        # 업비트 응답 캔들 갯수를 예측하므로 시간이 존재하면 항상 1개 이상
+        if aligned_start == aligned_end:
+            return 1
+
+        # 월봉: 실제 월 수 계산 (최신→과거 방향)
         if timeframe == '1M':
-            if aligned_start >= end_time:
-                return 0
-            # 실제 포함되는 월 수를 계산
             count = 0
-            current = datetime(aligned_start.year, aligned_start.month, 1)
-            while current < end_time:
-                count += 1
-                if current.month == 12:
-                    current = current.replace(year=current.year + 1, month=1)
-                else:
-                    current = current.replace(month=current.month + 1)
-            return count
-        elif timeframe == '1y':
-            if aligned_start >= end_time:
-                return 0
-            # 실제 포함되는 년 수를 계산
-            count = 0
-            current = datetime(aligned_start.year, 1, 1)
-            while current < end_time:
-                count += 1
-                current = current.replace(year=current.year + 1)
-            return count
+            current_year = aligned_start.year
+            current_month = aligned_start.month
 
-        # 분/시/일/주봉은 timedelta 계산 (성능 우선)
-        dt = TimeUtils.get_timeframe_delta(timeframe)
-        time_diff = end_time - aligned_start
-        count = int(time_diff.total_seconds() / dt.total_seconds())
-        return max(0, count)
+            while True:
+                current_dt = datetime(current_year, current_month, 1)
+                if current_dt <= aligned_end:
+                    break
+                count += 1
+
+                # 이전 달로 이동
+                if current_month == 1:
+                    current_year -= 1
+                    current_month = 12
+                else:
+                    current_month -= 1
+
+            return count + 1
+
+        # 년봉: 실제 년 수 계산 (최신→과거 방향)
+        elif timeframe == '1y':
+            count = 0
+            current_year = aligned_start.year
+
+            while True:
+                current_dt = datetime(current_year, 1, 1)
+                if current_dt <= aligned_end:
+                    break
+                count += 1
+                current_year -= 1
+
+            return count + 1
+
+        # 일봉/주봉: days 단위 최적화 계산
+        elif timeframe == '1d':
+            time_diff = aligned_start - aligned_end
+            return time_diff.days + 1
+
+        elif timeframe == '1w':
+            time_diff = aligned_start - aligned_end
+            return time_diff.days // 7 + 1
+
+        # 분/시봉: seconds 단위 계산
+        else:
+            timeframe_seconds = TimeUtils.get_timeframe_seconds(timeframe)
+            time_diff = aligned_start - aligned_end
+            count = int(time_diff.total_seconds() / timeframe_seconds)
+            return max(1, count + 1)
 
 
 # 편의 함수들 (자주 사용할 패턴들)
@@ -348,8 +384,8 @@ def get_dt(timeframe: str) -> timedelta:
 
 
 def align_time(timestamp: datetime, timeframe: str) -> datetime:
-    """TimeUtils._align_to_candle_boundary의 간단한 별칭"""
-    return TimeUtils._align_to_candle_boundary(timestamp, timeframe)
+    """TimeUtils.align_to_candle_boundary의 간단한 별칭"""
+    return TimeUtils.align_to_candle_boundary(timestamp, timeframe)
 
 
 def count_candles(start_time: datetime, end_time: datetime, timeframe: str) -> int:

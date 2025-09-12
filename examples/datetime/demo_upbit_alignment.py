@@ -1,7 +1,7 @@
 """
 업비트 API 정렬 방식 검증 테스트
 
-실제 업비트 API 응답과 _align_to_candle_boundary 내림 정렬 결과 비교
+실제 업비트 API 응답과 align_to_candle_boundary 내림 정렬 결과 비교
 """
 
 import sys
@@ -64,9 +64,11 @@ def test_upbit_alignment_comparison():
     print("🧪 업비트 API 정렬 방식 검증 테스트")
     print("=" * 80)
 
-    # 테스트 시간: 2025-09-07 00:00:30 (30초)
-    test_time_str = "2025-09-07T00:00:30Z"
-    test_time = datetime(2025, 9, 7, 0, 0, 30, 0, timezone.utc)
+    # 현재 시간에서 1시간 전으로 테스트 (확실히 거래가 있었던 시간)
+    import datetime as dt
+    now = dt.datetime.now(timezone.utc)
+    test_time = now.replace(minute=32, second=30, microsecond=0) - dt.timedelta(hours=2)
+    test_time_str = test_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     print(f"📅 테스트 기준 시간: {test_time} ({test_time_str})")
     print()
@@ -74,7 +76,7 @@ def test_upbit_alignment_comparison():
     # 1. 우리의 내림 정렬 결과
     print("🔧 우리의 내림 정렬 결과:")
     try:
-        aligned_time = TimeUtils._align_to_candle_boundary(test_time, "1m")
+        aligned_time = TimeUtils.align_to_candle_boundary(test_time, "1m")
         print(f"   입력: {test_time}")
         print(f"   정렬: {aligned_time}")
         print(f"   변화: {(test_time - aligned_time).total_seconds()}초")
@@ -159,65 +161,158 @@ def test_upbit_alignment_comparison():
 
     print()
 
-    # 4. 추가 검증: 여러 시간대 테스트
-    print("🔄 추가 검증: 다양한 초 값 테스트")
+    # 4. 추가 검증: 여러 시간대 테스트 (모든 케이스에서 업비트 API 요청)
+    print("🔄 추가 검증: 다양한 초 값 테스트 (모든 케이스 업비트 API 요청)")
     print("-" * 50)
 
+    # 현재 시간 기준으로 다양한 초 값 테스트
+    base_time = now - dt.timedelta(hours=1)  # 1시간 전
     test_cases = [
-        "2025-09-07T00:00:00Z",  # 정각
-        "2025-09-07T00:00:15Z",  # 15초
-        "2025-09-07T00:00:30Z",  # 30초
-        "2025-09-07T00:00:45Z",  # 45초
-        "2025-09-07T00:00:59Z",  # 59초
+        base_time.replace(second=0).strftime('%Y-%m-%dT%H:%M:%SZ'),   # 정각
+        base_time.replace(second=15).strftime('%Y-%m-%dT%H:%M:%SZ'),  # 15초
+        base_time.replace(second=30).strftime('%Y-%m-%dT%H:%M:%SZ'),  # 30초
+        base_time.replace(second=45).strftime('%Y-%m-%dT%H:%M:%SZ'),  # 45초
+        base_time.replace(second=59).strftime('%Y-%m-%dT%H:%M:%SZ'),  # 59초
     ]
 
     match_count = 0
     total_count = len(test_cases)
 
-    for test_case in test_cases:
+    for i, test_case in enumerate(test_cases):
         try:
+            print(f"\n   📋 테스트 케이스 {i + 1}/{total_count}: {test_case}")
+
             # 시간 파싱
             test_dt = datetime.fromisoformat(test_case[:-1] + '+00:00')
 
             # 우리의 정렬
-            our_aligned = TimeUtils._align_to_candle_boundary(test_dt, "1m")
+            our_aligned = TimeUtils.align_to_candle_boundary(test_dt, "1m")
 
-            # API 요청 (간단히 하기 위해 첫 번째만 상세 비교)
-            if test_case == test_cases[0]:  # 첫 번째만 실제 API 호출
-                api_result = fetch_upbit_candle("KRW-BTC", "1", test_case, 1)
-                if api_result and len(api_result) > 0:
-                    api_time_str = api_result[0]["candle_date_time_utc"]
-                    if api_time_str.endswith('Z'):
-                        api_dt = datetime.fromisoformat(api_time_str[:-1] + '+00:00')
-                    else:
-                        api_dt = datetime.fromisoformat(api_time_str)
+            # 모든 케이스에서 업비트 API 요청
+            print("      🌐 업비트 API 요청 중...")
+            api_result = fetch_upbit_candle("KRW-BTC", "1", test_case, 1)
 
-                    match = (our_aligned == api_dt)
-                    if match:
-                        match_count += 1
-
-                    print(f"   {test_case}: 우리={our_aligned.strftime('%H:%M:%S')}, API={api_dt.strftime('%H:%M:%S')}, 일치={match}")
+            if api_result and len(api_result) > 0:
+                api_time_str = api_result[0]["candle_date_time_utc"]
+                if api_time_str.endswith('Z'):
+                    api_dt = datetime.fromisoformat(api_time_str[:-1] + '+00:00')
                 else:
-                    print(f"   {test_case}: API 응답 없음")
+                    api_dt = datetime.fromisoformat(api_time_str)
+
+                # timezone 정보가 없으면 UTC로 설정
+                if api_dt.tzinfo is None:
+                    api_dt = api_dt.replace(tzinfo=timezone.utc)
+
+                match = (our_aligned == api_dt)
+                if match:
+                    match_count += 1
+
+                time_diff = (our_aligned - api_dt).total_seconds()
+                status_icon = "✅" if match else "❌"
+
+                # 업비트 원본 응답 형식과 동일하게 우리 시간 변환
+                our_time_str = our_aligned.strftime('%Y-%m-%dT%H:%M:%S')
+
+                print(f"      입력: {test_case}")
+                print(f"      우리: {our_time_str}")
+                print(f"      API:  {api_time_str}")
+                print(f"      일치: {status_icon} (차이: {time_diff:+.1f}초)")
+
             else:
-                # 나머지는 우리의 정렬 결과만 표시
-                print(f"   {test_case}: 우리={our_aligned.strftime('%H:%M:%S')} (API 미확인)")
+                print("      ❌ API 응답 없음 또는 데이터 없음")
 
         except Exception as e:
-            print(f"   {test_case}: 에러 - {e}")
+            print(f"      ❌ 에러: {e}")
+
+    print(f"\n   📊 1분봉 테스트 결과: {match_count}/{total_count}개 일치")
+
+    # 5. 다양한 타임프레임 테스트 (업비트 API 요청)
+    print("\n🔄 다양한 타임프레임 테스트 (모든 케이스 업비트 API 요청)")
+    print("-" * 50)
+
+    # 현재 시간 기준으로 타임프레임별 테스트
+    tf_base = now - dt.timedelta(hours=2)  # 2시간 전
+    timeframe_tests = [
+        ("3", "3m", tf_base.replace(minute=2, second=30).strftime('%Y-%m-%dT%H:%M:%SZ')),    # 3분봉: 2분30초 → 0분
+        ("5", "5m", tf_base.replace(minute=7, second=45).strftime('%Y-%m-%dT%H:%M:%SZ')),    # 5분봉: 7분45초 → 5분
+        ("15", "15m", tf_base.replace(minute=12, second=30).strftime('%Y-%m-%dT%H:%M:%SZ')),  # 15분봉: 12분30초 → 0분
+        ("30", "30m", tf_base.replace(minute=25, second=30).strftime('%Y-%m-%dT%H:%M:%SZ')),  # 30분봉: 25분30초 → 0분
+    ]
+
+    timeframe_match_count = 0
+    timeframe_total = len(timeframe_tests)
+
+    for tf_api, tf_utils, test_time_str in timeframe_tests:
+        try:
+            print(f"\n   📋 {tf_utils} 타임프레임 테스트: {test_time_str}")
+
+            # 시간 파싱
+            test_dt = datetime.fromisoformat(test_time_str[:-1] + '+00:00')
+
+            # 우리의 정렬
+            our_aligned = TimeUtils.align_to_candle_boundary(test_dt, tf_utils)
+
+            # 업비트 API 요청
+            print("      🌐 업비트 API 요청 중...")
+            api_result = fetch_upbit_candle("KRW-BTC", tf_api, test_time_str, 1)
+
+            if api_result and len(api_result) > 0:
+                api_time_str = api_result[0]["candle_date_time_utc"]
+                if api_time_str.endswith('Z'):
+                    api_dt = datetime.fromisoformat(api_time_str[:-1] + '+00:00')
+                else:
+                    api_dt = datetime.fromisoformat(api_time_str)
+
+                # timezone 정보가 없으면 UTC로 설정
+                if api_dt.tzinfo is None:
+                    api_dt = api_dt.replace(tzinfo=timezone.utc)
+
+                match = (our_aligned == api_dt)
+                if match:
+                    timeframe_match_count += 1
+
+                time_diff = (our_aligned - api_dt).total_seconds()
+                status_icon = "✅" if match else "❌"
+
+                # 업비트 원본 응답 형식과 동일하게 우리 시간 변환
+                our_time_str = our_aligned.strftime('%Y-%m-%dT%H:%M:%S')
+
+                print(f"      입력: {test_time_str}")
+                print(f"      우리: {our_time_str}")
+                print(f"      API:  {api_time_str}")
+                print(f"      일치: {status_icon} (차이: {time_diff:+.1f}초)")
+
+            else:
+                print("      ❌ API 응답 없음 또는 데이터 없음")
+
+        except Exception as e:
+            print(f"      ❌ 에러: {e}")
+
+    print(f"\n   📊 다양한 타임프레임 테스트 결과: {timeframe_match_count}/{timeframe_total}개 일치")
+
+    # 전체 결과 계산
+    total_tests = total_count + timeframe_total
+    total_matches = match_count + timeframe_match_count
 
     print()
     print("=" * 80)
     print(f"📊 최종 결과: {result_status}")
+    print(f"🎯 전체 일치율: {total_matches}/{total_tests}개 ({total_matches / total_tests * 100:.1f}%)")
 
-    if result_status == "SUCCESS":
-        print("✅ 우리의 내림 정렬 방식이 업비트 API와 일치합니다!")
+    if result_status == "SUCCESS" and total_matches == total_tests:
+        print("✅ 우리의 내림 정렬 방식이 업비트 API와 완벽히 일치합니다!")
         print("   → 현재 구현이 올바름")
+        final_success = True
+    elif total_matches >= total_tests * 0.8:  # 80% 이상 일치
+        print("⚠️  대부분 일치하지만 일부 불일치가 있습니다.")
+        print("   → 추가 검토 필요")
+        final_success = False
     else:
-        print("❌ 불일치가 발견되었습니다.")
+        print("❌ 상당한 불일치가 발견되었습니다.")
         print("   → 정렬 방식 재검토 필요 (올림 vs 내림)")
+        final_success = False
 
-    return result_status == "SUCCESS"
+    return final_success
 
 
 if __name__ == "__main__":
