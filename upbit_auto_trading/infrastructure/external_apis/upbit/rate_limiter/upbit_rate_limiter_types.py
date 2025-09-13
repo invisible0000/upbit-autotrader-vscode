@@ -49,6 +49,11 @@ class UnifiedRateLimiterConfig:
     rps: float
     burst_capacity: int
 
+    # 🆕 웹소켓 복합 제한 설정
+    requests_per_minute: Optional[int] = None        # 분당 요청 제한 (100 RPM 등)
+    requests_per_minute_burst: Optional[int] = None  # 분당 버스트 용량 (10개 등)
+    enable_dual_limit: bool = False                  # 이중 제한 활성화 (RPS + RPM)
+
     # 동적 조정 설정
     enable_dynamic_adjustment: bool = True
     error_429_threshold: int = 1  # Zero-429 정책

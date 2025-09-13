@@ -38,7 +38,14 @@ class UnifiedUpbitRateLimiter:
 
         # 그룹별 상태
         self.group_stats: Dict[UpbitRateLimitGroup, GroupStats] = {}
-        self.group_tats: Dict[UpbitRateLimitGroup, float] = {}  # Theoretical Arrival Time
+        self.group_tats: Dict[UpbitRateLimitGroup, float] = {}  # Theoretical Arrival Time (초단위)
+
+        # 🆕 웹소켓 복합 제한용 분단위 TAT
+        self.group_tats_minute: Dict[UpbitRateLimitGroup, float] = {}  # Theoretical Arrival Time (분단위)
+
+        # 🆕 RPM 버스트 카운터 (분 단위로 리셋)
+        self.group_rpm_burst_used: Dict[UpbitRateLimitGroup, int] = {}  # 사용된 RPM 버스트 개수
+        self.group_rpm_burst_window_start: Dict[UpbitRateLimitGroup, float] = {}  # RPM 버스트 윈도우 시작 시간
 
         # Lock-Free 대기열 (aiohttp 패턴)
         self.waiters: Dict[UpbitRateLimitGroup, collections.OrderedDict[str, WaiterInfo]] = {}
@@ -92,7 +99,10 @@ class UnifiedUpbitRateLimiter:
             ),
             UpbitRateLimitGroup.WEBSOCKET: UnifiedRateLimiterConfig.from_rps(
                 rps=5.0, burst_capacity=5,
-                enable_dynamic_adjustment=False
+                requests_per_minute=100,         # 🆕 분당 100 요청 제한
+                requests_per_minute_burst=10,    # 🆕 분당 10 요청 버스트 (6초간 10개)
+                enable_dual_limit=True,          # 🆕 이중 제한 활성화 (5 RPS + 100 RPM)
+                enable_dynamic_adjustment=False  # 웹소켓은 고정 제한
             )
         }
 
@@ -104,8 +114,13 @@ class UnifiedUpbitRateLimiter:
             stats.original_config = config
             self.group_stats[group] = stats
 
-            # TAT 초기화
+            # TAT 초기화 (초단위 + 분단위)
             self.group_tats[group] = 0.0
+            self.group_tats_minute[group] = 0.0
+
+            # 🆕 RPM 버스트 카운터 초기화
+            self.group_rpm_burst_used[group] = 0
+            self.group_rpm_burst_window_start[group] = 0.0
 
             # 대기열 초기화
             self.waiters[group] = collections.OrderedDict()
@@ -430,12 +445,29 @@ class UnifiedUpbitRateLimiter:
 
         for group, config in self.group_configs.items():
             stats = self.group_stats[group]
+
+            # 기본 설정 정보
+            config_info = {
+                'rps': config.rps,
+                'current_ratio': stats.current_rate_ratio,
+                'effective_rps': config.rps * stats.current_rate_ratio
+            }
+
+            # 🆕 이중 제한 및 버스트 정보 추가
+            if config.enable_dual_limit and config.requests_per_minute:
+                config_info['requests_per_minute'] = config.requests_per_minute
+                config_info['requests_per_minute_burst'] = config.requests_per_minute_burst or 0
+                config_info['dual_limit_enabled'] = True
+                config_info['burst_capacity'] = config.burst_capacity
+                config_info['tat_second'] = self.group_tats.get(group, 0.0)
+                config_info['tat_minute'] = self.group_tats_minute.get(group, 0.0)
+            else:
+                config_info['dual_limit_enabled'] = False
+                config_info['burst_capacity'] = config.burst_capacity
+                config_info['tat'] = self.group_tats.get(group, 0.0)
+
             groups_status[group.value] = {
-                'config': {
-                    'rps': config.rps,
-                    'current_ratio': stats.current_rate_ratio,
-                    'effective_rps': config.rps * stats.current_rate_ratio
-                },
+                'config': config_info,
                 'stats': {
                     'total_requests': stats.total_requests,
                     'total_waits': stats.total_waits,
