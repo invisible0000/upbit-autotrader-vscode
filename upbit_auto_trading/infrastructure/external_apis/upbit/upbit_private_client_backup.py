@@ -7,38 +7,6 @@ DDD Infrastructure 계층 컴포넌트
 - DRY-RUN 모드 기본 지원
 - 429 오류 자동 처리 및 재시도
 - Infrastructure 로깅 시스템 준수
-
-## 지원 엔드포인트 매핑
-
-### 계정 정보
-- get_accounts()           → GET /accounts
-- get_orders_chance()      → GET /orders/chance
-
-### 주문 관리
-- place_order()            → POST /orders
-- get_order()              → GET /order
-- get_orders()             → GET /orders
-- get_open_orders()        → GET /orders/open
-- get_closed_orders()      → GET /orders/closed
-
-### 주문 취소
-- cancel_order()           → DELETE /order
-- cancel_orders_by_ids()   → DELETE /orders/uuids
-- batch_cancel_orders()    → DELETE /orders/open
-
-### 거래 내역
-- get_trades_history()     → GET /orders/closed (체결된 주문 조회)
-
-### Rate Limit 그룹
-- 계정 조회: REST_PRIVATE_DEFAULT 그룹 (초당 30회)
-- 주문 생성/취소: REST_PRIVATE_ORDER 그룹 (초당 8회)
-- 전체 주문 취소: REST_PRIVATE_CANCEL_ALL 그룹 (초당 0.5회)
-
-### 특이사항
-- 모든 메서드는 API 키 인증 필수
-- DRY-RUN 모드 기본 활성화 (실거래 시 dry_run=False 명시 필요)
-- 주문 관련 메서드는 is_order_request=True로 별도 Rate Limit 적용
-- GCRA 기반 동적 조정으로 429 오류 최소화
 """
 import asyncio
 import aiohttp
@@ -51,6 +19,9 @@ from .upbit_auth import UpbitAuthenticator
 from .rate_limiter import (
     UnifiedUpbitRateLimiter,
     get_unified_rate_limiter,
+    unified_gate_rest_private,
+    log_429_error,
+    log_request_success,
     UpbitRateLimitGroup
 )
 
@@ -348,8 +319,13 @@ class UpbitPrivateClient:
                         return response_data
 
                     elif response.status == 429:
-                        # 429 응답 처리 및 통합 Rate Limiter에 429 에러 알림
-                        await rate_limiter.notify_429_error(endpoint, method)
+                        # 429 응답 처리
+                        retry_after = response.headers.get('Retry-After')
+                        retry_after_float = float(retry_after) if retry_after else None
+
+                        # 통합 Rate Limiter에 429 에러 알림
+                        group = UpbitRateLimitGroup.PRIVATE_REST
+                        await rate_limiter.notify_429_error(group, endpoint)
 
                         # 429 재시도 카운터 업데이트
                         self._stats['last_request_429_retries'] += 1

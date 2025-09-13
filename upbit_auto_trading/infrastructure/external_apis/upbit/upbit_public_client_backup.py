@@ -7,19 +7,24 @@ DDD Infrastructure 계층 컴포넌트
 - 429 오류 자동 처리 및 재시도
 - Infrastructure 로깅 시스템 준수
 - 인증이 불필요한 공개 API 전담
+- gzip 압축 지원으로 대역폭 최적화
 """
 import asyncio
 import aiohttp
 import time
+import gzip
+import json
+import random
 from typing import List, Dict, Any, Optional, Union
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .upbit_rate_limiter import get_global_rate_limiter, UpbitGCRARateLimiter
-from .dynamic_rate_limiter_wrapper import (
-    get_dynamic_rate_limiter,
-    DynamicUpbitRateLimiter,
-    DynamicConfig,
-    AdaptiveStrategy
+from .rate_limiter import (
+    UnifiedUpbitRateLimiter,
+    get_unified_rate_limiter,
+    unified_gate_rest_public,
+    log_429_error,
+    log_request_success,
+    UpbitRateLimitGroup
 )
 
 
@@ -45,29 +50,29 @@ class UpbitPublicClient:
     BASE_URL = "https://api.upbit.com/v1"
 
     def __init__(self,
-                 use_dynamic_limiter: bool = True,
-                 dynamic_config: Optional[DynamicConfig] = None,
-                 legacy_rate_limiter: Optional[UpbitGCRARateLimiter] = None):
+                 enable_gzip: bool = True,
+                 rate_limiter: Optional[UnifiedUpbitRateLimiter] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
         Args:
-            use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
-            dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
-            legacy_rate_limiter: 기존 GCRA Rate Limiter (동적 비활성화 시)
+            enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약 가능)
+            rate_limiter: 사용자 정의 Rate Limiter (기본값: 전역 공유 인스턴스)
 
         Note:
             공개 API 클라이언트는 인증이 불필요하며,
             모든 업비트 공개 데이터 조회 기능을 제공합니다.
+            gzip 압축을 통해 대역폭 사용량을 크게 줄일 수 있습니다.
+            새로운 통합 Rate Limiter를 사용하여 Zero-429 정책을 보장합니다.
         """
         # Infrastructure 로깅 초기화
         self._logger = create_component_logger("UpbitPublicClient")
 
-        # Rate Limiter 설정
-        self._use_dynamic_limiter = use_dynamic_limiter
-        self._dynamic_limiter: Optional[DynamicUpbitRateLimiter] = None
-        self._legacy_rate_limiter = legacy_rate_limiter
-        self._dynamic_config = dynamic_config or DynamicConfig(strategy=AdaptiveStrategy.BALANCED)
+        # Rate Limiter 설정 - 새로운 통합 Rate Limiter 사용
+        self._rate_limiter = rate_limiter  # None이면 나중에 전역 인스턴스 사용
+
+        # gzip 압축 설정
+        self._enable_gzip = enable_gzip
 
         # HTTP 세션 관리
         self._session: Optional[aiohttp.ClientSession] = None
@@ -78,14 +83,17 @@ class UpbitPublicClient:
             'total_429_retries': 0,
             'last_request_429_retries': 0,
             'average_response_time_ms': 0.0,
-            'last_http_response_time_ms': 0.0
+            'last_http_response_time_ms': 0.0,
+            'gzip_enabled': enable_gzip,
+            'total_bytes_received': 0,
+            'total_compressed_bytes': 0
         }
 
-        self._logger.info(f"✅ UpbitPublicClient 초기화 완료 (동적 Rate Limiter: {use_dynamic_limiter})")
+        self._logger.info(f"✅ UpbitPublicClient 초기화 완료 (gzip: {enable_gzip})")
 
     def __repr__(self):
         return (f"UpbitPublicClient("
-                f"dynamic_limiter={self._use_dynamic_limiter}, "
+                f"gzip={self._enable_gzip}, "
                 f"total_requests={self._stats['total_requests']})")
 
     async def __aenter__(self):
@@ -100,7 +108,7 @@ class UpbitPublicClient:
     # ================================================================
 
     async def _ensure_session(self) -> None:
-        """HTTP 세션 확보 - 연결 풀링 및 타임아웃 최적화"""
+        """HTTP 세션 확보 - 연결 풀링, 타임아웃 및 gzip 압축 최적화"""
         if not self._session or self._session.closed:
             connector = aiohttp.TCPConnector(
                 limit=100,           # 전체 연결 제한
@@ -113,28 +121,30 @@ class UpbitPublicClient:
                 connect=10,    # 연결 타임아웃
                 sock_read=20   # 소켓 읽기 타임아웃
             )
+
+            # 기본 헤더 설정 (gzip 압축 지원 포함)
+            headers = {
+                'Accept': 'application/json',
+                'User-Agent': 'upbit-autotrader-vscode/1.0'
+            }
+
+            # gzip 압축 요청 (대역폭 83% 절약 가능)
+            if self._enable_gzip:
+                headers['Accept-Encoding'] = 'gzip, deflate'
+
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
-                headers={
-                    'Accept': 'application/json',
-                    'User-Agent': 'upbit-autotrader-vscode/1.0'
-                }
+                headers=headers
             )
-            self._logger.debug("🌐 HTTP 세션 초기화 완료")
+            self._logger.debug(f"🌐 HTTP 세션 초기화 완료 (gzip: {self._enable_gzip})")
 
-    async def _ensure_rate_limiter(self) -> Union[DynamicUpbitRateLimiter, UpbitGCRARateLimiter]:
-        """Rate Limiter 확보 (동적 우선, 전역 공유 대체)"""
-        if self._use_dynamic_limiter:
-            if self._dynamic_limiter is None:
-                self._dynamic_limiter = await get_dynamic_rate_limiter(self._dynamic_config)
-                self._logger.debug("🔄 동적 Rate Limiter 초기화 완료")
-            return self._dynamic_limiter
-        else:
-            if self._legacy_rate_limiter is None:
-                self._legacy_rate_limiter = await get_global_rate_limiter()
-                self._logger.debug("⚙️ 레거시 Rate Limiter 초기화 완료")
-            return self._legacy_rate_limiter
+    async def _ensure_rate_limiter(self) -> UnifiedUpbitRateLimiter:
+        """Rate Limiter 확보 - 통합 Rate Limiter 사용"""
+        if self._rate_limiter is None:
+            self._rate_limiter = await get_unified_rate_limiter()
+            self._logger.debug("🔄 통합 Rate Limiter 초기화 완료")
+        return self._rate_limiter
 
     async def close(self) -> None:
         """리소스 정리"""
@@ -196,6 +206,11 @@ class UpbitPublicClient:
         Raises:
             Exception: API 오류 또는 네트워크 오류
         """
+        # 🔍 디버깅: 실제 업비트 서버에 보내는 파라미터 로깅
+        self._logger.debug(f"🌐 업비트 API 요청: {method} {endpoint}")
+        if params:
+            self._logger.debug(f"📝 요청 파라미터: {params}")
+
         await self._ensure_session()
 
         if not self._session:
@@ -210,9 +225,12 @@ class UpbitPublicClient:
 
         for attempt in range(max_retries):
             try:
-                # Rate Limit 적용
+                # Rate Limit 적용 - 통합 Rate Limiter
                 rate_limiter = await self._ensure_rate_limiter()
-                await rate_limiter.acquire(endpoint, method)
+                await rate_limiter.gate(UpbitRateLimitGroup.PUBLIC_REST, endpoint)
+
+                # 🎲 Micro-jitter: 동시 요청 분산 (5~20ms 랜덤 지연)
+                await asyncio.sleep(random.uniform(0.005, 0.020))
 
                 # 순수 HTTP 요청 시간 측정 시작
                 http_start_time = time.perf_counter()
@@ -235,8 +253,31 @@ class UpbitPublicClient:
                         )
 
                     if response.status == 200:
+                        # gzip 압축 통계 업데이트
+                        content_encoding = response.headers.get('Content-Encoding', '')
+                        content_length = response.headers.get('Content-Length')
+
+                        # 응답 데이터 읽기
                         response_data = await response.json()
-                        self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
+
+                        # 압축 통계 추적 (가능한 경우)
+                        if content_length:
+                            compressed_size = int(content_length)
+                            self._stats['total_compressed_bytes'] += compressed_size
+
+                            # 압축 효율 로깅
+                            if 'gzip' in content_encoding.lower() and self._enable_gzip:
+                                self._logger.debug(f"✅ gzip 압축 응답: {endpoint} "
+                                                 f"({compressed_size} bytes, {response_time_ms:.1f}ms)")
+                            else:
+                                self._logger.debug(f"✅ 일반 응답: {endpoint} "
+                                                 f"({compressed_size} bytes, {response_time_ms:.1f}ms)")
+                        else:
+                            self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
+
+                        # 📊 성공 요청 통계 기록
+                        await log_request_success(endpoint, response_time_ms)
+
                         return response_data
 
                     elif response.status == 429:
@@ -244,12 +285,33 @@ class UpbitPublicClient:
                         retry_after = response.headers.get('Retry-After')
                         retry_after_float = float(retry_after) if retry_after else None
 
-                        if isinstance(rate_limiter, DynamicUpbitRateLimiter):
-                            # 동적 Rate Limiter는 자동으로 429 처리됨 (acquire 단계에서)
-                            pass
-                        else:
-                            # 레거시 Rate Limiter 수동 처리
-                            rate_limiter.handle_429_response(retry_after=retry_after_float)
+                        # 🔍 실제 서버 429 응답 상세 정보 로깅
+                        error_body = await response.text()
+                        self._logger.info("🚨 실제 서버 429 응답 수신!")
+                        self._logger.info(f"📡 응답 헤더: {dict(response.headers)}")
+                        self._logger.info(f"📄 응답 본문: {error_body[:200]}{'...' if len(error_body) > 200 else ''}")
+                        self._logger.info(f"⏰ Retry-After: {retry_after} ({retry_after_float}초)")
+
+                        # 🎯 통합 Rate Limiter에 429 에러 알림
+                        group = UpbitRateLimitGroup.PUBLIC_REST
+                        await rate_limiter.notify_429_error(group, endpoint)
+
+                        # 상세 429 모니터링 이벤트 기록
+                        await log_429_error(
+                            endpoint=endpoint,
+                            method=method,
+                            retry_after=retry_after_float,
+                            attempt_number=attempt + 1,
+                            rate_limiter_type="unified",
+                            current_rate_ratio=None,
+                            response_headers=dict(response.headers),
+                            response_body=error_body,
+                            # 추가 컨텍스트
+                            total_429_retries=self._stats['total_429_retries'],
+                            session_stats=dict(self._stats),
+                            url=url,
+                            params=params
+                        )
 
                         # 429 재시도 카운터 업데이트
                         self._stats['last_request_429_retries'] += 1
@@ -576,10 +638,83 @@ class UpbitPublicClient:
         return response
 
     # ================================================================
-    # 캔들 정보 API - 분봉, 일봉, 주봉, 월봉
+    # 캔들 정보 API - 초봉, 분봉, 일봉, 주봉, 월봉, 연봉
     # ================================================================
 
-    async def get_candles_minutes(self, unit: int, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_candles_seconds(self, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        초봉 정보 조회
+
+        특정 마켓의 초봉 데이터를 조회합니다.
+
+        Args:
+            market: 마켓 코드 (예: 'KRW-BTC')
+            count: 조회할 캔들 개수 (기본값: 200, 최대: 200)
+            to: 마지막 캔들 시각 (ISO 8601 형식, 예: '2023-01-01T00:00:00Z')
+                None이면 가장 최근 캔들부터 조회
+
+        Returns:
+            List[Dict[str, Any]]: 초봉 데이터 리스트 (과거순 → 최신순)
+                [
+                    {
+                        'market': 'KRW-BTC',              # 마켓 코드
+                        'candle_date_time_utc': '2023-01-01T12:00:00',  # 캔들 기준 시각 (UTC)
+                        'candle_date_time_kst': '2023-01-01T21:00:00',  # 캔들 기준 시각 (KST)
+                        'opening_price': 19000000.0,       # 시가
+                        'high_price': 19200000.0,          # 고가
+                        'low_price': 18900000.0,           # 저가
+                        'trade_price': 19100000.0,         # 종가
+                        'timestamp': 1672574400000,        # 타임스탬프
+                        'candle_acc_trade_price': 123456789.0,  # 누적 거래 금액
+                        'candle_acc_trade_volume': 6.78901234   # 누적 거래량
+                    },
+                    ...
+                ]
+
+        Examples:
+            # 초봉 200개 조회
+            candles = await client.get_candles_seconds('KRW-BTC')
+
+            # 초봉 100개 조회
+            candles = await client.get_candles_seconds('KRW-BTC', count=100)
+
+            # 특정 시각부터 초봉 조회
+            candles = await client.get_candles_seconds(
+                'KRW-BTC',
+                count=50,
+                to='2023-01-01T00:00:00Z'
+            )
+
+        Raises:
+            ValueError: 마켓 코드가 비어있거나 count가 200을 초과하는 경우
+            Exception: API 오류
+
+        Note:
+            초 캔들 조회는 최대 3개월 이내 데이터만 제공됩니다.
+            조회 가능 기간을 초과한 경우 빈 리스트가 반환될 수 있습니다.
+        """
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        if count > 200:
+            raise ValueError("조회 가능한 최대 캔들 개수는 200개입니다")
+
+        params = {'market': market, 'count': str(count)}
+        if to:
+            params['to'] = to
+
+        response = await self._make_request('/candles/seconds', params=params)
+
+        self._logger.debug(f"⚡ 초봉 조회 완료: {market}, {len(response)}개 캔들")
+        return response
+
+    async def get_candles_minutes(
+        self,
+        unit: int,
+        market: str,
+        count: int = 200,
+        to: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         분봉 정보 조회
 
@@ -649,7 +784,13 @@ class UpbitPublicClient:
         self._logger.debug(f"🕐 {unit}분봉 조회 완료: {market}, {len(response)}개 캔들")
         return response
 
-    async def get_candles_days(self, market: str, count: int = 200, to: Optional[str] = None, converting_price_unit: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_candles_days(
+        self,
+        market: str,
+        count: int = 200,
+        to: Optional[str] = None,
+        converting_price_unit: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         일봉 정보 조회
 
@@ -800,6 +941,65 @@ class UpbitPublicClient:
         self._logger.debug(f"📆 월봉 조회 완료: {market}, {len(response)}개 캔들")
         return response
 
+    async def get_candles_years(self, market: str, count: int = 200, to: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        연봉 정보 조회
+
+        특정 마켓의 연봉 데이터를 조회합니다.
+
+        Args:
+            market: 마켓 코드 (예: 'KRW-BTC')
+            count: 조회할 캔들 개수 (기본값: 200, 최대: 200)
+            to: 마지막 캔들 시각 (ISO 8601 형식, 예: '2023-01-01T00:00:00Z')
+
+        Returns:
+            List[Dict[str, Any]]: 연봉 데이터 리스트 (과거순 → 최신순)
+                [
+                    {
+                        'market': 'KRW-BTC',              # 마켓 코드
+                        'candle_date_time_utc': '2023-01-01T00:00:00',  # 캔들 기준 시각 (UTC)
+                        'candle_date_time_kst': '2023-01-01T09:00:00',  # 캔들 기준 시각 (KST)
+                        'opening_price': 19000000.0,       # 시가
+                        'high_price': 19500000.0,          # 고가
+                        'low_price': 18500000.0,           # 저가
+                        'trade_price': 19200000.0,         # 종가
+                        'timestamp': 1672531200000,        # 타임스탬프
+                        'candle_acc_trade_price': 15432109876.0,  # 누적 거래 금액
+                        'candle_acc_trade_volume': 1234.56789012,  # 누적 거래량
+                        'prev_closing_price': 19100000.0,  # 전년 종가
+                        'change_price': 100000.0,          # 전년 대비 가격
+                        'change_rate': 0.00523560209,      # 전년 대비 등락률
+                        'first_day_of_period': '2023-01-01'  # 캔들 집계 시작일자
+                    },
+                    ...
+                ]
+
+        Examples:
+            # 연봉 200개 조회
+            candles = await client.get_candles_years('KRW-BTC')
+
+            # 연봉 10개 조회 (10년)
+            candles = await client.get_candles_years('KRW-BTC', count=10)
+
+        Raises:
+            ValueError: 마켓 코드가 비어있거나 count가 200을 초과하는 경우
+            Exception: API 오류
+        """
+        if not market:
+            raise ValueError("마켓 코드는 필수입니다")
+
+        if count > 200:
+            raise ValueError("한 번에 조회할 수 있는 캔들은 최대 200개입니다")
+
+        params = {'market': market, 'count': str(count)}
+        if to:
+            params['to'] = to
+
+        response = await self._make_request('/candles/years', params=params)
+
+        self._logger.debug(f"📊 연봉 조회 완료: {market}, {len(response)}개 캔들")
+        return response
+
     # ================================================================
     # 마켓 정보 API - 마켓 코드, 거래 가능 정보
     # ================================================================
@@ -926,39 +1126,39 @@ class UpbitPublicClient:
 # ================================================================
 
 def create_upbit_public_client(
-    use_dynamic_limiter: bool = True,
-    dynamic_config: Optional[DynamicConfig] = None
+    enable_gzip: bool = True,
+    rate_limiter: Optional[UnifiedUpbitRateLimiter] = None
 ) -> UpbitPublicClient:
     """
     업비트 공개 API 클라이언트 생성 (편의 함수)
 
     Args:
-        use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
-        dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
+        enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약)
+        rate_limiter: 사용자 정의 Rate Limiter (기본값: 전역 공유 인스턴스)
 
     Returns:
         UpbitPublicClient: 설정된 클라이언트 인스턴스
 
     Examples:
-        # 기본 설정으로 생성
+        # 기본 설정으로 생성 (gzip 압축 포함)
         client = create_upbit_public_client()
 
         # 보수적 전략으로 생성
         config = DynamicConfig(strategy=AdaptiveStrategy.CONSERVATIVE)
         client = create_upbit_public_client(dynamic_config=config)
 
-        # 레거시 Rate Limiter 사용
-        client = create_upbit_public_client(use_dynamic_limiter=False)
+        # gzip 비활성화
+        client = create_upbit_public_client(enable_gzip=False)
     """
     return UpbitPublicClient(
-        use_dynamic_limiter=use_dynamic_limiter,
-        dynamic_config=dynamic_config
+        enable_gzip=enable_gzip,
+        rate_limiter=rate_limiter
     )
 
 
 async def create_upbit_public_client_async(
-    use_dynamic_limiter: bool = True,
-    dynamic_config: Optional[DynamicConfig] = None
+    enable_gzip: bool = True,
+    rate_limiter: Optional[UnifiedUpbitRateLimiter] = None
 ) -> UpbitPublicClient:
     """
     업비트 공개 API 클라이언트 비동기 생성 (편의 함수)
@@ -966,16 +1166,18 @@ async def create_upbit_public_client_async(
     Args:
         use_dynamic_limiter: 동적 Rate Limiter 사용 여부 (기본값: True)
         dynamic_config: 동적 조정 설정 (기본값: 균형 전략)
+        enable_gzip: gzip 압축 사용 여부 (기본값: True, 대역폭 83% 절약)
 
     Returns:
         UpbitPublicClient: 초기화된 클라이언트 인스턴스
 
     Note:
         세션을 미리 초기화하여 첫 번째 요청 시 지연을 줄입니다.
+        gzip 압축을 통해 데이터 전송량을 83% 절약할 수 있습니다.
     """
     client = UpbitPublicClient(
-        use_dynamic_limiter=use_dynamic_limiter,
-        dynamic_config=dynamic_config
+        enable_gzip=enable_gzip,
+        rate_limiter=rate_limiter
     )
 
     # 세션 미리 초기화

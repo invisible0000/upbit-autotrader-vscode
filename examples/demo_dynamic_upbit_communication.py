@@ -413,13 +413,13 @@ async def generate_dynamic_test_requests(client: UpbitPublicClient, count: int =
         elif pattern[0] == "get_orderbook_single":
             # 단일 마켓 호가
             market = random.choice(krw_markets)
-            test_requests.append(("get_orderbook", ([market],), {}))
+            test_requests.append(("get_orderbooks", ([market],), {}))
 
         elif pattern[0] == "get_orderbook_multi":
             # 2-3개 마켓 호가 (호가는 최대 5개까지만 가능)
             market_count = random.randint(2, min(3, len(krw_markets)))
             markets = random.sample(krw_markets, market_count)
-            test_requests.append(("get_orderbook", (markets,), {}))
+            test_requests.append(("get_orderbooks", (markets,), {}))
 
         elif pattern[0] == "get_trades":
             # 체결 내역
@@ -521,7 +521,7 @@ async def test_market_all_communication():
             test_requests = [
                 ("get_markets", (), {}),
                 ("get_ticker", (["KRW-BTC"],), {}),
-                ("get_orderbook", (["KRW-BTC"],), {}),
+                ("get_orderbooks", (["KRW-BTC"],), {}),
                 ("get_trades", ("KRW-BTC",), {"count": 50}),
                 ("get_candles_minutes", (1, "KRW-BTC"), {"count": 50}),
             ]
@@ -738,7 +738,7 @@ async def test_stress_communication():
                 elif i % 5 == 1:
                     test_requests.append(("get_ticker", (["KRW-BTC", "KRW-ETH"],), {}))
                 elif i % 5 == 2:
-                    test_requests.append(("get_orderbook", (["KRW-BTC"],), {}))
+                    test_requests.append(("get_orderbooks", (["KRW-BTC"],), {}))
                 elif i % 5 == 3:
                     test_requests.append(("get_trades", ("KRW-BTC",), {"count": 100}))
                 else:

@@ -33,13 +33,36 @@ from ..support.subscription_manager import SubscriptionManager
 from ..support.jwt_manager import JWTManager
 from ..support.websocket_config import get_config
 
-# Rate Limiter 통합
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import (
-    gate_websocket
+# Rate Limiter 통합 - 새로운 통합 Rate Limiter 사용
+from upbit_auto_trading.infrastructure.external_apis.upbit.rate_limiter import (
+    UnifiedUpbitRateLimiter,
+    get_unified_rate_limiter,
+    UpbitRateLimitGroup
 )
-from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
-    get_dynamic_rate_limiter, DynamicConfig, AdaptiveStrategy
-)
+
+# WebSocket Rate Limiter 전역 인스턴스
+_websocket_rate_limiter: Optional[UnifiedUpbitRateLimiter] = None
+
+async def get_websocket_rate_limiter() -> UnifiedUpbitRateLimiter:
+    """WebSocket 전용 Rate Limiter 인스턴스 가져오기"""
+    global _websocket_rate_limiter
+    if _websocket_rate_limiter is None:
+        _websocket_rate_limiter = await get_unified_rate_limiter()
+    return _websocket_rate_limiter
+
+async def gate_websocket(action: str, max_wait: float = 15.0):
+    """WebSocket 전용 Rate Limiting Gate"""
+    try:
+        rate_limiter = await get_websocket_rate_limiter()
+        # WebSocket 연결은 WEBSOCKET 그룹 사용
+        await rate_limiter.gate(UpbitRateLimitGroup.WEBSOCKET, action)
+    except Exception as e:
+        # WebSocket gate 실패 시 로그만 남기고 계속 진행 (웹소켓 안정성 우선)
+        import logging
+        logger = logging.getLogger("websocket.rate_limiter")
+        logger.warning(f"WebSocket rate limit gate 실패 ({action}): {e}")
+        # 짧은 대기 후 진행
+        await asyncio.sleep(0.1)
 
 
 class WebSocketManager:
@@ -113,8 +136,8 @@ class WebSocketManager:
         self._subscription_manager: Optional[SubscriptionManager] = None  # v6.2 구독 관리자 (리얼타임 중심)
         self._jwt_manager: Optional[JWTManager] = None
 
-        # Rate Limiter 시스템
-        self._dynamic_limiter = None
+        # Rate Limiter 시스템 (통합 Rate Limiter 사용)
+        self._unified_limiter = None
         self._rate_limiter_enabled = True
         self._rate_limit_stats = {
             'total_connections': 0,
@@ -187,38 +210,17 @@ class WebSocketManager:
                 self._rate_limiter_enabled = False
                 return
 
-            # 동적 Rate Limiter 설정
-            strategy_map = {
-                "conservative": AdaptiveStrategy.CONSERVATIVE,
-                "balanced": AdaptiveStrategy.BALANCED,
-                "aggressive": AdaptiveStrategy.AGGRESSIVE
-            }
+            # 통합 Rate Limiter 사용
+            self._unified_limiter = await get_unified_rate_limiter()
+            self._rate_limiter_enabled = True
+            self.logger.info("📊 통합 Rate Limiter 초기화 완료")
 
-            dynamic_config = DynamicConfig(
-                strategy=strategy_map.get(rate_config.strategy, AdaptiveStrategy.BALANCED),
-                error_429_threshold=rate_config.error_threshold,
-                reduction_ratio=rate_config.reduction_ratio,
-                recovery_delay=rate_config.recovery_delay,
-                recovery_step=rate_config.recovery_step,
-                recovery_interval=rate_config.recovery_interval
-            )
-
-            if rate_config.enable_dynamic_adjustment:
-                self._dynamic_limiter = await get_dynamic_rate_limiter(dynamic_config)
-
-                # 429 에러 콜백 설정
-                self._dynamic_limiter.on_429_detected = self._on_rate_limit_error
-                self._dynamic_limiter.on_rate_reduced = self._on_rate_reduced
-                self._dynamic_limiter.on_rate_recovered = self._on_rate_recovered
-
-                self.logger.info(f"동적 Rate Limiter 초기화 완료 (전략: {rate_config.strategy})")
-            else:
-                # 기본 Rate Limiter만 사용
-                self.logger.info("기본 Rate Limiter 사용")
+            # 기존 동적 조정 기능은 UnifiedUpbitRateLimiter 내부에서 처리됨
 
         except Exception as e:
-            self.logger.warning(f"Rate Limiter 초기화 실패 (계속 진행): {e}")
+            self.logger.warning(f"통합 Rate Limiter 초기화 실패 (계속 진행): {e}")
             self._rate_limiter_enabled = False
+            self._unified_limiter = None
 
     def _on_rate_limit_error(self, group, endpoint, error):
         """Rate Limit 에러 감지 콜백"""
@@ -234,19 +236,15 @@ class WebSocketManager:
         self.logger.info(f"WebSocket Rate 복구: {group.value} {old_ratio:.1%} → {new_ratio:.1%}")
 
     async def _apply_rate_limit(self, action: str = 'websocket_message') -> None:
-        """Rate Limiter 적용"""
+        """Rate Limiter 적용 (새로운 통합 Rate Limiter 사용)"""
         if not self._rate_limiter_enabled:
             return
 
         try:
             start_time = time.monotonic()
 
-            if self._dynamic_limiter:
-                # 동적 Rate Limiter 사용
-                await self._dynamic_limiter.acquire(action, 'WS', max_wait=15.0)
-            else:
-                # 기본 Rate Limiter 사용 (폴백)
-                await gate_websocket(action, max_wait=15.0)
+            # 새로운 통합 Rate Limiter 사용
+            await gate_websocket(action, max_wait=15.0)
 
             # 대기 시간 통계
             wait_time = time.monotonic() - start_time
@@ -267,12 +265,8 @@ class WebSocketManager:
             # 실제 Rate Limiter 지연 시간 측정
             start_time = time.monotonic()
 
-            if self._dynamic_limiter:
-                # 실제 acquire로 정확한 지연 시간 측정
-                await self._dynamic_limiter.acquire('websocket_delay_check', 'WS', max_wait=15.0)
-            else:
-                # 기본 Rate Limiter로 측정
-                await gate_websocket('websocket_delay_check', max_wait=15.0)
+            # 통합 Rate Limiter로 지연 시간 측정
+            await gate_websocket('websocket_delay_check', max_wait=15.0)
 
             actual_delay = time.monotonic() - start_time
 
@@ -504,14 +498,7 @@ class WebSocketManager:
                         self.logger.warning("⚠️ Background Tasks 정리 타임아웃")
 
                 self._background_tasks.clear()
-            if self._dynamic_limiter:
-                try:
-                    # 매우 짧은 타임아웃으로 빠른 정리
-                    await asyncio.wait_for(self._dynamic_limiter.stop_monitoring(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    self.logger.warning("Rate Limiter 정지 타임아웃 (강제 진행)")
-                except Exception as e:
-                    self.logger.warning(f"Rate Limiter 정지 중 오류: {e}")
+            # 통합 Rate Limiter는 글로벌 인스턴스이므로 별도 정리 불필요
 
             # 3️⃣ 모든 연결 종료 (마지막)
             await self._disconnect_all()
@@ -1591,16 +1578,20 @@ class WebSocketManager:
             )
 
     def get_rate_limiter_status(self) -> Dict[str, Any]:
-        """Rate Limiter 상태 반환"""
+        """Rate Limiter 상태 반환 (통합 Rate Limiter 사용)"""
         status = {
             'enabled': self._rate_limiter_enabled,
             'stats': self._rate_limit_stats.copy(),
-            'dynamic_limiter': None
+            'unified_limiter': None
         }
 
-        if self._dynamic_limiter and self._rate_limiter_enabled:
+        if self._unified_limiter and self._rate_limiter_enabled:
             try:
-                status['dynamic_limiter'] = self._dynamic_limiter.get_dynamic_status()
+                # 통합 Rate Limiter의 상태 정보 조회
+                status['unified_limiter'] = {
+                    'type': 'UnifiedUpbitRateLimiter',
+                    'websocket_enabled': True
+                }
             except Exception as e:
                 self.logger.warning(f"Rate Limiter 상태 조회 실패: {e}")
 

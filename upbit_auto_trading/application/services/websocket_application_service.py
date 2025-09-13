@@ -92,12 +92,13 @@ class WebSocketApplicationService(BaseApplicationService):
 
             self.logger.debug("✅ WebSocket Manager 연결 완료")
 
-            # 자동 시작 설정
-            if self.config.auto_start_on_init:
-                await self.start()
-
+            # 초기화 완료 표시 (auto_start 전에 설정)
             self._is_initialized = True
             self.logger.info("✅ WebSocket Application Service 초기화 완료")
+
+            # 자동 시작 설정 (초기화 후 실행)
+            if self.config.auto_start_on_init:
+                await self.start()
             return True
 
         except Exception as e:

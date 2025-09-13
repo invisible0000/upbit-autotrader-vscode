@@ -30,13 +30,24 @@ await private_client.close()
 from .upbit_public_client import UpbitPublicClient, create_upbit_public_client
 # from .upbit_private_client import UpbitPrivateClient, create_upbit_private_client
 from .upbit_auth import UpbitAuthenticator
-from .upbit_rate_limiter import (
-    UpbitGCRARateLimiter, get_global_rate_limiter
+from .rate_limiter import (
+    UnifiedUpbitRateLimiter as UpbitGCRARateLimiter,
+    get_unified_rate_limiter as get_global_rate_limiter
 )
 
-# WebSocket v6 사용 (간소화된 아키텍처)
-from .websocket.core.websocket_client import WebSocketClient as UpbitWebSocketClient
-from .websocket.core.websocket_manager import get_websocket_manager as get_global_websocket_manager
+# WebSocket v6 사용 (간소화된 아키텍처) - 임시 주석처리
+# from .websocket.core.websocket_client import WebSocketClient as UpbitWebSocketClient
+# from .websocket.core.websocket_manager import get_websocket_manager as get_global_websocket_manager
+
+# 임시 더미 클래스
+class WebSocketClient:
+    def __init__(self, component_id: str):
+        self.component_id = component_id
+
+UpbitWebSocketClient = WebSocketClient
+
+def get_global_websocket_manager():
+    return None
 
 
 # 호환성을 위한 별칭 (레거시 코드 지원)

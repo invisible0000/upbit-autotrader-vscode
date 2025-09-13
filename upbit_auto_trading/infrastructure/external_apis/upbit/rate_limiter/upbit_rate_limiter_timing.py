@@ -1,12 +1,9 @@
 """
-고정밀 타이밍 시스템 - Redis Rate Limiter 패턴 적용
-- 나노초 정밀도 시간 관리
-- Decimal 기반 부동소수점 정밀도 문제 해결
-- 시간 정규화로 2048년까지 정확성 보장
-- Clock drift 보상 메커니즘
-
-DeepWiki 조사 결과 go-redis/redis_rate의 시간 처리 방식을 Python에 적용
+업비트 Rate Limiter 고정밀 타이밍 시스템
+- 나노초 정밀도 시간 관리, Clock drift 보상
+- 검색 키워드: timing, precision, nanosecond, clock
 """
+
 import time
 from decimal import Decimal, getcontext
 from typing import Dict, Any, Optional, Callable
@@ -15,25 +12,11 @@ import threading
 from datetime import datetime
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from .upbit_rate_limiter_types import TimeConfig
 
 
 # 고정밀 연산을 위한 Decimal 정밀도 설정 (Redis 방식)
 getcontext().prec = 28  # 28자리 정밀도로 2048년까지 안전
-
-
-@dataclass
-class TimeConfig:
-    """시간 관리 설정"""
-    # Redis 방식: 2017년 1월 1일을 기준점으로 사용 (큰 숫자 방지)
-    EPOCH_OFFSET: float = 1483228800.0  # 2017-01-01 00:00:00 UTC
-
-    # 정밀도 설정
-    NANOSECOND_PRECISION: bool = True
-    DECIMAL_PRECISION: int = 28
-
-    # Clock drift 보상
-    DRIFT_CHECK_INTERVAL: float = 60.0  # 1분마다 드리프트 체크
-    MAX_DRIFT_TOLERANCE: float = 0.001  # 1ms 드리프트 허용
 
 
 class PrecisionTimeManager:
@@ -355,4 +338,4 @@ def calculate_precise_wait(target_time: Decimal) -> float:
 
 def create_precision_timer(interval: float) -> Callable[[], bool]:
     """고정밀 타이머 생성"""
-    return get_global_time_manager().create_precise_timer(interval)
+    return get_global_time_manager().create_precision_timer(interval)

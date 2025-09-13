@@ -1,48 +1,20 @@
 """
-업비트 Rate Limit 모니터링 시스템
-- 429 에러 상세 추적 및 분석
-- 일일/주간 통계 리포트 생성
-- 패턴 분석을 통한 개선점 도출
-
-Zero-429 정책 달성을 위한 핵심 모니터링 도구
+업비트 Rate Limiter 모니터링 시스템
+- 429 에러 추적, 통계 생성, 일일/주간 리포트
+- 검색 키워드: monitoring, 429, stats, report
 """
+
 import os
 import json
 import time
 import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from pathlib import Path
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-
-
-@dataclass
-class Rate429Event:
-    """429 에러 이벤트 상세 정보"""
-    timestamp: float
-    datetime_str: str
-    endpoint: str
-    method: str
-    retry_after: Optional[float]
-    attempt_number: int
-    rate_limiter_type: str  # 'dynamic' or 'legacy'
-    current_rate_ratio: Optional[float]  # 동적 리미터의 현재 비율
-    response_headers: Dict[str, str]
-    response_body: str
-    context: Dict[str, Any]  # 추가 컨텍스트 정보
-
-
-@dataclass
-class HourlyStats:
-    """시간대별 통계"""
-    hour: int
-    total_requests: int = 0
-    error_429_count: int = 0
-    error_rate: float = 0.0
-    avg_response_time: float = 0.0
-    rate_reductions: int = 0  # 동적 조정 발생 횟수
+from .upbit_rate_limiter_types import Rate429Event, HourlyStats
 
 
 class RateLimitMonitor:

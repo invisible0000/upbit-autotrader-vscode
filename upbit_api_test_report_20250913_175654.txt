@@ -1,0 +1,57 @@
+
+=================================================================
+📊 업비트 공개 API 전체 엔드포인트 테스트 결과 리포트
+=================================================================
+⏰ 테스트 시간: 2025-09-13 17:56:54
+📈 전체 테스트: 23개
+✅ 성공: 18개 (78.3%)
+❌ 실패: 5개 (21.7%)
+
+=================================================================
+🔍 상세 결과
+=================================================================
+
+✅ 성공한 엔드포인트:
+  • /v1/market/all (573개) - 143.8ms
+  • /v1/orderbook (2개) - 119.9ms
+  • /v1/orderbook/instruments (2개) - 33.6ms
+  • /v1/trades/ticks (50개) - 128.4ms
+  • /v1/candles/seconds (50개) - 44.4ms
+  • /v1/candles/minutes/1 (50개) - 123.3ms
+  • /v1/candles/minutes/5 (50개) - 43.1ms
+  • /v1/candles/minutes/15 (50개) - 110.9ms
+  • /v1/candles/minutes/30 (50개) - 46.0ms
+  • /v1/candles/minutes/60 (50개) - 98.3ms
+  • /v1/candles/minutes/240 (50개) - 41.3ms
+  • /v1/candles/days (50개) - 124.0ms
+  • /v1/candles/weeks (50개) - 34.8ms
+  • /v1/candles/months (24개) - 107.6ms
+  • /v1/candles/years (8개) - 599.9ms
+  • 편의메서드:get_krw_markets (199개) - 104.7ms
+  • 편의메서드:get_btc_markets (247개) - 45.8ms
+  • 편의메서드:get_market_summary (1개) - 162.7ms
+
+❌ 실패한 엔드포인트:
+  • /v1/ticker - 'UpbitPublicClient' object has no attribute 'get_ticker'
+  • /v1/ticker/all?quote_currencies=KRW - API 오류 (상태: 404): {"error":{"name":404,"message":"Code not found"}}
+  • /v1/ticker/all?quote_currencies=BTC - API 오류 (상태: 404): {"error":{"name":404,"message":"Code not found"}}
+  • /v1/ticker/all?quote_currencies=USDT - API 오류 (상태: 404): {"error":{"name":404,"message":"Code not found"}}
+  • /v1/ticker/all?quote_currencies=KRW,BTC - 'UpbitPublicClient' object has no attribute 'get_ticker_all'
+
+=================================================================
+⚡ 성능 통계
+=================================================================
+평균 응답 시간: 117.4ms
+최고 응답 시간: 33.6ms
+최저 응답 시간: 599.9ms
+
+=================================================================
+📄 샘플 응답 데이터 (/v1/market/all)
+=================================================================
+{
+  "market": "BTC-BERA",
+  "korean_name": "베라체인",
+  "english_name": "Berachain"
+}
+
+=================================================================
