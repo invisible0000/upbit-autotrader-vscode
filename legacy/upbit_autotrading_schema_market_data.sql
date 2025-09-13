@@ -393,7 +393,7 @@ CREATE INDEX idx_data_collection_status_next_collection ON data_collection_statu
 
 -- 최신 시세 요약 뷰
 CREATE VIEW IF NOT EXISTS latest_market_summary AS
-SELECT 
+SELECT
     ms.symbol,
     ms.display_name_ko,
     ms.base_currency,
@@ -410,14 +410,14 @@ FROM market_symbols ms
 LEFT JOIN real_time_quotes rtq ON ms.symbol = rtq.symbol
 WHERE ms.is_active = 1
   AND rtq.id IN (
-    SELECT MAX(id) 
-    FROM real_time_quotes 
+    SELECT MAX(id)
+    FROM real_time_quotes
     GROUP BY symbol
   );
 
 -- 기술적 분석 최신 상태 뷰
 CREATE VIEW IF NOT EXISTS latest_technical_analysis AS
-SELECT 
+SELECT
     ti.symbol,
     ti.timestamp,
     ti.rsi_14,
@@ -427,26 +427,26 @@ SELECT
     ti.bb_middle,
     ti.bb_lower,
     ti.atr_14,
-    CASE 
+    CASE
         WHEN ti.rsi_14 > 70 THEN 'overbought'
         WHEN ti.rsi_14 < 30 THEN 'oversold'
         ELSE 'neutral'
     END as rsi_signal,
-    CASE 
+    CASE
         WHEN ti.macd_line > ti.macd_signal THEN 'bullish'
         WHEN ti.macd_line < ti.macd_signal THEN 'bearish'
         ELSE 'neutral'
     END as macd_signal
 FROM technical_indicators_1d ti
 WHERE ti.id IN (
-    SELECT MAX(id) 
-    FROM technical_indicators_1d 
+    SELECT MAX(id)
+    FROM technical_indicators_1d
     GROUP BY symbol
 );
 
 -- 고거래량 종목 뷰
 CREATE VIEW IF NOT EXISTS high_volume_symbols AS
-SELECT 
+SELECT
     rtq.symbol,
     ms.display_name_ko,
     rtq.current_price,
@@ -457,8 +457,8 @@ SELECT
 FROM real_time_quotes rtq
 JOIN market_symbols ms ON rtq.symbol = ms.symbol
 WHERE rtq.id IN (
-    SELECT MAX(id) 
-    FROM real_time_quotes 
+    SELECT MAX(id)
+    FROM real_time_quotes
     GROUP BY symbol
 )
   AND ms.is_active = 1
@@ -474,8 +474,8 @@ CREATE TRIGGER IF NOT EXISTS update_market_symbols_timestamp
     AFTER UPDATE ON market_symbols
     FOR EACH ROW
 BEGIN
-    UPDATE market_symbols 
-    SET updated_at = CURRENT_TIMESTAMP 
+    UPDATE market_symbols
+    SET updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.id;
 END;
 
@@ -484,7 +484,7 @@ CREATE TRIGGER IF NOT EXISTS update_data_collection_status_timestamp
     AFTER UPDATE ON data_collection_status
     FOR EACH ROW
 BEGIN
-    UPDATE data_collection_status 
-    SET updated_at = CURRENT_TIMESTAMP 
+    UPDATE data_collection_status
+    SET updated_at = CURRENT_TIMESTAMP
     WHERE id = NEW.id;
 END;

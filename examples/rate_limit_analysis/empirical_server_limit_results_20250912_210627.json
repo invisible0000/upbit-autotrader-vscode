@@ -1,0 +1,864 @@
+{
+  "measurement_timestamp": "20250912_210627",
+  "total_requests": 1022,
+  "phases": [
+    {
+      "phase_name": "Burst Test",
+      "target_rps": 70.11617478290887,
+      "actual_interval_ms": 15.012678347135845,
+      "total_requests": 20,
+      "success_count": 10,
+      "rate_limit_count": 10,
+      "success_rate": 50.0,
+      "rate_limit_rate": 50.0,
+      "avg_response_time_ms": 14.46545124053955,
+      "first_429_at_seconds": 0.17853736877441406,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #1",
+      "target_rps": 0.9756097560975611,
+      "actual_interval_ms": 1030.795699671695,
+      "total_requests": 20,
+      "success_count": 20,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 14.53711986541748,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #2",
+      "target_rps": 1.8621973929236497,
+      "actual_interval_ms": 545.7430746820238,
+      "total_requests": 37,
+      "success_count": 37,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 13.01913648038297,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #3",
+      "target_rps": 3.4129692832764507,
+      "actual_interval_ms": 296.92864418029785,
+      "total_requests": 68,
+      "success_count": 68,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 14.733423204982982,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #4",
+      "target_rps": 5.847953216374268,
+      "actual_interval_ms": 178.60699129534197,
+      "total_requests": 112,
+      "success_count": 112,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 15.901872089930942,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #5",
+      "target_rps": 9.090909090909092,
+      "actual_interval_ms": 122.90892188931689,
+      "total_requests": 163,
+      "success_count": 163,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 13.866578143067155,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "Binary Search #6",
+      "target_rps": 12.5,
+      "actual_interval_ms": 93.53547700693909,
+      "total_requests": 214,
+      "success_count": 195,
+      "rate_limit_count": 19,
+      "success_rate": 91.1214953271028,
+      "rate_limit_rate": 8.878504672897195,
+      "avg_response_time_ms": 15.385616605526934,
+      "first_429_at_seconds": 0.746295690536499,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "고정간격 100ms",
+      "target_rps": 10.0,
+      "actual_interval_ms": 108.97131905938586,
+      "total_requests": 138,
+      "success_count": 138,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 15.511376270349476,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "고정간격 150ms",
+      "target_rps": 6.666666666666667,
+      "actual_interval_ms": 155.25796761115393,
+      "total_requests": 97,
+      "success_count": 97,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 14.042288986677976,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "고정간격 200ms",
+      "target_rps": 5.0,
+      "actual_interval_ms": 202.89034712804508,
+      "total_requests": 74,
+      "success_count": 74,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 17.104938223555283,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "고정간격 300ms",
+      "target_rps": 3.3333333333333335,
+      "actual_interval_ms": 311.78530553976697,
+      "total_requests": 49,
+      "success_count": 49,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 14.400920089410276,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    },
+    {
+      "phase_name": "고정간격 500ms",
+      "target_rps": 2.0,
+      "actual_interval_ms": 510.5040895527807,
+      "total_requests": 30,
+      "success_count": 30,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "rate_limit_rate": 0.0,
+      "avg_response_time_ms": 12.413692474365234,
+      "first_429_at_seconds": null,
+      "retry_after_values": []
+    }
+  ],
+  "raw_results": [
+    {
+      "timestamp": 1757678583.8174756,
+      "status_code": 200,
+      "response_time_ms": 44.28720474243164,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.8619614,
+      "status_code": 200,
+      "response_time_ms": 9.031057357788086,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.8711383,
+      "status_code": 200,
+      "response_time_ms": 11.828899383544922,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.8831463,
+      "status_code": 200,
+      "response_time_ms": 11.026382446289062,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.894326,
+      "status_code": 200,
+      "response_time_ms": 8.577346801757812,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.9031293,
+      "status_code": 200,
+      "response_time_ms": 36.28706932067871,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.939587,
+      "status_code": 200,
+      "response_time_ms": 14.31894302368164,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.9540844,
+      "status_code": 200,
+      "response_time_ms": 12.920379638671875,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.9671824,
+      "status_code": 200,
+      "response_time_ms": 12.993574142456055,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.9803586,
+      "status_code": 200,
+      "response_time_ms": 15.487909317016602,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678583.9960089,
+      "status_code": 429,
+      "response_time_ms": 12.218236923217773,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.008497,
+      "status_code": 429,
+      "response_time_ms": 8.813858032226562,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0174294,
+      "status_code": 429,
+      "response_time_ms": 10.56981086730957,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0281236,
+      "status_code": 429,
+      "response_time_ms": 7.894754409790039,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0361543,
+      "status_code": 429,
+      "response_time_ms": 11.106729507446289,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0474868,
+      "status_code": 429,
+      "response_time_ms": 28.19657325744629,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0758386,
+      "status_code": 429,
+      "response_time_ms": 10.959148406982422,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0869198,
+      "status_code": 429,
+      "response_time_ms": 7.269620895385742,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.0943177,
+      "status_code": 429,
+      "response_time_ms": 8.28242301940918,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678584.1027164,
+      "status_code": 429,
+      "response_time_ms": 7.239103317260742,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678586.1195817,
+      "status_code": 200,
+      "response_time_ms": 13.151407241821289,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678587.1464093,
+      "status_code": 200,
+      "response_time_ms": 12.049436569213867,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678588.1750026,
+      "status_code": 200,
+      "response_time_ms": 9.314537048339844,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678589.2052996,
+      "status_code": 200,
+      "response_time_ms": 11.707305908203125,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678590.235015,
+      "status_code": 200,
+      "response_time_ms": 10.80632209777832,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678591.2662807,
+      "status_code": 200,
+      "response_time_ms": 14.07313346862793,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678592.2925773,
+      "status_code": 200,
+      "response_time_ms": 11.827468872070312,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678593.3242185,
+      "status_code": 200,
+      "response_time_ms": 12.435197830200195,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678594.3529458,
+      "status_code": 200,
+      "response_time_ms": 13.935327529907227,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678595.3838458,
+      "status_code": 200,
+      "response_time_ms": 10.923385620117188,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678596.4113364,
+      "status_code": 200,
+      "response_time_ms": 34.113407135009766,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678597.4418218,
+      "status_code": 200,
+      "response_time_ms": 11.117935180664062,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678598.466926,
+      "status_code": 200,
+      "response_time_ms": 37.30440139770508,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678599.501535,
+      "status_code": 200,
+      "response_time_ms": 13.583660125732422,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678600.5386038,
+      "status_code": 200,
+      "response_time_ms": 12.146234512329102,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678601.5765066,
+      "status_code": 200,
+      "response_time_ms": 11.187553405761719,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678602.6059942,
+      "status_code": 200,
+      "response_time_ms": 11.961221694946289,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678603.6372902,
+      "status_code": 200,
+      "response_time_ms": 12.587785720825195,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678604.6689246,
+      "status_code": 200,
+      "response_time_ms": 11.84701919555664,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678605.7047,
+      "status_code": 200,
+      "response_time_ms": 14.669656753540039,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678606.736458,
+      "status_code": 200,
+      "response_time_ms": 12.6495361328125,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678607.2804875,
+      "status_code": 200,
+      "response_time_ms": 11.826038360595703,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678607.8279996,
+      "status_code": 200,
+      "response_time_ms": 14.857053756713867,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678608.3724134,
+      "status_code": 200,
+      "response_time_ms": 13.10110092163086,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678608.921563,
+      "status_code": 200,
+      "response_time_ms": 11.191606521606445,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678609.4663856,
+      "status_code": 200,
+      "response_time_ms": 13.051986694335938,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678610.012632,
+      "status_code": 200,
+      "response_time_ms": 13.554096221923828,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678610.5554464,
+      "status_code": 200,
+      "response_time_ms": 13.843536376953125,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678611.105124,
+      "status_code": 200,
+      "response_time_ms": 12.830495834350586,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678611.6512287,
+      "status_code": 200,
+      "response_time_ms": 12.512445449829102,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678612.1989691,
+      "status_code": 200,
+      "response_time_ms": 12.572288513183594,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678612.743395,
+      "status_code": 200,
+      "response_time_ms": 10.629415512084961,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678613.2932513,
+      "status_code": 200,
+      "response_time_ms": 14.734983444213867,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678613.8393767,
+      "status_code": 200,
+      "response_time_ms": 13.382673263549805,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678614.3837507,
+      "status_code": 200,
+      "response_time_ms": 12.969970703125,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678614.930857,
+      "status_code": 200,
+      "response_time_ms": 12.431144714355469,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678615.4765773,
+      "status_code": 200,
+      "response_time_ms": 13.210058212280273,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678616.0211415,
+      "status_code": 200,
+      "response_time_ms": 14.117240905761719,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678616.5654423,
+      "status_code": 200,
+      "response_time_ms": 13.608694076538086,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678617.1100051,
+      "status_code": 200,
+      "response_time_ms": 14.618635177612305,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678617.6547682,
+      "status_code": 200,
+      "response_time_ms": 15.813827514648438,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678618.196214,
+      "status_code": 200,
+      "response_time_ms": 14.237642288208008,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678618.7383294,
+      "status_code": 200,
+      "response_time_ms": 14.398574829101562,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678619.2856996,
+      "status_code": 200,
+      "response_time_ms": 12.505292892456055,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678619.8347645,
+      "status_code": 200,
+      "response_time_ms": 12.040853500366211,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678620.3804085,
+      "status_code": 200,
+      "response_time_ms": 12.854814529418945,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678620.9224718,
+      "status_code": 200,
+      "response_time_ms": 11.876821517944336,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678621.4659479,
+      "status_code": 200,
+      "response_time_ms": 12.296199798583984,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678622.0142086,
+      "status_code": 200,
+      "response_time_ms": 10.883569717407227,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678622.557874,
+      "status_code": 200,
+      "response_time_ms": 13.47661018371582,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678623.1054726,
+      "status_code": 200,
+      "response_time_ms": 13.34238052368164,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678623.6523674,
+      "status_code": 200,
+      "response_time_ms": 12.688159942626953,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678624.1952443,
+      "status_code": 200,
+      "response_time_ms": 12.875080108642578,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678624.7448914,
+      "status_code": 200,
+      "response_time_ms": 9.851217269897461,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678625.2914762,
+      "status_code": 200,
+      "response_time_ms": 16.970396041870117,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678625.8380282,
+      "status_code": 200,
+      "response_time_ms": 11.131048202514648,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678626.3832088,
+      "status_code": 200,
+      "response_time_ms": 12.772560119628906,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678626.934522,
+      "status_code": 200,
+      "response_time_ms": 30.711650848388672,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678627.2306063,
+      "status_code": 200,
+      "response_time_ms": 11.738061904907227,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678627.5258532,
+      "status_code": 200,
+      "response_time_ms": 11.430025100708008,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678627.8229039,
+      "status_code": 200,
+      "response_time_ms": 11.647701263427734,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678628.1191459,
+      "status_code": 200,
+      "response_time_ms": 10.291814804077148,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678628.414495,
+      "status_code": 200,
+      "response_time_ms": 36.29708290100098,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678628.7108457,
+      "status_code": 200,
+      "response_time_ms": 13.29183578491211,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678629.0069082,
+      "status_code": 200,
+      "response_time_ms": 11.799097061157227,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678629.3031378,
+      "status_code": 200,
+      "response_time_ms": 12.850046157836914,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678629.600603,
+      "status_code": 200,
+      "response_time_ms": 12.531518936157227,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678629.8978815,
+      "status_code": 200,
+      "response_time_ms": 12.358665466308594,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678630.1968043,
+      "status_code": 200,
+      "response_time_ms": 11.323213577270508,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678630.5044098,
+      "status_code": 200,
+      "response_time_ms": 13.0462646484375,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678630.8019125,
+      "status_code": 200,
+      "response_time_ms": 11.818885803222656,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678631.0983973,
+      "status_code": 200,
+      "response_time_ms": 12.660980224609375,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678631.395623,
+      "status_code": 200,
+      "response_time_ms": 28.841257095336914,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678631.6905558,
+      "status_code": 200,
+      "response_time_ms": 28.477191925048828,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678631.988175,
+      "status_code": 200,
+      "response_time_ms": 12.487411499023438,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678632.2838197,
+      "status_code": 200,
+      "response_time_ms": 10.973215103149414,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678632.5795283,
+      "status_code": 200,
+      "response_time_ms": 12.983560562133789,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678632.874968,
+      "status_code": 200,
+      "response_time_ms": 12.668132781982422,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678633.1707618,
+      "status_code": 200,
+      "response_time_ms": 28.786897659301758,
+      "retry_after": null,
+      "error": null
+    },
+    {
+      "timestamp": 1757678633.4671445,
+      "status_code": 200,
+      "response_time_ms": 12.428522109985352,
+      "retry_after": null,
+      "error": null
+    }
+  ]
+}

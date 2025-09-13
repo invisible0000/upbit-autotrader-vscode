@@ -1,11 +1,13 @@
 """
-테스트 02: 시작 시간 지정 수집 테스트 (CandleCollectionTester 래퍼 활용)
+테스트 02: 시작 시간 지정 수집 테스트 (CandleCollectionTesterV2 활용)
 고정된 시작 시간(2025-09-08T00:00:00)을 기준으로 일관된 테스트 결과 확보
-CandleCollectionTester를 사용하여 통계 추적 자동화
+CandleDataProvider v4.1과 CandleCollectionTesterV2를 사용한 성능 측정
 """
 
 import sys
 import asyncio
+import gc
+import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -13,10 +15,11 @@ from datetime import datetime, timezone
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# 테스트 의존성 import
 from tests.candle_data_logic.candle_db_cleaner import CandleDBCleaner
 from tests.candle_data_logic.candle_db_analyzer import CandleDBAnalyzer
 from tests.candle_data_logic.candle_time_utils import CandleTimeUtils
-from tests.candle_data_logic.candle_collection_tester import CandleCollectionTester
+from tests.candle_data_logic.candle_collection_tester import CandleCollectionTesterV2
 
 
 # ================================================================
@@ -28,9 +31,9 @@ TEST_CONFIG = {
     "timeframe": "1m",
     "table_name": "candles_KRW_BTC_1m",
 
-    # 🕐 고정 시작 시간 (일관된 테스트를 위해)
-    "start_time": "2025-09-08T00:00:00",  # UTC 기준
-    "start_time_desc": "2025년 9월 8일 자정 (UTC)",
+    # 🕐 고정 시작 시간 (일관된 테스트를 위해) - 과거 시간으로 설정
+    "start_time": "2025-09-12T10:00:00",  # UTC 기준 (현재 시각 이전)
+    "start_time_desc": "2025년 9월 12일 10시 (UTC)",
 
     # 수집 개수 테스트 시나리오들
     "test_scenarios": [
@@ -42,7 +45,7 @@ TEST_CONFIG = {
     ],
 
     # 현재 실행할 시나리오 (0-4 인덱스)
-    "active_scenario": 4,  # 0=50개, 1=100개, 2=200개, 3=500개, 4=700개
+    "active_scenario": 1,  # 0=50개, 1=100개, 2=200개, 3=500개, 4=700개
 
     # 고급 설정
     "clean_db_before_test": True,  # 테스트 전 DB 초기화 여부
@@ -61,7 +64,7 @@ print("=" * 80)
 
 class StartTimeCollectionTester:
     """
-    시작 시간 지정 수집 테스트를 위한 CandleCollectionTester 래퍼
+    시작 시간 지정 수집 테스트를 위한 CandleCollectionTesterV2 래퍼
     """
 
     def __init__(self):
@@ -72,6 +75,7 @@ class StartTimeCollectionTester:
     async def test_start_time_collection(self):
         """
         시작 시간 지정 수집 테스트 - 고정된 시작 시간에서 과거로 수집
+        CandleDataProvider v4.1의 end 파라미터를 사용하여 시작점 지정
         """
         scenario = CURRENT_SCENARIO
         count = scenario["count"]
@@ -88,10 +92,10 @@ class StartTimeCollectionTester:
 
         # 예상 시간 범위 계산 및 표시
         if TEST_CONFIG["show_expected_range"]:
-            print(f"\n📊 예상 결과 계산...")
+            print("\n📊 예상 결과 계산...")
             expected = self.time_utils.get_time_info(start_time_str, count)
             print(f"   📅 예상 시간 범위: {expected['start_utc']} → {expected['end_utc']}")
-            print(f"   ⏱️  예상 기간: {expected['duration_minutes']}분 ({count}개 캔들)")
+            print(f"   ⏱️ 예상 기간: {expected['duration_minutes']}분 ({count}개 캔들)")
 
         # 1. DB 초기화 (설정에 따라)
         if TEST_CONFIG["clean_db_before_test"]:
@@ -113,29 +117,52 @@ class StartTimeCollectionTester:
         else:
             print("   ⚠️ 분석 불가")
 
-        # 3. CandleCollectionTester를 사용하여 시작 시간 지정 수집
+        # 3. CandleCollectionTesterV2를 사용하여 시작 시간 지정 수집
         print(f"\n3. {count}개 캔들 수집 실행 (시작 시간 지정)...")
-
         print(f"  심볼: {TEST_CONFIG['symbol']}")
         print(f"  시간틀: {TEST_CONFIG['timeframe']}")
         print(f"  개수: {count}개")
         print(f"  시작 시간: {start_time_str}")
 
-        # CandleCollectionTester를 사용한 수집 및 분석
-        async with CandleCollectionTester() as tester:
-            collection_stats = await tester.collect_and_analyze(
+        # CandleCollectionTesterV2를 사용한 성능 테스트 (end 파라미터 사용)
+        async with CandleCollectionTesterV2() as tester:
+            collection_stats = await tester.test_collection_performance(
                 symbol=TEST_CONFIG['symbol'],
                 timeframe=TEST_CONFIG['timeframe'],
                 count=count,
-                start_time=start_time  # 시작 시간 지정
+                end=start_time  # end 파라미터로 시작 시간 지정 (업비트 방향)
             )
 
             # 4. 수집 결과 분석
             print("\n4. 수집 결과 분석...")
+
+            print("\n📊 === 성능 테스트 결과 ===")
+            print(f"🎯 요청: {TEST_CONFIG['symbol']} {TEST_CONFIG['timeframe']}")
+            print(f"   📝 개수: {count}개")
+            print(f"   🕐 시작 시간: {start_time_str}")
+
+            # 성능 분석 출력 (간단한 형태)
+            print("\n📋 계획 vs 실제:")
+            print(f"   📊 캔들: 예상 {collection_stats.total_count}개")
+            print(f"   📦 청크: 예상 {collection_stats.estimated_chunks}개 → 실제 {collection_stats.actual_chunks}개")
+            duration_actual = collection_stats.actual_duration_ms / 1000
+            print(f"   ⏱️ 소요시간: 예상 {collection_stats.estimated_duration_seconds:.1f}초 → 실제 {duration_actual:.1f}초")
+
+            print("\n🚀 성능 지표:")
+            print(f"   📦 청크/초: {collection_stats.chunks_per_second:.2f}")
+            print(f"   📊 캔들/초: {collection_stats.candles_per_second:.1f}")
+            print(f"   🌐 API 호출: {collection_stats.total_api_calls}회")
+
+            print("\n💾 DB 상태:")
+            print(f"   📋 이전: {collection_stats.db_records_before}개")
+            print(f"   📋 이후: {collection_stats.db_records_after}개")
+            print(f"   📈 증가: +{collection_stats.db_records_after - collection_stats.db_records_before}개")
+
             if TEST_CONFIG["show_detailed_analysis"]:
-                tester.print_detailed_analysis(collection_stats)
-            else:
-                print("   (상세 분석 생략 - TEST_CONFIG['show_detailed_analysis'] = False)")
+                print("\n⏱️ 청크 처리 시간:")
+                print(f"   평균: {collection_stats.avg_chunk_time_ms:.1f}ms")
+                print(f"   최소: {collection_stats.min_chunk_time_ms:.1f}ms")
+                print(f"   최대: {collection_stats.max_chunk_time_ms:.1f}ms")
 
             # 5. 상세 검증
             print("\n5. 상세 검증...")
@@ -144,11 +171,12 @@ class StartTimeCollectionTester:
         return collection_stats
 
     def _verify_start_time_results(self, collection_stats, start_time_str, count):
-        """시작 시간 지정 수집 결과 검증"""
+        """시작 시간 지정 수집 결과 검증 (PerformanceStats 기준)"""
         print("📊 === 검증 결과 ===")
 
-        # 기본 성공 여부
-        if collection_stats.success:
+        # 기본 성공 여부 (PerformanceStats는 성공을 db_records_after > 0으로 판단)
+        success = collection_stats.db_records_after > 0
+        if success:
             print("  ✅ 수집 성공")
         else:
             print("  ❌ 수집 실패")
@@ -156,43 +184,40 @@ class StartTimeCollectionTester:
 
         # 요청 vs 수집 비교
         requested = count
-        collected = collection_stats.collected_count
-        db_stored = collection_stats.db_records_after
+        planned = collection_stats.total_count
+        db_stored = collection_stats.db_records_after - collection_stats.db_records_before
 
         print(f"  요청: {requested}개")
-        print(f"  수집: {collected}개")
+        print(f"  계획: {planned}개")
         print(f"  DB저장: {db_stored}개")
 
-        if collected >= requested:
-            print("  ✅ 수집 개수 충족")
+        if planned >= requested:
+            print("  ✅ 계획 수립 정상")
         else:
-            print(f"  ⚠️ 수집 부족: {requested - collected}개 누락")
+            print(f"  ⚠️ 계획 부족: {requested - planned}개 누락")
 
         if db_stored >= requested:
-            print("  ✅ DB 저장 충족")
+            print("  ✅ DB 저장 확인")
         else:
             print(f"  ⚠️ DB 저장 부족: {requested - db_stored}개 누락")
 
-        # 시간 범위 검증
-        if collection_stats.db_time_range_after:
-            print(f"  📅 실제 시간 범위 (업비트 방향): {collection_stats.db_time_range_after}")
+        # 성능 지표
+        print(f"  📦 청크 처리 성능: {collection_stats.chunks_per_second:.2f} 청크/초")
+        print(f"  📊 캔들 처리 성능: {collection_stats.candles_per_second:.1f} 캔들/초")
 
-            # 시작 시간 일치 여부 확인 (업비트 방향에서 end_time이 latest/시작점)
-            db_range = collection_stats.db_time_range_after
-            if " ~ " in db_range:
-                start_part, end_part = db_range.split(" ~ ")
-                # 업비트에서는 end_time(latest)이 우리가 지정한 start_time과 일치해야 함
-                if start_time_str.startswith(end_part.strip()):
-                    print("  ✅ 시작 시간 일치 확인 (업비트 방향)")
-                else:
-                    print(f"  ⚠️ 시작 시간 불일치: 요청({start_time_str}) vs 실제 latest({end_part.strip()})")
-        else:
-            print("  ⚠️ 시간 범위 정보 없음")
+        # 시간 정보 확인
+        if collection_stats.end:
+            print(f"  🕐 실제 end 파라미터: {collection_stats.end}")
+            # end 파라미터가 지정한 시작 시간과 일치하는지 확인
+            if start_time_str in str(collection_stats.end):
+                print("  ✅ 시작 시간 일치 확인")
+            else:
+                print(f"  ⚠️ 시작 시간 불일치: 지정({start_time_str}) vs 실제({collection_stats.end})")
 
 
 async def run_start_time_collection_test():
     """시작 시간 지정 수집 테스트 실행"""
-    print("🚀 === CandleCollectionTester 래퍼 활용 시작 시간 지정 수집 테스트 ===")
+    print("🚀 === CandleCollectionTesterV2 활용 시작 시간 지정 수집 테스트 ===")
 
     tester = StartTimeCollectionTester()
 
@@ -205,27 +230,56 @@ async def run_start_time_collection_test():
             return False
 
         print("\n🎯 === 테스트 완료 ===")
-        print(f"수집 성공: {result.success}")
-        print(f"요청/수집/저장: {result.count}/{result.collected_count}/{result.db_records_after}")
-        print(f"응답 시간: {result.response_time_ms:.1f}ms")
-        print(f"데이터 소스: {result.data_source}")
+        success = result.db_records_after > 0
+        requested = CURRENT_SCENARIO['count']
+        db_stored = result.db_records_after - result.db_records_before
 
-        # API 호출 통계
-        print(f"API 요청: {result.api_requests_made}회")
-        print(f"캐시 히트: {result.cache_hits}회")
+        print(f"수집 성공: {success}")
+        print(f"요청/계획/저장: {requested}/{result.total_count}/{db_stored}")
+        print(f"실행 시간: {result.actual_duration_ms:.1f}ms")
+        print(f"처리 성능: {result.candles_per_second:.1f} 캔들/초")
+        print(f"청크 처리: {result.actual_chunks}개")
+        print(f"평균 청크 시간: {result.avg_chunk_time_ms:.1f}ms")
 
         # 시작 시간 정보
         print(f"지정 시작 시간: {TEST_CONFIG['start_time']}")
-        if result.start_time:
-            print(f"실제 시작 시간: {result.start_time}")
+        if result.end:
+            print(f"실제 end 파라미터: {result.end}")
 
     except Exception as e:
         print(f"\n❌ 테스트 실행 중 오류: {e}")
         return False
+    finally:
+        # 모든 DB 연결 강제 정리
+        try:
+            from upbit_auto_trading.infrastructure.database.database_manager import DatabaseConnectionProvider
+
+            # 1. DatabaseConnectionProvider 인스턴스의 DB 매니저 정리
+            provider = DatabaseConnectionProvider()
+            if hasattr(provider, '_db_manager') and provider._db_manager:
+                provider._db_manager.close_all()
+                print("🧹 전역 DB 연결 정리 완료")
+
+            # 2. 모든 sqlite3.Connection 객체를 찾아서 강제 종료
+            for obj in gc.get_objects():
+                if isinstance(obj, sqlite3.Connection):
+                    try:
+                        obj.close()
+                        print("🔧 SQLite 연결 강제 종료")
+                    except Exception:
+                        pass  # 이미 닫힌 연결일 수 있음
+
+            # 3. 가비지 컬렉션 강제 실행
+            collected = gc.collect()
+            print(f"🧹 메모리 정리 완료 (정리된 객체: {collected}개)")
+        except Exception as e:
+            print(f"⚠️ DB 연결 정리 중 오류: {e}")
 
     return True
+
+
 if __name__ == "__main__":
-    print("CandleCollectionTester 래퍼를 활용한 시작 시간 지정 수집 테스트 시작...")
+    print("CandleCollectionTesterV2 활용한 시작 시간 지정 수집 테스트 시작...")
 
     success = asyncio.run(run_start_time_collection_test())
 

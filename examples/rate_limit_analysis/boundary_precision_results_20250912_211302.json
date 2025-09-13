@@ -1,0 +1,50 @@
+{
+  "timestamp": "20250912_211302",
+  "test_type": "boundary_precision_analysis",
+  "results": [
+    {
+      "interval_ms": 105,
+      "target_rps": 9.523809523809524,
+      "total_requests": 414,
+      "success_count": 414,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "first_429_at_seconds": null,
+      "avg_response_time_ms": 13.764969392675132,
+      "test_duration_seconds": 45.10056447982788
+    },
+    {
+      "interval_ms": 100,
+      "target_rps": 10.0,
+      "total_requests": 413,
+      "success_count": 413,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "first_429_at_seconds": null,
+      "avg_response_time_ms": 14.110236133270632,
+      "test_duration_seconds": 45.063315868377686
+    },
+    {
+      "interval_ms": 95,
+      "target_rps": 10.526315789473685,
+      "total_requests": 415,
+      "success_count": 415,
+      "rate_limit_count": 0,
+      "success_rate": 100.0,
+      "first_429_at_seconds": null,
+      "avg_response_time_ms": 13.656738005488751,
+      "test_duration_seconds": 45.05970597267151
+    },
+    {
+      "interval_ms": 90,
+      "target_rps": 11.11111111111111,
+      "total_requests": 482,
+      "success_count": 436,
+      "rate_limit_count": 46,
+      "success_rate": 90.45643153526972,
+      "first_429_at_seconds": 0.9353952407836914,
+      "avg_response_time_ms": 13.783320374445085,
+      "test_duration_seconds": 45.01373219490051
+    }
+  ]
+}

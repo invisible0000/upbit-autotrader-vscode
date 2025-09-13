@@ -28,7 +28,7 @@ class AdaptiveStrategy(Enum):
 class DynamicConfig:
     """동적 조정 설정"""
     # 429 감지 임계치
-    error_429_threshold: int = 3          # 연속 429 몇 번이면 제한 강화
+    error_429_threshold: int = 1          # 연속 429 몇 번이면 제한 강화 (Zero-429 정책)
     error_429_window: float = 60.0        # 임계치 체크 윈도우(초)
 
     # Rate Limit 조정 비율
@@ -36,8 +36,8 @@ class DynamicConfig:
     min_ratio: float = 0.5                # 최소 50%까지만 감소
 
     # 복구 설정
-    recovery_delay: float = 180.0         # 3분 후 복구 시작
-    recovery_step: float = 0.1            # 10%씩 점진적 복구
+    recovery_delay: float = 300.0         # 5분 후 복구 시작 (Zero-429 보수적 정책)
+    recovery_step: float = 0.05           # 5%씩 점진적 복구 (신중한 복구)
     recovery_interval: float = 30.0       # 30초마다 복구 단계
 
     # 전략
@@ -142,27 +142,37 @@ class DynamicUpbitRateLimiter:
         # 통계 초기화
         if group not in self.group_stats:
             self.group_stats[group] = GroupStats()
+            # 원본 설정 저장 (최초 한 번만)
+            if group in limiter._GROUP_CONFIGS:
+                self.group_stats[group].original_configs = limiter._GROUP_CONFIGS[group].copy()
 
         stats = self.group_stats[group]
         stats.total_requests += 1
 
-        try:
-            # 기존 Rate Limiter 호출
-            await limiter.acquire(endpoint, method, **kwargs)
+        # � 예방적 Rate Limiting: 429 위험 상태면 추가 대기
+        await self._apply_preventive_throttling(group, stats)
 
-        except Exception as e:
-            # 실제 429 에러만 감지 (TimeoutError는 제외)
-            error_str = str(e)
-            error_type = str(type(e).__name__)
-            is_real_429 = "429" in error_str and "HTTP" in error_str and "TimeoutError" not in error_type
+        # Rate Limiter 호출
+        await limiter.acquire(endpoint, method, **kwargs)
 
-            if is_real_429:
-                await self._handle_429_error(group, stats)
+    async def _apply_preventive_throttling(self, group: UpbitRateLimitGroup, stats: GroupStats):
+        """예방적 스로틀링 - 429 위험 상태에서 추가 대기"""
+        now = time.monotonic()
 
-                # 429 감지 콜백
-                if self.on_429_detected:
-                    self.on_429_detected(group, endpoint, str(e))
-            raise
+        # 최근 429 이력 확인
+        if stats.error_429_history:
+            # 최근 30초 내 429가 있었다면 추가 안전 대기
+            recent_429s = [t for t in stats.error_429_history if now - t <= 30.0]
+            if recent_429s:
+                # 최근 429 이후 경과 시간
+                time_since_last_429 = now - max(recent_429s)
+
+                if time_since_last_429 < 10.0:  # 10초 이내라면
+                    # Rate 비율에 따른 추가 대기
+                    safety_delay = (1.0 - stats.current_rate_ratio) * 0.5  # 최대 0.5초
+                    if safety_delay > 0.05:  # 50ms 이상만 적용
+                        print(f"🛡️  예방적 대기 적용: {group.value} (+{safety_delay * 1000:.0f}ms)")
+                        await asyncio.sleep(safety_delay)
 
     async def _handle_429_error(self, group: UpbitRateLimitGroup, stats: GroupStats):
         """429 에러 처리 및 동적 조정"""
@@ -172,6 +182,18 @@ class DynamicUpbitRateLimiter:
         print(f"⚠️  429 에러 감지: {group.value} (총 {stats.error_429_count}회)")
 
         async with self._adjustment_lock:
+            # 🚨 즉시 토큰 고갈 시뮬레이션 - 강제 대기 시간 적용
+            limiter = await self.get_base_limiter()
+            if group in limiter._controllers:
+                for controller in limiter._controllers[group]:
+                    # GCRA 토큰 강제 고갈 (T * 5만큼 대기 필요하도록 - 더 강력한 제한)
+                    controller.tat = now + (controller.T * 5.0)
+
+            print(f"🔥 토큰 강제 고갈 적용: {group.value} (대기시간 {controller.T * 5.0:.1f}초 증가)")
+
+            # 🔥 CRITICAL: 전역 Rate Limiter에도 즉시 적용
+            await self._emergency_global_token_depletion(group, now)
+
             # 최근 윈도우 내 429 에러 수 확인
             recent_errors = [
                 t for t in stats.error_429_history
@@ -224,9 +246,9 @@ class DynamicUpbitRateLimiter:
         async with self._adjustment_lock:
             for group, stats in self.group_stats.items():
                 # 복구 조건 확인
-                if (stats.current_rate_ratio < 1.0 and
-                    stats.last_reduction_time and
-                    now - stats.last_reduction_time >= self.config.recovery_delay):
+                if (stats.current_rate_ratio < 1.0
+                        and stats.last_reduction_time
+                        and now - stats.last_reduction_time >= self.config.recovery_delay):
 
                     # 최근 429 에러 없는지 확인
                     recent_errors = [
@@ -277,7 +299,35 @@ class DynamicUpbitRateLimiter:
             from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import GCRA
             limiter._controllers[group] = [GCRA(config) for config in new_configs]
 
+            # 🔥 CRITICAL: 전역 공유 Rate Limiter 강제 갱신
+            # 다른 클라이언트들이 사용 중인 전역 인스턴스도 즉시 업데이트
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import _GLOBAL_RATE_LIMITER
+            if _GLOBAL_RATE_LIMITER is not None:
+                _GLOBAL_RATE_LIMITER._GROUP_CONFIGS[group] = new_configs
+                _GLOBAL_RATE_LIMITER._controllers[group] = [GCRA(config) for config in new_configs]
+
         print(f"⚙️  {group.value} 설정 업데이트 완료 (비율: {ratio:.1%})")
+
+    async def _emergency_global_token_depletion(self, group: UpbitRateLimitGroup, now: float):
+        """긴급 전역 토큰 고갈 - 모든 Rate Limiter 인스턴스에 즉시 적용"""
+        try:
+            # 전역 Rate Limiter 직접 접근
+            from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_rate_limiter import _GLOBAL_RATE_LIMITER
+
+            if _GLOBAL_RATE_LIMITER is not None and group in _GLOBAL_RATE_LIMITER._controllers:
+                depletion_time = 0.0
+                for controller in _GLOBAL_RATE_LIMITER._controllers[group]:
+                    # 더 강력한 토큰 고갈 (T * 10)
+                    controller.tat = now + (controller.T * 10.0)
+                    depletion_time = controller.T * 10.0
+
+                print(f"🚨 전역 토큰 고갈 완료: {group.value} (전역 대기시간 {depletion_time:.1f}초)")
+
+            # 다른 동적 Rate Limiter 인스턴스들도 동기화
+            # (혹시 여러 인스턴스가 존재할 경우를 대비)
+
+        except Exception as e:
+            print(f"⚠️  전역 토큰 고갈 실패: {e}")
 
     def get_dynamic_status(self) -> Dict[str, Any]:
         """동적 조정 상태 반환"""

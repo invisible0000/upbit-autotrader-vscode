@@ -11,14 +11,10 @@
             "id": "f240a362df9e0cab",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 기능 기획_v2.md",
-                "mode": "preview",
-                "source": true
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "캔들 데이터 제공자 기능 기획_v2"
+              "title": "새 탭"
             }
           }
         ]
@@ -168,6 +164,8 @@
   },
   "active": "f240a362df9e0cab",
   "lastOpenFiles": [
+    "upbit_auto_trading/infrastructure/external_apis/upbit/UPBIT_RATE_LIMITER_V2_ENHANCED_PRODUCTION_ASSESSMENT.md",
+    "upbit_auto_trading/infrastructure/external_apis/upbit/업비트 Rate Limiter v2.0 기능 평가.md",
     "upbit_auto_trading/infrastructure/market_data/candle/__pycache__/candle_data_provider_new02.cpython-313.pyc",
     "logs/session_20250912_001454_PID99464.log",
     "test_to_parameter.py",
@@ -178,7 +176,6 @@
     "logs/session_20250912_000748_PID107100.log",
     "upbit_auto_trading/infrastructure/market_data/candle/mock_upbit_candle_responder.py",
     "logs/session_20250911_235724_PID125776.log",
-    "measure_normalization_overhead.py",
     "tasks/active/TASK_20250911_08-performance_monitoring_tool.md",
     "tasks/active/TASK_20250911_07-candle_provider_final_integration.md",
     "tasks/active/TASK_20250911_06-sqlite_repository_completion.md",
@@ -203,7 +200,6 @@
     "legacy/candle_data_provider_v5_architecture_design.md",
     "legacy/candle_data_provider_v5_api_documentation.md",
     "upbit_auto_trading/infrastructure/market_data/candle/OVERLAP_ANALYZER_V5_SIMPLIFIED_DESIGN.md",
-    "legacy/캔들 데이터 제공자 기능 기획_v1.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",

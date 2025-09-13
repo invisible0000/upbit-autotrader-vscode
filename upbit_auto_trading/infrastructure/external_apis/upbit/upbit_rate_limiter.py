@@ -130,10 +130,11 @@ class UpbitGCRARateLimiter:
     - Infrastructure 로깅 통합
     """
 
-    # 업비트 공식 Rate Limit 규칙 - 전문가 개선 적용
+    # 업비트 공식 Rate Limit 규칙 - Zero-429 정책 적용 (2025-09-12)
+    # 측정 결과: 95ms(10.53 RPS)까지 100% 안전, Zero-429를 위한 버스트 증가
     _GROUP_CONFIGS = {
         UpbitRateLimitGroup.REST_PUBLIC: [
-            GCRAConfig.from_rps(10.0, burst_capacity=10)  # 10 RPS, 최대 버스트
+            GCRAConfig.from_rps(10.0, burst_capacity=10)  # 10 RPS, Zero-429를 위한 최대 버스트 (10개)
         ],
         UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: [
             GCRAConfig.from_rps(30.0, burst_capacity=30)  # 30 RPS, 최대 버스트
@@ -294,6 +295,11 @@ class UpbitGCRARateLimiter:
         # 엔드포인트 → 그룹 매핑 (메서드 포함)
         group = self._get_rate_limit_group(endpoint, method)
 
+        # 🔍 디버깅: Rate Limiter 호출 추적 (성능 최적화 - 필요시에만)
+        instance_id = f"{self.client_id}_{id(self)}"
+        if self.logger.isEnabledFor(logging.INFO):
+            self.logger.info(f"🚀 Rate Limiter 호출: {endpoint} [{method}] -> {group.value} (인스턴스: {instance_id})")
+
         # WebSocket 그룹의 경우 더 넉넉한 max_wait 적용 (전문가 제안)
         if group == UpbitRateLimitGroup.WEBSOCKET and max_wait < 15.0:
             max_wait = 15.0
@@ -307,35 +313,51 @@ class UpbitGCRARateLimiter:
             now = time.monotonic()
 
             async with self._lock:
-                # 모든 관련 컨트롤러의 대기시간 계산
+                # 모든 관련 컨트롤러의 대기시간을 원자적으로 계산하고 소비
                 controllers = self._controllers[group]
+
+                # 현재 시점을 다시 확인 (락 획득 동안 시간이 흐름)
+                now = time.monotonic()
                 wait_times = [controller.need_wait(now) for controller in controllers]
                 max_wait_needed = max(wait_times)
 
+                # 🔍 디버깅: 토큰 상태 출력 (성능 최적화 - 대기시에만)
+                if max_wait_needed > 0.0:
+                    self.logger.debug(f"🔍 토큰 상태: {group.value}, 대기시간: {max_wait_needed:.3f}s")
+
                 if max_wait_needed <= 0.0:
-                    # 모든 제한을 통과 → 동시에 토큰 소비
-                    for controller in controllers:
-                        controller.consume(now)
+                    # 원자적 토큰 소비: 다시 한번 체크 후 소비
+                    final_wait_times = [controller.need_wait(now) for controller in controllers]
+                    final_max_wait = max(final_wait_times)
 
-                    elapsed = time.monotonic() - start_time
-                    if elapsed < 0.001:  # 1ms 미만이면 즉시 통과
-                        self._stats['immediate_passes'] += 1
+                    if final_max_wait <= 0.0:
+                        # 모든 제한을 통과 → 동시에 토큰 소비
+                        for controller in controllers:
+                            controller.consume(now)
 
-                    # 배치 로깅 (즉시 처리된 경우만)
-                    self._add_to_log_batch(f"획득: {endpoint} [{method}] -> {group.value} ({elapsed * 1000:.1f}ms)")
-                    return
+                        elapsed = time.monotonic() - start_time
+                        if elapsed < 0.001:  # 1ms 미만이면 즉시 통과
+                            self._stats['immediate_passes'] += 1
+
+                        # 성공 로깅 (성능 최적화)
+                        self.logger.info(f"✅ Rate Limiter 획득: {endpoint} -> {group.value} ({elapsed * 1000:.1f}ms)")
+                        return
+                    else:
+                        # 체크와 소비 사이에 상태가 변경됨 - 다시 대기 필요
+                        max_wait_needed = final_max_wait
 
             # 대기 필요 → 지터 추가 후 재시도
             wait_time = max_wait_needed + random.uniform(*jitter_range)
 
             if now + wait_time > deadline:
                 self._stats['timeout_errors'] += 1
+                self.logger.error(f"❌ Rate Limit 대기시간 초과: {endpoint} (max_wait={max_wait}s)")
                 raise TimeoutError(f"Rate limit 대기시간 초과: {endpoint} (max_wait={max_wait}s)")
 
             self._stats['total_wait_time'] += wait_time
 
-            # 배치 로깅 (대기하는 경우)
-            self._add_to_log_batch(f"대기: {endpoint} -> {group.value} ({wait_time * 1000:.1f}ms)")
+            # 즉시 로깅 (디버깅용)
+            self.logger.info(f"⏳ Rate Limiter 대기: {endpoint} -> {group.value} ({wait_time * 1000:.1f}ms)")
 
             await asyncio.sleep(max(0.0, wait_time))
 

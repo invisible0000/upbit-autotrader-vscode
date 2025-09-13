@@ -14,6 +14,7 @@ import aiohttp
 import time
 import gzip
 import json
+import random
 from typing import List, Dict, Any, Optional, Union
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -22,8 +23,10 @@ from .dynamic_rate_limiter_wrapper import (
     get_dynamic_rate_limiter,
     DynamicUpbitRateLimiter,
     DynamicConfig,
-    AdaptiveStrategy
+    AdaptiveStrategy,
+    GroupStats
 )
+from .rate_limit_monitor import get_rate_limit_monitor, log_429_error, log_request_success
 
 
 class UpbitPublicClient:
@@ -240,6 +243,9 @@ class UpbitPublicClient:
                 rate_limiter = await self._ensure_rate_limiter()
                 await rate_limiter.acquire(endpoint, method)
 
+                # 🎲 Micro-jitter: 동시 요청 분산 (5~20ms 랜덤 지연)
+                await asyncio.sleep(random.uniform(0.005, 0.020))
+
                 # 순수 HTTP 요청 시간 측정 시작
                 http_start_time = time.perf_counter()
 
@@ -283,6 +289,9 @@ class UpbitPublicClient:
                         else:
                             self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
 
+                        # 📊 성공 요청 통계 기록
+                        await log_request_success(endpoint, response_time_ms)
+
                         return response_data
 
                     elif response.status == 429:
@@ -290,12 +299,54 @@ class UpbitPublicClient:
                         retry_after = response.headers.get('Retry-After')
                         retry_after_float = float(retry_after) if retry_after else None
 
+                        # 🔍 실제 서버 429 응답 상세 정보 로깅
+                        error_body = await response.text()
+                        self._logger.info("🚨 실제 서버 429 응답 수신!")
+                        self._logger.info(f"📡 응답 헤더: {dict(response.headers)}")
+                        self._logger.info(f"📄 응답 본문: {error_body[:200]}{'...' if len(error_body) > 200 else ''}")
+                        self._logger.info(f"⏰ Retry-After: {retry_after} ({retry_after_float}초)")
+
+                        # 🎯 상세 모니터링 기록 (Zero-429 정책용)
+                        rate_limiter_type = 'dynamic' if isinstance(rate_limiter, DynamicUpbitRateLimiter) else 'legacy'
+                        current_rate_ratio = None
+
                         if isinstance(rate_limiter, DynamicUpbitRateLimiter):
-                            # 동적 Rate Limiter는 자동으로 429 처리됨 (acquire 단계에서)
-                            pass
+                            # 🔥 ZERO-429 핵심 수정: 동적 Rate Limiter에 429 에러 명시적 전파
+                            base_limiter = await rate_limiter.get_base_limiter()
+                            group = base_limiter._get_rate_limit_group(endpoint, method)
+
+                            # 그룹별 통계 초기화 (필요시)
+                            if group not in rate_limiter.group_stats:
+                                rate_limiter.group_stats[group] = GroupStats()
+
+                            # 429 에러를 동적 조정 로직에 전파
+                            stats = rate_limiter.group_stats[group]
+                            await rate_limiter._handle_429_error(group, stats)
+
+                            # 현재 Rate Ratio 가져오기
+                            dynamic_status = rate_limiter.get_dynamic_status()
+                            if 'groups' in dynamic_status and group.value in dynamic_status['groups']:
+                                current_rate_ratio = dynamic_status['groups'][group.value]['current_rate_ratio']
                         else:
                             # 레거시 Rate Limiter 수동 처리
                             rate_limiter.handle_429_response(retry_after=retry_after_float)
+
+                        # 상세 429 모니터링 이벤트 기록
+                        await log_429_error(
+                            endpoint=endpoint,
+                            method=method,
+                            retry_after=retry_after_float,
+                            attempt_number=attempt + 1,
+                            rate_limiter_type=rate_limiter_type,
+                            current_rate_ratio=current_rate_ratio,
+                            response_headers=dict(response.headers),
+                            response_body=error_body,
+                            # 추가 컨텍스트
+                            total_429_retries=self._stats['total_429_retries'],
+                            session_stats=dict(self._stats),
+                            url=url,
+                            params=params
+                        )
 
                         # 429 재시도 카운터 업데이트
                         self._stats['last_request_429_retries'] += 1

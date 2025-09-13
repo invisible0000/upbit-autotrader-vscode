@@ -573,8 +573,9 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         INSERT OR IGNORE INTO {table_name} (
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
-            timestamp, candle_acc_trade_price, candle_acc_trade_volume
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            timestamp, candle_acc_trade_price, candle_acc_trade_volume,
+            created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
 
         try:

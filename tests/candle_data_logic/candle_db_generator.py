@@ -141,27 +141,40 @@ class CandleDBGenerator:
         return records
 
     def _ensure_table_exists(self) -> None:
-        """테이블이 존재하는지 확인하고 없으면 생성"""
+        """테이블이 존재하는지 확인하고 없으면 생성 (sqlite_candle_repository.py와 동일한 스키마)"""
         # 디렉토리 생성
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            # sqlite_candle_repository.py의 ensure_table_exists와 정확히 동일한 스키마
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {self.table_name} (
-                    candle_date_time_utc TEXT PRIMARY KEY,
+                    -- ✅ 단일 PRIMARY KEY (시간 정렬 + 중복 방지)
+                    candle_date_time_utc TEXT NOT NULL PRIMARY KEY,
+
+                    -- 업비트 API 공통 필드들
                     market TEXT NOT NULL,
-                    candle_date_time_kst TEXT,
-                    opening_price REAL,
-                    high_price REAL,
-                    low_price REAL,
-                    trade_price REAL,
-                    timestamp INTEGER,
-                    candle_acc_trade_price REAL,
-                    candle_acc_trade_volume REAL,
-                    created_at TEXT
+                    candle_date_time_kst TEXT NOT NULL,
+                    opening_price REAL NOT NULL,
+                    high_price REAL NOT NULL,
+                    low_price REAL NOT NULL,
+                    trade_price REAL NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    candle_acc_trade_price REAL NOT NULL,
+                    candle_acc_trade_volume REAL NOT NULL,
+
+                    -- 메타데이터
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 🚀 성능 최적화를 위한 timestamp 인덱스 생성
+            cursor.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_{self.table_name}_timestamp
+                ON {self.table_name}(timestamp DESC)
+            """)
+
             conn.commit()
 
     def _save_to_db(self, records: List[Dict[str, Any]]) -> int:

@@ -128,15 +128,31 @@ class OverlapAnalyzer:
 
     async def _handle_start_overlap(self, request: OverlapRequest) -> OverlapResult:
         """시작 겹침 처리 (PARTIAL_START)"""
+        # 🚨 Critical Fix: 빈 DB 감지 시 즉시 NO_OVERLAP 반환
+        has_any_data = await self.repository.has_any_data_in_range(
+            request.symbol, request.timeframe, request.target_start, request.target_end
+        )
+
+        if not has_any_data:
+            logger.debug("🔍 빈 DB 감지 → NO_OVERLAP 반환")
+            return self._create_no_overlap_result(request)
+
         partial_end = await self.repository.find_last_continuous_time(
             request.symbol, request.timeframe, request.target_start, request.target_end
         )
+
+        logger.debug(f"🔍 PARTIAL_START 조건 확인: partial_end={partial_end}, target_end={request.target_end}")
+        if partial_end:
+            logger.debug(f"🔍 조건: {partial_end} < {request.target_end} = {partial_end < request.target_end}")
 
         if partial_end and partial_end < request.target_end:
             dt_seconds = self.get_timeframe_dt(request.timeframe)
             api_start = partial_end + timedelta(seconds=dt_seconds)  # 다음 캔들부터 API 요청
 
-            logger.debug(f"→ PARTIAL_START: DB({partial_end}~{request.target_start}) + API({request.target_end}~{api_start}) [업비트순]")
+            logger.debug(
+                f"→ PARTIAL_START: DB({partial_end}~{request.target_start}) + "
+                f"API({request.target_end}~{api_start}) [업비트순]"
+            )
             return OverlapResult(
                 status=OverlapStatus.PARTIAL_START,
                 api_start=api_start,
@@ -185,7 +201,7 @@ class OverlapAnalyzer:
             )
         else:
             # 파편 겹침 (PARTIAL_MIDDLE_FRAGMENT)
-            logger.debug(f"→ PARTIAL_MIDDLE_FRAGMENT: 2번째 gap 발견 → 전체 API 요청")
+            logger.debug("→ PARTIAL_MIDDLE_FRAGMENT: 2번째 gap 발견 → 전체 API 요청")
             return OverlapResult(
                 status=OverlapStatus.PARTIAL_MIDDLE_FRAGMENT,
                 api_start=request.target_start,
@@ -234,8 +250,10 @@ class OverlapAnalyzer:
         """target_start에 데이터 존재 여부 확인 (특정 시점 정확 검사)"""
         return await self.repository.has_data_at_time(symbol, timeframe, start_time)
 
-    async def find_data_start_in_range(self, symbol: str, timeframe: str,
-                                      start_time: datetime, end_time: datetime) -> Optional[datetime]:
+    async def find_data_start_in_range(
+        self, symbol: str, timeframe: str,
+        start_time: datetime, end_time: datetime
+    ) -> Optional[datetime]:
         """범위 내 데이터 시작점 찾기 (MAX 쿼리)
 
         업비트 서버 내림차순 특성: 최신 시간이 데이터의 '시작점'
@@ -243,8 +261,10 @@ class OverlapAnalyzer:
         """
         return await self.repository.find_data_start_in_range(symbol, timeframe, start_time, end_time)
 
-    async def is_continue_till_end(self, symbol: str, timeframe: str,
-                                  start_time: datetime, end_time: datetime) -> bool:
+    async def is_continue_till_end(
+        self, symbol: str, timeframe: str,
+        start_time: datetime, end_time: datetime
+    ) -> bool:
         """start_time부터 end_time까지 연속성 확인 (안전한 범위 제한)"""
         return await self.repository.is_continue_till_end(symbol, timeframe, start_time, end_time)
 

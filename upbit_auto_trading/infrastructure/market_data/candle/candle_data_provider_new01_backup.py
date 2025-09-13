@@ -36,7 +36,7 @@ class RequestType(Enum):
     COUNT_ONLY = "count_only"      # count만, to=None (첫 청크 OverlapAnalyzer 건너뜀)
     TO_COUNT = "to_count"          # to + count (to만 정렬, OverlapAnalyzer 사용)
     TO_END = "to_end"              # to + end (to만 정렬, OverlapAnalyzer 사용)
-    END_ONLY = "end_only"          # end만, COUNT_ONLY처럼 동작 (동적 count 계산)
+    END_ONLY = "end_only"          # end만, to=None (임시 현재시간으로 count 계산)
 
 
 @dataclass(frozen=True)
@@ -124,9 +124,8 @@ class RequestInfo:
         return self.get_request_type() == RequestType.END_ONLY
 
     def should_skip_overlap_analysis_for_first_chunk(self) -> bool:
-        """첫 청크 OverlapAnalyzer 건너뛸지 - COUNT_ONLY와 END_ONLY만 true"""
-        request_type = self.get_request_type()
-        return request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]
+        """첫 청크 OverlapAnalyzer 건너뛸지 - COUNT_ONLY만 true"""
+        return self.get_request_type() == RequestType.COUNT_ONLY
 
     def get_aligned_to_time(self) -> Optional[datetime]:
         """정렬된 to 시간 반환 (필요한 경우에만)"""
@@ -381,10 +380,10 @@ class CandleDataProvider:
                     f"[{request_type.value}, 첫청크={is_first_chunk}]")
 
         try:
-            # 1. COUNT_ONLY와 END_ONLY 첫 청크는 OverlapAnalyzer 건너뜀 (to 파라미터 없음)
-            if is_first_chunk and request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
-                logger.info(f"🎯 {request_type.value} 첫 청크: OverlapAnalyzer 건너뜀 (to 파라미터 없음)")
-                
+            # 1. COUNT_ONLY 첫 청크는 OverlapAnalyzer 건너뜀 (시간 정렬 문제 회피)
+            if is_first_chunk and request_type == RequestType.COUNT_ONLY:
+                logger.info("🎯 COUNT_ONLY 첫 청크: OverlapAnalyzer 건너뜀 (시간 정렬 문제 회피)")
+
                 # 직접 API 호출 (to 파라미터 없음 보장)
                 api_response = await self._fetch_chunk_from_api(state.current_chunk)
                 candle_data_list = self._convert_upbit_response_to_candles(
@@ -596,9 +595,9 @@ class CandleDataProvider:
             logger.debug(f"TO_END: 정렬된 to={aligned_to}, count={self.chunk_size}")
 
         elif request_type == RequestType.END_ONLY:
-            # end만: COUNT_ONLY처럼 동작 (to 없이, 업비트 서버 최신부터)
+            # end만: 임시 현재시간 사용
             params["count"] = self.chunk_size
-            logger.debug(f"END_ONLY: COUNT_ONLY처럼 to 없이, count={self.chunk_size} (총 개수는 동적 계산됨)")
+            logger.debug(f"END_ONLY: 현재시간 기준, count={self.chunk_size}")
 
         return params
 
@@ -618,12 +617,12 @@ class CandleDataProvider:
         # 🔧 핵심 개선: 연속성 보장 로직
         # ========================================
         if state.last_candle_time:
-            if request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
-                # COUNT_ONLY와 END_ONLY는 두 번째 청크부터 마지막 시간 사용 (연속성 보장)
+            if request_type == RequestType.COUNT_ONLY:
+                # COUNT_ONLY는 두 번째 청크부터 마지막 시간 사용 (연속성 보장)
                 params["to"] = state.last_candle_time
-                logger.debug(f"{request_type.value} 후속 청크: to={state.last_candle_time}")
+                logger.debug(f"COUNT_ONLY 후속 청크: to={state.last_candle_time}")
             else:
-                # TO_COUNT, TO_END는 1틱 이전 시간 사용 (겹침 방지)
+                # 다른 타입들은 1틱 이전 시간 사용 (겹침 방지)
                 try:
                     # 마지막 캔들 시간에서 1틱 이전으로 조정
                     last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
