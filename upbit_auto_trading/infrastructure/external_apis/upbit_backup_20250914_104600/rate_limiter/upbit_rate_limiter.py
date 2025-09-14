@@ -83,7 +83,7 @@ class UnifiedUpbitRateLimiter:
         """기본 설정 생성 - 업비트 공식 Rate Limit 규칙"""
         return {
             UpbitRateLimitGroup.REST_PUBLIC: UnifiedRateLimiterConfig.from_rps(
-                rps=8.0, burst_capacity=8,
+                rps=10.0, burst_capacity=10,
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: UnifiedRateLimiterConfig.from_rps(

@@ -496,10 +496,10 @@ class AtomicTATManager:
             else:
                 return await self._consume_single_token_atomic(group, config, stats, now, current_rate_ratio)
 
-    async def _consume_single_token_atomic_backup(
+    async def _consume_single_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
-        """🆕 단일 제한 (RPS만) GCRA 로직 + 버스트 지원 - 백업 버전"""
+        """🆕 단일 제한 (RPS만) GCRA 로직 + 버스트 지원"""
         # TAT 계산
         current_tat = self.limiter.group_tats.get(group, now)
 
@@ -534,73 +534,6 @@ class AtomicTATManager:
                 self.atomic_stats['rejected_acquisitions'] += 1
                 return False, current_tat
 
-    async def _consume_single_token_atomic(
-        self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
-    ) -> tuple[bool, float]:
-        """순수 GCRA tau 기반 토큰 소모 - 버스트 카운트 추적"""
-        # 현재 TAT 조회
-        current_tat = self.limiter.group_tats.get(group, now)
-
-        # GCRA 파라미터 계산 (98% 마진 적용)
-        base_interval = config.emission_interval  # T (emission interval)
-        adjusted_interval = (base_interval / current_rate_ratio) * 1.8  # 98% 속도 = 102% 간격
-        tau = config.burst_capacity * adjusted_interval  # τ (burst allowance)        # 버스트 토큰 수 계산 (현재 잔여 버스트 용량)
-        # tau 시간 동안 누적된 "부채"를 토큰으로 환산
-        if current_tat <= now:
-            # 완전히 충전됨 (no debt)
-            burst_tokens_remaining = config.burst_capacity
-        else:
-            # 부채가 있음 - 토큰으로 환산
-            debt_time = current_tat - now
-            debt_tokens = debt_time / adjusted_interval
-            burst_tokens_remaining = max(0, config.burst_capacity - debt_tokens)
-
-        # GCRA 토큰 소모 시도
-        if current_tat <= now:
-            # ✅ TAT가 과거/현재 - 즉시 허용 (일반 요청)
-            new_tat = now + adjusted_interval
-            self.limiter.group_tats[group] = new_tat
-
-            self.atomic_stats['successful_acquisitions'] += 1
-
-            # 로깅: 일반 요청
-            self.logger.debug(f"🟢 일반 요청: {group.value} 버스트({int(burst_tokens_remaining)}/{config.burst_capacity})")
-            return True, new_tat
-
-        else:
-            # TAT가 미래 - 버스트 체크 필요
-            debt_time = current_tat - now
-
-            if debt_time <= tau:
-                # ✅ τ 범위 내 - 버스트 허용
-                new_tat = current_tat + adjusted_interval
-                self.limiter.group_tats[group] = new_tat
-
-                # 버스트 사용 후 잔여 토큰 계산
-                new_debt_time = new_tat - now
-                new_debt_tokens = new_debt_time / adjusted_interval
-                remaining_burst = max(0, config.burst_capacity - new_debt_tokens)
-
-                self.atomic_stats['successful_acquisitions'] += 1
-                self.atomic_stats['burst_acquisitions'] = self.atomic_stats.get('burst_acquisitions', 0) + 1
-
-                # 로깅: 버스트 요청
-                self.logger.debug(f"🟡 버스트 요청: {group.value} 버스트({int(remaining_burst)}/{config.burst_capacity})")
-                return True, new_tat
-
-            else:
-                # ❌ τ 초과 - 대기 필요
-                self.atomic_stats['rejected_acquisitions'] += 1
-
-                # 로깅: 거부된 요청
-                wait_needed = debt_time - tau
-                self.logger.debug(
-                    f"🔴 거부 요청: {group.value} "
-                    f"버스트({int(burst_tokens_remaining)}/{config.burst_capacity}) "
-                    f"대기필요:{wait_needed:.3f}초"
-                )
-                return False, current_tat
-
     async def _consume_dual_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
@@ -622,40 +555,42 @@ class AtomicTATManager:
         else:
             long_burst_allowance = 0.0
 
-        # BREAKING CHANGE: 잘못된 AND 조건 제거 -> 순차 적용으로 변경
+        # RPS 체크 (항상 적용)
+        short_result = self._check_single_limit_with_burst(short_tat, short_increment, short_burst_allowance, now)
 
-        # 1단계: RPS 제한 처리 (순차)
-        rps_wait, new_rps_tat = self._handle_single_limit_sequential(
-            short_tat, short_increment, short_burst_allowance, now
-        )
+        # RPM 체크 (순수 GCRA)
+        long_result = self._check_single_limit_with_burst(long_tat, long_increment, long_burst_allowance, now)
 
-        # 2단계: RPM 제한 처리 (RPS 대기 반영)
-        effective_time = now + rps_wait  # RPS 대기 후 시점
-        rpm_wait, new_rpm_tat = self._handle_single_limit_sequential(
-            long_tat, long_increment, long_burst_allowance, effective_time
-        )
+        # 둘 다 통과해야 성공 (순수 GCRA)
+        if short_result[0] and long_result[0]:
+            # ✅ 모든 제한 통과 - TAT 업데이트 (GCRA 표준)
+            new_short_tat = short_result[1]
+            new_long_tat = long_result[1]
 
-        # 총 대기 시간 및 TAT 업데이트
-        total_wait = rps_wait + rpm_wait
-        final_time = now + total_wait
+            self.limiter.group_tats[group] = new_short_tat
+            self.limiter.group_tats_minute[group] = new_long_tat
 
-        # TAT 업데이트 (순차 적용 결과)
-        self.limiter.group_tats[group] = new_rps_tat
-        self.limiter.group_tats_minute[group] = max(new_rpm_tat, final_time + long_increment - effective_time)
+            self.atomic_stats['successful_acquisitions'] += 1
 
-        self.atomic_stats['successful_acquisitions'] += 1
+            # � 순수 GCRA 로그: 자연스러운 지연 시간
+            rps_delay = max(0, new_short_tat - now)
+            rpm_delay = max(0, new_long_tat - now)
 
-        # 간결한 제한 로그 (TAT 절대값 대신 상대적 지연만)
-        if total_wait > 0:
-            controlling_factor = "RPS" if rps_wait >= rpm_wait else "RPM" if rpm_wait > 0 else "Both"
-            if rps_wait > 0 and rpm_wait > 0:
-                controlling_factor = "RPS+RPM"
-
-            self.logger.debug(f"순차 제한: {group.value} -> {total_wait:.3f}초 대기 ({controlling_factor})")
-            return False, final_time
+            self.logger.debug(f"🎯 순수 GCRA 이중 TAT 업데이트: {group.value}, "
+                              f"RPS 다음: +{rps_delay:.3f}초, "
+                              f"RPM 다음: +{rpm_delay:.3f}초, "
+                              f"제어요소: {'RPM' if rpm_delay > rps_delay else 'RPS'}")
+            return True, max(new_short_tat, new_long_tat)
         else:
-            self.logger.debug(f"즉시 허용: {group.value} (버스트)")
-            return True, final_time
+            # ❌ 제한 위반 - 더 긴 대기시간 반환
+            short_wait = max(0, short_tat - now)
+            long_wait = max(0, long_tat - now)
+            next_available = now + max(short_wait, long_wait)
+
+            self.atomic_stats['rejected_acquisitions'] += 1
+            self.logger.debug(f"⏳ 이중 제한 대기: {group.value}, "
+                              f"RPS 대기: {short_wait:.3f}초, RPM 대기: {long_wait:.3f}초")
+            return False, next_available
 
     def _check_single_limit_with_burst(
         self, current_tat: float, increment: float, burst_allowance: float, now: float
@@ -679,37 +614,6 @@ class AtomicTATManager:
             else:
                 # ❌ 버스트 초과
                 return False, current_tat
-
-    def _handle_single_limit_sequential(
-        self, current_tat: float, increment: float, burst_allowance: float, now: float
-    ) -> tuple[float, float]:
-        """순차 GCRA 제한 처리 - 개별 제한을 자연스럽게 적용
-
-        Args:
-            current_tat: 현재 TAT
-            increment: 요청당 증가량 (간격)
-            burst_allowance: 버스트 허용량
-            now: 현재 시간
-
-        Returns:
-            tuple: (대기 시간, 새로운 TAT)
-        """
-        if current_tat <= now:
-            # 충분히 기다렸음 - 즉시 사용 가능
-            return 0.0, now + increment
-        else:
-            # 버스트 체크
-            potential_new_tat = current_tat + increment
-            max_tat_with_burst = now + burst_allowance
-
-            if potential_new_tat <= max_tat_with_burst:
-                # 버스트 허용 범위 내 - 즉시 사용 가능
-                return 0.0, potential_new_tat
-            else:
-                # 버스트 초과 - 대기 필요
-                wait_time = current_tat - now
-                new_tat = current_tat + increment
-                return wait_time, new_tat
 
     async def update_tat_atomic(self, group: UpbitRateLimitGroup, new_tat: float):
         """원자적 TAT 업데이트"""
