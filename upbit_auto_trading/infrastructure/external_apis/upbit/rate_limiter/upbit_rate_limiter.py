@@ -102,7 +102,6 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=10,                    # 직관적 버스트 허용량
                 base_window_size=10,                  # 업비트 기준 최대치 (RPS와 동일)
                 upbit_monitoring_interval=1.0,        # 업비트 기본 모니터링 간격
-                timestamp_window_size=8,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: UnifiedRateLimiterConfig(
@@ -118,7 +117,6 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=8,
                 base_window_size=8,
                 upbit_monitoring_interval=1.0,
-                timestamp_window_size=6,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL: UnifiedRateLimiterConfig(
@@ -126,7 +124,6 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=1,                     # 최소 1개 (0.5를 1로 보정)
                 base_window_size=1,                   # 0.5 RPS → 1개 기준
                 upbit_monitoring_interval=2.0,        # 0.5 RPS = 2초 간격
-                timestamp_window_size=1,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.WEBSOCKET: UnifiedRateLimiterConfig(
@@ -134,7 +131,6 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=5,                     # 웹소켓은 보수적 버스트
                 base_window_size=5,                   # RPS 기준
                 upbit_monitoring_interval=1.0,        # 기본 1초
-                timestamp_window_size=4,              # 호환성 유지용
                 requests_per_minute=100,              # 분당 100 요청
                 requests_per_minute_burst=20,         # 분당 버스트 10개
                 enable_dual_limit=True,               # 이중 제한 (RPS + RPM)
@@ -160,15 +156,12 @@ class UnifiedUpbitRateLimiter:
             # 대기열 초기화
             self.waiters[group] = collections.OrderedDict()
 
-            # 🆕 Phase 1: 타임스탬프 윈도우 초기화 (독립적 크기 설정)
-            # 2단계 개선: timestamp_window_size 필드 활용으로 burst_capacity와 분리
-            if config.timestamp_window_size is not None:
-                window_size = config.timestamp_window_size
-            else:
-                # 🚨 긴급 수정: REST_PRIVATE_CANCEL_ALL의 burst_capacity=0.5 문제 해결
-                # int(0.5) = 0이면 윈도우가 생성되지 않아 Rate Limiting 실패 위험
-                # 최소 1개 슬롯을 보장하여 시스템 안전성 확보
-                window_size = max(1, int(config.burst_capacity))
+            # 🆕 Phase 1: 타임스탬프 윈도우 초기화 (burst_capacity 기준)
+            # burst_capacity를 타임스탬프 윈도우 크기로 직접 사용
+            # 🚨 긴급 수정: REST_PRIVATE_CANCEL_ALL의 burst_capacity=0.5 문제 해결
+            # int(0.5) = 0이면 윈도우가 생성되지 않아 Rate Limiting 실패 위험
+            # 최소 1개 슬롯을 보장하여 시스템 안전성 확보
+            window_size = max(1, int(config.burst_capacity))
 
             self._timestamp_windows[group] = collections.deque(maxlen=window_size)
 

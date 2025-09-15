@@ -53,8 +53,7 @@ class UnifiedRateLimiterConfig:
     base_window_size: Optional[int] = None           # 업비트 기준 최대 허용량 (보통 RPS와 동일)
     upbit_monitoring_interval: float = 1.0           # 업비트 기본 모니터링 간격 (초)
 
-    # 🆕 타임스탬프 윈도우 독립 설정 (burst_capacity와 분리) - 호환성 유지
-    timestamp_window_size: Optional[int] = None      # None이면 업비트 표준 크기(10) 사용
+    # 호환성 제거: timestamp_window_size 완전 제거, burst_capacity가 윈도우 크기 결정
 
     # 🆕 웹소켓 복합 제한 설정
     requests_per_minute: Optional[int] = None        # 분당 요청 제한 (100 RPM 등)
@@ -81,16 +80,12 @@ class UnifiedRateLimiterConfig:
     strategy: AdaptiveStrategy = AdaptiveStrategy.CONSERVATIVE
 
     @classmethod
-    def from_rps(cls, rps: float, burst_capacity: int = None, timestamp_window_size: Optional[int] = None, **kwargs):
+    def from_rps(cls, rps: float, burst_capacity: int = None, **kwargs):
         """RPS 기반 설정 생성"""
         if burst_capacity is None:
             burst_capacity = max(1, int(rps))
 
-        # 🚨 BREAKING CHANGE: 기본값 제거, 명시적 설정 강제
-        # timestamp_window_size를 설정하지 않으면 나중에 런타임 에러 발생
-        # 이는 RPS와 윈도우 크기 불일치로 인한 Rate Limiting 오작동 방지
-
-        return cls(rps=rps, burst_capacity=burst_capacity, timestamp_window_size=timestamp_window_size, **kwargs)
+        return cls(rps=rps, burst_capacity=burst_capacity, **kwargs)
 
     @property
     def emission_interval(self) -> float:
