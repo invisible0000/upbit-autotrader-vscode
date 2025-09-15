@@ -7,7 +7,8 @@
 import asyncio
 import time
 import random
-from typing import Dict, Any, Optional
+import collections
+from typing import Dict, Optional, Any
 
 from .upbit_rate_limiter_types import UpbitRateLimitGroup, TaskHealth, WaiterState, WaiterInfo
 
@@ -496,7 +497,7 @@ class AtomicTATManager:
             current_rate_ratio = stats.current_rate_ratio
 
             # 🆕 이중 제한 지원 (RPS + RPM)
-            if config.enable_dual_limit and config.requests_per_minute is not None:
+            if config.enable_dual_limit and config.rpm is not None:
                 return await self._consume_dual_token_atomic(group, config, stats, now, current_rate_ratio)
             else:
                 return await self._consume_single_token_atomic(group, config, stats, now, current_rate_ratio)
@@ -550,44 +551,6 @@ class AtomicTATManager:
             delay = current_tat - now
             future_tat = current_tat + increment  # 미래 TAT 예상
             return False, delay, future_tat
-
-    async def _consume_single_token_atomic_backup(
-        self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
-    ) -> tuple[bool, float]:
-        """🆕 단일 제한 (RPS만) GCRA 로직 + 버스트 지원 - 백업 버전"""
-        # TAT 계산
-        current_tat = self.limiter.group_tats.get(group, now)
-
-        # 동적 조정된 emission_interval 계산
-        base_interval = config.emission_interval
-        adjusted_interval = base_interval / current_rate_ratio
-
-        # 🆕 GCRA 버스트 허용량 계산
-        burst_allowance = config.burst_capacity * adjusted_interval
-
-        if current_tat <= now:
-            # ✅ 충분히 기다렸음 - 즉시 사용 가능
-            new_tat = now + adjusted_interval
-            self.limiter.group_tats[group] = new_tat
-
-            self.atomic_stats['successful_acquisitions'] += 1
-            return True, new_tat
-        else:
-            # 🚀 버스트 체크 - TAT가 미래에 있어도 버스트 범위 내면 허용
-            potential_new_tat = current_tat + adjusted_interval
-            max_tat_with_burst = now + burst_allowance
-
-            if potential_new_tat <= max_tat_with_burst:
-                # ✅ 버스트 허용 범위 내 - 사용 가능
-                self.limiter.group_tats[group] = potential_new_tat
-
-                self.atomic_stats['successful_acquisitions'] += 1
-                self.atomic_stats['burst_acquisitions'] = self.atomic_stats.get('burst_acquisitions', 0) + 1
-                return True, potential_new_tat
-            else:
-                # ❌ 버스트 초과 - 대기 필요
-                self.atomic_stats['rejected_acquisitions'] += 1
-                return False, current_tat
 
     async def _consume_single_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
@@ -659,112 +622,77 @@ class AtomicTATManager:
     async def _consume_dual_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
-        """🆕 이중 제한 (RPS + RPM) GCRA 로직 + 독립 버스트 지원"""
-        # 초단위 TAT 계산
-        short_tat = self.limiter.group_tats.get(group, now)
-        short_increment = config.emission_interval / current_rate_ratio  # 동적 조정된 RPS
+        """
+        ✅ 이중 제한 하이브리드 GCRA+윈도우 알고리즘 (웹소켓 전용)
+        웹소켓은 RPS+RPM 이중 제한을 사용하므로 각각을 하이브리드 방식으로 처리:
+        1) RPS: 버스트(윈도우) + 기본속도(GCRA) 하이브리드
+        2) RPM: 버스트(윈도우) + 기본속도(GCRA) 하이브리드
+        3) 최종: max(RPS딜레이, RPM딜레이) - 보수적 선택
+        """
 
-        # 분단위 TAT 계산
-        long_tat = self.limiter.group_tats_minute.get(group, now)
-        long_increment = 60.0 / config.requests_per_minute  # 분당 제한은 고정
+        # 1단계: RPS 제한 하이브리드 체크
+        rps_burst_ok, rps_burst_delay = self._check_burst_slots(group, now)
+        rps_rate_ok, rps_rate_delay, rps_new_tat = self._check_basic_gcra(
+            group, config, now, current_rate_ratio
+        )
+        rps_final_delay = max(rps_burst_delay, rps_rate_delay)
 
-        # 🆕 버스트 허용량 계산 (순수 GCRA)
-        short_burst_allowance = config.burst_capacity * short_increment  # RPS 버스트 (예: 5 * 0.2s = 1초)
+        # 2단계: RPM 제한 하이브리드 체크 (분당 제한용 별도 윈도우/TAT)
+        # RPM 기본 설정 (변수명 스타일 통일)
+        rpm_limit = config.rpm or 100  # 기본 100/분
+        rpm_burst_capacity = config.rpm_burst_capacity or 0  # 버스트 용량 명시
+        # 동적 RPM 모니터링 간격 계산: rpm_burst_capacity * 60 / rpm
+        rpm_monitoring_interval = (rpm_burst_capacity * 60.0 / rpm_limit) if rpm_burst_capacity > 0 else 60.0
 
-        # 🎯 RPM 버스트도 순수 GCRA로 처리
-        if config.requests_per_minute_burst:
-            long_burst_allowance = config.requests_per_minute_burst * long_increment  # RPM 버스트 (예: 10 * 0.6s = 6초)
+        # RPM용 가상 그룹 설정 (분당 윈도우 사용)
+        rpm_window_key = f"{group.value}_rpm"
+        if rpm_window_key not in self.limiter.timestamp_windows:
+            # RPM용 분당 윈도우 초기화
+            self.limiter.timestamp_windows[rpm_window_key] = collections.deque()
+
+        # RPM 윈도우 정리 (동적 모니터링 간격 사용)
+        rpm_window = self.limiter.timestamp_windows[rpm_window_key]
+        while rpm_window and (now - rpm_window[0]) > rpm_monitoring_interval:
+            rpm_window.popleft()
+
+        # RPM 버스트 체크 (동적 버스트 용량 사용)
+        effective_rpm_burst = rpm_burst_capacity if rpm_burst_capacity > 0 else rpm_limit
+        rpm_burst_ok = len(rpm_window) < effective_rpm_burst
+        rpm_burst_delay = 0.0 if rpm_burst_ok else (
+            rpm_monitoring_interval - (now - rpm_window[0]) if rpm_window else 0.0
+        )        # RPM GCRA 체크
+        rpm_tat = self.limiter.group_tats_minute.get(group, now)
+        rpm_increment = rpm_monitoring_interval / rpm_limit  # 60.0 / 100 = 0.6초
+        if rpm_tat <= now:
+            rpm_rate_delay, rpm_new_tat = 0.0, now + rpm_increment
         else:
-            long_burst_allowance = 0.0
+            rpm_rate_delay, rpm_new_tat = rpm_tat - now, rpm_tat + rpm_increment
 
-        # BREAKING CHANGE: 잘못된 AND 조건 제거 -> 순차 적용으로 변경
+        rpm_final_delay = max(rpm_burst_delay, rpm_rate_delay)
 
-        # 1단계: RPS 제한 처리 (순차)
-        rps_wait, new_rps_tat = self._handle_single_limit_sequential(
-            short_tat, short_increment, short_burst_allowance, now
-        )
+        # 3단계: 하이브리드 보수적 결정
+        total_delay = max(rps_final_delay, rpm_final_delay)
+        can_proceed = (total_delay == 0.0)
 
-        # 2단계: RPM 제한 처리 (RPS 대기 반영)
-        effective_time = now + rps_wait  # RPS 대기 후 시점
-        rpm_wait, new_rpm_tat = self._handle_single_limit_sequential(
-            long_tat, long_increment, long_burst_allowance, effective_time
-        )
+        if can_proceed:
+            # ✅ 즉시 허용 - 윈도우와 TAT 모두 업데이트
+            self.limiter._add_timestamp_to_window(group, now)
+            rpm_window.append(now)
+            self.limiter.group_tats[group] = rps_new_tat
+            self.limiter.group_tats_minute[group] = rpm_new_tat
 
-        # 총 대기 시간 및 TAT 업데이트
-        total_wait = rps_wait + rpm_wait
-        final_time = now + total_wait
-
-        # TAT 업데이트 (순차 적용 결과)
-        self.limiter.group_tats[group] = new_rps_tat
-        self.limiter.group_tats_minute[group] = max(new_rpm_tat, final_time + long_increment - effective_time)
-
-        self.atomic_stats['successful_acquisitions'] += 1
-
-        # 간결한 제한 로그 (TAT 절대값 대신 상대적 지연만)
-        if total_wait > 0:
-            controlling_factor = "RPS" if rps_wait >= rpm_wait else "RPM" if rpm_wait > 0 else "Both"
-            if rps_wait > 0 and rpm_wait > 0:
+            self.atomic_stats['successful_acquisitions'] += 1
+            self.logger.debug(f"웹소켓 이중제한 허용: {group.value}")
+            return True, now
+        else:
+            # ❌ 대기 필요
+            controlling_factor = "RPS" if rps_final_delay >= rpm_final_delay else "RPM"
+            if abs(rps_final_delay - rpm_final_delay) < 0.001:
                 controlling_factor = "RPS+RPM"
 
-            self.logger.debug(f"순차 제한: {group.value} -> {total_wait:.3f}초 대기 ({controlling_factor})")
-            return False, final_time
-        else:
-            self.logger.debug(f"즉시 허용: {group.value} (버스트)")
-            return True, final_time
-
-    def _check_single_limit_with_burst(
-        self, current_tat: float, increment: float, burst_allowance: float, now: float
-    ) -> tuple[bool, float]:
-        """🆕 단일 제한에 대한 GCRA + 버스트 체크
-
-        Returns:
-            tuple: (사용 가능 여부, 새 TAT)
-        """
-        if current_tat <= now:
-            # ✅ 충분히 기다렸음 - 즉시 사용 가능
-            return True, now + increment
-        else:
-            # 🚀 버스트 체크
-            potential_new_tat = current_tat + increment
-            max_tat_with_burst = now + burst_allowance
-
-            if potential_new_tat <= max_tat_with_burst:
-                # ✅ 버스트 허용 범위 내
-                return True, potential_new_tat
-            else:
-                # ❌ 버스트 초과
-                return False, current_tat
-
-    def _handle_single_limit_sequential(
-        self, current_tat: float, increment: float, burst_allowance: float, now: float
-    ) -> tuple[float, float]:
-        """순차 GCRA 제한 처리 - 개별 제한을 자연스럽게 적용
-
-        Args:
-            current_tat: 현재 TAT
-            increment: 요청당 증가량 (간격)
-            burst_allowance: 버스트 허용량
-            now: 현재 시간
-
-        Returns:
-            tuple: (대기 시간, 새로운 TAT)
-        """
-        if current_tat <= now:
-            # 충분히 기다렸음 - 즉시 사용 가능
-            return 0.0, now + increment
-        else:
-            # 버스트 체크
-            potential_new_tat = current_tat + increment
-            max_tat_with_burst = now + burst_allowance
-
-            if potential_new_tat <= max_tat_with_burst:
-                # 버스트 허용 범위 내 - 즉시 사용 가능
-                return 0.0, potential_new_tat
-            else:
-                # 버스트 초과 - 대기 필요
-                wait_time = current_tat - now
-                new_tat = current_tat + increment
-                return wait_time, new_tat
+            self.atomic_stats['rejected_acquisitions'] += 1
+            self.logger.debug(f"웹소켓 이중제한 대기: {group.value} -> {total_delay:.3f}초 ({controlling_factor})")
+            return False, now + total_delay
 
     async def update_tat_atomic(self, group: UpbitRateLimitGroup, new_tat: float):
         """원자적 TAT 업데이트"""

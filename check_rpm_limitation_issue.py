@@ -21,7 +21,7 @@ async def test_rest_public_group():
     print(f"📊 REST Public 그룹 설정:")
     print(f"  - RPS: {config.rps}")
     print(f"  - 버스트: {config.burst_capacity}")
-    print(f"  - RPM: {config.requests_per_minute}")
+    print(f"  - RPM: {config.rpm}")
     print(f"  - 이중 제한: {config.enable_dual_limit}")
     print()
 
@@ -66,7 +66,7 @@ async def test_websocket_group():
     print(f"📊 Websocket 그룹 설정:")
     print(f"  - RPS: {config.rps}")
     print(f"  - 버스트: {config.burst_capacity}")
-    print(f"  - RPM: {config.requests_per_minute}")
+    print(f"  - RPM: {config.rpm}")
     print(f"  - 이중 제한: {config.enable_dual_limit}")
     print()
 

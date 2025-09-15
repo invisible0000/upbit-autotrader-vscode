@@ -109,7 +109,6 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=30,
                 base_window_size=30,
                 upbit_monitoring_interval=1.0,
-                timestamp_window_size=24,             # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_ORDER: UnifiedRateLimiterConfig(
@@ -131,8 +130,9 @@ class UnifiedUpbitRateLimiter:
                 burst_capacity=5,                     # 웹소켓은 보수적 버스트
                 base_window_size=5,                   # RPS 기준
                 upbit_monitoring_interval=1.0,        # 기본 1초
-                requests_per_minute=100,              # 분당 100 요청
-                requests_per_minute_burst=20,         # 분당 버스트 10개
+                rpm=100,                              # 분당 100 요청
+                rpm_burst_capacity=20,                # 분당 버스트 20개
+                rpm_monitoring_interval=60.0,         # RPM 모니터링 간격 60초
                 enable_dual_limit=True,               # 이중 제한 (RPS + RPM)
                 enable_dynamic_adjustment=False       # 웹소켓은 고정 제한
             )
@@ -150,7 +150,7 @@ class UnifiedUpbitRateLimiter:
             self.group_tats[group] = 0.0
 
             # 분단위 TAT는 이중 제한 그룹에만 초기화
-            if config.enable_dual_limit and config.requests_per_minute is not None:
+            if config.enable_dual_limit and config.rpm is not None:
                 self.group_tats_minute[group] = 0.0
 
             # 대기열 초기화
@@ -505,9 +505,9 @@ class UnifiedUpbitRateLimiter:
             }
 
             # 🆕 이중 제한 및 버스트 정보 추가
-            if config.enable_dual_limit and config.requests_per_minute:
-                config_info['requests_per_minute'] = config.requests_per_minute
-                config_info['requests_per_minute_burst'] = config.requests_per_minute_burst or 0
+            if config.enable_dual_limit and config.rpm:
+                config_info['rpm'] = config.rpm
+                config_info['rpm_burst_capacity'] = config.rpm_burst_capacity or 0
                 config_info['dual_limit_enabled'] = True
                 config_info['burst_capacity'] = config.burst_capacity
                 config_info['tat_second'] = self.group_tats.get(group, 0.0)

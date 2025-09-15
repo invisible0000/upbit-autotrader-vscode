@@ -56,8 +56,9 @@ class UnifiedRateLimiterConfig:
     # 호환성 제거: timestamp_window_size 완전 제거, burst_capacity가 윈도우 크기 결정
 
     # 🆕 웹소켓 복합 제한 설정
-    requests_per_minute: Optional[int] = None        # 분당 요청 제한 (100 RPM 등)
-    requests_per_minute_burst: Optional[int] = None  # 분당 버스트 용량 (10개 등)
+    rpm: Optional[int] = None                        # 분당 요청 제한 (100 RPM 등)
+    rpm_burst_capacity: Optional[int] = None         # 분당 버스트 용량 (10개 등)
+    rpm_monitoring_interval: float = 60.0            # RPM 모니터링 간격 (초)
     enable_dual_limit: bool = False                  # 이중 제한 활성화 (RPS + RPM)
 
     # 동적 조정 설정
