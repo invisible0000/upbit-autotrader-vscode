@@ -453,7 +453,12 @@ class AtomicTATManager:
             'rejected_acquisitions': 0,
             'lock_contentions': 0,
             'avg_lock_wait_time': 0.0,
-            'max_lock_wait_time': 0.0
+            'max_lock_wait_time': 0.0,
+            # 🆕 하이브리드 결정 통계
+            'burst_decisions': 0,      # 버스트(타임스탬프 윈도우)가 결정한 횟수
+            'gcra_decisions': 0,       # GCRA가 결정한 횟수
+            'burst_allowed': 0,        # 버스트로 허용된 횟수
+            'gcra_allowed': 0          # GCRA 기본속도로 허용된 횟수
         }
 
     def _get_or_create_lock(self, group: UpbitRateLimitGroup) -> asyncio.Lock:
@@ -496,6 +501,56 @@ class AtomicTATManager:
             else:
                 return await self._consume_single_token_atomic(group, config, stats, now, current_rate_ratio)
 
+    def _check_burst_slots(self, group: UpbitRateLimitGroup, now: float) -> tuple[bool, float]:
+        """
+        타임스탬프 윈도우 기반 버스트 슬롯 체크
+
+        사용자 승인 설계:
+        - 빈슬롯 있으면 무조건 허용 (즉시 0.0 딜레이)
+        - 윈도우 가득참이면 시차 기반 딜레이 계산
+
+        Returns:
+            tuple: (버스트 허용 여부, 딜레이 시간)
+        """
+        # 오래된 타임스탬프 정리 (기존 메서드 활용)
+        self.limiter._cleanup_old_timestamps(group, now)
+
+        # 빈슬롯 체크 (기존 메서드 활용)
+        if self.limiter._has_empty_slots(group):
+            # 빈슬롯 있음 → 버스트 즉시 허용
+            return True, 0.0
+        else:
+            # 윈도우 가득참 → 시차 기반 딜레이 계산 (기존 메서드 활용)
+            delay = self.limiter._calculate_window_delay(group, now)
+            return False, delay
+
+    def _check_basic_gcra(
+        self, group: UpbitRateLimitGroup, config, now: float, rate_ratio: float
+    ) -> tuple[bool, float, float]:
+        """
+        순수 표준 GCRA 체크 (버스트 로직 완전 제거)
+
+        사용자 승인 설계:
+        - 표준 GCRA는 기본 간격(RPS)만 계산
+        - 버스트는 관여하지 않음 (타임스탬프 윈도우가 담당)
+
+        Returns:
+            tuple: (기본속도 허용 여부, 딜레이 시간, 새로운 TAT)
+        """
+        # 표준 GCRA 파라미터
+        increment = 1.0 / (config.rps * rate_ratio)  # I = 1/RPS (표준 공식)
+        current_tat = self.limiter.group_tats.get(group, now)
+
+        if now >= current_tat:
+            # 기본 속도 OK - 즉시 사용 가능
+            new_tat = now + increment
+            return True, 0.0, new_tat
+        else:
+            # 기본 속도 위반 - 대기 필요
+            delay = current_tat - now
+            future_tat = current_tat + increment  # 미래 TAT 예상
+            return False, delay, future_tat
+
     async def _consume_single_token_atomic_backup(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
@@ -537,66 +592,69 @@ class AtomicTATManager:
     async def _consume_single_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
-        """🔄 하이브리드 GCRA+윈도우 결정 로직"""
+        """
+        ✅ 올바른 하이브리드 GCRA+윈도우 알고리즘 (사용자 승인 설계)
 
-        # 현재 TAT 조회
-        current_tat = self.limiter.group_tats.get(group, now)
+        역할 분담:
+        0) 버스트 허용량: 타임스탬프 윈도우 빈슬롯이 결정
+        1) 표준 GCRA: 기본 간격에 대해서만 계산 (버스트 관여 안함)
+        2) 딜레이: max(GCRA딜레이, 윈도우딜레이) - 보수적 선택
+        3) 자연스러운 전환: 빈슬롯 없으면 GCRA 주도, 두 값 수렴
+        """
 
-        # GCRA 파라미터 계산 (98% 마진 적용)
-        base_interval = config.emission_interval  # T (emission interval)
-        adjusted_interval = (base_interval / current_rate_ratio) * 1.0  # 98% 속도 = 102% 간격
-        tau = config.burst_capacity * adjusted_interval  # τ (burst allowance)
+        # 1단계: 버스트 슬롯 체크 (타임스탬프 윈도우 전담)
+        burst_available, burst_delay = self._check_burst_slots(group, now)
 
-        # 🔍 Phase 4: GCRA 지연 계산 (상태 업데이트 없이 계산만)
-        if current_tat <= now:
-            gcra_delay = 0.0  # 즉시 허용
-            gcra_would_allow = True
-        else:
-            debt_time = current_tat - now
-            if debt_time <= tau:
-                gcra_delay = 0.0  # 버스트 허용
-                gcra_would_allow = True
-            else:
-                gcra_delay = debt_time - tau  # 대기 필요
-                gcra_would_allow = False
+        # 2단계: 기본 속도 체크 (순수 GCRA, 버스트 제외)
+        rate_ok, rate_delay, new_tat = self._check_basic_gcra(group, config, now, current_rate_ratio)
 
-        # 🔍 Phase 4: 윈도우 지연 계산
-        window_delay = self.limiter._calculate_window_delay(group, now)
-        window_would_allow = (window_delay == 0.0)
+        # 3단계: 하이브리드 보수적 결정
+        final_delay = max(burst_delay, rate_delay)
+        can_proceed = (final_delay == 0.0)
 
-        # 🔍 Phase 4: 하이브리드 결정 - 더 보수적인 알고리즘 선택
-        final_delay = max(gcra_delay, window_delay)
-        final_allow = (final_delay == 0.0)
-
-        # 🔍 Phase 4: 하이브리드 결정 로깅
+        # 하이브리드 결정 로깅
         self.logger.debug(
-            f"🧠 하이브리드 결정: {group.value} | "
-            f"GCRA:{gcra_delay:.3f}s({gcra_would_allow}) | "
-            f"윈도우:{window_delay:.3f}s({window_would_allow}) | "
-            f"최종:{final_delay:.3f}s({final_allow})"
+            f"🧠 하이브리드: {group.value} | "
+            f"버스트:{burst_delay:.3f}s({burst_available}) | "
+            f"GCRA:{rate_delay:.3f}s({rate_ok}) | "
+            f"최종:{final_delay:.3f}s({can_proceed})"
         )
 
-        # 🔍 Phase 4: 최종 결정에 따른 상태 업데이트
-        if final_allow:
-            # 허용 - TAT 업데이트 및 윈도우에 타임스탬프 추가
-            new_tat = now + adjusted_interval
+        if can_proceed:
+            # ✅ 허용: 양쪽 시스템 모두 업데이트
             self.limiter.group_tats[group] = new_tat
             self.limiter._add_timestamp_to_window(group, now)
 
             self.atomic_stats['successful_acquisitions'] += 1
 
-            # 결정 근거 로깅
-            decisive_algo = "GCRA" if gcra_delay >= window_delay else "윈도우"
-            self.logger.debug(f"✅ 하이브리드 허용: {group.value} (결정: {decisive_algo})")
+            # 결정 근거 로깅 및 통계 기록
+            if burst_delay >= rate_delay:
+                decisive_algo = "버스트"
+                self.atomic_stats['burst_decisions'] += 1
+                if burst_available:
+                    self.atomic_stats['burst_allowed'] += 1
+            else:
+                decisive_algo = "GCRA"
+                self.atomic_stats['gcra_decisions'] += 1
+                if rate_ok:
+                    self.atomic_stats['gcra_allowed'] += 1
+
+            self.logger.debug(f"✅ 허용: {group.value} (결정: {decisive_algo})")
             return True, new_tat
         else:
-            # 거부 - 대기 시간 반환
+            # ❌ 거부: 대기 시간 반환
             self.atomic_stats['rejected_acquisitions'] += 1
 
-            # 결정 근거 로깅
-            decisive_algo = "GCRA" if gcra_delay >= window_delay else "윈도우"
-            self.logger.debug(f"❌ 하이브리드 거부: {group.value} 대기:{final_delay:.3f}s (결정: {decisive_algo})")
-            return False, current_tat + final_delay
+            # 결정 근거 로깅 및 통계 기록
+            if burst_delay >= rate_delay:
+                decisive_algo = "버스트"
+                self.atomic_stats['burst_decisions'] += 1
+            else:
+                decisive_algo = "GCRA"
+                self.atomic_stats['gcra_decisions'] += 1
+
+            self.logger.debug(f"❌ 거부: {group.value} 대기:{final_delay:.3f}s (결정: {decisive_algo})")
+            return False, now + final_delay
 
     async def _consume_dual_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
@@ -742,7 +800,9 @@ class AtomicTATManager:
         )
 
     def get_atomic_stats(self) -> Dict[str, Any]:
-        """원자적 관리 통계 조회"""
+        """원자적 관리 통계 조회 (하이브리드 결정 통계 포함)"""
+        total_decisions = self.atomic_stats['burst_decisions'] + self.atomic_stats['gcra_decisions']
+
         return {
             'total_operations': self.atomic_stats['total_atomic_operations'],
             'successful_rate': (
@@ -755,7 +815,23 @@ class AtomicTATManager:
             ),
             'avg_lock_wait_ms': self.atomic_stats['avg_lock_wait_time'] * 1000,
             'max_lock_wait_ms': self.atomic_stats['max_lock_wait_time'] * 1000,
-            'active_locks': len(self._tat_locks)
+            'active_locks': len(self._tat_locks),
+            # 🆕 하이브리드 알고리즘 통계
+            'hybrid_decisions': {
+                'total_decisions': total_decisions,
+                'burst_decision_rate': (
+                    self.atomic_stats['burst_decisions'] / max(1, total_decisions)
+                ),
+                'gcra_decision_rate': (
+                    self.atomic_stats['gcra_decisions'] / max(1, total_decisions)
+                ),
+                'burst_success_rate': (
+                    self.atomic_stats['burst_allowed'] / max(1, self.atomic_stats['burst_decisions'])
+                ),
+                'gcra_success_rate': (
+                    self.atomic_stats['gcra_allowed'] / max(1, self.atomic_stats['gcra_decisions'])
+                )
+            }
         }
 
     async def cleanup_locks(self):

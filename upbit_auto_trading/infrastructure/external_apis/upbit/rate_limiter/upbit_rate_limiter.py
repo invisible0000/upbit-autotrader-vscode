@@ -90,31 +90,55 @@ class UnifiedUpbitRateLimiter:
         self._initialize_groups()
         self.logger.info("🚀 통합 Rate Limiter v2.0 초기화 완료")
 
+    # =======================================================================================
+    #                      Upbit Rate Limiter 요청 제한 중요 설정
+    #             타임스탬프 윈도우 사이즈와 업비트 모티터링 인터벌은 변경하지 말것
+    # =======================================================================================
     def _create_default_configs(self) -> Dict[UpbitRateLimitGroup, UnifiedRateLimiterConfig]:
-        """기본 설정 생성 - 업비트 공식 Rate Limit 규칙"""
+        """기본 설정 생성 - 사용자 승인 설계 적용"""
         return {
-            UpbitRateLimitGroup.REST_PUBLIC: UnifiedRateLimiterConfig.from_rps(
-                rps=9.5, burst_capacity=10,
+            UpbitRateLimitGroup.REST_PUBLIC: UnifiedRateLimiterConfig(
+                rps=10.0,
+                burst_capacity=10,                    # 직관적 버스트 허용량
+                base_window_size=10,                  # 업비트 기준 최대치 (RPS와 동일)
+                upbit_monitoring_interval=1.0,        # 업비트 기본 모니터링 간격
+                timestamp_window_size=8,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
-            UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: UnifiedRateLimiterConfig.from_rps(
-                rps=30.0, burst_capacity=30,
+            UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: UnifiedRateLimiterConfig(
+                rps=30.0,
+                burst_capacity=30,
+                base_window_size=30,
+                upbit_monitoring_interval=1.0,
+                timestamp_window_size=24,             # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
-            UpbitRateLimitGroup.REST_PRIVATE_ORDER: UnifiedRateLimiterConfig.from_rps(
-                rps=8.0, burst_capacity=8,
+            UpbitRateLimitGroup.REST_PRIVATE_ORDER: UnifiedRateLimiterConfig(
+                rps=8.0,
+                burst_capacity=8,
+                base_window_size=8,
+                upbit_monitoring_interval=1.0,
+                timestamp_window_size=6,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL: UnifiedRateLimiterConfig(
-                rps=0.5, burst_capacity=0.5,
+                rps=0.5,
+                burst_capacity=1,                     # 최소 1개 (0.5를 1로 보정)
+                base_window_size=1,                   # 0.5 RPS → 1개 기준
+                upbit_monitoring_interval=2.0,        # 0.5 RPS = 2초 간격
+                timestamp_window_size=1,              # 호환성 유지용
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
-            UpbitRateLimitGroup.WEBSOCKET: UnifiedRateLimiterConfig.from_rps(
-                rps=5.0, burst_capacity=1,
-                requests_per_minute=100,         # � 순수 GCRA: 분당 100 요청 (0.6초 간격)
-                requests_per_minute_burst=10,    # � 순수 GCRA: RPM 버스트 6초 허용 (10 * 0.6초)
-                enable_dual_limit=True,          # � 이중 GCRA: 5 RPS + 100 RPM 자연스러운 제어
-                enable_dynamic_adjustment=False  # 웹소켓은 고정 제한
+            UpbitRateLimitGroup.WEBSOCKET: UnifiedRateLimiterConfig(
+                rps=5.0,
+                burst_capacity=5,                     # 웹소켓은 보수적 버스트
+                base_window_size=5,                   # RPS 기준
+                upbit_monitoring_interval=1.0,        # 기본 1초
+                timestamp_window_size=4,              # 호환성 유지용
+                requests_per_minute=100,              # 분당 100 요청
+                requests_per_minute_burst=20,         # 분당 버스트 10개
+                enable_dual_limit=True,               # 이중 제한 (RPS + RPM)
+                enable_dynamic_adjustment=False       # 웹소켓은 고정 제한
             )
         }
 
@@ -136,8 +160,16 @@ class UnifiedUpbitRateLimiter:
             # 대기열 초기화
             self.waiters[group] = collections.OrderedDict()
 
-            # 🆕 Phase 1: 타임스탬프 윈도우 초기화 (burst_capacity 크기)
-            window_size = int(config.burst_capacity)
+            # 🆕 Phase 1: 타임스탬프 윈도우 초기화 (독립적 크기 설정)
+            # 2단계 개선: timestamp_window_size 필드 활용으로 burst_capacity와 분리
+            if config.timestamp_window_size is not None:
+                window_size = config.timestamp_window_size
+            else:
+                # 🚨 긴급 수정: REST_PRIVATE_CANCEL_ALL의 burst_capacity=0.5 문제 해결
+                # int(0.5) = 0이면 윈도우가 생성되지 않아 Rate Limiting 실패 위험
+                # 최소 1개 슬롯을 보장하여 시스템 안전성 확보
+                window_size = max(1, int(config.burst_capacity))
+
             self._timestamp_windows[group] = collections.deque(maxlen=window_size)
 
             self.logger.debug(f"📊 그룹 초기화: {group.value} ({config.rps} RPS, 윈도우: {window_size}슬롯)")
@@ -516,6 +548,20 @@ class UnifiedUpbitRateLimiter:
         """그룹별 타임스탬프 윈도우 반환"""
         return self._timestamp_windows[group]
 
+    def _get_window_size(self, group: UpbitRateLimitGroup) -> int:
+        """
+        그룹별 윈도우 크기 계산 (burst_capacity 우선 사용)
+
+        사용자 승인 설계:
+        - 타임스탬프 윈도우 슬롯 개수 = 실제 버스트 허용량
+        - 직관적이고 사용자 친화적인 burst_capacity 우선 사용
+        """
+        config = self.group_configs[group]
+
+        # 🎯 사용자 승인: burst_capacity를 윈도우 크기로 사용 (직관적)
+        # 타임스탬프 윈도우의 슬롯 개수가 바로 버스트 허용량이므로
+        return max(1, int(config.burst_capacity))
+
     def _add_timestamp_to_window(self, group: UpbitRateLimitGroup, timestamp: float) -> None:
         """타임스탬프 윈도우에 새 요청 시간 추가"""
         window = self._get_timestamp_window(group)
@@ -529,8 +575,8 @@ class UnifiedUpbitRateLimiter:
     def _has_empty_slots(self, group: UpbitRateLimitGroup) -> bool:
         """타임스탬프 윈도우에 빈슬롯이 있는지 확인"""
         window = self._get_timestamp_window(group)
-        config = self.group_configs[group]
-        window_capacity = int(config.burst_capacity)
+        # 2단계 개선: 독립적 윈도우 크기 계산 메서드 사용
+        window_capacity = self._get_window_size(group)
 
         return len(window) < window_capacity
 
@@ -538,8 +584,8 @@ class UnifiedUpbitRateLimiter:
         """감시 인터벌을 초과한 오래된 타임스탬프 제거"""
         window = self._get_timestamp_window(group)
 
-        # 감시 인터벌 = 1/RPS (초 단위)
-        monitoring_interval = 1.0  # 1초 (업비트 기본 감시 인터벌)
+        # 🎯 사용자 승인: 동적 monitoring_interval 사용
+        monitoring_interval = self.get_effective_monitoring_interval(group)
         cutoff_time = current_time - monitoring_interval
 
         # deque의 왼쪽부터(오래된 것부터) 제거
@@ -560,8 +606,8 @@ class UnifiedUpbitRateLimiter:
 
         for group in UpbitRateLimitGroup:
             window = self._get_timestamp_window(group)
-            config = self.group_configs[group]
-            window_capacity = int(config.burst_capacity)
+            # 2단계 개선: 독립적 윈도우 크기 계산 메서드 사용
+            window_capacity = self._get_window_size(group)
 
             stats['groups'][group.name] = {
                 'current_slots_used': len(window),
@@ -572,6 +618,28 @@ class UnifiedUpbitRateLimiter:
             }
 
         return stats
+
+    def get_effective_monitoring_interval(self, group: UpbitRateLimitGroup) -> float:
+        """
+        동적 monitoring_interval 계산 (사용자 승인 공식)
+
+        공식: monitoring_interval = upbit_monitoring_interval × burst_capacity / base_window_size
+
+        Args:
+            group: Rate Limit 그룹
+
+        Returns:
+            float: 계산된 모니터링 간격 (초)
+        """
+        config = self.group_configs[group]
+
+        # base_window_size 기본값 처리 (RPS와 동일하게 설정)
+        base_window_size = config.base_window_size or int(config.rps)
+
+        # 사용자 승인 공식 적용
+        monitoring_interval = config.upbit_monitoring_interval * config.burst_capacity / base_window_size
+
+        return monitoring_interval
 
     # 🆕 Phase 2: 윈도우 지연 계산 로직 (문서의 시차 계산 알고리즘)
 
@@ -597,9 +665,11 @@ class UnifiedUpbitRateLimiter:
         if not window:
             return 0.0
 
-        return self._calculate_timestamp_gap_delay(window, current_time)
+        return self._calculate_timestamp_gap_delay(group, window, current_time)
 
-    def _calculate_timestamp_gap_delay(self, window: collections.deque, current_time: float) -> float:
+    def _calculate_timestamp_gap_delay(
+        self, group: UpbitRateLimitGroup, window: collections.deque, current_time: float
+    ) -> float:
         """
         타임스탬프 시차 기반 지연 계산 (문서 알고리즘 구현)
 
@@ -619,7 +689,8 @@ class UnifiedUpbitRateLimiter:
         if not window:
             return 0.0
 
-        monitoring_interval = 1.0  # 1초 (업비트 감시 인터벌)
+        # 🎯 사용자 승인: 동적 monitoring_interval 사용
+        monitoring_interval = self.get_effective_monitoring_interval(group)
         window_list = list(window)  # [newest, ..., oldest]
 
         # 문서 명세: 첫 슬롯에서 현재시간을 빼서 시차 계산
