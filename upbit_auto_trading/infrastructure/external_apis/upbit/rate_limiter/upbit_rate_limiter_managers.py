@@ -537,69 +537,66 @@ class AtomicTATManager:
     async def _consume_single_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float
     ) -> tuple[bool, float]:
-        """순수 GCRA tau 기반 토큰 소모 - 버스트 카운트 추적"""
+        """🔄 하이브리드 GCRA+윈도우 결정 로직"""
+
         # 현재 TAT 조회
         current_tat = self.limiter.group_tats.get(group, now)
 
         # GCRA 파라미터 계산 (98% 마진 적용)
         base_interval = config.emission_interval  # T (emission interval)
-        adjusted_interval = (base_interval / current_rate_ratio) * 1.8  # 98% 속도 = 102% 간격
-        tau = config.burst_capacity * adjusted_interval  # τ (burst allowance)        # 버스트 토큰 수 계산 (현재 잔여 버스트 용량)
-        # tau 시간 동안 누적된 "부채"를 토큰으로 환산
-        if current_tat <= now:
-            # 완전히 충전됨 (no debt)
-            burst_tokens_remaining = config.burst_capacity
-        else:
-            # 부채가 있음 - 토큰으로 환산
-            debt_time = current_tat - now
-            debt_tokens = debt_time / adjusted_interval
-            burst_tokens_remaining = max(0, config.burst_capacity - debt_tokens)
+        adjusted_interval = (base_interval / current_rate_ratio) * 1.0  # 98% 속도 = 102% 간격
+        tau = config.burst_capacity * adjusted_interval  # τ (burst allowance)
 
-        # GCRA 토큰 소모 시도
+        # 🔍 Phase 4: GCRA 지연 계산 (상태 업데이트 없이 계산만)
         if current_tat <= now:
-            # ✅ TAT가 과거/현재 - 즉시 허용 (일반 요청)
+            gcra_delay = 0.0  # 즉시 허용
+            gcra_would_allow = True
+        else:
+            debt_time = current_tat - now
+            if debt_time <= tau:
+                gcra_delay = 0.0  # 버스트 허용
+                gcra_would_allow = True
+            else:
+                gcra_delay = debt_time - tau  # 대기 필요
+                gcra_would_allow = False
+
+        # 🔍 Phase 4: 윈도우 지연 계산
+        window_delay = self.limiter._calculate_window_delay(group, now)
+        window_would_allow = (window_delay == 0.0)
+
+        # 🔍 Phase 4: 하이브리드 결정 - 더 보수적인 알고리즘 선택
+        final_delay = max(gcra_delay, window_delay)
+        final_allow = (final_delay == 0.0)
+
+        # 🔍 Phase 4: 하이브리드 결정 로깅
+        self.logger.debug(
+            f"🧠 하이브리드 결정: {group.value} | "
+            f"GCRA:{gcra_delay:.3f}s({gcra_would_allow}) | "
+            f"윈도우:{window_delay:.3f}s({window_would_allow}) | "
+            f"최종:{final_delay:.3f}s({final_allow})"
+        )
+
+        # 🔍 Phase 4: 최종 결정에 따른 상태 업데이트
+        if final_allow:
+            # 허용 - TAT 업데이트 및 윈도우에 타임스탬프 추가
             new_tat = now + adjusted_interval
             self.limiter.group_tats[group] = new_tat
+            self.limiter._add_timestamp_to_window(group, now)
 
             self.atomic_stats['successful_acquisitions'] += 1
 
-            # 로깅: 일반 요청
-            self.logger.debug(f"🟢 일반 요청: {group.value} 버스트({int(burst_tokens_remaining)}/{config.burst_capacity})")
+            # 결정 근거 로깅
+            decisive_algo = "GCRA" if gcra_delay >= window_delay else "윈도우"
+            self.logger.debug(f"✅ 하이브리드 허용: {group.value} (결정: {decisive_algo})")
             return True, new_tat
-
         else:
-            # TAT가 미래 - 버스트 체크 필요
-            debt_time = current_tat - now
+            # 거부 - 대기 시간 반환
+            self.atomic_stats['rejected_acquisitions'] += 1
 
-            if debt_time <= tau:
-                # ✅ τ 범위 내 - 버스트 허용
-                new_tat = current_tat + adjusted_interval
-                self.limiter.group_tats[group] = new_tat
-
-                # 버스트 사용 후 잔여 토큰 계산
-                new_debt_time = new_tat - now
-                new_debt_tokens = new_debt_time / adjusted_interval
-                remaining_burst = max(0, config.burst_capacity - new_debt_tokens)
-
-                self.atomic_stats['successful_acquisitions'] += 1
-                self.atomic_stats['burst_acquisitions'] = self.atomic_stats.get('burst_acquisitions', 0) + 1
-
-                # 로깅: 버스트 요청
-                self.logger.debug(f"🟡 버스트 요청: {group.value} 버스트({int(remaining_burst)}/{config.burst_capacity})")
-                return True, new_tat
-
-            else:
-                # ❌ τ 초과 - 대기 필요
-                self.atomic_stats['rejected_acquisitions'] += 1
-
-                # 로깅: 거부된 요청
-                wait_needed = debt_time - tau
-                self.logger.debug(
-                    f"🔴 거부 요청: {group.value} "
-                    f"버스트({int(burst_tokens_remaining)}/{config.burst_capacity}) "
-                    f"대기필요:{wait_needed:.3f}초"
-                )
-                return False, current_tat
+            # 결정 근거 로깅
+            decisive_algo = "GCRA" if gcra_delay >= window_delay else "윈도우"
+            self.logger.debug(f"❌ 하이브리드 거부: {group.value} 대기:{final_delay:.3f}s (결정: {decisive_algo})")
+            return False, current_tat + final_delay
 
     async def _consume_dual_token_atomic(
         self, group: UpbitRateLimitGroup, config, stats, now: float, current_rate_ratio: float

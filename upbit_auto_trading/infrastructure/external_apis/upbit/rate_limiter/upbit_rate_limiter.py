@@ -7,7 +7,7 @@
 import asyncio
 import time
 import collections
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 import uuid
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
@@ -71,19 +71,55 @@ class UnifiedUpbitRateLimiter:
         # 원자적 TAT 매니저
         self._atomic_tat_manager = AtomicTATManager(self)
 
+        # 🔍 슬라이딩 윈도우 관찰 모드 (Phase 1: 기존 시스템에 영향 없음)
+        self.sliding_window_config = {
+            'enabled': True,  # 관찰 모드 활성화
+            'window_size': 60.0,  # 1분 윈도우
+            'max_log_size': 1000,  # 메모리 제한
+            'cleanup_interval': 30.0  # 정리 주기 (초)
+        }
+
+        # 그룹별 요청 로그 저장소 (timestamp, weight)
+        self.sliding_window_logs: Dict[UpbitRateLimitGroup, List[tuple[float, int]]] = {
+            group: [] for group in UpbitRateLimitGroup
+        }
+
+        # 🆕 Phase 1: 하이브리드 알고리즘용 타임스탬프 윈도우
+        # 그룹별 타임스탬프 FIFO 윈도우 (deque로 고정 크기 관리)
+        self._timestamp_windows: Dict[UpbitRateLimitGroup, collections.deque] = {}
+
+        # 하이브리드 알고리즘 설정
+        self.hybrid_config = {
+            'enabled': False,  # 기본값 비활성화 (단계별 활성화 예정)
+            'window_cleanup_interval': 1.0,  # 1초마다 오래된 타임스탬프 정리
+            'detailed_logging': True  # 상세 로깅 활성화
+        }
+
+        # 알고리즘 비교 통계
+        self.algorithm_comparison_stats = {
+            'total_requests': 0,
+            'gcra_allowed': 0,
+            'sw_allowed': 0,
+            'both_allowed': 0,
+            'both_denied': 0,
+            'gcra_only_allowed': 0,
+            'sw_only_allowed': 0,
+            'last_cleanup': time.monotonic()
+        }
+
         # 콜백
         self.on_429_detected: Optional[Callable] = None
         self.on_rate_reduced: Optional[Callable] = None
         self.on_rate_recovered: Optional[Callable] = None
 
         self._initialize_groups()
-        self.logger.info("🚀 통합 Rate Limiter v2.0 초기화 완료")
+        self.logger.info("🚀 통합 Rate Limiter v2.0 초기화 완료 (슬라이딩 윈도우 관찰 모드 포함)")
 
     def _create_default_configs(self) -> Dict[UpbitRateLimitGroup, UnifiedRateLimiterConfig]:
         """기본 설정 생성 - 업비트 공식 Rate Limit 규칙"""
         return {
             UpbitRateLimitGroup.REST_PUBLIC: UnifiedRateLimiterConfig.from_rps(
-                rps=8.0, burst_capacity=8,
+                rps=9.5, burst_capacity=10,
                 strategy=AdaptiveStrategy.CONSERVATIVE
             ),
             UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: UnifiedRateLimiterConfig.from_rps(
@@ -125,7 +161,11 @@ class UnifiedUpbitRateLimiter:
             # 대기열 초기화
             self.waiters[group] = collections.OrderedDict()
 
-            self.logger.debug(f"📊 그룹 초기화: {group.value} ({config.rps} RPS)")
+            # 🆕 Phase 1: 타임스탬프 윈도우 초기화 (burst_capacity 크기)
+            window_size = int(config.burst_capacity)
+            self._timestamp_windows[group] = collections.deque(maxlen=window_size)
+
+            self.logger.debug(f"📊 그룹 초기화: {group.value} ({config.rps} RPS, 윈도우: {window_size}슬롯)")
 
     # 엔드포인트 → 그룹 매핑 (클라이언트 실제 사용 경로 기준)
     _ENDPOINT_MAPPINGS = {
@@ -370,7 +410,12 @@ class UnifiedUpbitRateLimiter:
         # 타임아웃 매니저 시작
         await self._timeout_manager.start_timeout_management()
 
-        self.logger.info("🔄 백그라운드 태스크 시작 완료 (Notifier Tasks 포함)")
+        # 🔍 Phase 4: 슬라이딩 윈도우 정리 태스크 시작
+        if self.sliding_window_config['enabled'] and not hasattr(self, '_sliding_window_cleanup_task'):
+            self._sliding_window_cleanup_task = asyncio.create_task(self._sliding_window_cleanup_task())
+            self.logger.info("🧹 슬라이딩 윈도우 메모리 정리 태스크 시작")
+
+        self.logger.info("🔄 백그라운드 태스크 시작 완료 (Notifier Tasks + 슬라이딩 윈도우 정리 포함)")
 
     async def _ensure_background_tasks_started(self):
         """백그라운드 태스크 자동 시작 (중복 방지)"""
@@ -491,7 +536,474 @@ class UnifiedUpbitRateLimiter:
             'groups': groups_status,
             'task_health': self._task_manager.get_health_status(),
             'timeout_status': self._timeout_manager.get_timeout_status(),
-            'atomic_stats': self._atomic_tat_manager.get_atomic_stats()
+            'atomic_stats': self._atomic_tat_manager.get_atomic_stats(),
+            'sliding_window_stats': self.get_sliding_window_stats()
+        }
+
+    # 🔍 슬라이딩 윈도우 관찰 메서드들 (Phase 1)
+
+    def _log_sliding_window_request(self, group: UpbitRateLimitGroup, weight: int = 1) -> None:
+        """슬라이딩 윈도우용 요청 로그 추가 (기존 시스템에 영향 없음)"""
+        if not self.sliding_window_config['enabled']:
+            return
+
+        current_time = time.monotonic()
+        log_entry = (current_time, weight)
+
+        # 그룹별 로그에 추가
+        self.sliding_window_logs[group].append(log_entry)
+
+        # 메모리 제한 확인 및 정리
+        max_size = self.sliding_window_config['max_log_size']
+        if len(self.sliding_window_logs[group]) > max_size:
+            self.sliding_window_logs[group] = self.sliding_window_logs[group][-max_size:]
+
+    def _cleanup_sliding_window_logs(self, group: UpbitRateLimitGroup) -> None:
+        """오래된 슬라이딩 윈도우 로그 정리"""
+        if not self.sliding_window_config['enabled']:
+            return
+
+        current_time = time.monotonic()
+        window_size = self.sliding_window_config['window_size']
+        cutoff_time = current_time - window_size
+
+        # 윈도우 밖의 오래된 로그 제거
+        logs = self.sliding_window_logs[group]
+        self.sliding_window_logs[group] = [
+            (timestamp, weight) for timestamp, weight in logs
+            if timestamp >= cutoff_time
+        ]
+
+    def _calculate_sliding_window_usage(self, group: UpbitRateLimitGroup) -> tuple[int, float]:
+        """슬라이딩 윈도우 기반 현재 사용량 계산
+
+        Returns:
+            tuple[int, float]: (현재 윈도우 내 요청 수, 사용률 %)
+        """
+        if not self.sliding_window_config['enabled']:
+            return 0, 0.0
+
+        # 로그 정리
+        self._cleanup_sliding_window_logs(group)
+
+        # 현재 윈도우 내 요청 수 계산
+        logs = self.sliding_window_logs[group]
+        request_count = sum(weight for _, weight in logs)
+
+        # 그룹별 한도 확인
+        group_config = self.group_configs[group]
+        max_requests = group_config.rps * self.sliding_window_config['window_size']
+
+        usage_rate = (request_count / max_requests * 100) if max_requests > 0 else 0.0
+
+        return request_count, usage_rate
+
+    def _would_sliding_window_allow(self, group: UpbitRateLimitGroup, weight: int = 1) -> bool:
+        """슬라이딩 윈도우 알고리즘이 요청을 허용할지 시뮬레이션
+
+        Returns:
+            bool: 허용 여부 (실제로는 허용하지 않고 시뮬레이션만)
+        """
+        if not self.sliding_window_config['enabled']:
+            return True
+
+        request_count, _ = self._calculate_sliding_window_usage(group)
+        group_config = self.group_configs[group]
+        max_requests = group_config.rps * self.sliding_window_config['window_size']
+
+        # 새 요청을 추가했을 때 한도를 초과하는지 확인
+        return (request_count + weight) <= max_requests
+
+    def get_sliding_window_stats(self) -> Dict[str, Any]:
+        """슬라이딩 윈도우 관찰 통계 반환"""
+        if not self.sliding_window_config['enabled']:
+            return {'enabled': False}
+
+        stats = {
+            'enabled': True,
+            'config': self.sliding_window_config,
+            'comparison_stats': self.algorithm_comparison_stats.copy(),
+            'groups': {}
+        }
+
+        for group in UpbitRateLimitGroup:
+            request_count, usage_rate = self._calculate_sliding_window_usage(group)
+            stats['groups'][group.name] = {
+                'current_requests': request_count,
+                'usage_rate_percent': round(usage_rate, 2),
+                'log_size': len(self.sliding_window_logs[group]),
+                'window_size': self.sliding_window_config['window_size']
+            }
+
+        return stats
+
+    def _update_algorithm_comparison_stats(self, gcra_allowed: bool, sw_allowed: bool) -> None:
+        """알고리즘 비교 통계 업데이트"""
+        stats = self.algorithm_comparison_stats
+        stats['total_requests'] += 1
+
+        if gcra_allowed:
+            stats['gcra_allowed'] += 1
+        if sw_allowed:
+            stats['sw_allowed'] += 1
+
+        if gcra_allowed and sw_allowed:
+            stats['both_allowed'] += 1
+        elif not gcra_allowed and not sw_allowed:
+            stats['both_denied'] += 1
+        elif gcra_allowed and not sw_allowed:
+            stats['gcra_only_allowed'] += 1
+        elif not gcra_allowed and sw_allowed:
+            stats['sw_only_allowed'] += 1
+
+    # 🆕 Phase 1: 타임스탬프 윈도우 관리 메서드들
+
+    def _get_timestamp_window(self, group: UpbitRateLimitGroup) -> collections.deque:
+        """그룹별 타임스탬프 윈도우 반환"""
+        return self._timestamp_windows[group]
+
+    def _add_timestamp_to_window(self, group: UpbitRateLimitGroup, timestamp: float) -> None:
+        """타임스탬프 윈도우에 새 요청 시간 추가"""
+        window = self._get_timestamp_window(group)
+        window.append(timestamp)
+
+        # 디버그 로깅 (상세 모드일 때만)
+        if self.hybrid_config.get('detailed_logging', False):
+            window_list = list(window)
+            self.logger.debug(f"📊 타임스탬프 추가: {group.value} | 윈도우: {window_list}")
+
+    def _has_empty_slots(self, group: UpbitRateLimitGroup) -> bool:
+        """타임스탬프 윈도우에 빈슬롯이 있는지 확인"""
+        window = self._get_timestamp_window(group)
+        config = self.group_configs[group]
+        window_capacity = int(config.burst_capacity)
+
+        return len(window) < window_capacity
+
+    def _cleanup_old_timestamps(self, group: UpbitRateLimitGroup, current_time: float) -> None:
+        """감시 인터벌을 초과한 오래된 타임스탬프 제거"""
+        window = self._get_timestamp_window(group)
+
+        # 감시 인터벌 = 1/RPS (초 단위)
+        monitoring_interval = 1.0  # 1초 (업비트 기본 감시 인터벌)
+        cutoff_time = current_time - monitoring_interval
+
+        # deque의 왼쪽부터(오래된 것부터) 제거
+        original_size = len(window)
+        while window and window[0] < cutoff_time:
+            window.popleft()
+
+        removed_count = original_size - len(window)
+        if removed_count > 0 and self.hybrid_config.get('detailed_logging', False):
+            self.logger.debug(f"🧹 타임스탬프 정리: {group.value} | 제거: {removed_count}개")
+
+    def get_timestamp_window_stats(self) -> Dict[str, Any]:
+        """타임스탬프 윈도우 통계 반환"""
+        stats = {
+            'hybrid_enabled': self.hybrid_config['enabled'],
+            'groups': {}
+        }
+
+        for group in UpbitRateLimitGroup:
+            window = self._get_timestamp_window(group)
+            config = self.group_configs[group]
+            window_capacity = int(config.burst_capacity)
+
+            stats['groups'][group.name] = {
+                'current_slots_used': len(window),
+                'max_capacity': window_capacity,
+                'empty_slots': window_capacity - len(window),
+                'usage_percent': (len(window) / window_capacity) * 100 if window_capacity > 0 else 0,
+                'timestamps': list(window) if self.hybrid_config.get('detailed_logging', False) else []
+            }
+
+        return stats
+
+    # 🆕 Phase 2: 윈도우 지연 계산 로직 (문서의 시차 계산 알고리즘)
+
+    def _calculate_window_delay(self, group: UpbitRateLimitGroup, current_time: float) -> float:
+        """
+        타임스탬프 윈도우 기반 지연 계산
+
+        문서 알고리즘:
+        1. 빈슬롯 있으면 → 0 지연 (즉시 허용)
+        2. 윈도우 가득참 → 시차 계산하여 지연 시간 산출
+
+        Returns:
+            float: 지연 시간 (초). 0이면 즉시 허용
+        """
+        # 빈슬롯 체크 - 있으면 즉시 허용
+        if self._has_empty_slots(group):
+            if self.hybrid_config.get('detailed_logging', False):
+                self.logger.debug(f"🟢 빈슬롯 허용: {group.value}")
+            return 0.0
+
+        # 윈도우가 가득 찬 경우 시차 계산
+        window = self._get_timestamp_window(group)
+        if not window:
+            return 0.0
+
+        return self._calculate_timestamp_gap_delay(window, current_time)
+
+    def _calculate_timestamp_gap_delay(self, window: collections.deque, current_time: float) -> float:
+        """
+        타임스탬프 시차 기반 지연 계산 (문서 알고리즘 구현)
+
+        알고리즘:
+        1. 첫 슬롯에서 현재시간을 빼서 시차 계산
+        2. 만약 첫슬롯 시차가 감시 인터벌보다 크면 계산 중지 (이미 지연 불필요)
+        3. 2번 슬롯부터는 다음-이전 슬롯 간 시차 계산
+        4. 시차 합을 감시 인터벌에서 뺀 값이 지연 시간
+
+        Args:
+            window: 타임스탬프 deque ([newest, ..., oldest] 순서)
+            current_time: 현재 시간
+
+        Returns:
+            float: 지연 시간 (초)
+        """
+        if not window:
+            return 0.0
+
+        monitoring_interval = 1.0  # 1초 (업비트 감시 인터벌)
+        window_list = list(window)  # [newest, ..., oldest]
+
+        # 문서 명세: 첫 슬롯에서 현재시간을 빼서 시차 계산
+        first_slot_time = window_list[0]  # 가장 최신 타임스탬프
+        first_gap = current_time - first_slot_time
+
+        # 첫슬롯 시차가 감시 인터벌보다 크면 계산 중지 (이미 충분한 시간 경과)
+        if first_gap >= monitoring_interval:
+            if self.hybrid_config.get('detailed_logging', False):
+                self.logger.debug(f"⏰ 첫슬롯 시차 충분: {first_gap:.3f}s >= {monitoring_interval}s")
+            return 0.0
+
+        # 시차 합 계산
+        total_gap = first_gap
+
+        # 2번째 슬롯부터 슬롯간 시차 계산
+        for i in range(1, len(window_list)):
+            current_slot = window_list[i - 1]  # 더 최신
+            previous_slot = window_list[i]     # 더 오래됨
+            slot_gap = current_slot - previous_slot
+            total_gap += slot_gap
+
+            # 조기 종료: 시차합이 감시 인터벌을 초과하면 더 이상 계산 불필요
+            if total_gap >= monitoring_interval:
+                if self.hybrid_config.get('detailed_logging', False):
+                    self.logger.debug(f"⏰ 시차합 충분: {total_gap:.3f}s >= {monitoring_interval}s")
+                return 0.0
+
+        # 최종 지연 계산: 감시 인터벌 - 시차 합
+        delay = max(0.0, monitoring_interval - total_gap)
+
+        if self.hybrid_config.get('detailed_logging', False):
+            self.logger.debug(
+                f"🕒 윈도우 지연 계산: 시차합={total_gap:.3f}s, "
+                f"감시인터벌={monitoring_interval}s → 지연={delay:.3f}s"
+            )
+
+        return delay
+
+    def _simulate_window_request(self, group: UpbitRateLimitGroup, current_time: float) -> tuple[bool, float]:
+        """
+        윈도우 알고리즘으로 요청 처리 시뮬레이션
+
+        Returns:
+            tuple: (즉시 허용 여부, 지연 시간)
+        """
+        # 오래된 타임스탬프 정리
+        self._cleanup_old_timestamps(group, current_time)
+
+        # 지연 계산
+        delay = self._calculate_window_delay(group, current_time)
+        immediate_allow = (delay == 0.0)
+
+        return immediate_allow, delay
+
+    # 🔍 Phase 3: 상세한 로깅 및 성능 지표 수집
+
+    def log_algorithm_comparison(self, group: UpbitRateLimitGroup, gcra_result: bool, sw_result: bool,
+                                 burst_remaining: int = 0, sw_usage: float = 0.0) -> None:
+        """알고리즘 비교 결과 상세 로깅"""
+        if not self.sliding_window_config['enabled']:
+            return
+
+        # 알고리즘 불일치 시 경고 로그
+        if gcra_result != sw_result:
+            self.logger.warning(
+                f"🔍 알고리즘 불일치 감지: {group.value} | "
+                f"GCRA: {'허용' if gcra_result else '거부'} | "
+                f"SW: {'허용' if sw_result else '거부'} | "
+                f"버스트잔여: {burst_remaining} | SW사용률: {sw_usage:.1f}%"
+            )
+        else:
+            # 일치하는 경우는 디버그 레벨로
+            self.logger.debug(
+                f"🔍 알고리즘 일치: {group.value} | "
+                f"결과: {'허용' if gcra_result else '거부'} | "
+                f"버스트잔여: {burst_remaining} | SW사용률: {sw_usage:.1f}%"
+            )
+
+    def get_algorithm_agreement_rate(self) -> Dict[str, float]:
+        """알고리즘 일치율 계산"""
+        stats = self.algorithm_comparison_stats
+        total = stats['total_requests']
+
+        if total == 0:
+            return {'agreement_rate': 100.0, 'total_samples': 0}
+
+        agreement_count = stats['both_allowed'] + stats['both_denied']
+        agreement_rate = (agreement_count / total) * 100
+
+        return {
+            'agreement_rate': round(agreement_rate, 2),
+            'total_samples': total,
+            'both_allowed': stats['both_allowed'],
+            'both_denied': stats['both_denied'],
+            'gcra_only_allowed': stats['gcra_only_allowed'],
+            'sw_only_allowed': stats['sw_only_allowed'],
+            'gcra_strictness': round((stats['gcra_only_allowed'] / total) * 100, 2) if total > 0 else 0.0,
+            'sw_strictness': round((stats['sw_only_allowed'] / total) * 100, 2) if total > 0 else 0.0
+        }
+
+    def reset_algorithm_comparison_stats(self) -> None:
+        """알고리즘 비교 통계 초기화"""
+        self.algorithm_comparison_stats = {
+            'total_requests': 0,
+            'gcra_allowed': 0,
+            'sw_allowed': 0,
+            'both_allowed': 0,
+            'both_denied': 0,
+            'gcra_only_allowed': 0,
+            'sw_only_allowed': 0,
+            'last_cleanup': time.monotonic()
+        }
+        self.logger.info("🔍 알고리즘 비교 통계가 초기화되었습니다")
+
+    async def log_periodic_comparison_summary(self) -> None:
+        """주기적 비교 요약 로그 (백그라운드 태스크용)"""
+        if not self.sliding_window_config['enabled']:
+            return
+
+        agreement_data = self.get_algorithm_agreement_rate()
+
+        if agreement_data['total_samples'] > 0:
+            self.logger.info(
+                f"📊 알고리즘 비교 요약 (샘플: {agreement_data['total_samples']}개) | "
+                f"일치율: {agreement_data['agreement_rate']}% | "
+                f"GCRA더엄격: {agreement_data['gcra_strictness']}% | "
+                f"SW더엄격: {agreement_data['sw_strictness']}%"
+            )
+
+    # 🔍 Phase 4: 메모리 관리 및 최적화
+
+    async def _sliding_window_cleanup_task(self) -> None:
+        """슬라이딩 윈도우 로그 정리 백그라운드 태스크"""
+        while True:
+            try:
+                if self.sliding_window_config['enabled']:
+                    current_time = time.monotonic()
+                    cleanup_interval = self.sliding_window_config['cleanup_interval']
+
+                    # 마지막 정리 시간 체크
+                    if current_time - self.algorithm_comparison_stats['last_cleanup'] >= cleanup_interval:
+                        await self._perform_memory_cleanup()
+                        self.algorithm_comparison_stats['last_cleanup'] = current_time
+
+                        # 주기적 요약 로그
+                        await self.log_periodic_comparison_summary()
+
+                # 다음 정리까지 대기
+                await asyncio.sleep(self.sliding_window_config['cleanup_interval'])
+
+            except asyncio.CancelledError:
+                self.logger.info("🧹 슬라이딩 윈도우 정리 태스크가 중지되었습니다")
+                break
+            except Exception as e:
+                self.logger.error(f"🧹 슬라이딩 윈도우 정리 태스크 오류: {e}")
+                await asyncio.sleep(5.0)  # 오류 시 5초 대기
+
+    async def _perform_memory_cleanup(self) -> None:
+        """메모리 정리 수행"""
+        if not self.sliding_window_config['enabled']:
+            return
+
+        total_cleaned = 0
+        memory_usage_before = self._get_memory_usage_info()
+
+        for group in UpbitRateLimitGroup:
+            before_count = len(self.sliding_window_logs[group])
+            self._cleanup_sliding_window_logs(group)
+            after_count = len(self.sliding_window_logs[group])
+            cleaned_count = before_count - after_count
+            total_cleaned += cleaned_count
+
+        memory_usage_after = self._get_memory_usage_info()
+
+        self.logger.debug(
+            f"🧹 메모리 정리 완료: {total_cleaned}개 로그 제거 | "
+            f"메모리: {memory_usage_before['total_logs']} → {memory_usage_after['total_logs']}개"
+        )
+
+    def _get_memory_usage_info(self) -> Dict[str, int]:
+        """메모리 사용량 정보 조회"""
+        total_logs = sum(len(logs) for logs in self.sliding_window_logs.values())
+        max_allowed = self.sliding_window_config['max_log_size'] * len(UpbitRateLimitGroup)
+
+        group_usage = {}
+        for group in UpbitRateLimitGroup:
+            group_usage[group.name] = len(self.sliding_window_logs[group])
+
+        return {
+            'total_logs': total_logs,
+            'max_allowed': max_allowed,
+            'usage_percent': round((total_logs / max_allowed * 100), 2) if max_allowed > 0 else 0,
+            'groups': group_usage
+        }
+
+    def get_memory_usage_status(self) -> Dict[str, Any]:
+        """메모리 사용량 상태 조회 (외부 접근용)"""
+        if not self.sliding_window_config['enabled']:
+            return {'enabled': False}
+
+        usage_info = self._get_memory_usage_info()
+        config = self.sliding_window_config
+
+        # 다음 정리까지 남은 시간 계산
+        last_cleanup = self.algorithm_comparison_stats['last_cleanup']
+        next_cleanup = max(0, config['cleanup_interval'] - (time.monotonic() - last_cleanup))
+
+        return {
+            'enabled': True,
+            'usage': usage_info,
+            'config': {
+                'window_size': config['window_size'],
+                'max_log_size': config['max_log_size'],
+                'cleanup_interval': config['cleanup_interval']
+            },
+            'next_cleanup_in': next_cleanup
+        }
+
+    def force_cleanup_sliding_window_logs(self) -> Dict[str, int]:
+        """강제 메모리 정리 (수동 호출용)"""
+        if not self.sliding_window_config['enabled']:
+            return {'status': 'disabled'}
+
+        before_usage = self._get_memory_usage_info()
+
+        # 모든 그룹의 로그 정리
+        for group in UpbitRateLimitGroup:
+            self._cleanup_sliding_window_logs(group)
+
+        after_usage = self._get_memory_usage_info()
+
+        self.logger.info(f"🧹 강제 메모리 정리: {before_usage['total_logs']} → {after_usage['total_logs']}개 로그")
+
+        return {
+            'before': before_usage['total_logs'],
+            'after': after_usage['total_logs'],
+            'cleaned': before_usage['total_logs'] - after_usage['total_logs']
         }
 
 
