@@ -506,24 +506,26 @@ class AtomicTATManager:
         """
         타임스탬프 윈도우 기반 버스트 슬롯 체크
 
-        사용자 승인 설계:
-        - 빈슬롯 있으면 무조건 허용 (즉시 0.0 딜레이)
-        - 윈도우 가득참이면 시차 기반 딜레이 계산
+        개선된 설계:
+        - 빈슬롯 여부와 관계없이 항상 윈도우 딜레이 계산
+        - 빈슬롯 있으면 버스트 허용하지만 계산된 딜레이도 반환 (로깅용)
+        - 로깅에서 GCRA vs 윈도우 딜레이 비교 분석 가능
 
         Returns:
-            tuple: (버스트 허용 여부, 딜레이 시간)
+            tuple: (버스트 허용 여부, 윈도우 계산 딜레이)
         """
-        # 오래된 타임스탬프 정리 (기존 메서드 활용)
-        self.limiter._cleanup_old_timestamps(group, now)
+        # 항상 윈도우 딜레이 계산 (빈슬롯 여부와 무관)
+        window_delay = self.limiter._calculate_window_delay(group, now)
 
-        # 빈슬롯 체크 (기존 메서드 활용)
-        if self.limiter._has_empty_slots(group):
-            # 빈슬롯 있음 → 버스트 즉시 허용
-            return True, 0.0
+        # 빈슬롯 체크 (클린업 전 원본 상태로 판단)
+        has_empty_slots = self.limiter._has_empty_slots(group)
+
+        if has_empty_slots:
+            # 빈슬롯 있음 → 버스트 허용 (하지만 계산된 딜레이도 반환)
+            return True, window_delay
         else:
-            # 윈도우 가득참 → 시차 기반 딜레이 계산 (기존 메서드 활용)
-            delay = self.limiter._calculate_window_delay(group, now)
-            return False, delay
+            # 윈도우 가득참 → 버스트 불허용, 시차 기반 딜레이 사용
+            return False, window_delay
 
     def _check_basic_gcra(
         self, group: UpbitRateLimitGroup, config, now: float, rate_ratio: float
@@ -571,50 +573,79 @@ class AtomicTATManager:
         # 2단계: 기본 속도 체크 (순수 GCRA, 버스트 제외)
         rate_ok, rate_delay, new_tat = self._check_basic_gcra(group, config, now, current_rate_ratio)
 
-        # 3단계: 하이브리드 보수적 결정
-        final_delay = max(burst_delay, rate_delay)
-        can_proceed = (final_delay == 0.0)
+        # 3단계: 버스트 우선 하이브리드 결정
+        if burst_available:
+            # 버스트 가능하면 무조건 즉시 허용 (GCRA 딜레이 무시)
+            final_delay = 0.0
+            can_proceed = True
+        else:
+            # 버스트 불가하면 기존 보수적 로직 적용
+            final_delay = max(burst_delay, rate_delay)
+            can_proceed = (final_delay == 0.0)
 
-        # 하이브리드 결정 로깅
+        # 🆕 개선된 하이브리드 결정 로깅 (항상 양쪽 딜레이 표시)
+        decision_reason = "버스트허용" if burst_available else ("GCRA주도" if rate_delay >= burst_delay else "윈도우주도")
         self.logger.debug(
-            f"🧠 하이브리드: {group.value} | "
-            f"버스트:{burst_delay:.3f}s({burst_available}) | "
-            f"GCRA:{rate_delay:.3f}s({rate_ok}) | "
-            f"최종:{final_delay:.3f}s({can_proceed})"
+            f"🧠 하이브리드분석: {group.value} | "
+            f"윈도우딜레이:{burst_delay:.3f}s | "
+            f"GCRA딜레이:{rate_delay:.3f}s | "
+            f"버스트슬롯:{burst_available} | "
+            f"GCRA속도OK:{rate_ok} | "
+            f"결정:{decision_reason} → 최종:{final_delay:.3f}s({can_proceed})"
         )
 
         if can_proceed:
-            # ✅ 허용: 양쪽 시스템 모두 업데이트
+            # ✅ 허용: GCRA TAT만 업데이트 (타임스탬프는 API 성공 후 커밋)
             self.limiter.group_tats[group] = new_tat
-            self.limiter._add_timestamp_to_window(group, now)
+
+            # 🔍 디버그: 지연된 커밋 전 윈도우 상태 추적
+            if self.limiter.hybrid_config.get('detailed_logging', False):
+                window = self.limiter._get_timestamp_window(group)
+                window_capacity = self.limiter._get_window_size(group)
+                current_usage = len(window)
+                self.logger.debug(
+                    f"🕐 지연된 커밋 예정: {group.value} | "
+                    f"현재 윈도우: {current_usage}/{window_capacity}슬롯 | "
+                    f"커밋 후 예상: {current_usage + 1}/{window_capacity}슬롯 | "
+                    f"타임스탬프: {now:.3f} (API 성공 시 추가 예정)"
+                )
+
+            # ⚠️ 타임스탬프 추가는 API 성공 후에 별도로 수행
+            # self.limiter._add_timestamp_to_window(group, now)  # 지연된 커밋으로 이동
+
+            # ⚠️ 클린업도 API 성공 후에 별도로 수행 (실패 시 롤백 위해 원본 상태 유지)
+            # self.limiter._cleanup_old_timestamps(group, now)  # 지연된 커밋으로 이동
 
             self.atomic_stats['successful_acquisitions'] += 1
 
             # 결정 근거 로깅 및 통계 기록
-            if burst_delay >= rate_delay:
+            if burst_available:
                 decisive_algo = "버스트"
                 self.atomic_stats['burst_decisions'] += 1
-                if burst_available:
-                    self.atomic_stats['burst_allowed'] += 1
+                self.atomic_stats['burst_allowed'] += 1
             else:
                 decisive_algo = "GCRA"
                 self.atomic_stats['gcra_decisions'] += 1
-                if rate_ok:
+                if can_proceed:
                     self.atomic_stats['gcra_allowed'] += 1
 
             self.logger.debug(f"✅ 허용: {group.value} (결정: {decisive_algo})")
             return True, new_tat
         else:
             # ❌ 거부: 대기 시간 반환
+            # 거부 시에도 오래된 타임스탬프 정리 (일관성 유지) <-- 거부시 시차합 일관성 때문에 지우면 안됨
+            # self.limiter._cleanup_old_timestamps(group, now)
+
             self.atomic_stats['rejected_acquisitions'] += 1
 
             # 결정 근거 로깅 및 통계 기록
-            if burst_delay >= rate_delay:
+            if not burst_available:
+                decisive_algo = "GCRA"  # 버스트 불가 시에는 항상 GCRA 결정
+                self.atomic_stats['gcra_decisions'] += 1
+            else:
+                # 이 케이스는 발생하지 않음 (버스트 가능하면 위에서 허용됨)
                 decisive_algo = "버스트"
                 self.atomic_stats['burst_decisions'] += 1
-            else:
-                decisive_algo = "GCRA"
-                self.atomic_stats['gcra_decisions'] += 1
 
             self.logger.debug(f"❌ 거부: {group.value} 대기:{final_delay:.3f}s (결정: {decisive_algo})")
             return False, now + final_delay
@@ -675,9 +706,26 @@ class AtomicTATManager:
         can_proceed = (total_delay == 0.0)
 
         if can_proceed:
-            # ✅ 즉시 허용 - 윈도우와 TAT 모두 업데이트
-            self.limiter._add_timestamp_to_window(group, now)
-            rpm_window.append(now)
+            # ✅ 즉시 허용 - TAT만 업데이트 (윈도우는 API 성공 후 커밋)
+
+            # 🔍 디버그: 이중 제한 지연된 커밋 전 상태 추적
+            if self.limiter.hybrid_config.get('detailed_logging', False):
+                rps_window = self.limiter._get_timestamp_window(group)
+                rps_capacity = self.limiter._get_window_size(group)
+                rps_usage = len(rps_window)
+                rpm_usage = len(rpm_window)
+                rpm_capacity = effective_rpm_burst
+
+                self.logger.debug(
+                    f"🕐 이중제한 지연된 커밋 예정: {group.value} | "
+                    f"RPS 윈도우: {rps_usage}/{rps_capacity}슬롯 → {rps_usage + 1}/{rps_capacity}슬롯 | "
+                    f"RPM 윈도우: {rpm_usage}/{rpm_capacity}슬롯 → {rpm_usage + 1}/{rpm_capacity}슬롯 | "
+                    f"타임스탬프: {now:.3f} (API 성공 시 양쪽 추가 예정)"
+                )
+
+            # ⚠️ 타임스탬프 추가는 API 성공 후에 별도로 수행
+            # self.limiter._add_timestamp_to_window(group, now)  # 지연된 커밋으로 이동
+            # rpm_window.append(now)  # RPM 윈도우도 지연된 커밋으로 이동
             self.limiter.group_tats[group] = rps_new_tat
             self.limiter.group_tats_minute[group] = rpm_new_tat
 
@@ -761,6 +809,41 @@ class AtomicTATManager:
                 )
             }
         }
+
+    async def commit_timestamp_window(self, group: UpbitRateLimitGroup, timestamp: float) -> None:
+        """
+        🚀 지연된 커밋: API 성공 후 타임스탬프 윈도우에 커밋 + 클린업
+
+        Args:
+            group: Rate Limit 그룹
+            timestamp: 커밋할 타임스탬프
+        """
+        # 단일 제한의 경우
+        config = self.limiter.group_configs[group]
+        if not config.enable_dual_limit:
+            # 1단계: 타임스탬프 윈도우에 커밋
+            self.limiter._add_timestamp_to_window(group, timestamp)
+
+            # 2단계: API 성공 후 오래된 타임스탬프 정리 (안전한 시점)
+            self.limiter._cleanup_old_timestamps(group, timestamp)
+
+            self.logger.debug(f"📊 타임스탬프 커밋+정리: {group.value} at {timestamp:.3f}")
+        else:
+            # 이중 제한의 경우 (웹소켓)
+            # 1단계: RPS 윈도우에 커밋
+            self.limiter._add_timestamp_to_window(group, timestamp)
+
+            # 2단계: RPM 윈도우에도 커밋
+            rpm_window_key = f"{group.value}_rpm"
+            if rpm_window_key in self.limiter.timestamp_windows:
+                rpm_window = self.limiter.timestamp_windows[rpm_window_key]
+                rpm_window.append(timestamp)
+
+            # 3단계: 양쪽 윈도우 모두 정리
+            self.limiter._cleanup_old_timestamps(group, timestamp)
+            # RPM 윈도우도 정리 (필요시)
+
+            self.logger.debug(f"📊 이중제한 타임스탬프 커밋+정리: {group.value} at {timestamp:.3f}")
 
     async def cleanup_locks(self):
         """락 정리"""

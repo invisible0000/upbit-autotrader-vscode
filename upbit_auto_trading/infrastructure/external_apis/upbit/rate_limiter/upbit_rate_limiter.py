@@ -264,14 +264,38 @@ class UnifiedUpbitRateLimiter:
 
         self.logger.debug(f"✅ 토큰 획득: {group.value}/{endpoint}")
 
-    async def gate(self, group: UpbitRateLimitGroup, endpoint: str) -> None:
-        """Rate Limiter 게이트 통과 (호환성 메소드)
+    async def commit_timestamp(self, endpoint: str, method: str = 'GET', timestamp: Optional[float] = None) -> None:
+        """
+        🚀 지연된 커밋: API 성공 후 타임스탬프 윈도우에 커밋
+
+        Rate Limit 체크 후 실제 API 호출이 성공했을 때 호출하여 타임스탬프를 확정합니다.
 
         Args:
-            group: Rate Limit 그룹
             endpoint: API 엔드포인트
+            method: HTTP 메서드
+            timestamp: 커밋할 타임스탬프 (None이면 현재 시간 사용)
+
+        Example:
+            # 1. Rate Limit 체크
+            await limiter.acquire("/ticker", "GET")
+
+            # 2. API 호출
+            try:
+                result = await api_call("/ticker")
+                # 3. 성공 시 타임스탬프 커밋
+                await limiter.commit_timestamp("/ticker", "GET")
+                return result
+            except Exception as e:
+                # 실패 시 커밋하지 않음 (자동 롤백)
+                raise e
         """
-        await self.acquire(endpoint, method='GET')
+        group = self._get_rate_limit_group(endpoint, method)
+        commit_timestamp = timestamp or time.monotonic()
+
+        # AtomicTATManager를 통한 안전한 커밋
+        await self._atomic_tat_manager.commit_timestamp_window(group, commit_timestamp)
+
+        self.logger.debug(f"📊 타임스탬프 커밋 완료: {group.value}/{endpoint}")
 
     async def _apply_preventive_throttling(self, group: UpbitRateLimitGroup, stats: GroupStats, now: float):
         """예방적 스로틀링 적용 (개선된 시간 감쇠 로직)"""
@@ -556,9 +580,9 @@ class UnifiedUpbitRateLimiter:
         return max(1, int(config.burst_capacity))
 
     def _add_timestamp_to_window(self, group: UpbitRateLimitGroup, timestamp: float) -> None:
-        """타임스탬프 윈도우에 새 요청 시간 추가"""
+        """타임스탬프 윈도우에 새 요청 시간 추가 (왼쪽에 최신 데이터 추가)"""
         window = self._get_timestamp_window(group)
-        window.append(timestamp)
+        window.appendleft(timestamp)
 
         # 디버그 로깅 (상세 모드일 때만)
         if self.hybrid_config.get('detailed_logging', False):
@@ -581,10 +605,10 @@ class UnifiedUpbitRateLimiter:
         monitoring_interval = self.get_effective_monitoring_interval(group)
         cutoff_time = current_time - monitoring_interval
 
-        # deque의 왼쪽부터(오래된 것부터) 제거
+        # deque의 오른쪽부터(오래된 것부터) 제거
         original_size = len(window)
-        while window and window[0] < cutoff_time:
-            window.popleft()
+        while window and window[-1] < cutoff_time:
+            window.pop()
 
         removed_count = original_size - len(window)
         if removed_count > 0 and self.hybrid_config.get('detailed_logging', False):
@@ -614,9 +638,10 @@ class UnifiedUpbitRateLimiter:
 
     def get_effective_monitoring_interval(self, group: UpbitRateLimitGroup) -> float:
         """
-        동적 monitoring_interval 계산 (사용자 승인 공식)
+        동적 monitoring_interval 계산 (실험적 개선)
 
-        공식: monitoring_interval = upbit_monitoring_interval × burst_capacity / base_window_size
+        기존 공식: monitoring_interval = upbit_monitoring_interval × burst_capacity / base_window_size
+        실험적 공식: monitoring_interval = upbit_monitoring_interval × 현재_윈도우_사이즈 / base_window_size
 
         Args:
             group: Rate Limit 그룹
@@ -629,12 +654,21 @@ class UnifiedUpbitRateLimiter:
         # base_window_size 기본값 처리 (RPS와 동일하게 설정)
         base_window_size = config.base_window_size or int(config.rps)
 
-        # 사용자 승인 공식 적용
-        monitoring_interval = config.upbit_monitoring_interval * config.burst_capacity / base_window_size
+        # 🧪 실험적 개선: 현재 실제 타임스탬프 윈도우 사이즈 사용
+        current_window = self._get_timestamp_window(group)
+        current_window_size = len(current_window)
 
-        return monitoring_interval
+        # 기존 공식 (보존용 주석)
+        # monitoring_interval = config.upbit_monitoring_interval * config.burst_capacity / base_window_size
 
-    # 🆕 Phase 2: 윈도우 지연 계산 로직 (문서의 시차 계산 알고리즘)
+        # 🛡️ 안전장치: 윈도우가 비어있으면 monitoring_interval = 0 (즉시 정리)
+        if current_window_size == 0:
+            monitoring_interval = 0.0
+        else:
+            # 실험적 공식: 현재 윈도우 사이즈 기반 동적 계산
+            monitoring_interval = config.upbit_monitoring_interval * current_window_size / base_window_size
+
+        return monitoring_interval    # 🆕 Phase 2: 윈도우 지연 계산 로직 (문서의 시차 계산 알고리즘)
 
     def _calculate_window_delay(self, group: UpbitRateLimitGroup, current_time: float) -> float:
         """
@@ -648,15 +682,18 @@ class UnifiedUpbitRateLimiter:
             float: 지연 시간 (초). 0이면 즉시 허용
         """
         # 빈슬롯 체크 - 있으면 즉시 허용
+        window = self._get_timestamp_window(group)  # 실험 임시 수정
         if self._has_empty_slots(group):
             if self.hybrid_config.get('detailed_logging', False):
                 self.logger.debug(f"🟢 빈슬롯 허용: {group.value}")
-            return 0.0
+            # return 0.0 # 원본 임시 수정
+            return self._calculate_timestamp_gap_delay(group, window, current_time)  # 실험 임시 수정
 
         # 윈도우가 가득 찬 경우 시차 계산
-        window = self._get_timestamp_window(group)
+        # window = self._get_timestamp_window(group) # 원본 임시 수정
         if not window:
-            return 0.0
+            # return 0.0 # 원본 임시 수정
+            return self._calculate_timestamp_gap_delay(group, window, current_time)  # 실험 임시 수정
 
         return self._calculate_timestamp_gap_delay(group, window, current_time)
 
@@ -701,9 +738,9 @@ class UnifiedUpbitRateLimiter:
 
         # 2번째 슬롯부터 슬롯간 시차 계산
         for i in range(1, len(window_list)):
-            current_slot = window_list[i - 1]  # 더 최신
-            previous_slot = window_list[i]     # 더 오래됨
-            slot_gap = current_slot - previous_slot
+            newer_slot = window_list[i - 1]   # 더 최신
+            older_slot = window_list[i]       # 더 오래됨
+            slot_gap = newer_slot - older_slot
             total_gap += slot_gap
 
             # 조기 종료: 시차합이 감시 인터벌을 초과하면 더 이상 계산 불필요

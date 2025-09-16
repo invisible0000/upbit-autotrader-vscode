@@ -162,6 +162,9 @@ class UpbitPublicClient:
             'total_compressed_bytes': 0
         }
 
+        # 마지막 요청 메타데이터 (Rate Limiter 대기/HTTP/총 소요시간 포함)
+        self._last_request_meta: Optional[dict] = None
+
         self._logger.info(f"✅ UpbitPublicClient 초기화 완료 (gzip: {enable_gzip})")
 
     def __repr__(self):
@@ -250,6 +253,13 @@ class UpbitPublicClient:
         return self._stats['last_http_response_time_ms']
 
     # ================================================================
+    # 요청 메타데이터 조회 (테스트/모니터링 용)
+    # ================================================================
+    def get_last_request_meta(self) -> Optional[Dict[str, Any]]:
+        """직전 요청의 상세 타이밍/재시도 메타데이터 반환"""
+        return self._last_request_meta.copy() if self._last_request_meta else None
+
+    # ================================================================
     # 핵심 HTTP 요청 처리
     # ================================================================
 
@@ -286,12 +296,23 @@ class UpbitPublicClient:
         # 요청별 429 재시도 카운터 초기화
         self._stats['last_request_429_retries'] = 0
         self._stats['total_requests'] += 1
+        # 메타데이터 수집용 변수들
+        attempts = 0
+        total_429_retries = 0
+        had_429 = False
+        acquire_wait_ms: float = 0.0
+        http_latency_ms: float = 0.0
+        total_cycle_start = time.perf_counter()  # 전체 사이클 시작 (acquire 호출 직전)
 
         for attempt in range(max_retries):
             try:
-                # Rate Limit 적용 - 통합 Rate Limiter (스로틀링 메시지가 먼저 표시됨)
+                attempts += 1
+                # Rate Limit 적용 - 지연된 커밋 방식 (호환성 코드 제거)
                 rate_limiter = await self._ensure_rate_limiter()
-                await rate_limiter.gate(UpbitRateLimitGroup.REST_PUBLIC, endpoint)
+                _acquire_start = time.perf_counter()
+                await rate_limiter.acquire(endpoint, method)  # 🚀 직접 acquire 호출
+                _acquire_end = time.perf_counter()
+                acquire_wait_ms += (_acquire_end - _acquire_start) * 1000.0
 
                 # 🔍 디버깅: 실제 업비트 서버에 보내는 파라미터 로깅 (Rate Limit 후)
                 self._logger.debug(f"🌐 업비트 API 요청: {method} {endpoint}")
@@ -310,6 +331,7 @@ class UpbitPublicClient:
                     # 순수 HTTP 응답 시간 저장 (Rate Limiter 대기 시간 제외)
                     response_time_ms = (http_end_time - http_start_time) * 1000
                     self._stats['last_http_response_time_ms'] = response_time_ms
+                    http_latency_ms += response_time_ms  # 단일 요청이므로 덮어쓰기와 동일
 
                     # 평균 응답 시간 업데이트
                     if self._stats['average_response_time_ms'] == 0.0:
@@ -347,6 +369,23 @@ class UpbitPublicClient:
                         # 📊 성공 요청 통계 기록
                         await log_request_success(endpoint, response_time_ms)
 
+                        # 🚀 지연된 커밋: API 성공 후 타임스탬프 윈도우에 커밋
+                        self._logger.debug(f"🔥 API 성공! 지연된 커밋 실행: {method} {endpoint}")
+                        await rate_limiter.commit_timestamp(endpoint, method)
+                        self._logger.debug(f"✅ 지연된 커밋 완료: {method} {endpoint}")
+
+                        # 성공 메타데이터 기록 후 반환
+                        self._last_request_meta = {
+                            'endpoint': endpoint,
+                            'method': method,
+                            'attempts': attempts,
+                            'had_429': had_429,
+                            'total_429_retries': total_429_retries,
+                            'acquire_wait_ms': acquire_wait_ms,
+                            'http_latency_ms': http_latency_ms,
+                            'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+                            'success': True
+                        }
                         return response_data
 
                     elif response.status == 429:
@@ -414,6 +453,8 @@ class UpbitPublicClient:
                         # 429 재시도 카운터 업데이트
                         self._stats['last_request_429_retries'] += 1
                         self._stats['total_429_retries'] += 1
+                        total_429_retries += 1
+                        had_429 = True
 
                         self._logger.warning(f"⚠️ Rate Limit 초과 (429): {endpoint}, 재시도 {attempt + 1}/{max_retries}")
 
@@ -440,11 +481,35 @@ class UpbitPublicClient:
                             continue
                         else:
                             error_text = await response.text()
+                            # 최종 실패 직전 메타데이터 저장
+                            self._last_request_meta = {
+                                'endpoint': endpoint,
+                                'method': method,
+                                'attempts': attempts,
+                                'had_429': had_429,
+                                'total_429_retries': total_429_retries,
+                                'acquire_wait_ms': acquire_wait_ms,
+                                'http_latency_ms': http_latency_ms,
+                                'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+                                'success': False,
+                                'error': f"429 Rate Limit 오류: {error_text}"}
                             raise Exception(f"429 Rate Limit 오류로 {max_retries}회 재시도 후에도 실패: {error_text}")
 
                     else:
                         error_text = await response.text()
                         self._logger.error(f"❌ API 오류 (상태: {response.status}): {error_text}")
+                        # 실패 메타데이터 기록
+                        self._last_request_meta = {
+                            'endpoint': endpoint,
+                            'method': method,
+                            'attempts': attempts,
+                            'had_429': had_429,
+                            'total_429_retries': total_429_retries,
+                            'acquire_wait_ms': acquire_wait_ms,
+                            'http_latency_ms': http_latency_ms,
+                            'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+                            'success': False,
+                            'error': f"API 오류 (상태: {response.status})"}
                         raise Exception(f"API 오류 (상태: {response.status}): {error_text}")
 
             except asyncio.TimeoutError:
@@ -454,6 +519,17 @@ class UpbitPublicClient:
                     await asyncio.sleep(wait_time)
                     continue
                 else:
+                    self._last_request_meta = {
+                        'endpoint': endpoint,
+                        'method': method,
+                        'attempts': attempts,
+                        'had_429': had_429,
+                        'total_429_retries': total_429_retries,
+                        'acquire_wait_ms': acquire_wait_ms,
+                        'http_latency_ms': http_latency_ms,
+                        'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+                        'success': False,
+                        'error': 'timeout'}
                     raise Exception(f"타임아웃으로 {max_retries}회 재시도 후에도 실패")
 
             except Exception as e:
@@ -462,8 +538,31 @@ class UpbitPublicClient:
                     await asyncio.sleep(0.5)
                     continue
                 else:
+                    self._last_request_meta = {
+                        'endpoint': endpoint,
+                        'method': method,
+                        'attempts': attempts,
+                        'had_429': had_429,
+                        'total_429_retries': total_429_retries,
+                        'acquire_wait_ms': acquire_wait_ms,
+                        'http_latency_ms': http_latency_ms,
+                        'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+                        'success': False,
+                        'error': str(e)}
                     raise e
 
+        # 이 위치에 도달하면 비정상 (논리적 보호)
+        self._last_request_meta = {
+            'endpoint': endpoint,
+            'method': method,
+            'attempts': attempts,
+            'had_429': had_429,
+            'total_429_retries': total_429_retries,
+            'acquire_wait_ms': acquire_wait_ms,
+            'http_latency_ms': http_latency_ms,
+            'total_cycle_ms': (time.perf_counter() - total_cycle_start) * 1000.0,
+            'success': False,
+            'error': 'unknown'}
         raise Exception("모든 재시도 실패")
 
     # ================================================================

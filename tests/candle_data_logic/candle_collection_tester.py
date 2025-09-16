@@ -89,22 +89,8 @@ class CandleCollectionTesterV2:
         db_manager = DatabaseManager(db_paths)
         repository = SqliteCandleRepository(db_manager)
 
-        # Zero-429 정책: 동적 Rate Limiter 강제 활성화
-        from upbit_auto_trading.infrastructure.external_apis.upbit.dynamic_rate_limiter_wrapper import (
-            DynamicConfig, AdaptiveStrategy
-        )
-        dynamic_config = DynamicConfig(
-            error_429_threshold=1,      # 429 1회면 즉시 조정
-            reduction_ratio=0.8,        # 80%로 감소
-            recovery_delay=300.0,       # 5분 후 복구 시작
-            recovery_step=0.05,         # 5%씩 복구
-            strategy=AdaptiveStrategy.CONSERVATIVE
-        )
-
-        upbit_client = UpbitPublicClient(
-            use_dynamic_limiter=True,
-            dynamic_config=dynamic_config
-        )
+        # Zero-429 정책: 통합 Rate Limiter 사용 (자동으로 Zero-429 정책 적용됨)
+        upbit_client = UpbitPublicClient()
         time_utils = TimeUtils()
         overlap_analyzer = OverlapAnalyzer(repository, time_utils)
 
@@ -310,7 +296,7 @@ class CandleCollectionTesterV2:
 
     def print_performance_summary(self, stats: PerformanceStats) -> None:
         """성능 통계 요약 출력"""
-        print(f"\n📊 === 성능 테스트 결과 ===")
+        print("\n📊 === 성능 테스트 결과 ===")
 
         if not stats.success:
             print(f"❌ 테스트 실패: {stats.error_message}")
@@ -327,14 +313,14 @@ class CandleCollectionTesterV2:
         print(f"\n📋 계획 vs 실제:")
         print(f"   📊 캔들: 예상 {stats.total_count}개")
         print(f"   📦 청크: 예상 {stats.estimated_chunks}개 → 실제 {stats.actual_chunks}개")
-        print(f"   ⏱️ 소요시간: 예상 {stats.estimated_duration_seconds:.1f}초 → 실제 {stats.actual_duration_ms/1000:.1f}초")
+        print(f"   ⏱️ 소요시간: 예상 {stats.estimated_duration_seconds:.1f}초 → 실제 {stats.actual_duration_ms / 1000:.1f}초")
 
-        print(f"\n🚀 성능 지표:")
+        print("\n🚀 성능 지표:")
         print(f"   📦 청크/초: {stats.chunks_per_second:.2f}")
         print(f"   📊 캔들/초: {stats.candles_per_second:.1f}")
         print(f"   🌐 API 호출: {stats.total_api_calls}회")
 
-        print(f"\n💾 DB 상태:")
+        print("\n💾 DB 상태:")
         print(f"   📋 이전: {stats.db_records_before:,}개")
         print(f"   📋 이후: {stats.db_records_after:,}개")
         print(f"   📈 증가: +{stats.db_records_added:,}개")
@@ -351,7 +337,7 @@ class CandleCollectionTesterV2:
         if not stats.success:
             return
 
-        print(f"\n🔍 === 상세 분석 ===")
+        print("\n🔍 === 상세 분석 ===")
 
         # 효율성 분석
         if stats.actual_duration_ms > 0 and stats.estimated_duration_seconds > 0:
@@ -359,7 +345,7 @@ class CandleCollectionTesterV2:
             if speed_ratio > 1.1:
                 print(f"🚀 예상보다 빠름: {speed_ratio:.1f}배 빠른 수집")
             elif speed_ratio < 0.9:
-                print(f"🐌 예상보다 느림: {1/speed_ratio:.1f}배 느린 수집")
+                print(f"🐌 예상보다 느림: {1 / speed_ratio:.1f}배 느린 수집")
             else:
                 print(f"🎯 예상과 유사한 성능: {speed_ratio:.1f}배")
 
@@ -380,17 +366,17 @@ class CandleCollectionTesterV2:
         if stats.db_records_added > 0 and stats.total_count > 0:
             save_ratio = stats.db_records_added / stats.total_count
             if save_ratio >= 0.95:
-                print(f"💾 우수한 DB 저장: {save_ratio*100:.1f}% 저장됨")
+                print(f"💾 우수한 DB 저장: {save_ratio * 100:.1f}% 저장됨")
             elif save_ratio >= 0.8:
-                print(f"💾 양호한 DB 저장: {save_ratio*100:.1f}% 저장됨")
+                print(f"💾 양호한 DB 저장: {save_ratio * 100:.1f}% 저장됨")
             else:
-                print(f"💾 저조한 DB 저장: {save_ratio*100:.1f}% 저장됨 (중복 또는 오류?)")
+                print(f"💾 저조한 DB 저장: {save_ratio * 100:.1f}% 저장됨 (중복 또는 오류?)")
 
         # 청크별 시간 분포
         if len(stats.chunk_times_ms) > 3:
-            print(f"\n📈 청크별 처리 시간 (처음 3개):")
+            print("\n📈 청크별 처리 시간 (처음 3개):")
             for i, chunk_time in enumerate(stats.chunk_times_ms[:3]):
-                print(f"   청크 {i+1}: {chunk_time:.1f}ms")
+                print(f"   청크 {i + 1}: {chunk_time:.1f}ms")
 
 
 # 편의 함수들
