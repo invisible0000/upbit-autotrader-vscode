@@ -460,7 +460,7 @@ class CandleDataProvider:
                         f"남은시간: {state.estimated_remaining_seconds:.1f}초")
 
             # 7. 수집 완료 확인 (개수 + 시간 조건)
-            count_reached = state.c >= state.total_requested
+            count_reached = state.total_collected >= state.total_requested
 
             # end 시점 도달 확인
             end_time_reached = False
@@ -575,30 +575,40 @@ class CandleDataProvider:
         params = {"market": request_info.symbol}
 
         if request_type == RequestType.COUNT_ONLY:
-            # 진짜 count-only: to 파라미터 없음
+            # COUNT_ONLY: to 파라미터 없이 count만 사용 (업비트 서버 최신부터)
             chunk_size = min(request_info.count, self.chunk_size)
             params["count"] = chunk_size
-            logger.debug(f"COUNT_ONLY: to 파라미터 없이 count={chunk_size}")
+            logger.debug(f"COUNT_ONLY: to 파라미터 없이 count={chunk_size} (서버 최신부터)")
 
         elif request_type == RequestType.TO_COUNT:
-            # to + count: to만 정렬
+            # to + count: 진입점 보정 적용 - 사용자 시간을 내부 시간으로 변환
             chunk_size = min(request_info.count, self.chunk_size)
             aligned_to = request_info.get_aligned_to_time()
+
+            # 🎯 진입점 보정: 사용자 to → 내부 시간 (to exclusive 대응)
+            dt = TimeUtils.get_timeframe_delta(request_info.timeframe)
+            first_chunk_start_time = aligned_to - dt  # 진입점 -1분 보정
+
             params["count"] = chunk_size
-            params["to"] = aligned_to.strftime("%Y-%m-%dT%H:%M:%S")
-            logger.debug(f"TO_COUNT: 정렬된 to={aligned_to}, count={chunk_size}")
+            params["to"] = first_chunk_start_time  # 보정된 내부 시간 사용!
+            logger.debug(f"TO_COUNT: 진입점보정 사용자={aligned_to} → 내부={first_chunk_start_time}, count={chunk_size}")
 
         elif request_type == RequestType.TO_END:
-            # to + end: to만 정렬
+            # to + end: 진입점 보정 적용 - 사용자 시간을 내부 시간으로 변환
             aligned_to = request_info.get_aligned_to_time()
+
+            # 🎯 진입점 보정: 사용자 to → 내부 시간 (to exclusive 대응)
+            dt = TimeUtils.get_timeframe_delta(request_info.timeframe)
+            first_chunk_start_time = aligned_to - dt  # 진입점 -1분 보정
+
             params["count"] = self.chunk_size
-            params["to"] = aligned_to.strftime("%Y-%m-%dT%H:%M:%S")
-            logger.debug(f"TO_END: 정렬된 to={aligned_to}, count={self.chunk_size}")
+            params["to"] = first_chunk_start_time  # 보정된 내부 시간 사용!
+            logger.debug(f"TO_END: 진입점보정 사용자={aligned_to} → 내부={first_chunk_start_time}, count={self.chunk_size}")
 
         elif request_type == RequestType.END_ONLY:
-            # end만: COUNT_ONLY처럼 동작 (to 없이, 업비트 서버 최신부터)
+            # END_ONLY: COUNT_ONLY처럼 to 없이 count만 사용 (서버 최신부터)
             params["count"] = self.chunk_size
-            logger.debug(f"END_ONLY: COUNT_ONLY처럼 to 없이, count={self.chunk_size} (총 개수는 동적 계산됨)")
+            logger.debug(f"END_ONLY: to 파라미터 없이 count={self.chunk_size} (서버 최신부터, 총 개수는 동적 계산)")
 
         return params
 
@@ -615,27 +625,135 @@ class CandleDataProvider:
         }
 
         # ========================================
-        # 🔧 핵심 개선: 연속성 보장 로직
+        # 🔧 핵심 개선: 연속성 보장 로직 (내부 시간 기준)
         # ========================================
         if state.last_candle_time:
-            if request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
-                # COUNT_ONLY와 END_ONLY는 두 번째 청크부터 마지막 시간 사용 (연속성 보장)
-                params["to"] = state.last_candle_time
-                logger.debug(f"{request_type.value} 후속 청크: to={state.last_candle_time}")
-            else:
-                # TO_COUNT, TO_END는 1틱 이전 시간 사용 (겹침 방지)
-                try:
-                    # 마지막 캔들 시간에서 1틱 이전으로 조정
-                    last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+            try:
+                # 마지막 캔들 시간을 datetime으로 변환 (내부 시간 기준)
+                last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+
+                if request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
+                    # COUNT_ONLY와 END_ONLY는 두 번째 청크부터 마지막 시간 사용 (연속성 보장)
+                    # 내부 시간은 datetime 객체로 유지
+                    params["to"] = last_time
+                    logger.debug(f"{request_type.value} 후속 청크: to={last_time} (내부 시간)")
+                else:
+                    # TO_COUNT, TO_END는 다음 내부 시간 명시적 계산 (과거 방향 연속성)
                     timeframe_delta = TimeUtils.get_timeframe_delta(state.timeframe)
-                    adjusted_to = last_time - timeframe_delta
-                    params["to"] = adjusted_to.strftime("%Y-%m-%dT%H:%M:%S")
-                    logger.debug(f"{request_type.value} 후속 청크: 조정된 to={adjusted_to}")
-                except Exception as e:
-                    logger.warning(f"시간 조정 실패: {e}, 원본 시간 사용")
-                    params["to"] = state.last_candle_time
+                    next_internal_time = last_time - timeframe_delta  # 다음 원하는 캔들 시간
+                    params["to"] = next_internal_time  # 내부 시간으로 저장
+                    logger.debug(f"{request_type.value} 후속 청크: DB={last_time} → 내부={next_internal_time} (과거 연속성)")
+
+            except Exception as e:
+                logger.warning(f"시간 조정 실패: {e}, 마지막 시간 사용")
+                # 문자열을 datetime으로 변환해서 사용
+                try:
+                    fallback_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+                    params["to"] = fallback_time
+                except Exception:
+                    logger.error("마지막 캔들 시간 파싱 실패, to 파라미터 생략")
+                    # to 파라미터 없이 진행 (COUNT_ONLY처럼)
 
         return params
+
+    # ========================================
+    # 🆕 간편한 get_candles() 인터페이스
+    # ========================================
+
+    async def get_candles(
+        self,
+        symbol: str,
+        timeframe: str,
+        count: Optional[int] = None,
+        to: Optional[datetime] = None,
+        end: Optional[datetime] = None
+    ) -> List[CandleData]:
+        """
+        완전 자동화된 캔들 수집 - 간편한 인터페이스
+
+        내부적으로 기존 청크 API를 활용하여 자동으로 수집 완료까지 처리합니다.
+        시간 변환은 진입점과 fetch 지점에서만 처리되어 일관성을 보장합니다.
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            count: 수집할 캔들 개수
+            to: 시작 시간 (사용자 관점에서 최신 캔들 시간)
+            end: 종료 시간 (사용자 관점에서 가장 과거 캔들 시간)
+
+        Returns:
+            List[CandleData]: 수집된 캔들 데이터 (업비트 내림차순)
+
+        Examples:
+            # 최신 100개 캔들
+            candles = await provider.get_candles('KRW-BTC', '1m', count=100)
+
+            # 특정 시점부터 100개
+            to_time = datetime(2025, 9, 9, 0, 50, 0, tzinfo=timezone.utc)
+            candles = await provider.get_candles('KRW-BTC', '1m', count=100, to=to_time)
+        """
+        logger.info(f"🚀 get_candles 요청: {symbol} {timeframe}")
+        if count:
+            logger.info(f"   📊 개수: {count}개")
+        if to:
+            logger.info(f"   📅 시작: {to}")
+        if end:
+            logger.info(f"   📅 종료: {end}")
+
+        # 🎯 진입점 시간 처리: to exclusive 활용 (사용자 의도 = 실제 첫 캔들)
+        first_chunk_start_time = None
+        if to is not None:
+            # to exclusive: 사용자가 14:00 요청하면 실제로는 13:59부터 원함
+            # 업비트 to exclusive 특성상 to=14:00이면 13:59부터 반환됨
+            timeframe_delta = TimeUtils.get_timeframe_delta(timeframe)
+            aligned_to = TimeUtils.align_to_candle_boundary(to, timeframe)
+            first_chunk_start_time = aligned_to - timeframe_delta
+            logger.info(f"   🎯 to exclusive: {to} → {first_chunk_start_time} (업비트 exclusive 의도 반영)")
+
+        # 기존 청크 API를 활용한 자동 수집
+        request_id = self.start_collection(symbol, timeframe, count, first_chunk_start_time, end)
+
+        collected_candles = []
+
+        try:
+            # 청크별 자동 처리 루프
+            while True:
+                chunk_info = self.get_next_chunk(request_id)
+                if chunk_info is None:
+                    break
+
+                # 청크 완료 처리 (내부적으로 수집 및 DB 저장)
+                await self.mark_chunk_completed(request_id)
+
+            # 수집 상태에서 결과 추출
+            collection_state = self.active_collections.get(request_id)
+            if collection_state and collection_state.is_completed:
+                logger.info(f"✅ get_candles 완료: {collection_state.total_collected}개 수집")
+
+                # Repository에서 수집된 데이터 조회
+                if first_chunk_start_time and count:
+                    # 시작 시간과 개수 기준으로 조회
+                    end_time = first_chunk_start_time - timedelta(
+                        seconds=(count - 1) * TimeUtils.get_timeframe_seconds(timeframe)
+                    )
+                    collected_candles = await self.repository.get_candles_by_range(
+                        symbol, timeframe, first_chunk_start_time, end_time
+                    )
+                elif count:
+                    # 개수만 있는 경우 최신 데이터 조회
+                    collected_candles = await self.repository.get_latest_candles(
+                        symbol, timeframe, count
+                    )
+
+            return collected_candles
+
+        except Exception as e:
+            logger.error(f"❌ get_candles 실패: {e}")
+            raise
+        finally:
+            # 수집 상태 정리
+            if request_id in self.active_collections:
+                del self.active_collections[request_id]
 
     # ========================================
     # 기존 메서드들 (최소 변경)
@@ -653,7 +771,14 @@ class CandleDataProvider:
                 if unit not in [1, 3, 5, 10, 15, 30, 60, 240]:
                     raise ValueError(f"지원하지 않는 분봉 단위: {unit}")
 
-                to_param = chunk_info.to.strftime("%Y-%m-%dT%H:%M:%S") if chunk_info.to else None
+                # 🎯 지출점 보정: 내부 시간 + 1분 → API 요청 (업비트 to exclusive 역보정)
+                to_param = None
+                if chunk_info.to:
+                    timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
+                    fetch_time = chunk_info.to + timeframe_delta  # 지출점 +1분 보정
+                    to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
+                    logger.debug(f"🔄 지출점 보정: 내부={chunk_info.to} → API={to_param} (+1분 보정)")
+
                 candles = await self.upbit_client.get_candles_minutes(
                     unit=unit,
                     market=chunk_info.symbol,
@@ -662,8 +787,14 @@ class CandleDataProvider:
                 )
 
             elif chunk_info.timeframe == '1d':
-                # 일봉
-                to_param = chunk_info.to.strftime("%Y-%m-%d") if chunk_info.to else None
+                # 일봉 - fetch시 시간 변환
+                to_param = None
+                if chunk_info.to:
+                    timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
+                    fetch_start_time = chunk_info.to + timeframe_delta
+                    to_param = fetch_start_time.strftime("%Y-%m-%d")
+                    logger.debug(f"🔄 일봉 fetch 변환: {chunk_info.to} → {to_param}")
+
                 candles = await self.upbit_client.get_candles_days(
                     market=chunk_info.symbol,
                     count=chunk_info.count,
@@ -671,8 +802,14 @@ class CandleDataProvider:
                 )
 
             elif chunk_info.timeframe == '1w':
-                # 주봉
-                to_param = chunk_info.to.strftime("%Y-%m-%d") if chunk_info.to else None
+                # 주봉 - fetch시 시간 변환
+                to_param = None
+                if chunk_info.to:
+                    timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
+                    fetch_start_time = chunk_info.to + timeframe_delta
+                    to_param = fetch_start_time.strftime("%Y-%m-%d")
+                    logger.debug(f"🔄 주봉 fetch 변환: {chunk_info.to} → {to_param}")
+
                 candles = await self.upbit_client.get_candles_weeks(
                     market=chunk_info.symbol,
                     count=chunk_info.count,
@@ -680,8 +817,14 @@ class CandleDataProvider:
                 )
 
             elif chunk_info.timeframe == '1M':
-                # 월봉
-                to_param = chunk_info.to.strftime("%Y-%m") if chunk_info.to else None
+                # 월봉 - fetch시 시간 변환
+                to_param = None
+                if chunk_info.to:
+                    timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
+                    fetch_start_time = chunk_info.to + timeframe_delta
+                    to_param = fetch_start_time.strftime("%Y-%m")
+                    logger.debug(f"🔄 월봉 fetch 변환: {chunk_info.to} → {to_param}")
+
                 candles = await self.upbit_client.get_candles_months(
                     market=chunk_info.symbol,
                     count=chunk_info.count,
@@ -887,18 +1030,21 @@ class CandleDataProvider:
         # chunk_params에서 실제 'to' 값 추출 (문자열 → datetime 변환)
         current_time = datetime.now(timezone.utc)
 
-        # 'to' 파라미터가 있으면 datetime으로 변환, 없으면 None 유지
+        # 'to' 파라미터가 있으면 그대로 사용 (이제 datetime 객체), 없으면 None 유지
         if "to" in chunk_params and chunk_params["to"]:
-            try:
-                # ISO 형식 문자열을 datetime으로 변환
-                to_str = chunk_params["to"]
-                if isinstance(to_str, str):
-                    # ISO format 처리 (업비트 API는 'YYYY-MM-DDTHH:MM:SS' 형식)
-                    to_datetime = datetime.fromisoformat(to_str.replace('Z', '+00:00'))
-                else:
+            to_param = chunk_params["to"]
+            if isinstance(to_param, datetime):
+                # 이미 datetime 객체인 경우 (새로운 시간 변환 레이어에서 제공)
+                to_datetime = to_param
+            elif isinstance(to_param, str):
+                # 문자열인 경우 변환 (하위 호환성)
+                try:
+                    to_datetime = datetime.fromisoformat(to_param.replace('Z', '+00:00'))
+                except (ValueError, TypeError):
+                    logger.warning(f"'to' 파라미터 파싱 실패: {to_param}, None 사용")
                     to_datetime = None
-            except (ValueError, TypeError):
-                logger.warning(f"'to' 파라미터 파싱 실패: {chunk_params.get('to')}, None 사용")
+            else:
+                logger.warning(f"'to' 파라미터 타입 오류: {type(to_param)}, None 사용")
                 to_datetime = None
         else:
             to_datetime = None  # ← 중요: COUNT_ONLY는 None 유지
