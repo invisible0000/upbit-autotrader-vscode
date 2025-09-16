@@ -11,10 +11,14 @@
             "id": "5bd0f060c9299ce7",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
+                "mode": "source",
+                "source": true
+              },
               "icon": "lucide-file",
-              "title": "새 탭"
+              "title": "캔들 데이터 제공자 to 시간 문제"
             }
           }
         ]
@@ -164,6 +168,7 @@
   },
   "active": "5bd0f060c9299ce7",
   "lastOpenFiles": [
+    "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
     "docs/ideas/요청 제한 슬라이딩 윈도우 동작 시나리오.md",
     "docs/ideas/요청 제한 알고리즘 gcra 학습노트.md",
     "docs/ideas/순수_슬라이딩_윈도우_카운터_구현_설계서.md",
@@ -199,7 +204,6 @@
     "upbit_auto_trading/infrastructure/external_apis/upbit/rate_limiter/GCRA_ALGORITHM_DETAILED_GUIDE.md",
     "upbit_auto_trading/infrastructure/external_apis/upbit/rate_limiter/RATE_LIMITER_ARCHITECTURE_ANALYSIS.md",
     "docs/RATE_LIMITER_ARCHITECTURE_ANALYSIS.md",
-    "legacy/upbit_backup3/websocket/WEBSOCKET_V6_SIMPLE_GUIDE.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",

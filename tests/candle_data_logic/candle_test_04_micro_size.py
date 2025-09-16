@@ -39,10 +39,11 @@ TEST_CONFIG = {
     "start_time": "2025-09-09 00:50:00",  # YYYY-MM-DD HH:MM:SS 형식
 
     # 청크 사이즈 설정 (기본값: 200, 최대: 200)
-    "chunk_size": 10,  # 작은 청크로 세밀한 진행률 추적
+    "chunk_size": 5,  # 작은 청크로 세밀한 진행률 추적
 
     # 수집 개수 테스트 시나리오들 (작은 청크로 세밀한 진행률 체험)
     "test_scenarios": [
+        {"name": "마이크로 테스트", "count": 13, "description": "utc 상세 분석"},
         {"name": "미니 테스트", "count": 30, "description": "미니 청크 기본 테스트 (30개)"},
         {"name": "소형 테스트", "count": 60, "description": "소형 청크 2개 분할 (60개)"},
         {"name": "중형 테스트", "count": 150, "description": "중형 청크 6개 분할 (150개)"},
@@ -51,7 +52,7 @@ TEST_CONFIG = {
     ],
 
     # 현재 실행할 시나리오 (0-4 인덱스)
-    "active_scenario": 4,  # 0=30개, 1=60개, 2=150개, 3=300개, 4=500개
+    "active_scenario": 0,  # 0=30개, 1=60개, 2=150개, 3=300개, 4=500개
 
     # 고급 설정
     "clean_db_before_test": True,  # 테스트 전 DB 초기화 여부

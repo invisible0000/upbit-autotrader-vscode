@@ -384,7 +384,7 @@ class CandleDataProvider:
             # 1. COUNT_ONLY와 END_ONLY 첫 청크는 OverlapAnalyzer 건너뜀 (to 파라미터 없음)
             if is_first_chunk and request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
                 logger.info(f"🎯 {request_type.value} 첫 청크: OverlapAnalyzer 건너뜀 (to 파라미터 없음)")
-                
+
                 # 직접 API 호출 (to 파라미터 없음 보장)
                 api_response = await self._fetch_chunk_from_api(state.current_chunk)
                 candle_data_list = self._convert_upbit_response_to_candles(
@@ -460,7 +460,7 @@ class CandleDataProvider:
                         f"남은시간: {state.estimated_remaining_seconds:.1f}초")
 
             # 7. 수집 완료 확인 (개수 + 시간 조건)
-            count_reached = state.total_collected >= state.total_requested
+            count_reached = state.c >= state.total_requested
 
             # end 시점 도달 확인
             end_time_reached = False
@@ -1153,4 +1153,3 @@ class CandleDataProvider:
 
         logger.debug(f"캔들 병합 완료: DB {len(db_candles)}개 + API {len(api_candles)}개 → 병합 {len(sorted_candles)}개")
         return sorted_candles
-
