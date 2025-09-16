@@ -41,9 +41,9 @@
 UpbitRateLimitGroup:
 ├── REST_PUBLIC        (10 RPS)   - 공개 API (현재가, 호가, 캔들 등)
 ├── REST_PRIVATE_DEFAULT (30 RPS) - 개인 API (잔고, 주문 내역 등)
-├── REST_PRIVATE_ORDER   (8 RPS)  - 주문 API (매수, 매도, 취소)
-├── WEBSOCKET_PUBLIC    (5 RPS)   - 공개 웹소켓 연결
-└── WEBSOCKET_PRIVATE   (5 RPS)   - 개인 웹소켓 연결
+├── REST_PRIVATE_ORDER   (8 RPS)  - 주문 API (매수/매도 주문생성, 취소 후 재주문)
+├── WEBSOCKET            (5 RPS)  - 공개/개인 웹소켓 연결
+└── REST_PRIVATE_CANCEL_ALL (0.5 RPS) - 전체 주문 취소
 ```
 
 ### 2. 핵심 데이터 구조

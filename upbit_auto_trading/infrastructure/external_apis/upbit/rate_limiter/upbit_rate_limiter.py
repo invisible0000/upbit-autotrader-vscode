@@ -252,6 +252,12 @@ class UnifiedUpbitRateLimiter:
         stats = self.group_stats[group]
         now = time.monotonic()
 
+        # 🔍 디버깅: 그룹 매핑 및 설정 로그
+        self.logger.debug(
+            f"🎯 Rate Limiter 매핑: {endpoint} ({method}) → {group.value} "
+            f"(RPS: {config.rps}, 비율: {stats.current_rate_ratio:.3f})"
+        )
+
         # 통계 업데이트
         stats.total_requests += 1
 

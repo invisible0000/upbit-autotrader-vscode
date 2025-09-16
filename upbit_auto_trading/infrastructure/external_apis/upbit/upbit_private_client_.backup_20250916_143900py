@@ -43,7 +43,6 @@ DDD Infrastructure 계층 컴포넌트
 import asyncio
 import aiohttp
 import time
-import random
 from typing import List, Dict, Any, Optional, Literal
 from decimal import Decimal
 
@@ -52,38 +51,8 @@ from .upbit_auth import UpbitAuthenticator
 from .rate_limiter import (
     UnifiedUpbitRateLimiter,
     get_unified_rate_limiter,
-    log_429_error,
-    log_request_success,
     UpbitRateLimitGroup
 )
-
-
-def _get_rate_limit_group_for_endpoint(endpoint: str, method: str) -> UpbitRateLimitGroup:
-    """
-    엔드포인트별 Rate Limit 그룹 결정
-
-    Args:
-        endpoint: API 엔드포인트
-        method: HTTP 메서드
-
-    Returns:
-        UpbitRateLimitGroup: 해당 엔드포인트의 Rate Limit 그룹
-    """
-    # 주문 생성/취소 (8 RPS)
-    if endpoint == '/orders' and method == 'POST':
-        return UpbitRateLimitGroup.REST_PRIVATE_ORDER
-    elif endpoint in ['/order', '/orders'] and method == 'DELETE':
-        return UpbitRateLimitGroup.REST_PRIVATE_ORDER
-    elif endpoint == '/orders/uuids' and method == 'DELETE':
-        return UpbitRateLimitGroup.REST_PRIVATE_ORDER
-
-    # 전체 주문 취소 (0.5 RPS)
-    elif endpoint == '/orders/open' and method == 'DELETE':
-        return UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL
-
-    # 기본: 계좌 조회, 주문 가능 정보 등 (30 RPS)
-    else:
-        return UpbitRateLimitGroup.REST_PRIVATE_DEFAULT
 
 
 class DryRunConfig:
@@ -166,9 +135,6 @@ class UpbitPrivateClient:
             'last_http_response_time_ms': 0.0
         }
 
-        # 마지막 요청 메타데이터 (Rate Limiter 대기/HTTP/총 소요시간 포함)
-        self._last_request_meta: Optional[dict] = None
-
         self._logger.info(f"✅ UpbitPrivateClient 초기화 완료 (DRY-RUN: {dry_run})")
 
     def __repr__(self):
@@ -225,7 +191,9 @@ class UpbitPrivateClient:
             self._session = None
             self._logger.debug("🗑️ HTTP 세션 정리 완료")
 
-        # Rate Limiter 리소스 정리는 필요시 여기에 추가
+        # 동적 Rate Limiter 모니터링 중지
+        if self._dynamic_limiter:
+            await self._dynamic_limiter.stop_monitoring()
 
     # ================================================================
     # 상태 조회 및 설정
@@ -286,13 +254,6 @@ class UpbitPrivateClient:
         return self._stats['last_http_response_time_ms']
 
     # ================================================================
-    # 요청 메타데이터 조회 (테스트/모니터링 용)
-    # ================================================================
-    def get_last_request_meta(self) -> Optional[Dict[str, Any]]:
-        """직전 요청의 상세 타이밍/재시도 메타데이터 반환"""
-        return self._last_request_meta.copy() if self._last_request_meta else None
-
-    # ================================================================
     # 핵심 HTTP 요청 처리
     # ================================================================
 
@@ -305,7 +266,7 @@ class UpbitPrivateClient:
         is_order_request: bool = False
     ) -> Any:
         """
-        인증된 HTTP 요청 수행 - 통합 Rate Limiter + 429 자동 처리 및 재시도
+        인증된 HTTP 요청 수행 - 429 자동 처리 및 재시도
 
         Args:
             method: HTTP 메서드
@@ -341,34 +302,11 @@ class UpbitPrivateClient:
         self._stats['last_request_429_retries'] = 0
         self._stats['total_requests'] += 1
 
-        # 메타데이터 수집용 변수들 (public_client와 동일)
-        attempts = 0
-        total_429_retries = 0
-        had_429 = False
-        acquire_wait_ms: float = 0.0
-        http_latency_ms: float = 0.0
-        total_cycle_start = time.perf_counter()  # 전체 사이클 시작 (성능 모니터링용)
-
         for attempt in range(max_retries):
             try:
-                attempts += 1
-
-                # 🚀 통합 Rate Limiter 적용 - 지연된 커밋 방식
+                # Rate Limit 적용 - 통합 Rate Limiter
                 rate_limiter = await self._ensure_rate_limiter()
-                _acquire_start = time.perf_counter()
-                await rate_limiter.acquire(endpoint, method)
-                _acquire_end = time.perf_counter()
-                acquire_wait_ms += (_acquire_end - _acquire_start) * 1000.0
-
-                # 🔍 디버깅: 실제 업비트 서버에 보내는 파라미터 로깅
-                self._logger.debug(f"🌐 업비트 프라이빗 API 요청: {method} {endpoint}")
-                if params:
-                    self._logger.debug(f"📝 요청 파라미터: {params}")
-                if data:
-                    self._logger.debug(f"📦 요청 데이터: {data}")
-
-                # 🎲 Micro-jitter: 동시 요청 분산 (5~20ms 랜덤 지연)
-                await asyncio.sleep(random.uniform(0.005, 0.020))
+                await rate_limiter.gate(UpbitRateLimitGroup.PRIVATE_REST, endpoint)
 
                 # 인증 헤더 생성
                 headers = self._auth.get_private_headers(query_params=params, request_body=data)
@@ -392,7 +330,6 @@ class UpbitPrivateClient:
                     # 순수 HTTP 응답 시간 저장 (Rate Limiter 대기 시간 제외)
                     response_time_ms = (http_end_time - http_start_time) * 1000
                     self._stats['last_http_response_time_ms'] = response_time_ms
-                    http_latency_ms += response_time_ms
 
                     # 평균 응답 시간 업데이트
                     if self._stats['average_response_time_ms'] == 0.0:
@@ -407,94 +344,22 @@ class UpbitPrivateClient:
                     if response.status in [200, 201]:  # 200: OK, 201: Created
                         self._stats['real_requests'] += 1
                         response_data = await response.json()
-                        self._logger.debug(f"✅ 프라이빗 API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
-
-                        # 📊 성공 요청 통계 기록
-                        await log_request_success(endpoint, response_time_ms)
-
-                        # 🚀 지연된 커밋: API 성공 후 타임스탬프 윈도우에 커밋
-                        # DRY-RUN 모드가 아닌 경우에만 커밋 수행
-                        if not (is_order_request and self._dry_run_config.enabled):
-                            self._logger.debug(f"🔥 API 성공! 지연된 커밋 실행: {method} {endpoint}")
-                            await rate_limiter.commit_timestamp(endpoint, method)
-                            self._logger.debug(f"✅ 지연된 커밋 완료: {method} {endpoint}")
-                        else:
-                            self._logger.debug(f"🏃‍♂️ DRY-RUN 모드: 커밋 건너뛰기 {method} {endpoint}")
-
+                        self._logger.debug(f"✅ API 요청 성공: {method} {endpoint} ({response_time_ms:.1f}ms)")
                         return response_data
 
                     elif response.status == 429:
-                        # 429 응답 처리 - 업비트 프라이빗 API 분석
-                        retry_after = response.headers.get('Retry-After')
-                        retry_after_float = float(retry_after) if retry_after else None
-
-                        # 🔍 실제 서버 429 응답 상세 정보 로깅
-                        error_body = await response.text()
-                        self._logger.info("🚨 실제 프라이빗 서버 429 응답 수신!")
-                        self._logger.info(f"📡 응답 헤더: {dict(response.headers)}")
-                        self._logger.info(f"📄 응답 본문: {error_body[:200]}{'...' if len(error_body) > 200 else ''}")
-
-                        # 🎯 통합 Rate Limiter에 429 에러 알림
+                        # 429 응답 처리 및 통합 Rate Limiter에 429 에러 알림
                         await rate_limiter.notify_429_error(endpoint, method)
-
-                        # Rate Limiter 상태 조회 (429 처리 후)
-                        rate_limiter_status = rate_limiter.get_comprehensive_status()
-                        groups_status = rate_limiter_status.get('groups', {})
-
-                        # 현재 엔드포인트의 Rate Limit 그룹 결정
-                        current_group = _get_rate_limit_group_for_endpoint(endpoint, method)
-                        group_status = groups_status.get(current_group.value, {})
-                        current_rate_ratio = group_status.get('config', {}).get('current_ratio')
-
-                        # 상세 429 모니터링 이벤트 기록
-                        await log_429_error(
-                            endpoint=endpoint,
-                            method=method,
-                            retry_after=retry_after_float,
-                            attempt_number=attempt + 1,
-                            rate_limiter_type="unified",
-                            current_rate_ratio=current_rate_ratio,
-                            response_headers=dict(response.headers),
-                            response_body=error_body,
-                            # 추가 컨텍스트 - 프라이빗 API 정보 포함
-                            total_429_retries=self._stats['total_429_retries'],
-                            session_stats=dict(self._stats),
-                            rate_limit_group=current_group.value,
-                            url=url,
-                            params=params,
-                            data=data
-                        )
 
                         # 429 재시도 카운터 업데이트
                         self._stats['last_request_429_retries'] += 1
                         self._stats['total_429_retries'] += 1
-                        total_429_retries += 1
-                        had_429 = True
 
                         self._logger.warning(f"⚠️ Rate Limit 초과 (429): {endpoint}, 재시도 {attempt + 1}/{max_retries}")
 
-                        # 429 오류 시 RPS 기반 동적 지수 백오프
+                        # 429 오류 시 지수 백오프로 재시도
                         if attempt < max_retries - 1:
-                            # 현재 그룹의 효과적 RPS 계산
-                            current_rate_ratio = current_rate_ratio or 1.0
-
-                            # 그룹별 기본 RPS
-                            base_rps = {
-                                UpbitRateLimitGroup.REST_PRIVATE_DEFAULT: 30.0,
-                                UpbitRateLimitGroup.REST_PRIVATE_ORDER: 8.0,
-                                UpbitRateLimitGroup.REST_PRIVATE_CANCEL_ALL: 0.5
-                            }.get(current_group, 30.0)
-
-                            effective_rps = base_rps * current_rate_ratio
-
-                            # RPS 기반 백오프 베이스 시간 (RPS의 2~4배 간격)
-                            base_wait = (2.0 / effective_rps) if effective_rps > 0 else 0.5
-
-                            # 지수 백오프 적용 (베이스 * 2^attempt)
-                            wait_time = base_wait * (2 ** attempt)
-
-                            self._logger.info(f"⏳ 429 동적 지수 백오프 대기: {wait_time:.3f}초 "
-                                              f"(그룹: {current_group.value}, RPS: {effective_rps:.1f}, 베이스: {base_wait:.3f}초)")
+                            wait_time = (2 ** attempt) * 0.5  # 0.5, 1.0, 2.0초
                             await asyncio.sleep(wait_time)
                             continue
                         else:
