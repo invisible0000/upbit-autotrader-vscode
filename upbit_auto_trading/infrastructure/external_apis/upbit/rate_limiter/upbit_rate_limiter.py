@@ -75,6 +75,9 @@ class UnifiedUpbitRateLimiter:
         # 그룹별 타임스탬프 FIFO 윈도우 (deque로 고정 크기 관리)
         self._timestamp_windows: Dict[UpbitRateLimitGroup, collections.deque] = {}
 
+        # 🔧 Public 접근을 위한 속성 (매니저들이 사용)
+        self.timestamp_windows = self._timestamp_windows
+
         # 하이브리드 알고리즘 설정
         self.hybrid_config = {
             'enabled': False,  # 기본값 비활성화 (단계별 활성화 예정)

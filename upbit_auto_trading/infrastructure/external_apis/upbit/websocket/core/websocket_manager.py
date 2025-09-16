@@ -54,8 +54,10 @@ async def gate_websocket(action: str, max_wait: float = 15.0):
     """WebSocket 전용 Rate Limiting Gate"""
     try:
         rate_limiter = await get_websocket_rate_limiter()
-        # WebSocket 연결은 WEBSOCKET 그룹 사용
-        await rate_limiter.gate(UpbitRateLimitGroup.WEBSOCKET, action)
+        # WebSocket 연결은 WEBSOCKET 그룹 사용 - acquire 메서드 사용
+        # action을 websocket_ prefix로 변환하여 Rate Limiter 엔드포인트 매핑 활용
+        websocket_endpoint = f"websocket_{action}" if not action.startswith("websocket_") else action
+        await rate_limiter.acquire(websocket_endpoint, method='WS')
     except Exception as e:
         # WebSocket gate 실패 시 로그만 남기고 계속 진행 (웹소켓 안정성 우선)
         import logging
@@ -236,7 +238,7 @@ class WebSocketManager:
         self.logger.info(f"WebSocket Rate 복구: {group.value} {old_ratio:.1%} → {new_ratio:.1%}")
 
     async def _apply_rate_limit(self, action: str = 'websocket_message') -> None:
-        """Rate Limiter 적용 (새로운 통합 Rate Limiter 사용)"""
+        """Rate Limiter 적용 (레거시 호환용 - 새로운 코드는 지연된 커밋 패턴 사용 권장)"""
         if not self._rate_limiter_enabled:
             return
 
@@ -255,6 +257,76 @@ class WebSocketManager:
             self._rate_limit_stats['rate_limit_errors'] += 1
             self.logger.warning(f"Rate Limiter 오류 (계속 진행): {e}")
             # Rate Limiter 실패 시에도 계속 진행 (안전성 확보)
+
+    async def _apply_delayed_commit_rate_limit(self, action: str) -> tuple[Any, str]:
+        """지연된 커밋을 위한 Rate Limiter 적용 (토큰 예약만)
+
+        Returns:
+            tuple: (rate_limiter_instance, websocket_endpoint)
+        """
+        if not self._rate_limiter_enabled:
+            return None, action
+
+        try:
+            websocket_endpoint = f"websocket_{action}" if not action.startswith("websocket_") else action
+            rate_limiter = await get_websocket_rate_limiter()
+
+            # 토큰만 예약 (타임스탬프 윈도우 업데이트 안함)
+            await rate_limiter.acquire(websocket_endpoint, method='WS')
+            self.logger.debug(f"📝 Rate Limiter 토큰 예약: {websocket_endpoint}")
+
+            return rate_limiter, websocket_endpoint
+
+        except Exception as e:
+            self._rate_limit_stats['rate_limit_errors'] += 1
+            self.logger.warning(f"Rate Limiter 토큰 예약 실패 (계속 진행): {e}")
+            return None, action
+
+    async def _commit_rate_limit_timestamp(self, rate_limiter: Any, websocket_endpoint: str) -> None:
+        """Rate Limiter 타임스탬프 윈도우 커밋"""
+        if rate_limiter and websocket_endpoint:
+            try:
+                await rate_limiter.commit_timestamp(websocket_endpoint, method='WS')
+                self.logger.debug(f"✅ Rate Limiter 타임스탬프 커밋: {websocket_endpoint}")
+            except Exception as e:
+                self.logger.warning(f"Rate Limiter 타임스탬프 커밋 실패: {e}")
+
+    async def _apply_websocket_connection_rate_limit(self, action: str = 'websocket_connect') -> tuple[Any, str]:
+        """WebSocket 연결 전용 빠른 Rate Limiter (타임아웃 3초)
+
+        WebSocket 연결은 빠른 응답이 중요하므로 짧은 타임아웃 적용
+        """
+        if not self._rate_limiter_enabled:
+            return None, action
+
+        try:
+            websocket_endpoint = f"websocket_{action}" if not action.startswith("websocket_") else action
+            rate_limiter = await get_websocket_rate_limiter()
+
+            # WebSocket 연결 전용 빠른 토큰 획득 (타임아웃 3초)
+            start_time = time.monotonic()
+
+            try:
+                # 짧은 타임아웃으로 빠른 획득 시도
+                await asyncio.wait_for(
+                    rate_limiter.acquire(websocket_endpoint, method='WS'),
+                    timeout=3.0  # WebSocket 연결 전용 짧은 타임아웃
+                )
+
+                elapsed = time.monotonic() - start_time
+                self.logger.debug(f"🚀 WebSocket 연결 Rate Limiter 빠른 획득: {websocket_endpoint} ({elapsed:.3f}s)")
+                return rate_limiter, websocket_endpoint
+
+            except asyncio.TimeoutError:
+                elapsed = time.monotonic() - start_time
+                self.logger.warning(f"⚡ WebSocket 연결 Rate Limiter 타임아웃 ({elapsed:.1f}s) - 연결 진행")
+                # 타임아웃 시에도 연결 진행 (WebSocket 연결 우선)
+                return None, websocket_endpoint
+
+        except Exception as e:
+            self._rate_limit_stats['rate_limit_errors'] += 1
+            self.logger.warning(f"WebSocket 연결 Rate Limiter 오류 (계속 진행): {e}")
+            return None, action
 
     async def _get_rate_limiter_delay(self) -> float:
         """Rate Limiter 실제 지연 시간 측정 (안전한 병합 제어)"""
@@ -368,17 +440,15 @@ class WebSocketManager:
             public_streams = self._subscription_manager.get_realtime_streams(WebSocketType.PUBLIC)
             private_streams = self._subscription_manager.get_realtime_streams(WebSocketType.PRIVATE)
 
-            # Public 통합 메시지 전송
+            # Public 통합 메시지 전송 (지연된 커밋 패턴은 _send_message 내부에서 처리)
             if public_streams and self._connection_states[WebSocketType.PUBLIC] == ConnectionState.CONNECTED:
                 self.logger.info(f"📤 Public 통합 스트림 전송: {len(public_streams)}개 타입")
-                await self._apply_rate_limit('websocket_subscription')
                 await self._send_current_subscriptions(WebSocketType.PUBLIC)
 
-            # Private 통합 메시지 전송
+            # Private 통합 메시지 전송 (지연된 커밋 패턴은 _send_message 내부에서 처리)
             if private_streams:
                 self.logger.info(f"📤 Private 통합 스트림 전송: {len(private_streams)}개 타입")
                 await self._ensure_connection(WebSocketType.PRIVATE)
-                await self._apply_rate_limit('websocket_subscription')
                 await self._send_current_subscriptions(WebSocketType.PRIVATE)
 
             if not public_streams and not private_streams:
@@ -542,10 +612,24 @@ class WebSocketManager:
                 try:
                     # 🔧 Event 기반 대기: 30초 또는 shutdown_event 중 먼저 발생하는 것
                     try:
+                        # 🛡️ Event Loop 바인딩 안전성 체크
+                        current_loop = asyncio.get_running_loop()
+                        if hasattr(self._shutdown_event, '_loop') and self._shutdown_event._loop != current_loop:
+                            self.logger.warning("⚠️ shutdown_event가 다른 이벤트 루프에 바인딩됨, 새로 생성")
+                            self._shutdown_event = asyncio.Event()
+
                         await asyncio.wait_for(self._shutdown_event.wait(), timeout=30.0)
                         # shutdown_event가 설정되면 즉시 종료
                         self.logger.info("🛑 Shutdown Event 감지 - 모니터링 루프 즉시 종료")
                         break
+                    except RuntimeError as e:
+                        if "bound to a different event loop" in str(e):
+                            self.logger.warning("🔧 Event Loop 바인딩 문제 해결: shutdown_event 재생성")
+                            self._shutdown_event = asyncio.Event()
+                            # 재생성 후 다시 시도하지 않고 타임아웃으로 처리
+                            await asyncio.sleep(30.0)
+                        else:
+                            raise e
                     except asyncio.TimeoutError:
                         # 30초 타임아웃 - 정상적인 헬스체크 수행
                         self.logger.debug("⏰ 30초 헬스체크 타이머 - 연결 상태 확인")
@@ -595,9 +679,21 @@ class WebSocketManager:
                         break
                     # 오류 시 Event 기반 대기 (10초 또는 shutdown_event)
                     try:
+                        # 🛡️ Event Loop 바인딩 안전성 체크
+                        current_loop = asyncio.get_running_loop()
+                        if hasattr(self._shutdown_event, '_loop') and self._shutdown_event._loop != current_loop:
+                            self._shutdown_event = asyncio.Event()
+
                         await asyncio.wait_for(self._shutdown_event.wait(), timeout=10.0)
                         self.logger.info("🛑 오류 처리 중 Shutdown Event 감지")
                         break
+                    except RuntimeError as e:
+                        if "bound to a different event loop" in str(e):
+                            self.logger.warning("🔧 Event Loop 바인딩 문제 해결: shutdown_event 재생성")
+                            self._shutdown_event = asyncio.Event()
+                            await asyncio.sleep(10.0)
+                        else:
+                            raise e
                     except asyncio.TimeoutError:
                         pass  # 10초 후 재시도
 
@@ -944,8 +1040,12 @@ class WebSocketManager:
 
             self._connection_states[connection_type] = ConnectionState.CONNECTING
 
-            # Rate Limiter 적용 (WebSocket 연결)
-            await self._apply_rate_limit('websocket_connect')
+            # 🚀 WebSocket 연결 전용 빠른 Rate Limiter 적용 (타임아웃 3초)
+            try:
+                rate_limiter, websocket_endpoint = await self._apply_websocket_connection_rate_limit('websocket_connect')
+            except Exception as e:
+                self.logger.warning(f"WebSocket 연결 Rate Limiter 실패 (계속 진행): {e}")
+                rate_limiter, websocket_endpoint = None, 'websocket_connect'
 
             # 설정 로드
             config = get_config()
@@ -959,14 +1059,22 @@ class WebSocketManager:
             # Private 연결 시 JWT를 Authorization 헤더로 추가 (업비트 공식 방식)
             headers = {}
             if connection_type == WebSocketType.PRIVATE and self._jwt_manager:
-                token = await self._jwt_manager.get_valid_token()
-                if token:
-                    # 업비트 공식 문서에 따라 JWT는 Authorization 헤더로 전달
-                    headers['Authorization'] = f'Bearer {token}'
-                    self.logger.debug("Private 연결: JWT 토큰을 Authorization 헤더로 추가")
+                # 🔧 WebSocket 연결마다 새로운 JWT 토큰 강제 생성 (업비트 보안 정책)
+                self.logger.debug("Private 연결: 새로운 JWT 토큰 강제 생성 시작")
+                token_refresh_success = await self._jwt_manager.force_refresh()
+
+                if token_refresh_success:
+                    token = await self._jwt_manager.get_valid_token()
+                    if token:
+                        # 업비트 공식 문서에 따라 JWT는 Authorization 헤더로 전달
+                        headers['Authorization'] = f'Bearer {token}'
+                        self.logger.debug("Private 연결: 새로운 JWT 토큰을 Authorization 헤더로 추가")
+                    else:
+                        self.logger.error("Private 연결: JWT 강제 갱신 후에도 토큰 없음")
+                        raise RuntimeError("JWT 토큰 강제 갱신 실패")
                 else:
-                    self.logger.error("Private 연결: 유효한 JWT 토큰을 얻을 수 없습니다")
-                    raise RuntimeError("JWT 토큰 없음")
+                    self.logger.error("Private 연결: JWT 토큰 강제 갱신 실패")
+                    raise RuntimeError("JWT 토큰 강제 갱신 실패")
 
             # 압축 설정 (업비트 공식 압축 지원)
             compression = "deflate" if config.connection.enable_compression else None
@@ -976,35 +1084,66 @@ class WebSocketManager:
                 raise RuntimeError("websockets 라이브러리가 설치되지 않았습니다")
 
             # 업비트 WebSocket 연결 시도 (Authorization 헤더 포함)
-            try:
-                self.logger.debug(f"연결 시도: {connection_type} -> {url}")
+            max_retry_attempts = 2 if connection_type == WebSocketType.PRIVATE else 1
 
-                # websockets 라이브러리 버전에 따른 헤더 전송 방식
-                if headers:
-                    # Authorization 헤더가 있는 경우 (Private 연결)
-                    connection = await websockets.connect(
-                        url,
-                        additional_headers=headers  # websockets 15.x에서는 additional_headers 사용
-                    )
-                else:
-                    # Public 연결 (헤더 없음)
-                    connection = await websockets.connect(url)
+            for attempt in range(max_retry_attempts):
+                try:
+                    self.logger.debug(f"연결 시도: {connection_type} -> {url} (시도: {attempt + 1}/{max_retry_attempts})")
 
-                self.logger.info(f"업비트 WebSocket 연결 성공: {connection_type} -> {url}")
+                    # websockets 라이브러리 버전에 따른 헤더 전송 방식
+                    if headers:
+                        # Authorization 헤더가 있는 경우 (Private 연결)
+                        connection = await websockets.connect(
+                            url,
+                            additional_headers=headers  # websockets 15.x에서는 additional_headers 사용
+                        )
+                    else:
+                        # Public 연결 (헤더 없음)
+                        connection = await websockets.connect(url)
 
-                # 연결 상태 확인 (state 속성 사용)
-                connection_state = getattr(connection, 'state', None)
-                connection_open = getattr(connection, 'open', None)
-                self.logger.debug(f"연결 직후 상태: state={connection_state}, open={connection_open}")
+                    self.logger.info(f"업비트 WebSocket 연결 성공: {connection_type} -> {url}")
 
-                # state가 1(OPEN)이 아니면 문제
-                if hasattr(connection, 'state') and connection.state != 1:
-                    self.logger.error(f"WebSocket 상태 비정상: state={connection.state} (1=OPEN, 2=CLOSING, 3=CLOSED)")
-                    raise RuntimeError(f"WebSocket 연결 실패: 상태={connection.state}")
+                    # 연결 상태 확인 (state 속성 사용)
+                    connection_state = getattr(connection, 'state', None)
+                    connection_open = getattr(connection, 'open', None)
+                    self.logger.debug(f"연결 직후 상태: state={connection_state}, open={connection_open}")
 
-            except Exception as e:
-                self.logger.error(f"WebSocket 연결 실패 ({connection_type}): {e}")
-                raise
+                    # state가 1(OPEN)이 아니면 문제
+                    if hasattr(connection, 'state') and connection.state != 1:
+                        self.logger.error(f"WebSocket 상태 비정상: state={connection.state} (1=OPEN, 2=CLOSING, 3=CLOSED)")
+                        raise RuntimeError(f"WebSocket 연결 실패: 상태={connection.state}")
+
+                    # 성공적으로 연결됨
+                    break
+
+                except Exception as e:
+                    self.logger.error(f"WebSocket 연결 실패 ({connection_type}), 시도 {attempt + 1}: {e}")
+
+                    # Private 연결에서 HTTP 401 오류이고 재시도가 가능한 경우
+                    if (connection_type == WebSocketType.PRIVATE and
+                        attempt < max_retry_attempts - 1 and
+                        ("401" in str(e) or "unauthorized" in str(e).lower())):
+
+                        self.logger.warning("HTTP 401 오류 감지 - JWT 토큰 재갱신 후 재시도")
+
+                        # JWT 토큰 재갱신
+                        if self._jwt_manager:
+                            try:
+                                await self._jwt_manager.force_refresh()
+                                new_token = await self._jwt_manager.get_valid_token()
+                                if new_token:
+                                    headers['Authorization'] = f'Bearer {new_token}'
+                                    self.logger.debug("JWT 토큰 재갱신 완료 - 재시도 준비")
+                                    continue  # 다음 시도로
+                            except Exception as jwt_error:
+                                self.logger.error(f"JWT 토큰 재갱신 실패: {jwt_error}")
+
+                    # 마지막 시도이거나 재시도 불가능한 오류
+                    if attempt == max_retry_attempts - 1:
+                        raise  # 최종 예외 발생
+
+                    # 재시도 전 짧은 대기
+                    await asyncio.sleep(0.5)
 
             self._connections[connection_type] = connection
             self._connection_states[connection_type] = ConnectionState.CONNECTED
@@ -1018,6 +1157,15 @@ class WebSocketManager:
             # 메시지 수신 태스크 시작
             task = asyncio.create_task(self._handle_messages(connection_type, connection))
             self._message_tasks[connection_type] = task
+
+            # 🚀 WebSocket 연결 성공 시 타임스탬프 커밋 (빠른 처리)
+            if rate_limiter:  # Rate Limiter가 성공적으로 획득된 경우만
+                try:
+                    await self._commit_rate_limit_timestamp(rate_limiter, websocket_endpoint)
+                except Exception as e:
+                    self.logger.warning(f"WebSocket 연결 Rate Limiter 커밋 실패 (무시): {e}")
+            else:
+                self.logger.debug(f"Rate Limiter 타임아웃으로 커밋 스킵: {websocket_endpoint}")
 
             # 현재 구독 전송
             await self._send_current_subscriptions(connection_type)
@@ -1229,15 +1377,23 @@ class WebSocketManager:
             self.logger.error(f"연결 상태 불량 ({connection_type}): {connection_state}")
             raise RuntimeError(f"WebSocket 연결 상태가 잘못됨: {connection_type} - {connection_state}")
 
+        # 🚀 지연된 커밋 패턴 적용: acquire → 전송 → commit_timestamp
+        websocket_endpoint = 'websocket_message'
+        rate_limiter = None
+
         try:
             self.logger.debug(f"WebSocket 메시지 전송 시도 ({connection_type}): {message}")
 
-            # Rate Limiter 적용 (메시지 전송)
-            self.logger.debug("Rate Limiter 적용 중...")
-            await self._apply_rate_limit('websocket_message')
-            self.logger.debug("Rate Limiter 통과!")
-
-            # 연결 상태 재확인 (websockets 라이브러리의 실제 상태 확인)
+            # 1️⃣ Rate Limiter 토큰 예약 (타임스탬프 업데이트 안함)
+            self.logger.debug("Rate Limiter 토큰 예약 중...")
+            if self._rate_limiter_enabled:
+                try:
+                    rate_limiter = await get_websocket_rate_limiter()
+                    await rate_limiter.acquire(websocket_endpoint, method='WS')
+                    self.logger.debug("Rate Limiter 토큰 예약 완료!")
+                except Exception as e:
+                    self.logger.warning(f"Rate Limiter 토큰 예약 실패 (계속 진행): {e}")
+                    rate_limiter = None            # 연결 상태 재확인 (websockets 라이브러리의 실제 상태 확인)
             try:
                 connection_state = getattr(connection, 'state', None)
                 connection_open = getattr(connection, 'open', None)
@@ -1251,10 +1407,19 @@ class WebSocketManager:
             except Exception as e:
                 self.logger.warning(f"연결 상태 확인 실패: {e}")
 
-            # 실제 메시지 전송
+            # 2️⃣ 실제 메시지 전송
             self.logger.debug("실제 메시지 전송 중...")
             await connection.send(message)
             self.logger.debug("메시지 전송 완료, 통계 업데이트 중...")
+
+            # 3️⃣ 성공 시 타임스탬프 윈도우 커밋
+            if self._rate_limiter_enabled and rate_limiter:
+                try:
+                    await rate_limiter.commit_timestamp(websocket_endpoint, method='WS')
+                    self.logger.debug(f"📊 타임스탬프 커밋 완료: {websocket_endpoint}")
+                except Exception as e:
+                    self.logger.warning(f"Rate Limiter 타임스탬프 커밋 실패: {e}")
+                    # 커밋 실패해도 메시지는 성공적으로 전송되었으므로 계속 진행
 
             self._rate_limit_stats['total_messages'] += 1
             self.logger.info(f"✅ 메시지 전송 성공 ({connection_type}): {len(message)} bytes")

@@ -427,9 +427,14 @@ class SubscriptionManager:
             self._snapshot_requests[WebSocketType.PRIVATE].clear()
             self._component_subscriptions.clear()
             self._component_refs.clear()
+
+            # 🔧 중요: 이전 상태 캐시도 완전 클리어 (테스트 간 간섭 방지)
+            self._previous_stream_state[WebSocketType.PUBLIC].clear()
+            self._previous_stream_state[WebSocketType.PRIVATE].clear()
+
             self._update_metrics()
 
-            self.logger.info("모든 스트림 상태 클리어 완료")
+            self.logger.info("모든 스트림 상태 클리어 완료 (이전 상태 캐시 포함)")
 
     # ================================================================
     # 변경 알림 시스템
