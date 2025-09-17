@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
-                "mode": "source",
+                "file": "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
+                "mode": "preview",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "캔들 데이터 제공자 to 시간 문제"
+              "title": "TIME_HANDLING_GUIDE"
             }
           }
         ]
@@ -163,23 +163,31 @@
       "canvas:새 캔버스 만들기": false,
       "daily-notes:오늘의 일일 노트 열기": false,
       "templates:템플릿 삽입": false,
-      "command-palette:명령어 팔레트 열기": false
+      "command-palette:명령어 팔레트 열기": false,
+      "obsidian-excalidraw-plugin:New drawing": false
     }
   },
   "active": "5bd0f060c9299ce7",
   "lastOpenFiles": [
-    "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
+    "legacy/candle_data_provider_new01.py",
+    "legacy/candle_data_provider_backup_20250917_142800.py",
+    "logs/session_20250917_142848_PID61012.log",
+    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider.py",
+    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_new01 copy.py",
+    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_backup_20250917_142800.py",
+    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_new01.py",
+    "data/market_data.sqlite3-shm",
+    "data/market_data.sqlite3-wal",
+    "logs/session_20250917_131221_PID51420.log",
+    "tests/performance/time_utils/DETAILED_CODE_MODIFICATIONS.md",
+    "tests/performance/time_utils/OPTIMIZATION_LESSONS_AND_IMPLEMENTATION_GUIDE.md",
+    "tests/performance/time_utils/debug_align_to_candle_boundary.py",
+    "tests/performance/time_utils/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
+    "docs/TIME_CALCULATION_OPTIMIZATION_REPORT.md",
+    "tests/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
+    "docs/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
     "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
-    "logs/session_20250916_233536_PID99796.log",
-    "logs/session_20250916_233219_PID80092.log",
-    "logs/session_20250916_231415_PID91236.log",
-    "logs/session_20250916_231331_PID61092.log",
-    "logs/session_20250916_231000_PID48536.log",
-    "logs/session_20250916_230840_PID12936.log",
-    "logs/session_20250916_224117_PID25688.log",
-    "logs/session_20250916_220521_PID49804.log",
-    "logs/session_20250916_220448_PID98788.log",
-    "logs/session_20250916_220422_PID72168.log",
+    "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
     "docs/ideas/요청 제한 슬라이딩 윈도우 동작 시나리오.md",
     "docs/ideas/요청 제한 알고리즘 gcra 학습노트.md",
     "docs/ideas/순수_슬라이딩_윈도우_카운터_구현_설계서.md",
@@ -197,12 +205,6 @@
     "upbit_auto_trading/infrastructure/external_apis/upbit copy/websocket/WEBSOCKET_V6_SIMPLE_GUIDE.md",
     "upbit_auto_trading/infrastructure/external_apis/upbit copy/websocket/GLOBAL_SUBSCRIPTION_SCENARIOS_V3.md",
     "upbit_auto_trading/infrastructure/external_apis/upbit copy/rate_limiter/UPBIT_RATE_LIMITER_V2_PRODUCTION_READINESS_ASSESSMENT.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit copy/rate_limiter/UPBIT_RATE_LIMITER_V2_ENHANCED_PRODUCTION_ASSESSMENT.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit copy/rate_limiter/README.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit copy/rate_limiter/RATE_LIMITER_ARCHITECTURE_ANALYSIS.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit copy/rate_limiter/GCRA_ALGORITHM_DETAILED_GUIDE.md",
-    "docs/GCRA_BURST_SEMANTICS_ANALYSIS.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit/rate_limiter/GCRA_ALGORITHM_DETAILED_GUIDE.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",
