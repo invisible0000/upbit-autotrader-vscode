@@ -36,8 +36,8 @@ TEST_CONFIG = {
     "symbol": "KRW-BTC",
     "timeframe": "1m",
     "start_time": "2025-09-09 00:50:00",
-    "count": 13,
-    "chunk_size": 5,
+    "count": 200000,
+    "chunk_size": 200,
 
     # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
     "partial_records": [
@@ -49,6 +49,7 @@ TEST_CONFIG = {
     # 고급 설정
     "table_name": "candles_KRW_BTC_1m",
     "pause_for_verification": False,  # 파편 생성 후 사용자 확인 대기
+    "complete_db_table_view": False  # 테스트 후 DB 테이블 전체 보기
 }
 
 
@@ -223,6 +224,10 @@ class OverlapPartialDataTester:
         try:
             print(f"  📥 get_candles 호출: {TEST_CONFIG['symbol']} {TEST_CONFIG['timeframe']} count={count}")
 
+            # ⏱️ 성능 측정 시작
+            import time
+            start_performance = time.time()
+
             collected_candles = await self.candle_provider.get_candles(
                 symbol=TEST_CONFIG['symbol'],
                 timeframe=TEST_CONFIG['timeframe'],
@@ -230,7 +235,13 @@ class OverlapPartialDataTester:
                 to=start_time
             )
 
+            # ⏱️ 성능 측정 완료
+            end_performance = time.time()
+            total_duration = end_performance - start_performance
+            avg_per_candle = (total_duration / len(collected_candles)) * 1000 if len(collected_candles) > 0 else 0
+
             print(f"✅ 캔들 수집 완료: {len(collected_candles)}개 수집됨")
+            print(f"📊 성능: 총 {total_duration:.1f}초, 캔들당 평균 {avg_per_candle:.2f}ms")
 
         except Exception as e:
             print(f"❌ 캔들 수집 실패: {e}")
@@ -265,26 +276,49 @@ class OverlapPartialDataTester:
         else:
             print(f"⚠️ 수집 개수 불일치 (요청: {count}, 실제: {len(collected_candles)})")
 
-        # 8. 실제 DB 상태 출력 (코파일럿 터미널 확인용)
-        print(" 📊 === 최종 DB 상태 ===")
-        try:
-            import sqlite3
-            conn = sqlite3.connect('data/market_data.sqlite3')
-            cursor = conn.cursor()
-            cursor.execute(
-                'SELECT candle_date_time_utc, candle_date_time_kst, timestamp '
-                'FROM candles_KRW_BTC_1m ORDER BY candle_date_time_utc DESC'
-            )
-            results = cursor.fetchall()
-            print('=== KRW-BTC 1분 캔들 데이터 (UTC 시간 내림차순) ===')
-            print('UTC 시간\t\t\tKST 시간\t\t\t타임스탬프')
-            print('-' * 80)
-            for row in results:
-                print(f'{row[0]}\t{row[1]}\t{row[2]}')
-            conn.close()
-            print(f" 총 {len(results)}개 레코드")
-        except Exception as e:
-            print(f"DB 조회 실패: {e}")
+        # 8. 설정에 따른 DB 테이블 전체 출력 (대용량 테스트 시 생략)
+        if TEST_CONFIG["complete_db_table_view"]:
+            print(" 📊 === 최종 DB 상태 ===")
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data/market_data.sqlite3')
+                cursor = conn.cursor()
+                cursor.execute(
+                    'SELECT candle_date_time_utc, candle_date_time_kst, timestamp '
+                    'FROM candles_KRW_BTC_1m ORDER BY candle_date_time_utc DESC'
+                )
+                results = cursor.fetchall()
+                print('=== KRW-BTC 1분 캔들 데이터 (UTC 시간 내림차순) ===')
+                print('UTC 시간\t\t\tKST 시간\t\t\t타임스탬프')
+                print('-' * 80)
+                for row in results:
+                    print(f'{row[0]}\t{row[1]}\t{row[2]}')
+                conn.close()
+                print(f" 총 {len(results)}개 레코드")
+            except Exception as e:
+                print(f"DB 조회 실패: {e}")
+        else:
+            # 간결한 DB 통계만 표시
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data/market_data.sqlite3')
+                cursor = conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM candles_KRW_BTC_1m')
+                total_records = cursor.fetchone()[0]
+
+                cursor.execute(
+                    'SELECT MIN(candle_date_time_utc), MAX(candle_date_time_utc) '
+                    'FROM candles_KRW_BTC_1m'
+                )
+                min_time, max_time = cursor.fetchone()
+                conn.close()
+
+                print(f" 📊 === DB 요약 ===   총 {total_records}개 레코드")
+                if min_time and max_time:
+                    print(f" 🕐 시간범위: {min_time} ~ {max_time}")
+
+            except Exception as e:
+                print(f"간결 DB 조회 실패: {e}")
 
         return True
 
