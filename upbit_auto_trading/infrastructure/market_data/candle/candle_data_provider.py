@@ -473,7 +473,7 @@ class CandleDataProvider:
 
         try:
             # 성능 최적화된 청크 처리
-            saved_count = await self._process_chunk_direct_storage(
+            saved_count, last_candle_time = await self._process_chunk_direct_storage(
                 state.current_chunk, state, is_first_chunk, request_type
             )
 
@@ -482,6 +482,11 @@ class CandleDataProvider:
             completed_chunk.status = "completed"
             state.completed_chunks.append(completed_chunk)
             state.total_collected += saved_count
+
+            # 연속성을 위한 마지막 캔들 시간 업데이트
+            if last_candle_time:
+                state.last_candle_time = last_candle_time
+                logger.debug(f"마지막 캔들 시간 업데이트: {last_candle_time}")
 
             # 진행률 업데이트
             self._update_remaining_time_estimates(state)
@@ -515,11 +520,16 @@ class CandleDataProvider:
         state: CollectionState,
         is_first_chunk: bool,
         request_type: RequestType
-    ) -> int:
-        """성능 최적화된 청크 처리 - 직접 저장 방식"""
+    ) -> tuple[int, Optional[str]]:
+        """성능 최적화된 청크 처리 - 직접 저장 방식
+
+        Returns:
+            tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
+        """
 
         # 겹침 분석 (API 절약 효과 유지)
         overlap_result = None
+        chunk_end = None
         if not (is_first_chunk and request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]):
             chunk_start = chunk_info.to
             chunk_end = self._calculate_chunk_end_time(chunk_info)
@@ -529,20 +539,28 @@ class CandleDataProvider:
 
         if overlap_result and hasattr(overlap_result, 'status'):
             # 겹침 분석 결과에 따른 직접 저장
-            saved_count = await self._handle_overlap_direct_storage(chunk_info, overlap_result)
+            saved_count, last_candle_time = await self._handle_overlap_direct_storage(
+                chunk_info, overlap_result, chunk_end
+            )
         else:
-            # 폴백: 직접 API → 저장
+            # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
             api_response = await self._fetch_chunk_from_api(chunk_info)
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, api_response
             )
+            # API 응답에서 마지막 캔들 시간 추출 (COUNT_ONLY/END_ONLY 케이스)
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
 
-        return saved_count
+        return saved_count, last_candle_time
 
     async def _handle_overlap_direct_storage(
-        self, chunk_info: ChunkInfo, overlap_result
-    ) -> int:
-        """겹침 분석 결과에 따른 직접 저장 처리"""
+        self, chunk_info: ChunkInfo, overlap_result, calculated_chunk_end: Optional[datetime] = None
+    ) -> tuple[int, Optional[str]]:
+        """겹침 분석 결과에 따른 직접 저장 처리
+
+        Returns:
+            tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
+        """
         from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapStatus
 
         status = overlap_result.status
@@ -550,15 +568,21 @@ class CandleDataProvider:
         if status == OverlapStatus.COMPLETE_OVERLAP:
             # 완전 겹침: 저장할 것 없음 (이미 DB에 존재)
             logger.debug("완전 겹침 → 저장 생략")
-            return 0
+            # DB에 데이터 존재가 보장되므로 계산된 chunk_end 사용
+            last_candle_time = None
+            if calculated_chunk_end:
+                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            return 0, last_candle_time
 
         elif status == OverlapStatus.NO_OVERLAP:
             # 겹침 없음: API → 직접 저장
             logger.debug("겹침 없음 → 전체 API 직접 저장")
             api_response = await self._fetch_chunk_from_api(chunk_info)
-            return await self.repository.save_raw_api_data(
+            saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, api_response
             )
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
+            return saved_count, last_candle_time
 
         elif status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]:
             # 부분 겹침: API 부분만 저장 (DB 부분은 이미 존재)
@@ -584,18 +608,33 @@ class CandleDataProvider:
                     status="pending"
                 )
                 api_response = await self._fetch_chunk_from_api(temp_chunk)
-                return await self.repository.save_raw_api_data(
+                saved_count = await self.repository.save_raw_api_data(
                     chunk_info.symbol, chunk_info.timeframe, api_response
                 )
-            return 0
+                # 부분 API 응답에서 마지막 캔들 시간 추출 후 전체 청크 범위로 보정
+                api_last_time = self._extract_last_candle_time_from_api_response(api_response)
+                # 전체 청크의 예상 끝 시간 사용 (더 정확함)
+                last_candle_time = None
+                if calculated_chunk_end:
+                    last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                elif api_last_time:
+                    last_candle_time = api_last_time
+                return saved_count, last_candle_time
+            # API 정보 없으면 계산된 값 사용
+            last_candle_time = None
+            if calculated_chunk_end:
+                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            return 0, last_candle_time
 
         else:
             # PARTIAL_MIDDLE_FRAGMENT 또는 기타: 안전한 폴백 → 전체 API 저장
             logger.debug("복잡한 겹침 → 전체 API 직접 저장 폴백")
             api_response = await self._fetch_chunk_from_api(chunk_info)
-            return await self.repository.save_raw_api_data(
+            saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, api_response
             )
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
+            return saved_count, last_candle_time
 
     # =========================================================================
     # 계획 수립
@@ -999,3 +1038,37 @@ class CandleDataProvider:
     def _calculate_api_count(self, start_time: datetime, end_time: datetime, timeframe: str) -> int:
         """API 요청에 필요한 캔들 개수 계산"""
         return TimeUtils.calculate_expected_count(start_time, end_time, timeframe)
+
+    def _extract_last_candle_time_from_api_response(self, api_response: List[Dict[str, Any]]) -> Optional[str]:
+        """API 응답에서 마지막 캔들 시간 추출 (연속성용)
+
+        업비트 API는 최신 캔들부터 내림차순으로 반환하므로,
+        마지막 요소가 가장 오래된 캔들 (다음 청크 연속성의 기준점)
+
+        Args:
+            api_response: 업비트 캔들 API 응답 리스트
+
+        Returns:
+            Optional[str]: ISO 형식 UTC 시간 문자열 또는 None
+        """
+        if not api_response or len(api_response) == 0:
+            return None
+
+        try:
+            # 업비트 API는 내림차순 정렬이므로 마지막 요소가 가장 과거 캔들
+            last_candle = api_response[-1]
+            candle_time_utc = last_candle.get('candle_date_time_utc')
+
+            if candle_time_utc:
+                # 업비트 API 시간 형식을 표준 ISO 형식으로 변환
+                if isinstance(candle_time_utc, str):
+                    # 기존 문자열을 datetime으로 파싱 후 다시 포맷
+                    dt = datetime.fromisoformat(candle_time_utc.replace('Z', '+00:00'))
+                    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+            logger.warning(f"API 응답에서 캔들 시간 추출 실패: {last_candle}")
+            return None
+
+        except Exception as e:
+            logger.warning(f"마지막 캔들 시간 추출 중 오류: {e}")
+            return None
