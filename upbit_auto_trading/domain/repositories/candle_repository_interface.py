@@ -232,6 +232,26 @@ class CandleRepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def save_raw_api_data(self, symbol: str, timeframe: str, raw_data: List[dict]) -> int:
+        """업비트 API 원시 데이터 직접 저장 (성능 최적화)
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            raw_data: 업비트 API 원시 응답 데이터 (Dict 리스트)
+
+        Returns:
+            int: 저장된 캔들 개수
+
+        Note:
+            - Dict → CandleData 변환 생략으로 메모리 절약
+            - 배치 INSERT로 고성능 저장
+            - 업비트 API 필드 직접 매핑
+            - INSERT OR IGNORE로 중복 처리
+        """
+        pass
+
+    @abstractmethod
     async def get_candles_by_range(self, symbol: str, timeframe: str, start_time: datetime, end_time: datetime) -> List:
         """지정 범위의 캔들 데이터 조회 (새로운 CandleData 모델 반환)
 
@@ -247,6 +267,6 @@ class CandleRepositoryInterface(ABC):
         Note:
             - PRIMARY KEY 범위 스캔 활용
             - JSON 필드 파싱 포함
-            - 시간순 정렬 보장
+            - 시간순 정렬 보장 (ORDER BY 필수)
         """
         pass

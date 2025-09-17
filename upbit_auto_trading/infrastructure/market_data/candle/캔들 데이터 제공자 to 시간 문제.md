@@ -2,7 +2,7 @@
 
 ### 업비트 데이터 기초 정보
 업비트가 제공하는 캔들 데이터의 시간 순서는 기본적으로 현재(미래)에서 과거 순서로 내림차순이야.
-업비트 서버는 요청 시간의 다음 시점에 데이터부터 전달해줘. 예를 들면 `2025-09-09 00:50:30` 로 요청하면 `2025-09-09 00:49:00`부터 제공해. 조금 자세히 말하면 1m 타임프레임 일 때 `2025-09-09 00:50:59`~ `2025-09-09 00:50:00` 안에 데이터면 `2025-09-09 00:49:00` 부터 제공하는 거지. 업비트는 1초 단위까지 입력을 받는데 1초라도 존재하면 그 다음 시점의 데이터를 제공해. 염두해 둘것은 1s 타임프레임은 1초가 최소 단위 이므로 항상 다음부터 받을 수 있고, 1m 타임프레임 이상부터는 1초라도 포함 시키면 다음을 받을 수 있지. 그리고 제공하는 데이터의 utc, kst 열의 데이터는 시간이 타임프레임에 따라 깔끔하게 정렬되어 있어. timestamp 열은 실제로 캔들이 생성된 시점이라 정렬되어 있지 않아. 
+업비트 서버는 요청 시간의 다음 시점에 데이터부터 전달해줘. 예를 들면 `2025-09-09 00:50:30` 로 요청하면 `2025-09-09 00:49:00`부터 제공해. 조금 자세히 말하면 1m 타임프레임 일 때 `2025-09-09 00:50:59`~ `2025-09-09 00:50:00` 안에 데이터면 `2025-09-09 00:49:00` 부터 제공하는 거지. 업비트는 1초 단위까지 입력을 받는데 1초라도 존재하면 그 다음 시점의 데이터를 제공해. 염두해 둘것은 1s 타임프레임은 1초가 최소 단위 이므로 항상 다음부터 받을 수 있고, 1m 타임프레임 이상부터는 1초라도 포함 시키면 다음을 받을 수 있지. 그리고 제공하는 데이터의 utc, kst 열의 데이터는 시간이 타임프레임에 따라 깔끔하게 정렬되어 있어. timestamp 열은 실제로 캔들이 생성된 시점이라 정렬되어 있지 않아.
 
 ### 상황 파악 및 문제점 검토
 #### 테스트 설정
@@ -137,17 +137,17 @@ candle_date_time_utc
 
 #### db 데이터 확인용 명령
 ```powershell
-cd d:\projects\upbit-autotrader-vscode && python -c "  
-import sqlite3  
-conn = sqlite3.connect('data/market_data.sqlite3')  
-cursor = conn.cursor()  
-cursor.execute('SELECT candle_date_time_utc, candle_date_time_kst, timestamp FROM candles_KRW_BTC_1m ORDER BY candle_date_time_utc DESC')  
-results = cursor.fetchall()  
-print('=== KRW-BTC 1분 캔들 데이터 (UTC 시간 내림차순) ===')  
-print('UTC 시간\t\tKST 시간\t\t타임스탬프')  
-print('-' * 100)  
-for row in results:print(f'{row[0]}\t{row[1]}\t{row[2]}')  
-conn.close()  
+cd d:\projects\upbit-autotrader-vscode && python -c "
+import sqlite3
+conn = sqlite3.connect('data/market_data.sqlite3')
+cursor = conn.cursor()
+cursor.execute('SELECT candle_date_time_utc, candle_date_time_kst, timestamp FROM candles_KRW_BTC_1m ORDER BY candle_date_time_utc DESC')
+results = cursor.fetchall()
+print('=== KRW-BTC 1분 캔들 데이터 (UTC 시간 내림차순) ===')
+print('UTC 시간\t\tKST 시간\t\t타임스탬프')
+print('-' * 100)
+for row in results:print(f'{row[0]}\t{row[1]}\t{row[2]}')
+conn.close()
 "
 ```
 
@@ -162,7 +162,7 @@ fetch_start_time = 개별 청크 시작 + dt
 ```
 이런식의 사용을 말한겁니다. 요청 파라미터 상황에 따라 더 명확히 설명하면 다음과 같습니다. thought
 1. COUNT_ONLY - get_cndles(count)
- - 우리는 서버의 시작시간을 모르니 일단 처음 청크는 count만 이용하여 fetch를 해야합니다. 그러나 내부적으로 메타 데이터나 특정 정보들은 end시간이 필요할테니 현재 시간을 정렬하고 한 타임 프레임 과거로 옮겨서 계산들을 진행합니다. 그리고 처음 청크는 count만 이용해서 요청하고 이어서 연속적으로 청크 처리를 하면 될겁니다. 현재 로직도 count나 end만 있으면 첫 요청은 오버랩 분석도 하지 않습니다. 
+ - 우리는 서버의 시작시간을 모르니 일단 처음 청크는 count만 이용하여 fetch를 해야합니다. 그러나 내부적으로 메타 데이터나 특정 정보들은 end시간이 필요할테니 현재 시간을 정렬하고 한 타임 프레임 과거로 옮겨서 계산들을 진행합니다. 그리고 처음 청크는 count만 이용해서 요청하고 이어서 연속적으로 청크 처리를 하면 될겁니다. 현재 로직도 count나 end만 있으면 첫 요청은 오버랩 분석도 하지 않습니다.
 2. TO_COUNT - get_candles(count,to)
  - 쉬운 케이스 입니다. 단시 시작 시간을 과거로 한프레임 옮기고 청크에서 fetch 요청 시만 시작을 미래로 한프레임 옮기면 됩니다.
 3. TO_END - get_candles(to,end)
@@ -180,8 +180,26 @@ fetch_start_time = 개별 청크 시작 + dt
 "start_time": "2025-09-09 00:50:00",
 "count": 13
 "chunk_size": 5,
-"partial_records": [ 
+"partial_records": [
 					{"start_time": "2025-09-09 00:47:00", "count": 2},
 					{"start_time": "2025-09-09 00:41:00", "count": 2}
 					]
+```
+
+---
+
+#### db 데이터 확인용 명령 그대로 조회
+```powershell
+cd d:\projects\upbit-autotrader-vscode && python -c "
+import sqlite3
+conn = sqlite3.connect('data/market_data.sqlite3')
+cursor = conn.cursor()
+cursor.execute('SELECT candle_date_time_utc, candle_date_time_kst, timestamp FROM candles_KRW_BTC_1m')
+results = cursor.fetchall()
+print('=== KRW-BTC 1분 캔들 데이터 (정렬없이 조회) ===')
+print('UTC 시간\t\tKST 시간\t\t타임스탬프')
+print('-' * 100)
+for row in results:print(f'{row[0]}\t{row[1]}\t{row[2]}')
+conn.close()
+"
 ```

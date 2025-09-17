@@ -37,7 +37,7 @@ TEST_CONFIG = {
     "timeframe": "1m",
     "start_time": "2025-09-09 00:50:00",
     "count": 13,
-    "chunk_size": 200,
+    "chunk_size": 5,
 
     # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
     "partial_records": [
