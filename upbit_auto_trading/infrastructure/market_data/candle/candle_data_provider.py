@@ -327,7 +327,8 @@ class CandleDataProvider:
 
                 # Repository에서 수집된 데이터 조회
                 if to and count:
-                    aligned_to = TimeUtils.align_to_candle_boundary(to, timeframe)
+                    # aligned_to = TimeUtils.align_to_candle_boundary(to, timeframe)
+                    aligned_to = collection_state.completed_chunks[0].to
                     end_time = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -(count - 1))
                     collected_candles = await self.repository.get_candles_by_range(
                         symbol, timeframe, aligned_to, end_time
@@ -904,13 +905,20 @@ class CandleDataProvider:
             # API 데이터 수집
             api_candles = []
             if overlap_result.api_start and overlap_result.api_end:
+                # API 요청 개수 동적 계산
+                api_count = self._calculate_api_count(
+                    overlap_result.api_start,
+                    overlap_result.api_end,
+                    chunk_info.timeframe
+                )
+
                 # 부분 API 요청을 위한 임시 청크 정보 생성
                 temp_chunk = ChunkInfo(
                     chunk_id=f"{chunk_info.chunk_id}_partial",
                     chunk_index=chunk_info.chunk_index,
                     symbol=chunk_info.symbol,
                     timeframe=chunk_info.timeframe,
-                    count=overlap_result.api_count or chunk_info.count,
+                    count=api_count,
                     to=overlap_result.api_start,
                     end=overlap_result.api_end,
                     status="pending"

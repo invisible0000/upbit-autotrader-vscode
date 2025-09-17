@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
-                "mode": "preview",
+                "file": "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
+                "mode": "source",
                 "source": true
               },
               "icon": "lucide-file",
-              "title": "TIME_HANDLING_GUIDE"
+              "title": "캔들 데이터 제공자 to 시간 문제"
             }
           }
         ]
@@ -169,25 +169,25 @@
   },
   "active": "5bd0f060c9299ce7",
   "lastOpenFiles": [
-    "legacy/candle_data_provider_new01.py",
-    "legacy/candle_data_provider_backup_20250917_142800.py",
-    "logs/session_20250917_142848_PID61012.log",
-    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider.py",
-    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_new01 copy.py",
-    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_backup_20250917_142800.py",
-    "upbit_auto_trading/infrastructure/market_data/candle/candle_data_provider_new01.py",
-    "data/market_data.sqlite3-shm",
-    "data/market_data.sqlite3-wal",
-    "logs/session_20250917_131221_PID51420.log",
+    "data/strategies.sqlite3-shm",
+    "data/strategies.sqlite3-wal",
+    "data/settings.sqlite3-shm",
+    "data/settings.sqlite3-wal",
+    "logs/session_20250917_183756_PID32996.log",
+    "logs/session_20250917_183241_PID64964.log",
+    "logs/session_20250917_181631_PID5416.log",
+    "logs/session_20250917_181147_PID61692.log",
+    "logs/session_20250917_181100_PID64620.log",
+    "logs/session_20250917_180900_PID13796.log",
+    "logs/session_20250917_180755_PID57740.log",
+    "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
     "tests/performance/time_utils/DETAILED_CODE_MODIFICATIONS.md",
     "tests/performance/time_utils/OPTIMIZATION_LESSONS_AND_IMPLEMENTATION_GUIDE.md",
-    "tests/performance/time_utils/debug_align_to_candle_boundary.py",
     "tests/performance/time_utils/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
     "docs/TIME_CALCULATION_OPTIMIZATION_REPORT.md",
     "tests/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
     "docs/TIME_CALCULATION_PERFORMANCE_ANALYSIS.md",
     "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
-    "upbit_auto_trading/infrastructure/market_data/candle/TIME_HANDLING_GUIDE.md",
     "docs/ideas/요청 제한 슬라이딩 윈도우 동작 시나리오.md",
     "docs/ideas/요청 제한 알고리즘 gcra 학습노트.md",
     "docs/ideas/순수_슬라이딩_윈도우_카운터_구현_설계서.md",

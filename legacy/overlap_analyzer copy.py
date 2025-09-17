@@ -12,7 +12,7 @@ OverlapAnalyzer v5.0 - 5가지 상태 분류 분석 엔진
 - 임시 검증: 개발 초기 안정성 확보 (안정화 후 제거)
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
@@ -143,13 +143,15 @@ class OverlapAnalyzer:
 
         logger.debug(f"🔍 PARTIAL_START 조건 확인: partial_end={partial_end}, target_end={request.target_end}")
         if partial_end:
+            logger.debug(f"🔍 조건: {partial_end} < {request.target_end} = {partial_end < request.target_end}")
 
-            # time_utils.get_time_by_ticks로 정확한 다음 캔들 시간 계산 (월/년봉도 정확히 처리)
-            api_start = self.time_utils.get_time_by_ticks(partial_end, request.timeframe, 1)
+        if partial_end and partial_end < request.target_end:
+            dt_seconds = self.get_timeframe_dt(request.timeframe)
+            api_start = partial_end + timedelta(seconds=dt_seconds)  # 다음 캔들부터 API 요청
 
             logger.debug(
-                f"→ PARTIAL_START: DB({request.target_start}~{partial_end}) + "
-                f"API({api_start}~{request.target_end} [업비트순])"
+                f"→ PARTIAL_START: DB({partial_end}~{request.target_start}) + "
+                f"API({request.target_end}~{api_start}) [업비트순]"
             )
             return OverlapResult(
                 status=OverlapStatus.PARTIAL_START,
@@ -184,8 +186,8 @@ class OverlapAnalyzer:
 
         if is_continuous:
             # 말단 겹침 (PARTIAL_MIDDLE_CONTINUOUS)
-            # time_utils.get_time_by_ticks로 정확한 다음 캔들 시간 계산 (월/년봉도 정확히 처리)
-            api_end = self.time_utils.get_time_by_ticks(partial_start, request.timeframe, 1)
+            dt_seconds = self.get_timeframe_dt(request.timeframe)
+            api_end = partial_start + timedelta(seconds=dt_seconds)  # 다음 캔들까지 API 요청
 
             logger.debug(f"→ PARTIAL_MIDDLE_CONTINUOUS: API({request.target_start}~{api_end}) + "
                          f"DB({partial_start}~{request.target_end}) [업비트순]")
@@ -266,6 +268,42 @@ class OverlapAnalyzer:
         """start_time부터 end_time까지 연속성 확인 (안전한 범위 제한)"""
         return await self.repository.is_continue_till_end(symbol, timeframe, start_time, end_time)
 
+    def get_timeframe_dt(self, timeframe: str) -> int:
+        """타임프레임 → 초 단위 변환 (time_utils 연동)"""
+        return self.time_utils.get_timeframe_seconds(timeframe)
+
     def calculate_expected_count(self, start_time: datetime, end_time: datetime, timeframe: str) -> int:
-        """시간 범위 → 예상 캔들 개수 계산 (time_utils 위임으로 정확성 보장)"""
-        return self.time_utils.calculate_expected_count(start_time, end_time, timeframe)
+        """시간 범위 → 예상 캔들 개수 계산 (업비트 내림차순: start > end)"""
+        dt_seconds = self.get_timeframe_dt(timeframe)
+        time_diff = int((start_time - end_time).total_seconds())  # start > end이므로 start - end
+        return (time_diff // dt_seconds) + 1
+
+    # === 구 버전 호환성 유지 (deprecated) ===
+
+    async def analyze(self, symbol: str, timeframe: str, start_time: datetime, count: int) -> dict:
+        """구 버전 호환성 유지 (deprecated)
+
+        새 코드는 analyze_overlap()을 사용하세요.
+        """
+        logger.warning("analyze() 메서드는 deprecated입니다. analyze_overlap()을 사용하세요.")
+
+        end_time = start_time + timedelta(seconds=(count - 1) * self.get_timeframe_dt(timeframe))
+        request = OverlapRequest(
+            symbol=symbol,
+            timeframe=timeframe,
+            target_start=start_time,
+            target_end=end_time,
+            target_count=count
+        )
+
+        result = await self.analyze_overlap(request)
+
+        # 구 버전 형식으로 변환
+        return {
+            "status": result.status.value,
+            "connected_end": result.partial_end or result.db_end,
+            "api_start": result.api_start,
+            "api_end": result.api_end,
+            "db_start": result.db_start,
+            "db_end": result.db_end
+        }

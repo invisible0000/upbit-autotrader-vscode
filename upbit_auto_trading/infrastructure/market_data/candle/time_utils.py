@@ -3,6 +3,7 @@ TimeUtils - 캔들 데이터 시간 처리 유틸리티
 업비트 전용, timedelta 기반 단순 구현 - 필요시 기능 추가
 """
 
+import warnings
 from datetime import datetime, timedelta
 from typing import Dict
 
@@ -63,6 +64,16 @@ class TimeUtils:
         """타임프레임을 timedelta로 변환"""
         if timeframe not in TimeUtils._TIMEFRAME_MAP:
             raise ValueError(f"지원하지 않는 타임프레임: {timeframe}")
+
+        # 월/년봉 사용시 정확성 워닝
+        if timeframe in ('1M', '1y'):
+            warnings.warn(
+                f"타임프레임 '{timeframe}'의 timedelta 계산은 부정확할 수 있습니다. "
+                f"정확한 월/년 계산이 필요한 경우 get_time_by_ticks()를 사용해주세요.",
+                UserWarning,
+                stacklevel=2
+            )
+
         return TimeUtils._TIMEFRAME_MAP[timeframe]
 
     @staticmethod
@@ -152,16 +163,8 @@ class TimeUtils:
                 return datetime(year, 1, 1, 0, 0, 0, tzinfo=aligned_time.tzinfo)
 
             else:
-                # 초/분/시간/일/주봉: 빠른 timedelta 계산 (정렬 가정하므로 안전)
-                if timeframe == '1w':
-                    delta = timedelta(weeks=1)
-                elif timeframe == '1d':
-                    delta = timedelta(days=1)
-                else:
-                    # 초/분/시간봉: 직접 매핑으로 최적화
-                    timeframe_seconds = TimeUtils.get_timeframe_seconds(timeframe)
-                    delta = timedelta(seconds=timeframe_seconds)
-
+                # 초/분/시간/일/주봉: get_timeframe_delta로 한 번에 변환 (더 간단하고 일관성 있음)
+                delta = TimeUtils.get_timeframe_delta(timeframe)
                 return aligned_time + (delta * tick_count)
 
         # 2. 다중 틱: 정확성 우선, 하지만 재정렬은 최소화
@@ -201,11 +204,9 @@ class TimeUtils:
             return result_time
 
         else:
-            # 초/분/시간/일봉: 고정 길이, 최고 성능 (재정렬 없음)
-            timeframe_seconds = TimeUtils.get_timeframe_seconds(timeframe)
-            total_seconds_offset = timeframe_seconds * tick_count
-
-            return aligned_time + timedelta(seconds=total_seconds_offset)
+            # 초/분/시간/일봉: get_timeframe_delta로 한 번에 변환 (더 간단하고 일관성 있음)
+            delta = TimeUtils.get_timeframe_delta(timeframe)
+            return aligned_time + (delta * tick_count)
 
     @staticmethod
     def generate_time_sequence(start_time: datetime, timeframe: str, count: int) -> list[datetime]:

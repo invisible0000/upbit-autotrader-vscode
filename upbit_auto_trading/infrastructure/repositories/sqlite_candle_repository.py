@@ -611,8 +611,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         try:
             with self.db_manager.get_connection("market_data") as conn:
                 cursor = conn.execute(select_sql, (
-                    _to_utc_iso(start_time),
-                    _to_utc_iso(end_time)
+                    _to_utc_iso(end_time),
+                    _to_utc_iso(start_time)
                 ))
 
                 rows = cursor.fetchall()
