@@ -481,7 +481,10 @@ class CandleDataProvider:
             completed_chunk = state.current_chunk
             completed_chunk.status = "completed"
             state.completed_chunks.append(completed_chunk)
-            state.total_collected += saved_count
+
+            # 🟢 새로운 카운팅 로직: 청크 완료 = 담당 범위 완료
+            # 실제 저장 개수와 무관하게 청크가 담당한 범위 전체를 완료로 처리
+            state.total_collected += completed_chunk.count
 
             # 연속성을 위한 마지막 캔들 시간 업데이트
             if last_candle_time:
@@ -492,7 +495,7 @@ class CandleDataProvider:
             self._update_remaining_time_estimates(state)
 
             logger.info(f"청크 완료: {completed_chunk.chunk_id}, "
-                        f"저장: {saved_count}개, "
+                        f"저장: {saved_count}개, 청크범위: {completed_chunk.count}개, "
                         f"누적: {state.total_collected}/{state.total_requested}")
 
             # 수집 완료 확인
@@ -936,16 +939,34 @@ class CandleDataProvider:
         return chunk_info
 
     def _is_collection_complete(self, state: CollectionState) -> bool:
-        """수집 완료 여부 확인"""
-        # 개수 달성 확인
+        """수집 완료 여부 확인 - 청크 담당 범위 기준 + End 시간 검증"""
+        # 1. 개수 달성 확인 (청크 담당 범위 기준)
         count_reached = state.total_collected >= state.total_requested
 
-        # end 시점 도달 확인 (필요한 경우만)
+        # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스)
         end_time_reached = False
-        if state.target_end:
-            # 실제 구현에서는 last_candle_time 등을 통해 확인
-            # 여기서는 간소화
-            end_time_reached = False
+        if state.target_end and state.last_candle_time:
+            try:
+                # 마지막 캔들 시간을 datetime으로 변환
+                last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+                # 마지막 캔들 시간이 목표 종료 시간에 도달하거나 지나쳤는지 확인
+                end_time_reached = last_time <= state.target_end
+
+                if end_time_reached:
+                    logger.debug(f"End 시간 도달: last_candle={last_time}, target_end={state.target_end}")
+
+            except Exception as e:
+                logger.warning(f"End 시간 비교 실패: {e}")
+                end_time_reached = False
+
+        completion_reason = []
+        if count_reached:
+            completion_reason.append("개수달성")
+        if end_time_reached:
+            completion_reason.append("End시간도달")
+
+        if completion_reason:
+            logger.debug(f"수집 완료 조건: {', '.join(completion_reason)}")
 
         return count_reached or end_time_reached
 
