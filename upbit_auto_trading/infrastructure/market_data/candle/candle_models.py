@@ -118,6 +118,60 @@ class CandleData:
             timeframe=timeframe
         )
 
+    @classmethod
+    def create_empty_candle(
+        cls,
+        target_time: datetime,
+        reference_utc: str,
+        timeframe: str,
+        market: str,
+        timestamp_ms: int
+    ) -> 'CandleData':
+        """
+        빈 캔들 생성 (EmptyCandleDetector 전용)
+
+        빈 캔들 특징:
+        - 가격: 참조 캔들의 종가로 고정 (시가=고가=저가=종가=0.0, 실제값은 Dict에서 설정)
+        - 거래량/거래대금: 0
+        - timestamp: 정확한 밀리초 단위 (SqliteCandleRepository 호환)
+
+        Args:
+            target_time: 빈 캔들의 시간
+            reference_utc: 참조 캔들의 UTC 시간 (추적용)
+            timeframe: 타임프레임
+            market: 마켓 코드 (예: 'KRW-BTC')
+            timestamp_ms: 정확한 Unix timestamp (밀리초)
+
+        Returns:
+            CandleData: 빈 캔들 객체
+        """
+        return cls(
+            # === 업비트 API 공통 필드 ===
+            market=market,
+            candle_date_time_utc=target_time.strftime('%Y-%m-%dT%H:%M:%S'),
+            candle_date_time_kst=cls._utc_to_kst_string(target_time),
+            opening_price=0.0,      # 빈 캔들: 기본값 (실제값은 Dict에서 설정)
+            high_price=0.0,
+            low_price=0.0,
+            trade_price=0.0,
+            timestamp=timestamp_ms,  # 🚀 정확한 timestamp (SqliteCandleRepository 호환)
+            candle_acc_trade_price=0.0,   # 빈 캔들: 거래 없음
+            candle_acc_trade_volume=0.0,
+
+            # === 편의성 필드 ===
+            symbol=market,
+            timeframe=timeframe
+        )
+
+    @staticmethod
+    def _utc_to_kst_string(utc_time: datetime) -> str:
+        """UTC datetime을 KST 시간 문자열로 변환 (빈 캔들 생성용)"""
+        from datetime import timedelta
+
+        # KST = UTC + 9시간
+        kst_time = utc_time + timedelta(hours=9)
+        return kst_time.strftime('%Y-%m-%dT%H:%M:%S')
+
     def to_db_dict(self) -> dict:
         """DB 저장용 딕셔너리 변환 (공통 필드만, Repository 스키마와 통일)"""
         return {

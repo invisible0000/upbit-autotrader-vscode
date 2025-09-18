@@ -21,6 +21,9 @@ from upbit_auto_trading.infrastructure.market_data.candle.time_utils import Time
 from upbit_auto_trading.infrastructure.market_data.candle.candle_models import (
     ChunkInfo, CandleData
 )
+from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector import (
+    EmptyCandleDetector
+)
 from upbit_auto_trading.domain.repositories.candle_repository_interface import (
     CandleRepositoryInterface
 )
@@ -29,9 +32,6 @@ from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client i
 )
 from upbit_auto_trading.infrastructure.market_data.candle.overlap_analyzer import (
     OverlapAnalyzer
-)
-from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector import (
-    EmptyCandleDetector
 )
 
 logger = create_component_logger("CandleDataProvider")
@@ -226,18 +226,19 @@ class CollectionPlan:
 
 class CandleDataProvider:
     """
-    캔들 데이터 제공자 v6.0 - 성능 최적화 버전
+    캔들 데이터 제공자 v6.1 - 빈 캔들 처리 지원
 
     주요 개선사항:
     1. 메모리 효율성: 90% 절약 (직접 저장 방식)
     2. DB 접근 최소화: 56% 감소 (불필요한 조회 제거)
     3. CPU 처리량 개선: 70% 개선 (변환 과정 제거)
-    4. 코드 단순성: 복잡한 병합 로직 제거
+    4. 빈 캔들 처리: EmptyCandleDetector 통합으로 완전한 시계열 보장
 
     최적화 전략:
     - API Dict → DB 직접 저장 (CandleData 변환 생략)
     - OverlapAnalyzer 유지 (API 절약 효과 보존)
     - 메모리 즉시 해제 (누적 방지)
+    - 선택적 빈 캔들 처리: enable_empty_candle_processing 옵션
     """
 
     def __init__(
@@ -246,9 +247,9 @@ class CandleDataProvider:
         upbit_client: UpbitPublicClient,
         overlap_analyzer: OverlapAnalyzer,
         chunk_size: int = 200,
-        enable_empty_candle_processing: bool = True
+        enable_empty_candle_processing: bool = True  # ← 새 옵션 추가
     ):
-        """CandleDataProvider v6.1 초기화 (빈 캔듡 처리 지원)"""
+        """CandleDataProvider v6.1 초기화 (빈 캔들 처리 지원)"""
         self.repository = repository
         self.upbit_client = upbit_client
         self.overlap_analyzer = overlap_analyzer
@@ -256,60 +257,17 @@ class CandleDataProvider:
         self.active_collections: Dict[str, CollectionState] = {}
         self.api_rate_limit_rps = 10  # 10 RPS 기준
 
-        # 빈 캔듡 처리 설정
+        # 빈 캔들 처리 설정
         self.enable_empty_candle_processing = enable_empty_candle_processing
-        self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # timeframe별 캠시
+        self.empty_candle_detectors: Dict[str, 'EmptyCandleDetector'] = {}  # timeframe별 캐시
 
-        logger.info("CandleDataProvider v6.1 (빈 캔듡 처리 지원) 초기화")
+        logger.info("CandleDataProvider v6.1 (빈 캔들 처리 지원) 초기화")
         logger.info(f"청크 크기: {self.chunk_size}, API Rate Limit: {self.api_rate_limit_rps} RPS")
-        logger.info(f"빈 캔듡 처리: {'활성화' if enable_empty_candle_processing else '비활성화'}")
+        logger.info(f"빈 캔들 처리: {'활성화' if enable_empty_candle_processing else '비활성화'}")
 
     # =========================================================================
     # 핵심 공개 API
     # =========================================================================
-
-    def _get_empty_candle_detector(self, timeframe: str) -> EmptyCandleDetector:
-        """타임프레임별 EmptyCandleDetector 캠시 (성능 최적화)"""
-        if timeframe not in self.empty_candle_detectors:
-            self.empty_candle_detectors[timeframe] = EmptyCandleDetector(timeframe)
-            logger.debug(f"EmptyCandleDetector 생성: {timeframe}")
-        return self.empty_candle_detectors[timeframe]
-
-    async def _process_api_candles_with_empty_filling(
-        self,
-        api_candles: List[Dict[str, Any]],
-        timeframe: str,
-        chunk_end: Optional[datetime] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        API 캔듡 응답에 빈 캔듡 처리 적용 (save_raw_api_data 전 호출)
-
-        처리 순서:
-        1. API 캔듡 응답에 빈캔듡 검사
-        2. 검사 결과를 바탕으로 청크 끝 시간까지만 빈캔듡 생성
-        3. API 캔듡 응답과 통합
-        4. 청크 끝 시간을 벗어난 과거 캔듡 삭제
-
-        Args:
-            api_candles: 업비트 API 원시 응답 데이터
-            timeframe: 타임프레임
-            chunk_end: 청크 종료 시간 (이후 캔듡 제거용)
-
-        Returns:
-            처리된 캔듡 데이터 (Dict 형태 유지)
-        """
-        if not self.enable_empty_candle_processing or not api_candles:
-            return api_candles
-
-        detector = self._get_empty_candle_detector(timeframe)
-        processed_candles = detector.detect_and_fill_gaps(api_candles, chunk_end=chunk_end)
-
-        # 캔듡 수 보정 로깅
-        if len(processed_candles) != len(api_candles):
-            empty_count = len(processed_candles) - len(api_candles)
-            logger.info(f"빈 캔듡 처리: 원본 {len(api_candles)}개 + 빈 {empty_count}개 = 최종 {len(processed_candles)}개")
-
-        return processed_candles
 
     async def get_candles(
         self,
@@ -497,6 +455,166 @@ class CandleDataProvider:
         logger.debug(f"다음 청크 반환: {state.current_chunk.chunk_id}")
         return state.current_chunk
 
+    # =========================================================================
+    # 빈 캔들 처리 관련 메서드 (v6.1 새 기능)
+    # =========================================================================
+
+    def _get_empty_candle_detector(self, timeframe: str) -> EmptyCandleDetector:
+        """타임프레임별 EmptyCandleDetector 캐시 (성능 최적화)"""
+        if timeframe not in self.empty_candle_detectors:
+            self.empty_candle_detectors[timeframe] = EmptyCandleDetector(timeframe)
+            logger.debug(f"EmptyCandleDetector 생성: {timeframe}")
+        return self.empty_candle_detectors[timeframe]
+
+    async def _process_chunk_with_empty_candles(
+        self,
+        chunk_info: ChunkInfo,
+        state: CollectionState,
+        is_first_chunk: bool,
+        request_type: RequestType
+    ) -> tuple[int, Optional[str]]:
+        """
+        빈 캔들 처리가 통합된 청크 처리 메서드
+
+        기존 _process_chunk_direct_storage 확장 (빈 캔들 처리 추가)
+
+        변경 사항:
+        - API 응답 → EmptyCandleDetector → Repository 저장
+        - 나머지 로직은 기존과 완전히 동일
+
+        Returns:
+            tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
+        """
+
+        # === 기존 겹침 분석 로직 (완전히 동일) ===
+        overlap_result = None
+        chunk_end = None
+        if not (is_first_chunk and request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]):
+            chunk_start = chunk_info.to
+            chunk_end = self._calculate_chunk_end_time(chunk_info)
+
+            overlap_result = await self._analyze_chunk_overlap(
+                state.symbol, state.timeframe, chunk_start, chunk_end
+            )
+
+        if overlap_result and hasattr(overlap_result, 'status'):
+            logger.debug(f"겹침 분석 결과: {overlap_result.status}")
+            return await self._handle_overlap_with_empty_candles(chunk_info, overlap_result, chunk_end)
+        else:
+            logger.debug("겹침 분석 건너뜀 또는 겹침 없음, API 호출 진행")
+            api_candles = await self._fetch_chunk_from_api(chunk_info)
+
+            # 🆕 청크 경계를 고려한 빈 캔들 처리
+            if self.enable_empty_candle_processing and api_candles:
+                detector = self._get_empty_candle_detector(state.timeframe)
+                # 청크 종료 시점 계산 (청크 경계 후처리용)
+                chunk_end = self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None
+                final_candles = detector.detect_and_fill_gaps(
+                    api_candles, chunk_end=chunk_end
+                )
+            else:
+                final_candles = api_candles
+
+            saved_count = await self.repository.save_raw_api_data(
+                state.symbol, state.timeframe, final_candles
+            )
+            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            return saved_count, last_candle_time
+
+    async def _handle_overlap_with_empty_candles(
+        self, chunk_info: ChunkInfo, overlap_result, calculated_chunk_end: Optional[datetime] = None
+    ) -> tuple[int, Optional[str]]:
+        """
+        겹침 분석 결과에 따른 빈 캔들 처리 통합 저장
+
+        기존 _handle_overlap_direct_storage를 확장하여 빈 캔들 처리 추가
+
+        Returns:
+            tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
+        """
+        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapStatus
+
+        status = overlap_result.status
+
+        if status == OverlapStatus.COMPLETE_OVERLAP:
+            logger.debug("완전 겹침: API 호출 및 저장 생략")
+            # 겹침 구간의 마지막 시간을 추정 (빈 캔들 처리 불필요)
+            if calculated_chunk_end:
+                last_time_str = calculated_chunk_end.strftime('%Y-%m-%dT%H:%M:%S')
+                return 0, last_time_str
+            return 0, None
+
+        elif status == OverlapStatus.NO_OVERLAP:
+            logger.debug("겹침 없음: 전체 API 호출")
+            api_candles = await self._fetch_chunk_from_api(chunk_info)
+
+            # 🆕 청크 경계를 고려한 빈 캔들 처리
+            if self.enable_empty_candle_processing and api_candles:
+                detector = self._get_empty_candle_detector(chunk_info.timeframe)
+                # 청크 경계 계산
+                chunk_start = chunk_info.to
+                chunk_end = self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None
+                final_candles = detector.detect_and_fill_gaps_within_bounds(
+                    api_candles, chunk_start, chunk_end
+                )
+            else:
+                final_candles = api_candles
+
+            saved_count = await self.repository.save_raw_api_data(
+                chunk_info.symbol, chunk_info.timeframe, final_candles
+            )
+            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            return saved_count, last_candle_time
+
+        elif status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]:
+            logger.debug(f"부분 겹침: {status}")
+
+            # 부분 API 호출 범위 계산
+            if hasattr(overlap_result, 'api_start') and overlap_result.api_start:
+                # 조정된 청크 파라미터로 API 호출
+                adjusted_chunk = ChunkInfo.create_chunk(
+                    chunk_index=chunk_info.chunk_index,
+                    symbol=chunk_info.symbol,
+                    timeframe=chunk_info.timeframe,
+                    count=chunk_info.count,  # 기본값 유지
+                    to=overlap_result.api_start,
+                    end=overlap_result.api_end
+                )
+
+                api_candles = await self._fetch_chunk_from_api(adjusted_chunk)
+
+                # 🆕 청크 경계를 고려한 빈 캔들 처리
+                if self.enable_empty_candle_processing and api_candles:
+                    detector = self._get_empty_candle_detector(chunk_info.timeframe)
+                    # 청크 경계 계산 (조정된 청크 기준)
+                    adj_chunk_start = adjusted_chunk.to
+                    adj_chunk_end = self._calculate_chunk_end_time(adjusted_chunk) if adjusted_chunk.to else None
+                    final_candles = detector.detect_and_fill_gaps_within_bounds(
+                        api_candles, adj_chunk_start, adj_chunk_end
+                    )
+                else:
+                    final_candles = api_candles
+
+                saved_count = await self.repository.save_raw_api_data(
+                    chunk_info.symbol, chunk_info.timeframe, final_candles
+                )
+
+                # 연속성 종료점 활용
+                if hasattr(overlap_result, 'partial_end') and overlap_result.partial_end:
+                    last_time_str = overlap_result.partial_end.strftime('%Y-%m-%dT%H:%M:%S')
+                    logger.debug(f"부분 겹침 연속성 종료점 사용: {last_time_str}")
+                    return saved_count, last_time_str
+                else:
+                    last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+                    return saved_count, last_candle_time
+            else:
+                logger.warning(f"부분 겹침이지만 API 범위 정보 없음: {status}")
+                return 0, None
+
+        else:
+            logger.error(f"지원하지 않는 겹침 상태: {status}")
+            return 0, None
+
     async def mark_chunk_completed(self, request_id: str) -> bool:
         """
         청크 완료 처리 - 성능 최적화 버전
@@ -524,8 +642,8 @@ class CandleDataProvider:
         logger.info(f"청크 처리 시작: {state.current_chunk.chunk_id} [{request_type.value}]")
 
         try:
-            # 성능 최적화된 청크 처리
-            saved_count, last_candle_time = await self._process_chunk_direct_storage(
+            # 🆕 빈 캔들 처리가 통합된 청크 처리
+            saved_count, last_candle_time = await self._process_chunk_with_empty_candles(
                 state.current_chunk, state, is_first_chunk, request_type
             )
 
@@ -600,18 +718,11 @@ class CandleDataProvider:
         else:
             # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
             api_response = await self._fetch_chunk_from_api(chunk_info)
-
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
-            final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, state.timeframe, chunk_end
-            )
-
             saved_count = await self.repository.save_raw_api_data(
-                state.symbol, state.timeframe, final_candles
+                state.symbol, state.timeframe, api_response
             )
             # API 응답에서 마지막 캔들 시간 추출 (COUNT_ONLY/END_ONLY 케이스)
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
 
         return saved_count, last_candle_time
 
@@ -640,17 +751,10 @@ class CandleDataProvider:
             # 겹침 없음: API → 직접 저장
             logger.debug("겹침 없음 → 전체 API 직접 저장")
             api_response = await self._fetch_chunk_from_api(chunk_info)
-
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
-            final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, chunk_info.timeframe, chunk_end
-            )
-
             saved_count = await self.repository.save_raw_api_data(
-                chunk_info.symbol, chunk_info.timeframe, final_candles
+                chunk_info.symbol, chunk_info.timeframe, api_response
             )
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
             return saved_count, last_candle_time
 
         elif status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]:
@@ -677,18 +781,11 @@ class CandleDataProvider:
                     status="pending"
                 )
                 api_response = await self._fetch_chunk_from_api(temp_chunk)
-
-                # 빈 캔들 처리 적용 (save_raw_api_data 전)
-                temp_chunk_end = temp_chunk.end or (self._calculate_chunk_end_time(temp_chunk) if temp_chunk.to else None)
-                final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, chunk_info.timeframe, temp_chunk_end
-                )
-
                 saved_count = await self.repository.save_raw_api_data(
-                    chunk_info.symbol, chunk_info.timeframe, final_candles
+                    chunk_info.symbol, chunk_info.timeframe, api_response
                 )
                 # 부분 API 응답에서 마지막 캔들 시간 추출 후 전체 청크 범위로 보정
-                api_last_time = self._extract_last_candle_time_from_api_response(final_candles)
+                api_last_time = self._extract_last_candle_time_from_api_response(api_response)
                 # 전체 청크의 예상 끝 시간 사용 (더 정확함)
                 last_candle_time = None
                 if calculated_chunk_end:
@@ -706,17 +803,10 @@ class CandleDataProvider:
             # PARTIAL_MIDDLE_FRAGMENT 또는 기타: 안전한 폴백 → 전체 API 저장
             logger.debug("복잡한 겹침 → 전체 API 직접 저장 폴백")
             api_response = await self._fetch_chunk_from_api(chunk_info)
-
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
-            final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, chunk_info.timeframe, chunk_end
-            )
-
             saved_count = await self.repository.save_raw_api_data(
-                chunk_info.symbol, chunk_info.timeframe, final_candles
+                chunk_info.symbol, chunk_info.timeframe, api_response
             )
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            last_candle_time = self._extract_last_candle_time_from_api_response(api_response)
             return saved_count, last_candle_time
 
     # =========================================================================
@@ -986,6 +1076,7 @@ class CandleDataProvider:
     ) -> ChunkInfo:
         """다음 청크 정보 생성"""
         chunk_id = f"{collection_state.symbol}_{collection_state.timeframe}_{chunk_index:05d}"
+        current_time = datetime.now(timezone.utc)
 
         # 'to' 파라미터 처리
         if "to" in chunk_params and chunk_params["to"]:
@@ -1004,19 +1095,6 @@ class CandleDataProvider:
         else:
             to_datetime = None  # COUNT_ONLY는 None 유지
 
-        # end 시간 계산 - 실제 데이터 범위 끝
-        calculated_end = None
-        if to_datetime and chunk_params.get("count"):
-            # to와 count가 있으면 실제 데이터 범위 끝 계산
-            calculated_end = TimeUtils.get_time_by_ticks(
-                to_datetime,
-                collection_state.timeframe,
-                -(chunk_params["count"] - 1)
-            )
-        else:
-            # COUNT_ONLY, END_ONLY 경우 None 유지 (현재 시간 사용 안 함)
-            calculated_end = None
-
         chunk_info = ChunkInfo(
             chunk_id=chunk_id,
             chunk_index=chunk_index,
@@ -1024,7 +1102,7 @@ class CandleDataProvider:
             timeframe=collection_state.timeframe,
             count=chunk_params["count"],
             to=to_datetime,
-            end=calculated_end,
+            end=current_time,
             status="pending"
         )
 
