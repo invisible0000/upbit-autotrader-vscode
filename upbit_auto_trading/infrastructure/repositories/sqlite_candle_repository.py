@@ -17,6 +17,44 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 logger = create_component_logger("SqliteCandleRepository")
 
 
+def _safe_float(value, default=None):
+    """None 값을 안전하게 float로 변환 (빈 캔들 지원)
+
+    Args:
+        value: 변환할 값 (None 가능)
+        default: None일 때 반환할 기본값 (기본: None → SQLite NULL)
+
+    Returns:
+        float 또는 None (SQLite NULL로 저장됨)
+    """
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        logger.warning(f"float 변환 실패: {value}, 기본값 사용: {default}")
+        return default
+
+
+def _safe_int(value, default=0):
+    """None 값을 안전하게 int로 변환
+
+    Args:
+        value: 변환할 값 (None 가능)
+        default: None일 때 반환할 기본값
+
+    Returns:
+        int 값
+    """
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning(f"int 변환 실패: {value}, 기본값 사용: {default}")
+        return default
+
+
 def _to_utc_iso(dt: datetime) -> str:
     """datetime → UTC ISO 문자열 (DB 저장용)
 
@@ -496,13 +534,16 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             -- 업비트 API 공통 필드들
             market TEXT NOT NULL,
             candle_date_time_kst TEXT NOT NULL,
-            opening_price REAL NOT NULL,
-            high_price REAL NOT NULL,
-            low_price REAL NOT NULL,
-            trade_price REAL NOT NULL,
+            opening_price REAL,        -- 빈 캔들에서는 NULL (용량 절약)
+            high_price REAL,           -- 빈 캔들에서는 NULL (용량 절약)
+            low_price REAL,            -- 빈 캔들에서는 NULL (용량 절약)
+            trade_price REAL,          -- 빈 캔들에서는 NULL (용량 절약)
             timestamp INTEGER NOT NULL,
-            candle_acc_trade_price REAL NOT NULL,
-            candle_acc_trade_volume REAL NOT NULL,
+            candle_acc_trade_price REAL,   -- 빈 캔들에서는 NULL (용량 절약)
+            candle_acc_trade_volume REAL,  -- 빈 캔들에서는 NULL (용량 절약)
+
+            -- 빈 캔들 처리 필드
+            blank_copy_from_utc TEXT,
 
             -- 메타데이터
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -556,18 +597,19 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                     logger.warning(f"필수 필드 누락: {api_dict}")
                     continue
 
-                # 직접 매핑 (변환 과정 완전 생략)
+                # None 값 안전 처리로 빈 캔들 지원 (용량 절약)
                 db_records.append((
                     api_dict['candle_date_time_utc'],    # PRIMARY KEY
                     api_dict['market'],                  # 심볼
                     api_dict.get('candle_date_time_kst', ''),  # KST 시간
-                    float(api_dict['opening_price']),    # 시가
-                    float(api_dict['high_price']),       # 고가
-                    float(api_dict['low_price']),        # 저가
-                    float(api_dict['trade_price']),      # 종가
-                    int(api_dict.get('timestamp', 0)),   # 타임스탬프
-                    float(api_dict.get('candle_acc_trade_price', 0.0)),  # 누적 거래대금
-                    float(api_dict.get('candle_acc_trade_volume', 0.0))   # 누적 거래량
+                    _safe_float(api_dict.get('opening_price')),    # 시가 (빈 캔들: NULL)
+                    _safe_float(api_dict.get('high_price')),       # 고가 (빈 캔들: NULL)
+                    _safe_float(api_dict.get('low_price')),        # 저가 (빈 캔들: NULL)
+                    _safe_float(api_dict.get('trade_price')),      # 종가 (빈 캔들: NULL)
+                    _safe_int(api_dict.get('timestamp', 0)),       # 타임스탬프
+                    _safe_float(api_dict.get('candle_acc_trade_price')),  # 누적 거래대금 (빈 캔들: NULL)
+                    _safe_float(api_dict.get('candle_acc_trade_volume')),   # 누적 거래량 (빈 캔들: NULL)
+                    api_dict.get('blank_copy_from_utc')  # 빈 캔들 식별 필드
                 ))
             except (ValueError, KeyError) as e:
                 logger.warning(f"잘못된 API 데이터 스키핑: {api_dict}, 오류: {e}")
@@ -583,8 +625,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
             timestamp, candle_acc_trade_price, candle_acc_trade_volume,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            blank_copy_from_utc, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
 
         try:
@@ -625,13 +667,14 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                     db_dict['candle_date_time_utc'],
                     db_dict['market'],
                     db_dict['candle_date_time_kst'],
-                    db_dict['opening_price'],
-                    db_dict['high_price'],
-                    db_dict['low_price'],
-                    db_dict['trade_price'],
-                    db_dict['timestamp'],
-                    db_dict['candle_acc_trade_price'],
-                    db_dict['candle_acc_trade_volume']
+                    _safe_float(db_dict.get('opening_price')),        # 빈 캔들: NULL
+                    _safe_float(db_dict.get('high_price')),           # 빈 캔들: NULL
+                    _safe_float(db_dict.get('low_price')),            # 빈 캔들: NULL
+                    _safe_float(db_dict.get('trade_price')),          # 빈 캔들: NULL
+                    _safe_int(db_dict.get('timestamp', 0)),           # timestamp 안전 처리
+                    _safe_float(db_dict.get('candle_acc_trade_price')),  # 빈 캔들: NULL
+                    _safe_float(db_dict.get('candle_acc_trade_volume')),  # 빈 캔들: NULL
+                    db_dict.get('blank_copy_from_utc')
                 ))
             else:
                 # 호환성을 위한 기존 형식 지원 (추후 제거 예정)
@@ -643,8 +686,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
             timestamp, candle_acc_trade_price, candle_acc_trade_volume,
-            created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            blank_copy_from_utc, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
 
         try:
@@ -673,7 +716,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         SELECT
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
-            timestamp, candle_acc_trade_price, candle_acc_trade_volume
+            timestamp, candle_acc_trade_price, candle_acc_trade_volume,
+            blank_copy_from_utc
         FROM {table_name}
         WHERE candle_date_time_utc BETWEEN ? AND ?
         ORDER BY candle_date_time_utc DESC
@@ -709,6 +753,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                             timestamp=row[7],
                             candle_acc_trade_price=row[8],
                             candle_acc_trade_volume=row[9],
+                            blank_copy_from_utc=row[10],
 
                             # 편의성 필드
                             symbol=row[1],  # market과 동일

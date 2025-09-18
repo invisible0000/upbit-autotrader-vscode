@@ -35,16 +35,18 @@ TEST_CONFIG = {
     # 기본 설정
     "symbol": "KRW-BTC",
     "timeframe": "1m",
-    "start_time": "2025-09-09 00:50:00",
-    "count": 200000,
-    "chunk_size": 200,
+    # "start_time": "2025-09-09 00:50:00",
+    "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
+    "count": 10,
+    "chunk_size": 10,
 
     # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
-    "partial_records": [
-        {"start_time": "2025-09-09 00:47:00", "count": 2},  # 2개 캔들 조각
-        {"start_time": "2025-09-09 00:41:00", "count": 2},   # 2개 캔들 조각
-        {"start_time": "2025-09-09 00:37:00", "count": 1}
-    ],
+    "partial_records": [],
+    # "partial_records": [
+    #     {"start_time": "2025-09-09 00:47:00", "count": 2},  # 2개 캔들 조각
+    #     {"start_time": "2025-09-09 00:41:00", "count": 2},   # 2개 캔들 조각
+    #     {"start_time": "2025-09-09 00:37:00", "count": 1}
+    # ],
 
     # 고급 설정
     "table_name": "candles_KRW_BTC_1m",

@@ -80,20 +80,28 @@ class CandleDBCleaner:
             return 0
 
     def _create_candle_table(self, cursor: sqlite3.Cursor, table_name: str) -> None:
-        """캔들 테이블 생성 (표준 스키마)"""
+        """캔들 테이블 생성 (sqlite_candle_repository.py와 동일한 최신 스키마)"""
         cursor.execute(f"""
             CREATE TABLE {table_name} (
-                candle_date_time_utc TEXT PRIMARY KEY,
+                -- 단일 PRIMARY KEY (시간 정렬 + 중복 방지)
+                candle_date_time_utc TEXT NOT NULL PRIMARY KEY,
+
+                -- 업비트 API 공통 필드들
                 market TEXT NOT NULL,
-                candle_date_time_kst TEXT,
-                opening_price REAL,
-                high_price REAL,
-                low_price REAL,
-                trade_price REAL,
-                timestamp INTEGER,
-                candle_acc_trade_price REAL,
-                candle_acc_trade_volume REAL,
-                created_at TEXT
+                candle_date_time_kst TEXT NOT NULL,
+                opening_price REAL,        -- 빈 캔들에서는 NULL (용량 절약)
+                high_price REAL,           -- 빈 캔들에서는 NULL (용량 절약)
+                low_price REAL,            -- 빈 캔들에서는 NULL (용량 절약)
+                trade_price REAL,          -- 빈 캔들에서는 NULL (용량 절약)
+                timestamp INTEGER NOT NULL,
+                candle_acc_trade_price REAL,   -- 빈 캔들에서는 NULL (용량 절약)
+                candle_acc_trade_volume REAL,  -- 빈 캔들에서는 NULL (용량 절약)
+
+                -- 빈 캔들 처리 필드
+                blank_copy_from_utc TEXT,
+
+                -- 메타데이터
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -148,7 +156,7 @@ def main():
     clean_result = cleaner.clear_candle_table()
 
     if clean_result['success']:
-        print(f"   ✅ 초기화 성공!")
+        print("   ✅ 초기화 성공!")
         print(f"   📁 DB 경로: {clean_result['db_path']}")
         print(f"   📊 이전 레코드: {clean_result['records_before']:,}개")
         print(f"   📊 현재 레코드: {clean_result['records_after']:,}개")

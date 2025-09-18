@@ -588,6 +588,10 @@ class CandleDataProvider:
         if not (is_first_chunk and request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]):
             chunk_start = chunk_info.to
             chunk_end = self._calculate_chunk_end_time(chunk_info)
+
+            # 🔍 디버깅: 겹침 분석에서의 chunk_end
+            logger.debug(f"🔍 겹침 분석 chunk_end: {chunk_end}")
+
             overlap_result = await self._analyze_chunk_overlap(
                 state.symbol, state.timeframe, chunk_start, chunk_end
             )
@@ -603,6 +607,10 @@ class CandleDataProvider:
 
             # 빈 캔들 처리 적용 (save_raw_api_data 전)
             chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
+
+            # 🔍 디버깅: 빈 캔들 처리에 전달되는 chunk_end
+            logger.debug(f"🔍 빈 캔들 처리 (COUNT_ONLY) chunk_end: {chunk_end}")
+
             final_candles = await self._process_api_candles_with_empty_filling(
                 api_response, state.timeframe, chunk_end
             )
@@ -1139,7 +1147,13 @@ class CandleDataProvider:
 
     def _calculate_chunk_end_time(self, chunk_info: ChunkInfo) -> datetime:
         """청크 요청의 예상 종료 시점 계산"""
-        end_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, -(chunk_info.count - 1))
+        ticks = -(chunk_info.count - 1)
+        end_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, ticks)
+
+        # 🔍 디버깅: 청크 경계 계산 과정 로깅
+        logger.debug(f"🔍 청크 경계 계산: to={chunk_info.to}, count={chunk_info.count}, "
+                     f"ticks={ticks}, calculated_end={end_time}")
+
         return end_time
 
     def _ensure_utc_timezone(self, dt: datetime) -> datetime:

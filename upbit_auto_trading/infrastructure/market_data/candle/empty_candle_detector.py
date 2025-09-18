@@ -100,8 +100,15 @@ class EmptyCandleDetector:
 
         logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
 
-        # 1. Gap 감지
-        gaps = self._detect_gaps_in_response(api_candles)
+        # 🔍 디버깅: API 응답 캔들들의 시간 범위 확인
+        if api_candles:
+            sorted_for_debug = sorted(api_candles, key=lambda x: x["candle_date_time_utc"], reverse=True)
+            first_time = sorted_for_debug[0]["candle_date_time_utc"]
+            last_time = sorted_for_debug[-1]["candle_date_time_utc"]
+            logger.debug(f"🔍 API 응답 시간 범위: {first_time} ~ {last_time} ({len(api_candles)}개)")
+
+        # 1. Gap 감지 (청크 범위 내로 제한)
+        gaps = self._detect_gaps_in_response(api_candles, chunk_end)
 
         if not gaps:
             logger.debug("Gap 없음, 청크 경계 필터링 건너뛰기")
@@ -117,6 +124,9 @@ class EmptyCandleDetector:
         merged_candles = self._merge_real_and_empty_candles(api_candles, empty_candle_dicts)
 
         # 4. 🆕 청크 경계 후처리: chunk_end 이후 캔들 제거
+        # 🔍 디버깅: 청크 경계 필터링 전 상태
+        logger.debug(f"🔍 필터링 전: {len(merged_candles)}개 캔들, chunk_end: {chunk_end}")
+
         final_candles = self._filter_by_chunk_boundary(merged_candles, chunk_end)
 
         logger.info(f"빈 캔들 처리 완료: 실제 {len(api_candles)}개 + 빈 {len(empty_candle_dicts)}개 → 최종 {len(final_candles)}개")
@@ -156,7 +166,7 @@ class EmptyCandleDetector:
             logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
 
         # 1. Gap 감지 (기존과 동일)
-        gaps = self._detect_gaps_in_response(api_candles)
+        gaps = self._detect_gaps_in_response(api_candles, None)
 
         if not gaps:
             logger.debug("Gap 없음, 원본 응답 반환")
@@ -185,7 +195,7 @@ class EmptyCandleDetector:
         logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
 
         # 1. Gap 감지
-        gaps = self._detect_gaps_in_response(api_candles)
+        gaps = self._detect_gaps_in_response(api_candles, None)
 
         if not gaps:
             logger.debug("Gap 없음, 원본 응답 반환")
@@ -283,7 +293,11 @@ class EmptyCandleDetector:
 
     # === Gap 감지 로직 ===
 
-    def _detect_gaps_in_response(self, api_candles: List[Dict[str, Any]]) -> List[GapInfo]:
+    def _detect_gaps_in_response(
+        self,
+        api_candles: List[Dict[str, Any]],
+        chunk_end: Optional[datetime] = None
+    ) -> List[GapInfo]:
         """
         API 응답 캔들들 사이의 Gap 감지
 
@@ -298,7 +312,7 @@ class EmptyCandleDetector:
             return []  # 캔들이 1개 이하면 Gap 없음
 
         # 업비트 내림차순 확인 (최신 → 과거)
-        sorted_candles = sorted(api_candles,
+        sorted_candles = sorted(api_candles,  # <-- 업비트는 내림차순으로 이미 제공, 필요성 검토 필요
                                 key=lambda x: x["candle_date_time_utc"],
                                 reverse=True)
 
@@ -315,6 +329,12 @@ class EmptyCandleDetector:
 
             # Gap 감지: 실제 다음 캔들이 예상보다 과거에 있음
             if next_time < expected_next:
+                # 🆕 청크 범위 필터링: chunk_end보다 과거의 Gap은 무시
+                if chunk_end and expected_next < chunk_end:
+                    logger.debug(f"Gap 무시 (청크 범위 밖): {next_time} ~ {expected_next} "
+                                 f"(chunk_end: {chunk_end})")
+                    continue
+
                 gap_info = GapInfo(
                     gap_start=next_time,        # Gap 시작 (과거)
                     gap_end=expected_next,      # Gap 종료 (미래)
@@ -394,25 +414,23 @@ class EmptyCandleDetector:
         업비트 API 형식의 빈 캔들 Dict 생성
 
         빈 캔들 특징:
-        - 가격: 참조 캔들의 종가로 고정 (시가=고가=저가=종가)
-        - 거래량/거래대금: 0
+        - 가격: NULL로 설정하여 용량 절약
+        - 거래량/거래대금: NULL로 설정하여 용량 절약
         - blank_copy_from_utc: 빈 캔들 식별용 필드
         - timestamp: 정확한 밀리초 단위 timestamp
         """
-        ref_price = reference_candle["trade_price"]  # 참조 캔들의 종가
-
         return {
             # === 업비트 API 공통 필드 ===
             "market": reference_candle["market"],
             "candle_date_time_utc": target_time.strftime('%Y-%m-%dT%H:%M:%S'),
             "candle_date_time_kst": self._utc_to_kst_string(target_time),
-            "opening_price": ref_price,      # 빈 캔들: 모든 가격 동일
-            "high_price": ref_price,
-            "low_price": ref_price,
-            "trade_price": ref_price,
+            "opening_price": None,           # 빈 캔들: NULL (용량 절약)
+            "high_price": None,              # 빈 캔들: NULL (용량 절약)
+            "low_price": None,               # 빈 캔들: NULL (용량 절약)
+            "trade_price": None,             # 빈 캔들: NULL (용량 절약)
             "timestamp": timestamp_ms,       # 🚀 정확한 timestamp (SqliteCandleRepository 호환)
-            "candle_acc_trade_price": 0.0,   # 빈 캔들: 거래 없음
-            "candle_acc_trade_volume": 0.0,
+            "candle_acc_trade_price": None,  # 빈 캔들: NULL (용량 절약)
+            "candle_acc_trade_volume": None,  # 빈 캔들: NULL (용량 절약)
 
             # === 빈 캔들 식별 필드 ===
             "blank_copy_from_utc": reference_candle["candle_date_time_utc"],  # 참조 캔들 추적용

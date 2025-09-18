@@ -43,16 +43,16 @@ class ChunkStatus(Enum):
 class CandleData:
     """캔들 데이터 도메인 모델 (업비트 API 완전 호환)"""
     # === 업비트 API 응답 필드 (1:1 매칭) ===
-    market: str                           # 페어 코드 (KRW-BTC)
-    candle_date_time_utc: str            # UTC 시간 문자열
-    candle_date_time_kst: str            # KST 시간 문자열
-    opening_price: float                 # 시가
-    high_price: float                    # 고가
-    low_price: float                     # 저가
-    trade_price: float                   # 종가
-    timestamp: int                       # 마지막 틱 타임스탬프 (ms)
-    candle_acc_trade_price: float        # 누적 거래 금액
-    candle_acc_trade_volume: float       # 누적 거래량
+    market: str                                    # 페어 코드 (KRW-BTC)
+    candle_date_time_utc: str                     # UTC 시간 문자열
+    candle_date_time_kst: str                     # KST 시간 문자열
+    opening_price: Optional[float]                # 시가 (빈 캔들에서는 None)
+    high_price: Optional[float]                   # 고가 (빈 캔들에서는 None)
+    low_price: Optional[float]                    # 저가 (빈 캔들에서는 None)
+    trade_price: Optional[float]                  # 종가 (빈 캔들에서는 None)
+    timestamp: int                                # 마지막 틱 타임스탬프 (ms)
+    candle_acc_trade_price: Optional[float]       # 누적 거래 금액 (빈 캔들에서는 None)
+    candle_acc_trade_volume: Optional[float]      # 누적 거래량 (빈 캔들에서는 None)
 
     # === 타임프레임별 고유 필드 (Optional) ===
     unit: Optional[int] = None                    # 초봉/분봉: 캔들 단위
@@ -61,6 +61,9 @@ class CandleData:
     change_rate: Optional[float] = None           # 일봉: 변화율
     first_day_of_period: Optional[str] = None     # 주봉~연봉: 집계 시작일
     converted_trade_price: Optional[float] = None  # 일봉: 환산 종가 (선택적)
+
+    # === 빈 캔들 처리 필드 ===
+    blank_copy_from_utc: Optional[str] = None  # 빈 캔들 식별용 (참조 캔들의 UTC 시간)
 
     # === 편의성 필드 (호환성) ===
     symbol: str = ""                     # market에서 추출
@@ -71,16 +74,21 @@ class CandleData:
         # ============================================
         # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
         # ============================================
-        # 기본 가격 검증
-        prices = [self.opening_price, self.high_price, self.low_price, self.trade_price]
-        if any(p <= 0 for p in prices):
-            raise ValueError("모든 가격은 0보다 커야 합니다")
-        if self.candle_acc_trade_volume < 0:
-            raise ValueError("거래량은 0 이상이어야 합니다")
-        if self.high_price < max(self.opening_price, self.trade_price, self.low_price):
-            raise ValueError("고가는 시가/종가/저가보다 높아야 합니다")
-        if self.low_price > min(self.opening_price, self.trade_price, self.high_price):
-            raise ValueError("저가는 시가/종가/고가보다 낮아야 합니다")
+        # 빈 캔들 허용: blank_copy_from_utc가 있으면 가격/거래량 검증 건너뛰기
+        if self.blank_copy_from_utc is not None:
+            # 빈 캔들: 검증 생략 (NULL 값 허용)
+            pass
+        else:
+            # 일반 캔들: 기본 가격 검증
+            prices = [self.opening_price, self.high_price, self.low_price, self.trade_price]
+            if any(p is None or p <= 0 for p in prices):
+                raise ValueError("모든 가격은 0보다 커야 합니다")
+            if self.candle_acc_trade_volume is not None and self.candle_acc_trade_volume < 0:
+                raise ValueError("거래량은 0 이상이어야 합니다")
+            if self.high_price < max(self.opening_price, self.trade_price, self.low_price):
+                raise ValueError("고가는 시가/종가/저가보다 높아야 합니다")
+            if self.low_price > min(self.opening_price, self.trade_price, self.high_price):
+                raise ValueError("저가는 시가/종가/고가보다 낮아야 합니다")
         # ============================================
         # 🔍 END VALIDATION ZONE
         # ============================================
@@ -97,13 +105,13 @@ class CandleData:
             market=api_data["market"],
             candle_date_time_utc=api_data["candle_date_time_utc"],
             candle_date_time_kst=api_data["candle_date_time_kst"],
-            opening_price=api_data["opening_price"],
-            high_price=api_data["high_price"],
-            low_price=api_data["low_price"],
-            trade_price=api_data["trade_price"],
+            opening_price=api_data.get("opening_price"),      # 빈 캔들 고려 None 허용
+            high_price=api_data.get("high_price"),           # 빈 캔들 고려 None 허용
+            low_price=api_data.get("low_price"),             # 빈 캔들 고려 None 허용
+            trade_price=api_data.get("trade_price"),         # 빈 캔들 고려 None 허용
             timestamp=api_data["timestamp"],
-            candle_acc_trade_price=api_data["candle_acc_trade_price"],
-            candle_acc_trade_volume=api_data["candle_acc_trade_volume"],
+            candle_acc_trade_price=api_data.get("candle_acc_trade_price"),   # 빈 캔들 고려 None 허용
+            candle_acc_trade_volume=api_data.get("candle_acc_trade_volume"),  # 빈 캔들 고려 None 허용
 
             # 타임프레임별 선택적 필드
             unit=api_data.get("unit"),
@@ -112,6 +120,9 @@ class CandleData:
             change_rate=api_data.get("change_rate"),
             first_day_of_period=api_data.get("first_day_of_period"),
             converted_trade_price=api_data.get("converted_trade_price"),
+
+            # 빈 캔들 처리 필드
+            blank_copy_from_utc=api_data.get("blank_copy_from_utc"),
 
             # 편의성 필드
             symbol=api_data["market"],
@@ -186,6 +197,7 @@ class CandleData:
             "timestamp": self.timestamp,
             "candle_acc_trade_price": self.candle_acc_trade_price,
             "candle_acc_trade_volume": self.candle_acc_trade_volume,
+            "blank_copy_from_utc": self.blank_copy_from_utc,
         }
 
 
