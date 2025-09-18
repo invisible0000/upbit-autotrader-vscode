@@ -169,6 +169,7 @@
   },
   "active": "5bd0f060c9299ce7",
   "lastOpenFiles": [
+    "docs/ideas/빈캔들 관리 방법 구상안v1.1.md",
     "docs/ideas/빈캔들 관리 방법 구상안.md",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
@@ -204,7 +205,6 @@
     "upbit_auto_trading/infrastructure/external_apis/upbit_backup_20250914_104600/rate_limiter/README.md",
     "upbit_auto_trading/infrastructure/external_apis/upbit_backup_20250914_104600/rate_limiter/RATE_LIMITER_ARCHITECTURE_ANALYSIS.md",
     "upbit_auto_trading/infrastructure/external_apis/upbit_backup_20250914_104600/rate_limiter/GCRA_ALGORITHM_DETAILED_GUIDE.md",
-    "upbit_auto_trading/infrastructure/external_apis/upbit copy/websocket/WEBSOCKET_V6_UNIFIED_ARCHITECTURE.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",
