@@ -545,10 +545,11 @@ class RequestInfo:
 @dataclass(frozen=False)  # 실시간 조정을 위해 mutable
 class ChunkInfo:
     """
-    CandleDataProvider v4.0 개별 청크 정보
+    CandleDataProvider v6.1 개별 청크 정보 - Overlap 최적화 지원
 
     실시간 시간 조정이 가능한 개별 청크 메타정보.
     이전 청크 결과에 따라 동적으로 시간 범위 조정.
+    temp_chunk 생성 제거로 성능 최적화.
     """
     # === 청크 식별 정보 ===
     chunk_id: str                         # 청크 고유 식별자
@@ -560,6 +561,12 @@ class ChunkInfo:
     count: int                            # 이 청크에서 요청할 캔들 개수
     to: Optional[datetime] = None         # 이 청크의 마지막 캔들 시간
     end: Optional[datetime] = None        # 이 청크의 종료 시간
+
+    # === 🆕 Overlap 최적화 필드들 ===
+    overlap_status: Optional['OverlapStatus'] = None    # 겹침 분석 결과
+    api_count: Optional[int] = None                     # 실제 API 호출 개수 (부분 겹침 시)
+    api_start: Optional[datetime] = None                # API 호출 시작점 (부분 겹침 시)
+    api_end: Optional[datetime] = None                  # API 호출 종료점 (부분 겹침 시)
 
     # === 처리 상태 정보 ===
     status: str = "pending"               # pending, processing, completed, failed
@@ -616,6 +623,53 @@ class ChunkInfo:
     def is_completed(self) -> bool:
         """완료 상태 확인"""
         return self.status == "completed"
+
+    # === 🆕 Overlap 최적화 메서드들 ===
+
+    def set_overlap_info(self, overlap_result: 'OverlapResult', api_count: Optional[int] = None) -> None:
+        """겹침 분석 결과를 ChunkInfo에 설정 (temp_chunk 생성 제거)"""
+        self.overlap_status = overlap_result.status
+        self.api_start = overlap_result.api_start
+        self.api_end = overlap_result.api_end
+
+        # API 개수 설정 (부분 겹침 시)
+        if api_count is not None:
+            self.api_count = api_count
+        elif overlap_result.api_start and overlap_result.api_end:
+            # API 개수 자동 계산
+            from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
+            self.api_count = TimeUtils.calculate_expected_count(
+                overlap_result.api_start, overlap_result.api_end, self.timeframe
+            )
+
+    def has_overlap_info(self) -> bool:
+        """겹침 분석 정보 보유 여부 확인"""
+        return self.overlap_status is not None
+
+    def needs_api_call(self) -> bool:
+        """API 호출 필요 여부 확인"""
+        if not self.has_overlap_info():
+            return True  # 겹침 분석 없으면 API 호출 필요
+
+        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapStatus
+        return self.overlap_status != OverlapStatus.COMPLETE_OVERLAP
+
+    def needs_partial_api_call(self) -> bool:
+        """부분 API 호출 필요 여부 확인"""
+        if not self.has_overlap_info():
+            return False
+
+        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapStatus
+        return self.overlap_status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]
+
+    def get_api_params(self) -> tuple[int, Optional[datetime]]:
+        """API 호출 파라미터 반환 (count, to)"""
+        if self.needs_partial_api_call() and self.api_count and self.api_start:
+            # 부분 겹침: overlap 정보 사용
+            return self.api_count, self.api_start
+        else:
+            # 전체 호출: 기본 정보 사용
+            return self.count, self.to
 
     @classmethod
     def create_chunk(cls, chunk_index: int, symbol: str, timeframe: str, count: int,

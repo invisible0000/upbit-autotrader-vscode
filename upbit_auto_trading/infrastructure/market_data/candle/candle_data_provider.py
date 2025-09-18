@@ -1,13 +1,15 @@
 """
-CandleDataProvider v6.0 - 성능 최적화 버전
+CandleDataProvider v6.2 - ChunkInfo 확장 성능 최적화 버전
 
 Created: 2025-09-17
+Updated: 2025-09-18 (ChunkInfo 확장으로 temp_chunk 생성 제거)
 Purpose: 메모리 효율성과 DB 접근 최소화를 위한 성능 최적화
-Features: 직접 저장 방식, 불필요한 변환 제거, 메모리 사용량 90% 절약
+Features: 직접 저장 방식, 불필요한 변환 제거, 메모리 사용량 90% 절약, 객체 생성 최적화
 Performance:
 - 메모리: 90% 절약 (1GB → 100MB)
 - DB 접근: 56% 감소 (16회 → 7회)
 - CPU 처리: 70% 개선
+- 🆕 객체 생성: temp_chunk 제거로 추가 절약
 Architecture: DDD Infrastructure 계층, 의존성 주입 패턴
 """
 
@@ -226,18 +228,20 @@ class CollectionPlan:
 
 class CandleDataProvider:
     """
-    캔들 데이터 제공자 v6.0 - 성능 최적화 버전
+    캔들 데이터 제공자 v6.2 - ChunkInfo 확장 성능 최적화 버전
 
     주요 개선사항:
     1. 메모리 효율성: 90% 절약 (직접 저장 방식)
     2. DB 접근 최소화: 56% 감소 (불필요한 조회 제거)
     3. CPU 처리량 개선: 70% 개선 (변환 과정 제거)
     4. 코드 단순성: 복잡한 병합 로직 제거
+    5. 🆕 객체 생성 최적화: temp_chunk 생성 제거 (ChunkInfo 확장)
 
     최적화 전략:
     - API Dict → DB 직접 저장 (CandleData 변환 생략)
     - OverlapAnalyzer 유지 (API 절약 효과 보존)
     - 메모리 즉시 해제 (누적 방지)
+    - 🚀 ChunkInfo 통합 관리: overlap 정보를 하나의 객체에서 처리
     """
 
     def __init__(
@@ -248,7 +252,7 @@ class CandleDataProvider:
         chunk_size: int = 200,
         enable_empty_candle_processing: bool = True
     ):
-        """CandleDataProvider v6.1 초기화 (빈 캔듡 처리 지원)"""
+        """CandleDataProvider v6.2 초기화 (빈 캔들 처리 + ChunkInfo 확장 최적화)"""
         self.repository = repository
         self.upbit_client = upbit_client
         self.overlap_analyzer = overlap_analyzer
@@ -260,7 +264,7 @@ class CandleDataProvider:
         self.enable_empty_candle_processing = enable_empty_candle_processing
         self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # timeframe별 캠시
 
-        logger.info("CandleDataProvider v6.1 (빈 캔듡 처리 지원) 초기화")
+        logger.info("CandleDataProvider v6.2 (빈 캔들 처리 + ChunkInfo 확장 최적화) 초기화")
         logger.info(f"청크 크기: {self.chunk_size}, API Rate Limit: {self.api_rate_limit_rps} RPS")
         logger.info(f"빈 캔듡 처리: {'활성화' if enable_empty_candle_processing else '비활성화'}")
 
@@ -597,6 +601,9 @@ class CandleDataProvider:
             )
 
         if overlap_result and hasattr(overlap_result, 'status'):
+            # 🟢 개선: ChunkInfo에 overlap 정보 저장 (통합 관리)
+            chunk_info.set_overlap_info(overlap_result)
+
             # 겹침 분석 결과에 따른 직접 저장
             saved_count, last_candle_time = await self._handle_overlap_direct_storage(
                 chunk_info, overlap_result, chunk_end
@@ -666,30 +673,21 @@ class CandleDataProvider:
             logger.debug(f"부분 겹침 ({status.value}) → API 부분만 직접 저장")
 
             if overlap_result.api_start and overlap_result.api_end:
-                # API 요청 개수 동적 계산
+                # 🟢 개선: ChunkInfo에 overlap 정보 설정 (temp_chunk 생성 제거)
                 api_count = self._calculate_api_count(
                     overlap_result.api_start,
                     overlap_result.api_end,
                     chunk_info.timeframe
                 )
 
-                # 부분 API 요청을 위한 임시 청크 정보 생성
-                temp_chunk = ChunkInfo(
-                    chunk_id=f"{chunk_info.chunk_id}_partial",
-                    chunk_index=chunk_info.chunk_index,
-                    symbol=chunk_info.symbol,
-                    timeframe=chunk_info.timeframe,
-                    count=api_count,
-                    to=overlap_result.api_start,
-                    end=overlap_result.api_end,
-                    status="pending"
-                )
-                api_response = await self._fetch_chunk_from_api(temp_chunk)
+                chunk_info.set_overlap_info(overlap_result, api_count)
+                api_response = await self._fetch_chunk_from_api(chunk_info)
 
                 # 빈 캔들 처리 적용 (save_raw_api_data 전)
-                temp_chunk_end = temp_chunk.end or (self._calculate_chunk_end_time(temp_chunk) if temp_chunk.to else None)
+                # 부분 API의 실제 종료 시간 계산
+                partial_chunk_end = overlap_result.api_end or calculated_chunk_end
                 final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, chunk_info.timeframe, temp_chunk_end
+                    api_response, chunk_info.timeframe, partial_chunk_end
                 )
 
                 saved_count = await self.repository.save_raw_api_data(
@@ -786,22 +784,30 @@ class CandleDataProvider:
     # =========================================================================
 
     async def _fetch_chunk_from_api(self, chunk_info: ChunkInfo) -> List[Dict[str, Any]]:
-        """실제 API 호출을 통한 청크 데이터 수집"""
+        """실제 API 호출을 통한 청크 데이터 수집 - Overlap 최적화 지원"""
         logger.debug(f"API 청크 요청: {chunk_info.chunk_id}")
+
+        # 🟢 개선: ChunkInfo에서 최적화된 API 파라미터 추출
+        api_count, api_to = chunk_info.get_api_params()
+
+        if chunk_info.has_overlap_info() and chunk_info.needs_partial_api_call():
+            logger.debug(f"부분 API 호출: count={api_count}, to={api_to} (overlap 최적화)")
+        else:
+            logger.debug(f"전체 API 호출: count={api_count}, to={api_to}")
 
         try:
             # 타임프레임별 API 메서드 선택
             if chunk_info.timeframe == '1s':
                 # 초봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
+                if api_to:
                     timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
-                    fetch_time = chunk_info.to + timeframe_delta
+                    fetch_time = api_to + timeframe_delta
                     to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
 
                 candles = await self.upbit_client.get_candles_seconds(
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
@@ -813,74 +819,76 @@ class CandleDataProvider:
 
                 # 분봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
+                if api_to:
                     timeframe_delta = TimeUtils.get_timeframe_delta(chunk_info.timeframe)
-                    fetch_time = chunk_info.to + timeframe_delta
+                    fetch_time = api_to + timeframe_delta
                     to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
 
                 candles = await self.upbit_client.get_candles_minutes(
                     unit=unit,
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
             elif chunk_info.timeframe == '1d':
                 # 일봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
-                    fetch_start_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, 1)
+                if api_to:
+                    fetch_start_time = TimeUtils.get_time_by_ticks(api_to, chunk_info.timeframe, 1)
                     to_param = fetch_start_time.strftime("%Y-%m-%d")
 
                 candles = await self.upbit_client.get_candles_days(
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
             elif chunk_info.timeframe == '1w':
                 # 주봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
-                    fetch_start_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, 1)
+                if api_to:
+                    fetch_start_time = TimeUtils.get_time_by_ticks(api_to, chunk_info.timeframe, 1)
                     to_param = fetch_start_time.strftime("%Y-%m-%d")
 
                 candles = await self.upbit_client.get_candles_weeks(
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
             elif chunk_info.timeframe == '1M':
                 # 월봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
-                    fetch_start_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, 1)
+                if api_to:
+                    fetch_start_time = TimeUtils.get_time_by_ticks(api_to, chunk_info.timeframe, 1)
                     to_param = fetch_start_time.strftime("%Y-%m")
 
                 candles = await self.upbit_client.get_candles_months(
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
             elif chunk_info.timeframe == '1y':
                 # 연봉 API 지출점 보정
                 to_param = None
-                if chunk_info.to:
-                    fetch_start_time = TimeUtils.get_time_by_ticks(chunk_info.to, chunk_info.timeframe, 1)
+                if api_to:
+                    fetch_start_time = TimeUtils.get_time_by_ticks(api_to, chunk_info.timeframe, 1)
                     to_param = fetch_start_time.strftime("%Y")
 
                 candles = await self.upbit_client.get_candles_years(
                     market=chunk_info.symbol,
-                    count=chunk_info.count,
+                    count=api_count,
                     to=to_param
                 )
 
             else:
                 raise ValueError(f"지원하지 않는 타임프레임: {chunk_info.timeframe}")
 
-            logger.info(f"API 청크 완료: {chunk_info.chunk_id}, 수집: {len(candles)}개")
+            # 🟢 개선: 최적화된 로깅 (overlap 정보 표시)
+            overlap_info = f" (overlap: {chunk_info.overlap_status.value})" if chunk_info.has_overlap_info() else ""
+            logger.info(f"API 청크 완료: {chunk_info.chunk_id}, 수집: {len(candles)}개{overlap_info}")
             return candles
 
         except Exception as e:
