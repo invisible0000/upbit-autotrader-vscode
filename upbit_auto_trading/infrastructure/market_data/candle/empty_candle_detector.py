@@ -32,15 +32,15 @@ logger = create_component_logger("EmptyCandleDetector")
 @dataclass
 class GapInfo:
     """Gap 정보 저장용 모델 (EmptyCandleDetector 전용)"""
-    gap_start: datetime               # Gap 시작 시간 (과거)
-    gap_end: datetime                 # Gap 종료 시간 (미래)
+    gap_start: datetime               # Gap 시작 시간 (미래) - 업비트 정렬 [5,4,3,2,1]에서 더 큰 값
+    gap_end: datetime                 # Gap 종료 시간 (과거) - 업비트 정렬에서 더 작은 값
     reference_candle: Dict[str, Any]  # 참조할 실제 캔들 (Dict 형태)
     timeframe: str                    # 타임프레임
 
     def __post_init__(self):
-        """Gap 정보 검증"""
-        if self.gap_start >= self.gap_end:
-            raise ValueError(f"Gap 시작시간이 종료시간보다 늦습니다: {self.gap_start} >= {self.gap_end}")
+        """Gap 정보 검증 (업비트 정렬: gap_start > gap_end)"""
+        if self.gap_start < self.gap_end:
+            raise ValueError(f"Gap 시작시간이 종료시간보다 작습니다: {self.gap_start} < {self.gap_end}")
         if not self.reference_candle:
             raise ValueError("참조 캔들 정보가 없습니다")
         if not self.timeframe:
@@ -78,7 +78,8 @@ class EmptyCandleDetector:
     def detect_and_fill_gaps(
         self,
         api_candles: List[Dict[str, Any]],
-        chunk_end: Optional[datetime] = None
+        api_start: Optional[datetime] = None,
+        api_end: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """
         API 응답에서 Gap 감지하고 빈 캔들(Dict)로 채워서 완전한 List[Dict] 반환
@@ -88,17 +89,19 @@ class EmptyCandleDetector:
 
         Args:
             api_candles: 업비트 API 원시 응답 데이터 (Dict 리스트)
-            chunk_end: 청크 종료 시간 (이 시간 이후의 캔들은 제거됨)
+            api_start: API 검출 범위 시작 시간 (미래 방향, None이면 제한 없음)
+            api_end: API 검출 범위 종료 시간 (과거 방향, None이면 제한 없음)
 
         Returns:
             List[Dict]: 실제 캔들 + 빈 캔들이 병합된 완전한 시계열 (Dict 형태 유지)
-                       chunk_end가 지정된 경우 해당 시간 이후의 캔들은 자동 제거
+                       api_start~api_end 범위 내에서만 빈 캔들 검출 및 생성
         """
         if not api_candles:
             logger.debug("빈 API 응답, 처리할 캔들 없음")
             return []
 
         logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
+        logger.debug(f"검출 범위: api_start={api_start}, api_end={api_end}")
 
         # 🔍 디버깅: API 응답 캔들들의 시간 범위 확인
         if api_candles:
@@ -107,95 +110,8 @@ class EmptyCandleDetector:
             last_time = sorted_for_debug[-1]["candle_date_time_utc"]
             logger.debug(f"🔍 API 응답 시간 범위: {first_time} ~ {last_time} ({len(api_candles)}개)")
 
-        # 1. Gap 감지 (청크 범위 내로 제한)
-        gaps = self._detect_gaps_in_response(api_candles, chunk_end)
-
-        if not gaps:
-            logger.debug("Gap 없음, 청크 경계 필터링 건너뛰기")
-            # 빈 캔들이 없으면 청크 경계 필터링도 건너뛰기 (안전성 우선)
-            return api_candles
-
-        logger.info(f"{len(gaps)}개 Gap 감지, 빈 캔들 생성 시작")
-
-        # 2. 빈 캔들 생성 (Dict 형태)
-        empty_candle_dicts = self._generate_empty_candle_dicts(gaps)
-
-        # 3. 실제 + 빈 캔들 병합 및 정렬
-        merged_candles = self._merge_real_and_empty_candles(api_candles, empty_candle_dicts)
-
-        # 4. 🆕 청크 경계 후처리: chunk_end 이후 캔들 제거
-        # 🔍 디버깅: 청크 경계 필터링 전 상태
-        logger.debug(f"🔍 필터링 전: {len(merged_candles)}개 캔들, chunk_end: {chunk_end}")
-
-        final_candles = self._filter_by_chunk_boundary(merged_candles, chunk_end)
-
-        logger.info(f"빈 캔들 처리 완료: 실제 {len(api_candles)}개 + 빈 {len(empty_candle_dicts)}개 → 최종 {len(final_candles)}개")
-
-        return final_candles
-
-    def detect_and_fill_gaps_within_bounds(
-        self,
-        api_candles: List[Dict[str, Any]],
-        chunk_start: Optional[datetime],
-        chunk_end: Optional[datetime]
-    ) -> List[Dict[str, Any]]:
-        """
-        청크 경계를 고려한 Gap 감지 및 빈 캔들 생성 (CandleDataProvider 전용)
-
-        청크 경계 초과 문제 해결:
-        - 빈 캔들 생성을 chunk_start ~ chunk_end 범위 내로 제한
-        - 청크 관리 로직과의 충돌 방지
-        - 다음 청크와의 겹침 방지
-
-        Args:
-            api_candles: 업비트 API 원시 응답 데이터 (Dict 리스트)
-            chunk_start: 청크 시작 시간 (None이면 제한 없음)
-            chunk_end: 청크 종료 시간 (None이면 제한 없음)
-
-        Returns:
-            List[Dict]: 청크 경계 내 실제 캔들 + 빈 캔들이 병합된 시계열
-        """
-        if not api_candles:
-            logger.debug("빈 API 응답, 처리할 캔들 없음")
-            return []
-
-        if chunk_start or chunk_end:
-            logger.debug(f"청크 경계 제한 Gap 처리 시작: {len(api_candles)}개 캔들, "
-                         f"범위: {chunk_end} ~ {chunk_start}")
-        else:
-            logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
-
-        # 1. Gap 감지 (기존과 동일)
-        gaps = self._detect_gaps_in_response(api_candles, None)
-
-        if not gaps:
-            logger.debug("Gap 없음, 원본 응답 반환")
-            return api_candles
-
-        logger.info(f"{len(gaps)}개 Gap 감지, 청크 경계 내 빈 캔들 생성 시작")
-
-        # 2. 청크 경계를 고려한 빈 캔들 생성
-        if chunk_start or chunk_end:
-            empty_candle_dicts = self._generate_empty_candle_dicts_bounded(gaps, chunk_start, chunk_end)
-        else:
-            empty_candle_dicts = self._generate_empty_candle_dicts(gaps)
-
-        # 3. 실제 + 빈 캔들 병합 및 정렬
-        merged_candles = self._merge_real_and_empty_candles(api_candles, empty_candle_dicts)
-
-        logger.info(f"청크 경계 제한 처리 완료: 실제 {len(api_candles)}개 + 빈 {len(empty_candle_dicts)}개 = 총 {len(merged_candles)}개")
-
-        return merged_candles
-
-    def _original_detect_and_fill_gaps(self, api_candles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        기존 무제한 Gap 처리 메서드 (하위 호환성 및 테스트용)
-        """
-
-        logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
-
-        # 1. Gap 감지
-        gaps = self._detect_gaps_in_response(api_candles, None)
+        # 1. Gap 감지 (api_start ~ api_end 범위 내로 제한)
+        gaps = self._detect_gaps_in_response(api_candles, api_start, api_end)
 
         if not gaps:
             logger.debug("Gap 없음, 원본 응답 반환")
@@ -208,143 +124,123 @@ class EmptyCandleDetector:
 
         # 3. 실제 + 빈 캔들 병합 및 정렬
         merged_candles = self._merge_real_and_empty_candles(api_candles, empty_candle_dicts)
+
+        # 4. 🆕 api_end 범위 필터링 (요청 범위를 벗어나는 과거 데이터 제거)
+        if api_end:
+            before_filter = len(merged_candles)
+            # 업비트 정렬: api_end보다 과거인 데이터 제거 (candle_date_time_utc < api_end)
+            merged_candles = [
+                candle for candle in merged_candles
+                if self._parse_utc_time(candle["candle_date_time_utc"]) >= api_end
+            ]
+            after_filter = len(merged_candles)
+
+            if before_filter != after_filter:
+                removed_count = before_filter - after_filter
+                logger.info(f"🗑️ api_end 범위 필터링: {removed_count}개 제거 ({before_filter}→{after_filter})")
+                logger.debug(f"📐 api_end 기준: {api_end}, 남은 범위: {api_end} 이후")
 
         logger.info(f"빈 캔들 처리 완료: 실제 {len(api_candles)}개 + 빈 {len(empty_candle_dicts)}개 = 총 {len(merged_candles)}개")
 
         return merged_candles
-
-    def _generate_empty_candle_dicts_bounded(
-        self,
-        gaps: List[GapInfo],
-        chunk_start: Optional[datetime],
-        chunk_end: Optional[datetime]
-    ) -> List[Dict[str, Any]]:
-        """
-        청크 경계를 고려한 빈 캔듡 생성 (성능 최적화 적용)
-
-        핵심 개선사항:
-        - 청크 경계(chunk_start ~ chunk_end) 밖의 빈 캔들은 생성 안함
-        - 다음 청크와의 겹침 방지
-        - 청크 관리 로직과의 충돌 방지
-        """
-        all_empty_candles = []
-
-        for gap_info in gaps:
-            # 청크 경계를 고려한 시간점 배치 생성
-            time_points = self._generate_gap_time_points_bounded(gap_info, chunk_start, chunk_end)
-
-            if not time_points:
-                continue
-
-            # 🚀 성능 최적화: 첫 번째만 datetime → timestamp 변환
-            first_timestamp_ms = self._datetime_to_timestamp_ms(time_points[0])
-
-            for i, current_time in enumerate(time_points):
-                # 🚀 최적화: 나머지는 단순 덧셈으로 timestamp 계산 (76배 빠름!)
-                timestamp_ms = first_timestamp_ms + (i * self._timeframe_delta_ms)
-
-                empty_dict = self._create_empty_candle_dict(
-                    target_time=current_time,
-                    reference_candle=gap_info.reference_candle,
-                    timestamp_ms=timestamp_ms
-                )
-                all_empty_candles.append(empty_dict)
-
-        return all_empty_candles
-
-    def _generate_gap_time_points_bounded(
-        self,
-        gap_info: GapInfo,
-        chunk_start: Optional[datetime],
-        chunk_end: Optional[datetime]
-    ) -> List[datetime]:
-        """
-        청크 경계를 고려한 Gap 구간의 시간점 배치 생성
-
-        청크 경계 제한:
-        - chunk_end 대신 과거 시간은 제외
-        - chunk_start 보다 미래 시간은 제외
-
-        예: 청크 범위 00:49~00:45, Gap 00:35~00:47
-        → 생성: 00:46, 00:47 (청크 경계 내만)
-        """
-        time_points = []
-        current_time = TimeUtils.get_time_by_ticks(gap_info.gap_start, self.timeframe, 1)
-
-        while current_time < gap_info.gap_end:
-            # 청크 경계 확인
-            within_chunk_bounds = True
-
-            if chunk_end and current_time < chunk_end:
-                # 청크 종료 시간보다 과거이면 제외
-                within_chunk_bounds = False
-
-            if chunk_start and current_time > chunk_start:
-                # 청크 시작 시간보다 미래이면 제외
-                within_chunk_bounds = False
-
-            if within_chunk_bounds:
-                time_points.append(current_time)
-
-            current_time = TimeUtils.get_time_by_ticks(current_time, self.timeframe, 1)
-
-        logger.debug(f"청크 경계 내 빈 캔들: {len(time_points)}개 시간점")
-        return time_points
 
     # === Gap 감지 로직 ===
 
     def _detect_gaps_in_response(
         self,
         api_candles: List[Dict[str, Any]],
-        chunk_end: Optional[datetime] = None
+        api_start: Optional[datetime] = None,
+        api_end: Optional[datetime] = None
     ) -> List[GapInfo]:
         """
-        API 응답 캔들들 사이의 Gap 감지
+        API 응답 캔들들 사이의 Gap 감지 (개선된 로직)
 
-        업비트 API 특성 반영:
-        - 내림차순 정렬 (최신 → 과거)
-        - 연속된 캔들간 시간 차이 분석
-        - 타임프레임별 임계값으로 Gap 판단
+        새로운 특징:
+        - api_start부터의 빈 캔들 검출 가능 (첫 번째 캔들과 api_start 비교)
+        - [i-1], [i] 비교 방식으로 변경
+        - api_end 도달 시 검출 중지
+        - api_start ~ api_end 범위 내 정확한 Gap 검출
 
         성능: O(n) 시간 복잡도, 단일 루프로 최적화
         """
-        if len(api_candles) < 2:
-            return []  # 캔들이 1개 이하면 Gap 없음
+        if len(api_candles) < 1:
+            return []  # 캔들이 없으면 Gap 없음
 
-        # 업비트 내림차순 확인 (최신 → 과거)
-        sorted_candles = sorted(api_candles,  # <-- 업비트는 내림차순으로 이미 제공, 필요성 검토 필요
+        # 업비트 내림차순 정렬 (최신 → 과거)
+        sorted_candles = sorted(api_candles,  # 이미 내림차순 정렬일 수 있음
                                 key=lambda x: x["candle_date_time_utc"],
                                 reverse=True)
 
         gaps = []
-        for i in range(len(sorted_candles) - 1):
-            current_candle = sorted_candles[i]      # 더 최신
-            next_candle = sorted_candles[i + 1]     # 더 과거
 
-            current_time = self._parse_utc_time(current_candle["candle_date_time_utc"])
-            next_time = self._parse_utc_time(next_candle["candle_date_time_utc"])
+        # 🆕 1. 첫 번째 캔들과 api_start 비교 (처음부터 빈 캔들 검출)
+        if api_start and sorted_candles:
+            first_candle = sorted_candles[0]
+            first_time = self._parse_utc_time(first_candle["candle_date_time_utc"])
+            # expected_first = TimeUtils.get_time_by_ticks(api_start, self.timeframe, -1)
+            expected_first = api_start
 
-            # 예상 다음 캔들 시간 계산 (과거 방향으로 1틱)
-            expected_next = TimeUtils.get_time_by_ticks(current_time, self.timeframe, -1)
+            logger.debug(f"🔍 첫 캔들 Gap 검사: api_start={api_start}, first_time={first_time}, expected_first={expected_first}")
 
-            # Gap 감지: 실제 다음 캔들이 예상보다 과거에 있음
-            if next_time < expected_next:
-                # 🆕 청크 범위 필터링: chunk_end보다 과거의 Gap은 무시
-                if chunk_end and expected_next < chunk_end:
-                    logger.debug(f"Gap 무시 (청크 범위 밖): {next_time} ~ {expected_next} "
-                                 f"(chunk_end: {chunk_end})")
-                    continue
-
+            if first_time < expected_first:
+                # 처음부터 Gap 존재 (업비트 정렬: gap_start > gap_end)
                 gap_info = GapInfo(
-                    gap_start=next_time,        # Gap 시작 (과거)
-                    gap_end=expected_next,      # Gap 종료 (미래)
-                    reference_candle=current_candle,  # 참조할 실제 캔들
+                    gap_start=expected_first,    # 미래 (있어야 할 캔들)
+                    gap_end=first_time,          # 과거 (실제 존재하는 캔들)
+                    reference_candle=first_candle,
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
+                logger.debug(f"✅ 처음 Gap 감지: {expected_first} ~ {first_time} (미래→과거)")
+            else:
+                logger.debug("❌ 첫 캔들 Gap 없음: 연속적")
 
-                logger.debug(f"Gap 감지: {next_time} ~ {expected_next} "
-                             f"({(expected_next - next_time).total_seconds():.0f}초)")
+        # 🔧 2. 기존 루프를 [i-1], [i] 비교로 변경
+        for i in range(1, len(sorted_candles)):
+            previous_candle = sorted_candles[i - 1]  # 더 최신 (이전) [5,4,3,2,1] 에서 5가 이전
+            current_candle = sorted_candles[i]       # 더 과거 (현재) 처리 순서에 의해 현재
+
+            previous_time = self._parse_utc_time(previous_candle["candle_date_time_utc"])
+            current_time = self._parse_utc_time(current_candle["candle_date_time_utc"])
+
+            # 🔧 2. 기존 gap 검출 로직 (먼저 실행)
+            expected_current = TimeUtils.get_time_by_ticks(previous_time, self.timeframe, -1)
+
+            logger.debug(f"🔍 캔들[{i - 1}→{i}] Gap 검사: {previous_time} → {current_time}, 예상: {expected_current}")
+
+            if current_time < expected_current:
+                # 실제 gap 발견 (업비트 정렬: gap_start > gap_end)
+                original_gap_start = expected_current  # 미래 (다음에 있어야 할 캔들)
+                original_gap_end = current_time      # 과거 (마지막 존재하는 캔들)
+
+                logger.debug(f"🎯 Gap 발견! 원본 범위: {original_gap_start} ~ {original_gap_end}")
+
+                # 🆕 3. api_end 경계 처리 (gap이 검출 범위를 벗어나지 않도록)
+                gap_start = original_gap_start
+                gap_end = original_gap_end
+
+                if api_end and gap_end < api_end:
+                    gap_end = api_end
+                    logger.debug(f"📐 api_end 경계 조정: gap_end {original_gap_end} → {gap_end}")
+
+                # 유효한 gap인지 확인 (업비트 정렬: gap_start >= gap_end, 빈 캔들 1개 경우 포함)
+                if gap_start >= gap_end:
+                    gap_info = GapInfo(
+                        gap_start=gap_start,
+                        gap_end=gap_end,
+                        reference_candle=current_candle,
+                        timeframe=self.timeframe
+                    )
+                    gaps.append(gap_info)
+                    logger.debug(f"✅ Gap 등록: {gap_start} ~ {gap_end} (미래→과거)")
+                else:
+                    logger.debug(f"❌ Gap 무효: gap_start({gap_start}) < gap_end({gap_end})")
+            else:
+                logger.debug("✅ 연속적: Gap 없음")
+
+            # 🚪 4. api_end 도달 시 루프 중지
+            if api_end and current_time <= api_end:
+                break
 
         return gaps
 
@@ -386,22 +282,28 @@ class EmptyCandleDetector:
 
     def _generate_gap_time_points(self, gap_info: GapInfo) -> List[datetime]:
         """
-        Gap 구간의 모든 시간점 배치 생성
+        Gap 구간의 모든 시간점 배치 생성 (업비트 정렬: 미래→과거)
 
-        Gap 범위: gap_start < missing_times < gap_end
-        - gap_start 다음 틱부터 시작
-        - gap_end 직전 틱까지 포함 (gap_end는 기존 캔들이므로 제외)
+        Gap 범위: gap_start >= missing_times >= gap_end (업비트 정렬)
+        - gap_start부터 바로 시작 (첫 번째 빈 캔들 포함)
+        - gap_end까지 포함 (api_end로 조정된 경우 gap_end도 빈 캔들로 생성)
 
-        예: Gap 14:01 ~ 14:04 → 생성할 빈 캔들: 14:02, 14:03
+        예: Gap 16:19:00 ~ 16:12:00 → 생성할 빈 캔들: 16:19:00, 16:18:00, ..., 16:12:00
         """
         time_points = []
-        current_time = TimeUtils.get_time_by_ticks(gap_info.gap_start, self.timeframe, 1)
+        current_time = gap_info.gap_start  # 🔧 수정: gap_start부터 바로 시작 (ticks 변환 없이)
 
-        # gap_end 직전까지만 생성 (gap_end는 기존 실제 캔들의 예상 시간이므로 제외)
-        while current_time < gap_info.gap_end:
+        logger.debug(f"🕐 빈 캔들 시간점 생성 시작: {gap_info.gap_start} ~ {gap_info.gap_end}")
+
+        # gap_end까지 포함하여 생성 (>= 조건으로 변경)
+        while current_time >= gap_info.gap_end:
             time_points.append(current_time)
-            current_time = TimeUtils.get_time_by_ticks(current_time, self.timeframe, 1)
+            logger.debug(f"  ➕ 빈 캔들 시간점 추가: {current_time}")
+            current_time = TimeUtils.get_time_by_ticks(current_time, self.timeframe, -1)
 
+        first_point = time_points[0] if time_points else 'None'
+        last_point = time_points[-1] if time_points else 'None'
+        logger.debug(f"🕐 빈 캔들 시간점 생성 완료: {len(time_points)}개 ({first_point} ~ {last_point})")
         return time_points
 
     def _create_empty_candle_dict(
@@ -545,45 +447,6 @@ class EmptyCandleDetector:
         return kst_time.strftime('%Y-%m-%dT%H:%M:%S')
 
     # === 디버깅 및 통계 메서드 ===
-
-    def _filter_by_chunk_boundary(
-        self,
-        candles: List[Dict[str, Any]],
-        chunk_end: Optional[datetime]
-    ) -> List[Dict[str, Any]]:
-        """
-        청크 경계에 따라 캔들 필터링 (chunk_end 이후 캔들 제거)
-
-        청크 경계 초과 문제 해결:
-        - API 응답에 청크 범위를 넘어가는 캔들이 포함될 수 있음
-        - 빈 캔들 생성 후에도 경계를 넘어가는 캔들 발생 가능
-        - 최종 결과에서 chunk_end 이후의 모든 캔들을 안전하게 제거
-
-        Args:
-            candles: 필터링할 캔들 리스트 (실제 + 빈 캔들 혼합)
-            chunk_end: 청크 종료 시간 (None이면 필터링 없음)
-
-        Returns:
-            List[Dict]: chunk_end 이전의 캔들만 포함된 리스트
-        """
-        if chunk_end is None:
-            return candles
-
-        # chunk_end 이후의 캔들 제거 (chunk_end 포함)
-        filtered_candles = []
-        removed_count = 0
-
-        for candle in candles:
-            candle_time = self._parse_utc_time(candle["candle_date_time_utc"])
-            if candle_time >= chunk_end:
-                filtered_candles.append(candle)
-            else:
-                removed_count += 1
-
-        if removed_count > 0:
-            logger.info(f"청크 경계 필터링: {removed_count}개 캔들 제거 (chunk_end: {chunk_end.strftime('%Y-%m-%d %H:%M:%S')})")
-
-        return filtered_candles
 
     def get_detector_stats(self) -> Dict[str, Any]:
         """EmptyCandleDetector 통계 정보 반환"""

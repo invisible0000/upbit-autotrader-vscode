@@ -283,21 +283,22 @@ class CandleDataProvider:
         self,
         api_candles: List[Dict[str, Any]],
         timeframe: str,
-        chunk_end: Optional[datetime] = None
+        api_start: Optional[datetime] = None,
+        api_end: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """
         API 캔듡 응답에 빈 캔듡 처리 적용 (save_raw_api_data 전 호출)
 
         처리 순서:
-        1. API 캔듡 응답에 빈캔듡 검사
-        2. 검사 결과를 바탕으로 청크 끝 시간까지만 빈캔듡 생성
-        3. API 캔듡 응답과 통합
-        4. 청크 끝 시간을 벗어난 과거 캔듡 삭제
+        1. API 캔듡 응답에 빈캔듡 검사 (api_start ~ api_end 범위 내)
+        2. 검출된 Gap을 빈 캔들로 채우기
+        3. API 캔듡 응답과 통합하여 완전한 시계열 생성
 
         Args:
             api_candles: 업비트 API 원시 응답 데이터
             timeframe: 타임프레임
-            chunk_end: 청크 종료 시간 (이후 캔듡 제거용)
+            api_start: API 검출 범위 시작 시간 (None이면 제한 없음)
+            api_end: API 검출 범위 종료 시간 (None이면 제한 없음)
 
         Returns:
             처리된 캔듡 데이터 (Dict 형태 유지)
@@ -306,7 +307,11 @@ class CandleDataProvider:
             return api_candles
 
         detector = self._get_empty_candle_detector(timeframe)
-        processed_candles = detector.detect_and_fill_gaps(api_candles, chunk_end=chunk_end)
+        processed_candles = detector.detect_and_fill_gaps(
+            api_candles,
+            api_start=api_start,
+            api_end=api_end
+        )
 
         # 캔듡 수 보정 로깅
         if len(processed_candles) != len(api_candles):
@@ -612,15 +617,17 @@ class CandleDataProvider:
             # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
             api_response = await self._fetch_chunk_from_api(chunk_info)
 
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
+            # 🆕 첫 청크는 빈 캔들 처리 안 함 (안전성)
+            if is_first_chunk:
+                logger.debug("첫 청크: 빈 캔들 처리 건너뛰기")
+                final_candles = api_response
+            else:
+                # api_start, api_end 추출 (첫 청크가 아닌 경우만)
+                api_start, api_end = None, None  # COUNT_ONLY/END_ONLY는 빈 캔들 검출 범위 제한 없음
 
-            # 🔍 디버깅: 빈 캔들 처리에 전달되는 chunk_end
-            logger.debug(f"🔍 빈 캔들 처리 (COUNT_ONLY) chunk_end: {chunk_end}")
-
-            final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, state.timeframe, chunk_end
-            )
+                final_candles = await self._process_api_candles_with_empty_filling(
+                    api_response, state.timeframe, api_start, api_end
+                )
 
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, final_candles
@@ -656,10 +663,12 @@ class CandleDataProvider:
             logger.debug("겹침 없음 → 전체 API 직접 저장")
             api_response = await self._fetch_chunk_from_api(chunk_info)
 
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
+            # overlap_result에서 api_start, api_end 추출
+            api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
+            api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
+
             final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, chunk_info.timeframe, chunk_end
+                api_response, chunk_info.timeframe, api_start, api_end
             )
 
             saved_count = await self.repository.save_raw_api_data(
@@ -683,11 +692,12 @@ class CandleDataProvider:
                 chunk_info.set_overlap_info(overlap_result, api_count)
                 api_response = await self._fetch_chunk_from_api(chunk_info)
 
-                # 빈 캔들 처리 적용 (save_raw_api_data 전)
-                # 부분 API의 실제 종료 시간 계산
-                partial_chunk_end = overlap_result.api_end or calculated_chunk_end
+                # overlap_result에서 api_start, api_end 추출
+                api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
+                api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
+
                 final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, chunk_info.timeframe, partial_chunk_end
+                    api_response, chunk_info.timeframe, api_start, api_end
                 )
 
                 saved_count = await self.repository.save_raw_api_data(
@@ -713,10 +723,9 @@ class CandleDataProvider:
             logger.debug("복잡한 겹침 → 전체 API 직접 저장 폴백")
             api_response = await self._fetch_chunk_from_api(chunk_info)
 
-            # 빈 캔들 처리 적용 (save_raw_api_data 전)
-            chunk_end = chunk_info.end or (self._calculate_chunk_end_time(chunk_info) if chunk_info.to else None)
+            # 폴백에서는 api_start, api_end 없이 전체 처리
             final_candles = await self._process_api_candles_with_empty_filling(
-                api_response, chunk_info.timeframe, chunk_end
+                api_response, chunk_info.timeframe, None, None
             )
 
             saved_count = await self.repository.save_raw_api_data(
