@@ -31,18 +31,19 @@ logger = create_component_logger("EmptyCandleDetector")
 
 @dataclass
 class GapInfo:
-    """Gap 정보 저장용 모델 (EmptyCandleDetector 전용)"""
-    gap_start: datetime               # Gap 시작 시간 (미래) - 업비트 정렬 [5,4,3,2,1]에서 더 큰 값
-    gap_end: datetime                 # Gap 종료 시간 (과거) - 업비트 정렬에서 더 작은 값
-    reference_candle: Dict[str, Any]  # 참조할 실제 캔들 (Dict 형태)
-    timeframe: str                    # 타임프레임
+    """Gap 정보 저장용 모델 (EmptyCandleDetector 전용) - 순수 datetime 기반 최적화"""
+    gap_start: datetime                    # Gap 시작 시간 (미래) - 업비트 정렬 [5,4,3,2,1]에서 더 큰 값
+    gap_end: datetime                      # Gap 종료 시간 (과거) - 업비트 정렬에서 더 작은 값
+    market: str                            # 🚀 마켓 정보 (예: "KRW-BTC") - 직접 저장으로 단순화
+    reference_time: Optional[datetime]     # 🚀 참조 캔들 시간 (blank_copy_from_utc용)
+    timeframe: str                         # 타임프레임
 
     def __post_init__(self):
         """Gap 정보 검증 (업비트 정렬: gap_start > gap_end)"""
         if self.gap_start < self.gap_end:
             raise ValueError(f"Gap 시작시간이 종료시간보다 작습니다: {self.gap_start} < {self.gap_end}")
-        if not self.reference_candle:
-            raise ValueError("참조 캔들 정보가 없습니다")
+        if not self.market:
+            raise ValueError("마켓 정보가 없습니다")
         if not self.timeframe:
             raise ValueError("타임프레임이 지정되지 않았습니다")
 
@@ -99,7 +100,18 @@ class EmptyCandleDetector:
             List[Dict]: 실제 캔들 + 빈 캔들이 병합된 완전한 시계열 (Dict 형태 유지)
                        api_start~api_end 범위 내에서만 빈 캔들 검출 및 생성
         """
-        # 🚀 0. 사전 필터링: api_end보다 과거인 캔들 제거 (메모리 효율성)
+        # 🚀 0. Market 정보 미리 취득 (필터링 이전에 안전하게 확보)
+        market = None
+        if api_candles:
+            # 원본 API 캔들에서 market 정보 취득 (필터링과 무관하게 항상 가능)
+            market = api_candles[0]["market"]
+            logger.debug(f"🚀 원본 API에서 market 정보 취득: '{market}'")
+        elif fallback_reference:
+            # fallback에서 market 정보 추출
+            market = fallback_reference["market"]
+            logger.debug(f"🚀 Fallback에서 market 정보 취득: '{market}'")
+
+        # 🚀 1. 사전 필터링: api_end보다 과거인 캔들 제거 (메모리 효율성)
         if api_end and api_candles:
             before_filter = len(api_candles)
             filtered_candles = [
@@ -122,14 +134,23 @@ class EmptyCandleDetector:
             last_time = sorted_for_debug[-1]["candle_date_time_utc"]
             logger.debug(f"🔍 필터링된 시간 범위: {first_time} ~ {last_time} ({len(filtered_candles)}개)")
 
+        # 🚀 2. 순수 시간 정보 추출 (최대 메모리 절약)
+        datetime_list = []
+
+        if filtered_candles:
+            # 시간 정보만 추출 (전체 Dict 대신 datetime만)
+            datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in filtered_candles]
+            logger.debug(f"🚀 최대 경량화: {len(filtered_candles)}개 캔들 → {len(datetime_list)}개 datetime + market='{market}'")
+
         # 🆕 케이스 1: 필터링 후 빈 배열 처리 (전체 범위가 빈 캔들)
         if not filtered_candles:
-            if fallback_reference and api_start and api_end:
+            if market and api_start and api_end:
                 logger.debug(f"📦 전체 범위 빈 캔들 생성: {api_start} ~ {api_end}")
                 gap_info = GapInfo(
                     gap_start=api_start,
                     gap_end=api_end,
-                    reference_candle=fallback_reference,
+                    market=market,
+                    reference_time=None,  # 전체 범위에서는 참조 시간 불필요
                     timeframe=self.timeframe
                 )
                 empty_candle_dicts = self._generate_empty_candle_dicts([gap_info])
@@ -138,8 +159,8 @@ class EmptyCandleDetector:
             logger.debug("빈 API 응답, 처리할 캔들 없음")
             return []
 
-        # 1. Gap 감지 (필터링된 캔들에서 api_start ~ api_end 범위 내 Gap 검출)
-        gaps = self._detect_gaps_in_response(filtered_candles, api_start, api_end, fallback_reference)
+        # 4. Gap 감지 (순수 datetime 리스트로 api_start ~ api_end 범위 내 Gap 검출)
+        gaps = self._detect_gaps_in_datetime_list(datetime_list, market, api_start, api_end, fallback_reference)
 
         if not gaps:
             logger.debug("Gap 없음, 필터링된 응답 반환")
@@ -159,99 +180,95 @@ class EmptyCandleDetector:
 
     # === Gap 감지 로직 ===
 
-    def _detect_gaps_in_response(
+    def _detect_gaps_in_datetime_list(
         self,
-        api_candles: List[Dict[str, Any]],
+        datetime_list: List[datetime],
+        market: str,
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
-        fallback_reference: Optional[Dict[str, Any]] = None  # 🆕 첫 번째 Gap 안전 참조
+        fallback_reference: Optional[Dict[str, Any]] = None
     ) -> List[GapInfo]:
         """
-        API 응답 캔들들 사이의 Gap 감지 (개선된 로직 + 안전성 강화)
+        🚀 순수 datetime 리스트 기반 Gap 감지 (최대 메모리 절약)
 
-        새로운 특징:
-        - api_start부터의 빈 캔들 검출 가능 (첫 번째 캔들과 api_start 비교)
-        - 첫 번째 Gap에서 fallback_reference 우선 사용 (검증되지 않은 API 캔들 위험 회피)
-        - [i-1], [i] 비교 방식으로 변경
-        - api_end 도달 시 검출 중지
-        - api_start ~ api_end 범위 내 정확한 Gap 검출
+        메모리 효율성 극대화:
+        - 입력: 순수 datetime 리스트 (전체 Dict 없이)
+        - 처리: 시간 비교만 수행 (95%+ 메모리 절약)
+        - 참조: market 정보 직접 사용, 인덱스 시스템 완전 제거
 
         Args:
-            api_candles: 필터링된 API 캔들 데이터
+            datetime_list: 순수 datetime 리스트 (업비트 내림차순 정렬)
+            market: 마켓 정보 (예: "KRW-BTC")
             api_start: Gap 검출 시작점
             api_end: Gap 검출 종료점
-            fallback_reference: DB에서 조회한 안전한 참조 캔들 (첫 Gap용)
+            fallback_reference: DB 안전 참조 캔들 (첫 Gap용)
 
-        성능: O(n) 시간 복잡도, 단일 루프로 최적화
+        Returns:
+            List[GapInfo]: 감지된 Gap 정보 (순수 datetime + market 기반)
         """
-        if len(api_candles) < 1:
-            return []  # 캔들이 없으면 Gap 없음
+        if not datetime_list:
+            return []  # datetime 리스트가 없으면 Gap 없음
 
-        # 업비트 내림차순 정렬 (최신 → 과거)
-        sorted_candles = sorted(api_candles,  # 이미 내림차순 정렬일 수 있음
-                                key=lambda x: x["candle_date_time_utc"],
-                                reverse=True)
+        # 업비트 내림차순 정렬 확보 (최신 → 과거)
+        sorted_datetimes = sorted(datetime_list, reverse=True)
 
         gaps = []
 
         # 🆕 1. 첫 번째 캔들과 api_start 비교 (처음부터 빈 캔들 검출)
-        if api_start and sorted_candles:
-            first_candle = sorted_candles[0]
-            first_time = self._parse_utc_time(first_candle["candle_date_time_utc"])
-            # expected_first = TimeUtils.get_time_by_ticks(api_start, self.timeframe, -1)
+        if api_start and sorted_datetimes:
+            first_time = sorted_datetimes[0]
             expected_first = api_start
 
-            logger.debug(f"🔍 첫 캔들 Gap 검사: api_start={api_start}, first_time={first_time}, expected_first={expected_first}")
+            logger.debug(f"🔍 첫 캔들 Gap 검사: api_start={api_start}, first_time={first_time}")
 
             if first_time < expected_first:
-                # 🆕 첫 번째 Gap: fallback_reference 우선 사용 (검증되지 않은 API 캔들 위험 회피)
-                reference_candle = fallback_reference if fallback_reference else first_candle
+                # 🆕 첫 번째 Gap: fallback 시간 또는 첫 캔들 시간을 참조로 사용
+                reference_time = None
+                if fallback_reference:
+                    reference_time = self._parse_utc_time(fallback_reference["candle_date_time_utc"])
+                else:
+                    reference_time = first_time
 
                 gap_info = GapInfo(
-                    gap_start=expected_first,    # 미래 (있어야 할 캔듡)
-                    gap_end=first_time,          # 과거 (실제 존재하는 캔듡)
-                    reference_candle=reference_candle,  # 🔧 DB 안전 참조 또는 API 캔듡
+                    gap_start=expected_first,      # 미래 (있어야 할 캔들)
+                    gap_end=first_time,           # 과거 (실제 존재하는 캔들)
+                    market=market,
+                    reference_time=reference_time,
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
-                ref_type = "DB 안전 참조" if fallback_reference else "API 캔들"
-                logger.debug(f"✅ 첫 Gap 감지: {expected_first} ~ {first_time} (미래→과거), 참조: {ref_type}")
+                ref_type = "DB 안전 참조" if fallback_reference else "첫 캔들"
+                logger.debug(f"✅ 첫 Gap 감지: {expected_first} ~ {first_time}, 참조: {ref_type}")
             else:
                 logger.debug("❌ 첫 캔들 Gap 없음: 연속적")
 
-        # 🔧 2. 기존 루프를 [i-1], [i] 비교로 변경
-        for i in range(1, len(sorted_candles)):
-            previous_candle = sorted_candles[i - 1]  # 더 최신 (이전) [5,4,3,2,1] 에서 5가 이전
-            current_candle = sorted_candles[i]       # 더 과거 (현재) 처리 순서에 의해 현재
+        # � 2. 경량화된 Gap 검출 루프 (시간 정보만 사용)
+        for i in range(1, len(sorted_datetimes)):
+            previous_time = sorted_datetimes[i - 1]  # 더 최신
+            current_time = sorted_datetimes[i]       # 더 과거
 
-            previous_time = self._parse_utc_time(previous_candle["candle_date_time_utc"])
-            current_time = self._parse_utc_time(current_candle["candle_date_time_utc"])
-
-            # 🔧 2. 기존 gap 검출 로직 (먼저 실행)
+            # Gap 검출 로직
             expected_current = TimeUtils.get_time_by_ticks(previous_time, self.timeframe, -1)
 
-            logger.debug(f"🔍 캔들[{i - 1}→{i}] Gap 검사: {previous_time} → {current_time}, 예상: {expected_current}")
+            logger.debug(
+                f"🔍 캔들[{i - 1}→{i}] Gap 검사: {previous_time} → {current_time}, 예상: {expected_current}"
+            )
 
             if current_time < expected_current:
-                # 실제 gap 발견 (업비트 정렬: gap_start > gap_end)
-                original_gap_start = expected_current  # 미래 (다음에 있어야 할 캔들)
-                original_gap_end = current_time      # 과거 (마지막 존재하는 캔들)
-
-                logger.debug(f"🎯 Gap 발견! 범위: {original_gap_start} ~ {original_gap_end}")
-
-                # 업비트 정렬에서 gap_start >= gap_end 조건 항상 만족 (사전 필터링로 단순화)
+                # Gap 발견: 순수 datetime + market 기반 GapInfo 생성
                 gap_info = GapInfo(
-                    gap_start=original_gap_start,
-                    gap_end=original_gap_end,
-                    reference_candle=current_candle,
+                    gap_start=expected_current,         # 미래 (다음에 있어야 할 캔들)
+                    gap_end=current_time,              # 과거 (마지막 존재하는 캔들)
+                    market=market,
+                    reference_time=current_time,        # 🚀 현재 캔들 시간을 참조로 사용
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
-                logger.debug(f"✅ Gap 등록: {original_gap_start} ~ {original_gap_end} (미래→과거)")
+                logger.debug(f"✅ Gap 등록: {expected_current} ~ {current_time}, 참조: {current_time}")
             else:
                 logger.debug("✅ 연속적: Gap 없음")
 
-            # 🚪 4. api_end 도달 시 루프 중지
+            # 🚪 api_end 도달 시 루프 중지
             if api_end and current_time <= api_end:
                 break
 
@@ -261,16 +278,18 @@ class EmptyCandleDetector:
 
     def _generate_empty_candle_dicts(self, gaps: List[GapInfo]) -> List[Dict[str, Any]]:
         """
-        Gap 구간에 빈 캔들들을 Dict 형태로 생성 (성능 최적화 적용)
+        🚀 Gap 구간에 빈 캔들들을 Dict 형태로 생성 (순수 datetime + market 기반 최적화)
 
         핵심 최적화:
-        - 🚀 Timestamp 생성: 첫 번째만 datetime 변환, 나머지는 단pure 덧셈 (76배 빠름)
+        - 🚀 Timestamp 생성: 첫 번째만 datetime 변환, 나머지는 단순 덧셈 (76배 빠름)
+        - 🚀 참조 정보: market과 reference_time 직접 사용 (인덱스 시스템 불필요)
         - Dict 형태 유지: CandleDataProvider v6.0 성능 최적화 보존
-        - 메모리 효율성: 빈 캔들은 필수 필드만 설정
         """
         all_empty_candles = []
 
         for gap_info in gaps:
+            # 🚀 순수 datetime 기반: market과 reference_time 직접 사용
+
             # Gap 구간의 시간점 배치 생성
             time_points = self._generate_gap_time_points(gap_info)
 
@@ -286,7 +305,8 @@ class EmptyCandleDetector:
 
                 empty_dict = self._create_empty_candle_dict(
                     target_time=current_time,
-                    reference_candle=gap_info.reference_candle,
+                    market=gap_info.market,
+                    reference_time=gap_info.reference_time,
                     timestamp_ms=timestamp_ms
                 )
                 all_empty_candles.append(empty_dict)
@@ -322,21 +342,29 @@ class EmptyCandleDetector:
     def _create_empty_candle_dict(
         self,
         target_time: datetime,
-        reference_candle: Dict[str, Any],
+        market: str,
+        reference_time: Optional[datetime],
         timestamp_ms: int
     ) -> Dict[str, Any]:
         """
-        업비트 API 형식의 빈 캔들 Dict 생성
+        업비트 API 형식의 빈 캔들 Dict 생성 (순수 datetime + market 기반)
 
         빈 캔들 특징:
         - 가격: NULL로 설정하여 용량 절약
         - 거래량/거래대금: NULL로 설정하여 용량 절약
-        - blank_copy_from_utc: 빈 캔들 식별용 필드
+        - blank_copy_from_utc: 참조 시간 사용 (인덱스 시스템 불필요)
         - timestamp: 정확한 밀리초 단위 timestamp
         """
+        # 참조 시간 결정 (reference_time 우선, 없으면 target_time 사용)
+        ref_time_str = None
+        if reference_time:
+            ref_time_str = reference_time.strftime('%Y-%m-%dT%H:%M:%S')
+        else:
+            ref_time_str = target_time.strftime('%Y-%m-%dT%H:%M:%S')
+
         return {
             # === 업비트 API 공통 필드 ===
-            "market": reference_candle["market"],
+            "market": market,
             "candle_date_time_utc": target_time.strftime('%Y-%m-%dT%H:%M:%S'),
             "candle_date_time_kst": self._utc_to_kst_string(target_time),
             "opening_price": None,           # 빈 캔들: NULL (용량 절약)
@@ -348,7 +376,7 @@ class EmptyCandleDetector:
             "candle_acc_trade_volume": None,  # 빈 캔들: NULL (용량 절약)
 
             # === 빈 캔들 식별 필드 ===
-            "blank_copy_from_utc": reference_candle["candle_date_time_utc"],  # 참조 캔들 추적용
+            "blank_copy_from_utc": ref_time_str,  # 🚀 참조 시간 사용 (인덱스 불필요)
 
             # === 타임프레임별 선택적 필드 (필요시 추가) ===
             # unit, prev_closing_price 등은 필요시 reference_candle에서 복사
