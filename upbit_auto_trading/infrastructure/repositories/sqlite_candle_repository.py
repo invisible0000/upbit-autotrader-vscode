@@ -456,27 +456,32 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
     # === EmptyCandleDetector 빈 캔들 참조 지원 메서드 ===
 
-    async def find_reference_candle_time(
+    async def find_reference_previous_chunks(
         self,
         symbol: str,
         timeframe: str,
-        api_start: datetime
+        api_start: datetime,
+        range_start: datetime,
+        range_end: datetime
     ) -> Optional[datetime]:
         """
-        api_start 이후 가장 가까운 참조 시간 찾기 (순수 datetime 반환)
+        수집된 청크 범위 내에서 api_start 이후 가장 가까운 참조 시간 찾기 (안전한 범위 제한)
 
         핵심 로직:
-        1. api_start보다 큰 가장 가까운 캔들 1개 조회 (PRIMARY KEY 인덱스 활용)
+        1. api_start보다 크고 range_start~range_end 범위 내의 가장 가까운 캔들 1개 조회
         2. blank_copy_from_utc가 NULL이면 실제 캔들의 candle_date_time_utc 사용
         3. blank_copy_from_utc에 데이터가 있으면 해당 시간을 참조 시간으로 사용
+        4. 🚀 범위 제한으로 수집하지 않은 구간의 잘못된 참조점 방지
 
         Args:
             symbol: 심볼 (예: 'KRW-BTC')
             timeframe: 타임프레임 (예: '1m', '5m')
             api_start: 기준 시점 (이로부터 미래 방향으로 검색)
+            range_start: 안전한 검색 범위 시작점 (첫 청크 시작)
+            range_end: 안전한 검색 범위 종료점 (현재 청크 끝)
 
         Returns:
-            참조할 수 있는 시간 (datetime) 또는 None
+            참조할 수 있는 시간 (datetime) 또는 None (범위 내 데이터 없음)
 
         효율성:
         - O(log n) 성능: PRIMARY KEY 인덱스 직접 활용
@@ -499,13 +504,14 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                         blank_copy_from_utc IS NOT NULL as is_blank_candle
                     FROM {table_name}
                     WHERE candle_date_time_utc > ?
+                      AND candle_date_time_utc BETWEEN ? AND ?
                     ORDER BY candle_date_time_utc ASC
                     LIMIT 1
-                """, (_to_utc_iso(api_start),))
+                """, (_to_utc_iso(api_start), _to_utc_iso(range_end), _to_utc_iso(range_start)))
 
                 row = cursor.fetchone()
                 if not row:
-                    logger.debug(f"참조 시간 없음: {symbol} {timeframe}, api_start={api_start} 이후")
+                    logger.debug(f"참조 시간 없음: {symbol} {timeframe}, api_start={api_start} 이후, 범위=[{range_start}, {range_end}]")
                     return None
 
                 reference_time_str = row[0]
@@ -514,16 +520,16 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 # ISO 문자열을 datetime으로 변환
                 reference_time = _from_utc_iso(reference_time_str)
 
-                # 로깅 (빈 캔들 체인 추적)
+                # 로깅 (빈 캔들 체인 추적 + 범위 정보)
                 if is_blank_candle:
-                    logger.debug(f"🔗 빈 캔들 체인 참조: {symbol} {timeframe} → {reference_time}")
+                    logger.debug(f"🔗 빈 캔들 체인 참조: {symbol} {timeframe} → {reference_time} (범위: [{range_start}, {range_end}])")
                 else:
-                    logger.debug(f"✅ 실제 캔들 참조: {symbol} {timeframe} → {reference_time}")
+                    logger.debug(f"✅ 실제 캔들 참조: {symbol} {timeframe} → {reference_time} (범위: [{range_start}, {range_end}])")
 
                 return reference_time
 
         except Exception as e:
-            logger.debug(f"참조 시간 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
+            logger.debug(f"참조 시간 조회 실패: {symbol} {timeframe}, 범위=[{range_start}, {range_end}] - {type(e).__name__}: {e}")
             return None
 
     # === OverlapAnalyzer v5.0 전용 새로운 메서드들 ===

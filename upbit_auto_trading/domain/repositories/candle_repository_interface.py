@@ -191,6 +191,37 @@ class CandleRepositoryInterface(ABC):
         """
         pass
 
+    # === EmptyCandleDetector 빈 캔들 참조 지원 메서드 ===
+
+    @abstractmethod
+    async def find_reference_previous_chunks(
+        self,
+        symbol: str,
+        timeframe: str,
+        api_start: datetime,
+        range_start: datetime,
+        range_end: datetime
+    ) -> Optional[datetime]:
+        """수집된 청크 범위 내에서 api_start 이후 가장 가까운 참조 시간 찾기 (안전한 범위 제한)
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            api_start: 기준 시점 (이로부터 미래 방향으로 검색)
+            range_start: 안전한 검색 범위 시작점 (첫 청크 시작)
+            range_end: 안전한 검색 범위 종료점 (현재 청크 끝)
+
+        Returns:
+            참조할 수 있는 시간 (datetime) 또는 None (범위 내 데이터 없음)
+
+        Note:
+            - EmptyCandleDetector의 빈 캔들 생성 시 참조점 조회용
+            - 수집하지 않은 구간을 건너서 잘못된 참조점을 찾는 엣지 케이스 방지
+            - 확실히 수집한 청크 범위 내에서만 안전하게 참조점 조회
+            - blank_copy_from_utc 체인 자동 처리로 빈 캔들 → 실제 캔들 추적
+        """
+        pass
+
     # === CandleDataProvider v4.0 새로운 메서드들 ===
 
     @abstractmethod
@@ -248,6 +279,50 @@ class CandleRepositoryInterface(ABC):
             - 배치 INSERT로 고성능 저장
             - 업비트 API 필드 직접 매핑
             - INSERT OR IGNORE로 중복 처리
+        """
+        pass
+
+    @abstractmethod
+    async def get_latest_candle(self, symbol: str, timeframe: str):
+        """최신 캔들 데이터 조회
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+
+        Returns:
+            CandleData: 최신 캔들 객체 또는 None (데이터 없음)
+
+        Note:
+            - Application 서비스 레이어에서 캐시 확인용으로 사용
+            - PRIMARY KEY 역순 정렬로 최고 성능
+            - CandleCache와 연동 예정
+        """
+        pass
+
+    @abstractmethod
+    async def count_candles_in_range(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> int:
+        """지정 범위의 캔들 개수 조회
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            start_time: 조회 시작 시간
+            end_time: 조회 종료 시간
+
+        Returns:
+            int: 범위 내 캔들 개수
+
+        Note:
+            - 데이터 완전성 검증 및 진행률 계산용
+            - COUNT 쿼리로 효율적 개수 조회
+            - OverlapAnalyzer와 연계하여 데이터 품질 확인
         """
         pass
 

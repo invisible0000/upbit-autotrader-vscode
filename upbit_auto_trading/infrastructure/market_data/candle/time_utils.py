@@ -4,12 +4,63 @@ TimeUtils - 캔들 데이터 시간 처리 유틸리티
 """
 
 import warnings
-from datetime import datetime, timedelta
-from typing import Dict
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Optional
 
 
 class TimeUtils:
     """캔들 데이터 시간 처리 - timedelta 기반 단순 구현"""
+
+    # ========================================================================
+    # UTC 정규화 메서드 (CandleDataProvider 진입점 전용)
+    # ========================================================================
+
+    @staticmethod
+    def normalize_datetime_to_utc(dt: Optional[datetime]) -> Optional[datetime]:
+        """
+        CandleDataProvider 진입점에서 사용하는 UTC 정규화 메서드
+
+        한 번의 변환으로 내부 로직을 단순화하여 timezone 관련 복잡성 제거:
+        - None 값: 그대로 반환
+        - naive datetime: UTC timezone 추가
+        - aware datetime: UTC로 변환
+
+        Args:
+            dt: 정규화할 datetime (None 허용)
+
+        Returns:
+            Optional[datetime]: UTC로 정규화된 datetime 또는 None
+        """
+        if dt is None:
+            return None
+
+        if dt.tzinfo is None:
+            # naive datetime은 UTC로 간주하여 timezone 추가
+            return dt.replace(tzinfo=timezone.utc)
+        else:
+            # aware datetime은 UTC로 변환
+            return dt.astimezone(timezone.utc)
+
+    @staticmethod
+    def format_datetime_utc(dt: datetime) -> str:
+        """
+        UTC datetime을 +00:00 형식 문자열로 변환
+
+        내부적으로 통일된 UTC 문자열 형식 제공:
+        - 형식: "YYYY-MM-DDTHH:MM:SS+00:00"
+        - UTC 보장: dt는 이미 UTC로 정규화되어 있다고 가정
+
+        Args:
+            dt: UTC로 정규화된 datetime
+
+        Returns:
+            str: +00:00 형식의 UTC 시간 문자열
+        """
+        return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+    # ========================================================================
+    # 기존 TimeUtils 메서드들
+    # ========================================================================
 
     # 업비트 지원 타임프레임 (필요시 추가)
     _TIMEFRAME_MAP: Dict[str, timedelta] = {

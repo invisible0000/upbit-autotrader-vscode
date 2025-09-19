@@ -159,7 +159,7 @@ class CandleData:
         return cls(
             # === 업비트 API 공통 필드 ===
             market=market,
-            candle_date_time_utc=target_time.strftime('%Y-%m-%dT%H:%M:%S'),
+            candle_date_time_utc=target_time.strftime('%Y-%m-%dT%H:%M:%S'),  # UTC 형식 (timezone 정보 없음)
             candle_date_time_kst=cls._utc_to_kst_string(target_time),
             opening_price=0.0,      # 빈 캔들: 기본값 (실제값은 Dict에서 설정)
             high_price=0.0,

@@ -146,11 +146,12 @@ class EmptyCandleDetector:
         if not filtered_candles:
             if market and api_start and api_end:
                 logger.debug(f"📦 전체 범위 빈 캔들 생성: {api_start} ~ {api_end}")
+                reference_time = self._parse_utc_time(fallback_reference["candle_date_time_utc"])
                 gap_info = GapInfo(
                     gap_start=api_start,
                     gap_end=api_end,
                     market=market,
-                    reference_time=None,  # 전체 범위에서는 참조 시간 불필요
+                    reference_time=reference_time,  # 전체 범위에서는 참조 시간 불필요
                     timeframe=self.timeframe
                 )
                 empty_candle_dicts = self._generate_empty_candle_dicts([gap_info])
@@ -227,7 +228,7 @@ class EmptyCandleDetector:
                 if fallback_reference:
                     reference_time = self._parse_utc_time(fallback_reference["candle_date_time_utc"])
                 else:
-                    reference_time = first_time
+                    reference_time = None
 
                 gap_info = GapInfo(
                     gap_start=expected_first,      # 미래 (있어야 할 캔들)
@@ -242,7 +243,7 @@ class EmptyCandleDetector:
             else:
                 logger.debug("❌ 첫 캔들 Gap 없음: 연속적")
 
-        # � 2. 경량화된 Gap 검출 루프 (시간 정보만 사용)
+        # 🆕 2. 경량화된 Gap 검출 루프 (시간 정보만 사용)
         for i in range(1, len(sorted_datetimes)):
             previous_time = sorted_datetimes[i - 1]  # 더 최신
             current_time = sorted_datetimes[i]       # 더 과거
@@ -260,7 +261,7 @@ class EmptyCandleDetector:
                     gap_start=expected_current,         # 미래 (다음에 있어야 할 캔들)
                     gap_end=current_time,              # 과거 (마지막 존재하는 캔들)
                     market=market,
-                    reference_time=current_time,        # 🚀 현재 캔들 시간을 참조로 사용
+                    reference_time=previous_time,        # 🚀 현재 캔들 시간을 참조로 사용
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
@@ -448,7 +449,7 @@ class EmptyCandleDetector:
 
     def _parse_utc_time(self, utc_string: str) -> datetime:
         """UTC 시간 문자열을 datetime 객체로 변환"""
-        # 업비트 API: '2025-01-18T14:05:00' 형식
+        # 🚀 UTC 통일: 업비트 API '2025-01-18T14:05:00' 형식은 이미 UTC 보장됨
         try:
             return datetime.fromisoformat(utc_string).replace(tzinfo=timezone.utc)
         except Exception as e:
@@ -467,12 +468,9 @@ class EmptyCandleDetector:
         - 이 메서드는 Gap당 첫 번째 시간점에서만 호출됨
         - 나머지는 단순 덧셈으로 계산하여 76배 성능 향상
         """
+        # 🚀 UTC 통일: 내부에서는 모든 datetime이 이미 UTC로 정규화되어 있음
         if dt.tzinfo is None:
-            # timezone 정보가 없으면 UTC로 가정
             dt = dt.replace(tzinfo=timezone.utc)
-        elif dt.tzinfo != timezone.utc:
-            # UTC가 아닌 timezone이면 UTC로 변환
-            dt = dt.astimezone(timezone.utc)
 
         # Unix timestamp (초) * 1000 = 밀리초
         timestamp_ms = int(dt.timestamp() * 1000)

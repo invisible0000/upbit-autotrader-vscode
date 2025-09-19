@@ -1,0 +1,96 @@
+# 업비트 개발자 센터 Documentation
+
+## Guides
+- [업비트 개발자 센터 안내](https://docs.upbit.com/kr/docs/developer-center-overview.md): 업비트 개발자 센터는 업비트가 제공하는 다양한 기술 도구를 연동하여 디지털 자산 거래, 알고리즘 트레이딩, 자산 관리 자동화 등의 시스템을 구축하고자 하는 개발자를 위한 공식 문서 페이지입니다.
+- [주요 용어 안내](https://docs.upbit.com/kr/docs/terms.md): 업비트 개발자 센터에서 사용되는 기본 용어들의 정의와 설명을 제공합니다.
+- [AI와 함께하는 업비트 API 연동](https://docs.upbit.com/kr/docs/ai-guide.md): AI로 업비트 개발자 센터 문서를 효율적으로 탐색하고 개발에 활용해보세요.
+- [첫 업비트 API 호출하기](https://docs.upbit.com/kr/docs/first-quotation-api-call.md): REST API 호출 테스트 가이드를 따라 업비트 API를 호출해보고 성공 응답을 확인할 수 있습니다.
+- [API Key 발급 받기](https://docs.upbit.com/kr/docs/api-key.md): API Key를 발급받는 방법을 안내합니다.
+- [API Key로 첫 인증 API 호출하기](https://docs.upbit.com/kr/docs/first-exchange-api-call.md): 발급받은 API Key의 Access Key와 Secret Key를 사용하여 인증 토큰을 생성하고 Exchange API를 호출할 수 있습니다.
+- [개발 환경 설정 가이드](https://docs.upbit.com/kr/docs/dev-environment.md): API 연동을 위한 언어별 개발 환경 설정 방법 및 주요 라이브러리를 안내합니다.
+- [REST API 연동 Best Practice](https://docs.upbit.com/kr/docs/rest-api-best-practice.md): 업비트 REST API 연동 구현을 위한 가이드라인 문서로서 인증, 요청 수 제한, 에러 처리 등 실제 연동 시 참고해야 하는 구현 요구사항을 안내합니다.
+- [WebSocket 연동 Best Practice](https://docs.upbit.com/kr/docs/websocket-best-practice.md): 업비트 WebSocket 연동 구현을 위한 가이드라인 문서로서 인증, 연결 관리, 요청 수 제한 등 실제 구현 시 참고해야 하는 구현 요구사항을 안내합니다.
+- [REST API를 이용한 시세 조회](https://docs.upbit.com/kr/docs/upbit-quotation-restful-api.md): 업비트 REST API를 이용한 시세 조회 방법을 안내합니다.
+- [WebSocket으로 실시간 캔들 차트 생성](https://docs.upbit.com/kr/docs/how-to-subscribe-quotation-stream.md): 업비트 시세 WebSocket 실시간 캔들 스트림을 구독하여 캔들 차트를 생성합니다.
+- [24시간 누적 거래대금 확인](https://docs.upbit.com/kr/docs/24-hour-accumulated-trade-volume.md): 업비트 API는 사용자의 편리한 거래 분석을 위해 다양한 데이터를 제공합니다. 24시간 누적 거래 대금을 확인하는 예제를 제공합니다.
+- [RSI 지표 산출](https://docs.upbit.com/kr/docs/rsi-indicator-calculation-tutorial.md): RSI 지표에 대해 알아보고 업비트 시세 API 응답을 기반으로 RSI 지표를 산출하는 방법을 알아봅니다.
+- [지정가 매수 주문 생성](https://docs.upbit.com/kr/docs/limit-bid-order-creation.md): 업비트 API를 사용해 지정가로 디지털 자산을 매수하는 주문을 생성하는 방법을 안내합니다.
+- [시장가 매도 주문 생성](https://docs.upbit.com/kr/docs/market-ask-order-creation.md): 업비트 API를 사용해 사용자가 보유한 디지털 자산을 시장가로 매도하는 주문을 생성하는 방법을 학습합니다.
+- [계정주 확인 자동화](https://docs.upbit.com/kr/docs/address-owner-verification.md): 사용자가 타 거래소에 보유 중인 디지털 자산을 업비트로 입금 시 자금세탁을 방지하기 위해 가상자산사업자가 계정주 동일 여부를 확인해야 합니다. 업비트 API를 사용해 자동으로 계정주 확인을 하는 방법을 학습합니다.
+- [디지털 자산 출금](https://docs.upbit.com/kr/docs/digital-asset-withdrawal.md): API를 사용하여 사용자가 업비트에 보유한 디지털 자산을 타 거래소로 출금하는 방법을 알아봅니다.
+- [CCXT 라이브러리 연동 안내](https://docs.upbit.com/kr/docs/ccxt-library-guide.md): CCXT(CryptoCurrency eXchange Trading Library)는 전 세계 디지털 자산 거래소의 API와 각 거래소에서 지원하는 알고리즘 트레이딩, 전략 백테스팅 등의 기능을 다양한 프로그래밍 언어로 사용할 수 있게 도와주는 오픈 소스 라이브러리입니다.
+- [API 공통 문의](https://docs.upbit.com/kr/docs/faq-api.md): API 사용과 관련한 자주 묻는 질문 모음입니다.
+- [주문 관련 문의](https://docs.upbit.com/kr/docs/faq-order.md): 주문과 관련한 자주 묻는 질문 모음입니다.
+- [입출금 관련 문의](https://docs.upbit.com/kr/docs/faq-withdraw-deposit.md): 입출금과 관련한 자주 묻는 질문 모음입니다.
+- [원화(KRW) 마켓 주문 가격 단위 / 최소 주문 가능 금액](https://docs.upbit.com/kr/docs/krw-market-info.md): 원화 마켓의 주문 가격 단위와 최소 주문 가능 금액 정책을 안내합니다.
+- [BTC 마켓 주문 가격 단위 / 최소 주문 가능 금액](https://docs.upbit.com/kr/docs/btc-market-info.md): BTC 마켓의 주문 가격 단위와 최소 주문 가능 금액 정책을 안내합니다.
+- [USDT 마켓 주문 가격 단위 / 최소 주문 가능 금액](https://docs.upbit.com/kr/docs/usdt-market-info.md): USDT 마켓의 주문 가격 단위와 최소 주문 가능 금액 정책을 안내합니다.
+- [거래소 지갑 주소 등록](https://docs.upbit.com/kr/docs/open-api-withdraw_access_register.md): 타 거래소에서 발급 받은 입금 주소를 업비트의 출금 허용 주소로 등록하는 방법을 안내합니다.
+- [개인지갑 주소 등록](https://docs.upbit.com/kr/docs/open-api-withdraw-private-wallet.md): 개인 지갑 주소를 업비트의 출금 허용 주소로 등록하는 방법을 안내합니다.
+- [자전거래 체결 방지(Self-Match Prevention, SMP)](https://docs.upbit.com/kr/docs/smp.md): 자전거래 체결 방지 옵션의 개념과 사용 방법을 안내합니다.
+
+## API Reference
+- [개요](https://docs.upbit.com/kr/reference/api-overview.md): 업비트 API의 주요 기능과 연동 순서를 한눈에 확인하세요.
+- [인증](https://docs.upbit.com/kr/reference/auth.md): REST API 및 WebSocket 사용을 위한 인증 가이드입니다.
+- [요청 수 제한(Rate Limits)](https://docs.upbit.com/kr/reference/rate-limits.md): 업비트 API의 요청 수 제한(Rate Limits) 정책 안내 및 구현 가이드입니다.
+- [REST API 사용 및 에러 안내](https://docs.upbit.com/kr/reference/rest-api-guide.md): 업비트 REST API 사용을 위한 요청, 인증, 에러 및 gzip 지원 관련 안내입니다.
+- [WebSocket 사용 및 에러 안내](https://docs.upbit.com/kr/reference/websocket-guide.md): 업비트 WebSocket 연결 및 데이터 수신을 위한 사용 안내입니다.
+- [페어 목록 조회](https://docs.upbit.com/kr/reference/list-trading-pairs.md): 업비트에서 지원하는 모든 페어 목록을 조회합니다.
+- [초(Second) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-seconds.md): 초 단위 캔들 목록을 조회합니다.
+- [분(Minute) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-minutes.md): 분 단위 캔들 목록을 조회합니다.
+- [일(Day) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-days.md): 일 단위 캔들 목록을 조회합니다.
+- [주(Week) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-weeks.md): 주 단위 캔들 목록을 조회합니다.
+- [월(Month) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-months.md): 월 단위 캔들 목록을 조회합니다.
+- [연(Year) 캔들 조회](https://docs.upbit.com/kr/reference/list-candles-years.md): 연 단위 캔들 목록을 조회합니다.
+- [페어 체결 이력 조회](https://docs.upbit.com/kr/reference/list-pair-trades.md): 지정한 페어의 최근 체결 목록을 조회합니다.
+- [페어 단위 현재가 조회](https://docs.upbit.com/kr/reference/list-tickers.md): 지정한 페어의 현재가를 조회합니다. 요청 시점 기준으로 해당 페어의 티커 스냅샷이 반환됩니다.
+- [마켓 단위 현재가 조회](https://docs.upbit.com/kr/reference/list-quote-tickers.md): 지정한 마켓(호가 자산) 내 모든 페어들의 현재가 정보를 조회합니다.
+- [호가 조회](https://docs.upbit.com/kr/reference/list-orderbooks.md): 지정한 종목들의 실시간 호가(Orderbook) 정보를 조회합니다.
+- [호가 정책 조회](https://docs.upbit.com/kr/reference/list-orderbook-instruments.md): 지정한 페어들의 호가 단위(tick_size)와 호가 모아보기 단위(supported_levels) 정보를 조회합니다.
+- [계정 잔고 조회](https://docs.upbit.com/kr/reference/get-balance.md): 계정이 보유하고 있는 자산 목록과 잔고를 조회합니다.
+- [페어별 주문 가능 정보 조회](https://docs.upbit.com/kr/reference/available-order-information.md): 지정한 페어의 주문 가능 정보를 조회합니다.
+- [주문 생성](https://docs.upbit.com/kr/reference/new-order.md): 특정 페어를 매수/매도하기 위한 주문을 생성합니다.
+- [개별 주문 조회](https://docs.upbit.com/kr/reference/get-order.md): 주문의 UUID 또는 Identifier로 단일 주문 정보를 조회합니다.
+- [id로 주문 목록 조회](https://docs.upbit.com/kr/reference/list-orders-by-ids.md): UUID 또는 Identifier 목록으로 주문을 조회합니다.
+- [체결 대기 주문 목록 조회](https://docs.upbit.com/kr/reference/list-open-orders.md): 체결 대기 중인 주문(Open Orders) 목록을 조회합니다.
+- [종료 주문 목록 조회](https://docs.upbit.com/kr/reference/list-closed-orders.md): 종료 주문(Closed Order) 목록을 조회합니다.
+- [개별 주문 취소 접수](https://docs.upbit.com/kr/reference/cancel-order.md): UUID 또는 Identifier로 주문을 취소합니다.
+- [id로 주문 목록 취소 접수](https://docs.upbit.com/kr/reference/cancel-orders-by-ids.md): UUID 또는 Identifier 목록으로 취소 대상 주문을 지정 취소합니다. 한 번의 요청으로 최대 20개의 주문을 취소할 수 있습니다.
+- [주문 일괄 취소 접수](https://docs.upbit.com/kr/reference/batch-cancel-orders.md): 조건을 지정하여 해당 조건을 만족하는 최대 300개의 주문을 일괄 취소합니다.
+- [취소 후 재주문](https://docs.upbit.com/kr/reference/cancel-and-new-order.md): 한 번의 요청으로 기존 주문을 취소하고 신규 주문을 생성합니다.
+- [출금 가능 정보 조회](https://docs.upbit.com/kr/reference/available-withdrawal-information.md): 지정한 통화에 대한 출금 가능 정보를 조회합니다. 해당 통화의 출금 정책과 사용자 잔고를 확인할 수 있습니다.
+- [출금 허용 주소 목록 조회](https://docs.upbit.com/kr/reference/list-withdrawal-addresses.md): 계정에 등록된 출금 허용 주소 목록을 조회합니다.
+- [디지털 자산 출금 요청](https://docs.upbit.com/kr/reference/withdraw.md): 디지털 자산 출금을 요청합니다.
+- [원화 출금 요청](https://docs.upbit.com/kr/reference/withdraw-krw.md): 원화(KRW) 출금을 요청합니다.
+- [개별 출금 조회](https://docs.upbit.com/kr/reference/get-withdrawal.md): 최신 단일 출금 정보를 조회합니다. 특정 출금 정보를 조회하고자 하는 경우 출금의 UUID 또는 트랜잭션 ID(TXID)로 지정할 수 있습니다.
+- [출금 목록 조회](https://docs.upbit.com/kr/reference/list-withdrawals.md): 최신 출금 목록을 조회합니다.
+- [디지털 자산 출금 취소 요청](https://docs.upbit.com/kr/reference/cancel-withdrawal.md): 출금 UUID로 요청이 완료된 디지털 자산 출금 건의 취소를 요청합니다.
+- [디지털 자산 입금 가능 정보 조회](https://docs.upbit.com/kr/reference/available-deposit-information.md): 지정한 통화에 대한 입금 가능 정보를 조회합니다.
+- [입금 주소 생성 요청](https://docs.upbit.com/kr/reference/create-deposit-address.md): 개인 지갑 또는 타 거래소 자산을 업비트로 입금 하기 위한 입금 주소 생성을 요청합니다.
+- [개별 입금 주소 조회](https://docs.upbit.com/kr/reference/get-deposit-address.md): 지정한 통화의 입금 주소 정보를 조회힙니다.
+- [입금 주소 목록 조회](https://docs.upbit.com/kr/reference/list-deposit-addresses.md): 계정의 모든 입금 주소 목록을 조회합니다. 정상적으로 생성된 모든 입금 주소 목록이 반환됩니다.
+- [원화 입금](https://docs.upbit.com/kr/reference/deposit-krw.md): 입출금 계좌로부터 원화를 지정한 금액만큼 입금합니다.
+- [개별 입금 조회](https://docs.upbit.com/kr/reference/get-deposit.md): 최신 입금 이력을 조회합니다. 특정 입금 정보를 조회하고자 하는 경우 입금의 UUID 또는 트랜잭션 ID(TXID), 통화 코드로 지정할 수 있습니다.
+- [입금 목록 조회](https://docs.upbit.com/kr/reference/list-deposits.md): 최신 입금 목록을 조회합니다.
+- [트래블룰 검증](https://docs.upbit.com/kr/reference/travelrule-guide.md): 타 거래소로부터 업비트로 입금시 트래블룰 준수를 위해 계정주 확인을 수행합니다.
+- [계정주 확인 서비스 지원 거래소 목록 조회](https://docs.upbit.com/kr/reference/list-travelrule-vasps.md): 계정주 확인 서비스를 지원하는 거래소 목록을 조회합니다.
+- [입금 UUID로 계정주 검증 요청](https://docs.upbit.com/kr/reference/verify-travelrule-by-uuid.md): 입금의 UUID로 트래블룰 검증(입금 계정주 확인)을 요청합니다.
+- [입금 TxID로 계정주 검증 요청](https://docs.upbit.com/kr/reference/verify-travelrule-by-txid.md): 입금의 TxID로 트래블룰 검증(입금 계정주 확인)을 요청합니다.
+- [입출금 서비스 상태 조회](https://docs.upbit.com/kr/reference/get-service-status.md): 전체 통화에 대해 입출금 서비스 상태를 조회합니다.
+- [API Key 목록 조회](https://docs.upbit.com/kr/reference/list-api-keys.md): 계정의 모든 API Key 목록과 각 Key의 만료일자를 조회합니다.
+- [현재가 (Ticker)](https://docs.upbit.com/kr/reference/websocket-ticker.md): 현재가 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [체결 (Trade)](https://docs.upbit.com/kr/reference/websocket-trade.md): 체결 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [호가 (Orderbook)](https://docs.upbit.com/kr/reference/websocket-orderbook.md): 호가 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [캔들 (Candle)](https://docs.upbit.com/kr/reference/websocket-candle.md): 캔들 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [내 주문 및 체결 (MyOrder)](https://docs.upbit.com/kr/reference/websocket-myorder.md): 내 주문 및 체결 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [내 자산 (MyAsset)](https://docs.upbit.com/kr/reference/websocket-myasset.md): 내 자산 데이터를 WebSocket으로 수신하기 위한 요청 및 구독 데이터 예시를 제공합니다.
+- [구독 중인 스트림 목록 조회](https://docs.upbit.com/kr/reference/list-subscriptions.md): WebSocket 연결을 통해 구독중인 데이터 스트림 항목을 확인할 수 있습니다.
+- [주문 리스트 조회](https://docs.upbit.com/kr/reference/주문-리스트-조회.md): 주문 리스트를 조회한다.
+- [호가 모아보기 단위 조회 (Deprecated)](https://docs.upbit.com/kr/reference/list-orderbook-levels.md): 종목별로 지원하는 모아보기 단위 목록을 조회합니다. 반환된 지원 단위를 호가 조회 API 사용 시 지정하여 호가를 원하는 단위로 조회할 수 있습니다.
+
+## Changelog
+- [[안내] llms.txt 기능 지원 안내](https://docs.upbit.com/kr/changelog/llms_txt.md)
+- [[안내] 업비트 개발자 센터 문서 개편 안내 (8/14 완료)](https://docs.upbit.com/kr/changelog/upbit-devcenter-redesigned.md)
+- [[중요] 업비트 개발자 센터 개편 작업 예정 안내 (8/14 완료)](https://docs.upbit.com/kr/changelog/upbit-devcenter-redesigned-2025-08.md)
+- [[안내] '호가 정책 조회' 기능 추가 (7/31)](https://docs.upbit.com/kr/changelog/orderbook-instruments.md)
+- [KRW 마켓 서버 점검 안내 (완료)](https://docs.upbit.com/kr/changelog/maintenance_250731.md)

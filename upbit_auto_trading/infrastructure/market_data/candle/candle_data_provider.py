@@ -285,7 +285,9 @@ class CandleDataProvider:
         symbol: str,
         timeframe: str,
         api_start: Optional[datetime] = None,
-        api_end: Optional[datetime] = None
+        api_end: Optional[datetime] = None,
+        safe_range_start: Optional[datetime] = None,
+        safe_range_end: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """
         API 캔들 응답에 빈 캔들 처리 적용 (save_raw_api_data 전 호출)
@@ -302,6 +304,8 @@ class CandleDataProvider:
             timeframe: 타임프레임
             api_start: API 검출 범위 시작 시간 (None이면 제한 없음)
             api_end: API 검출 범위 종료 시간 (None이면 제한 없음)
+            safe_range_start: 안전한 참조 범위 시작 (첫 청크 시작점)
+            safe_range_end: 안전한 참조 범위 끝 (현재 청크 끝점)
 
         Returns:
             처리된 캔들 데이터 (Dict 형태 유지)
@@ -309,12 +313,12 @@ class CandleDataProvider:
         if not self.enable_empty_candle_processing:
             return api_candles
 
-        # 🚀 참조 시간 조회 (전체 범위 빈 캔들 생성용)
+        # 🚀 참조 시간 조회 (안전한 범위 제한으로 빈 캔듡 생성용)
         fallback_reference = None
-        if api_start and api_candles:
+        if api_start and api_candles and safe_range_start and safe_range_end:
             try:
-                reference_time = await self.repository.find_reference_candle_time(
-                    symbol, timeframe, api_start
+                reference_time = await self.repository.find_reference_previous_chunks(
+                    symbol, timeframe, api_start, safe_range_start, safe_range_end
                 )
                 if reference_time:
                     # 참조 시간을 포함한 fallback_reference 생성
@@ -323,17 +327,18 @@ class CandleDataProvider:
                         'candle_date_time_utc': reference_time.strftime('%Y-%m-%dT%H:%M:%S'),
                         'reference_time': reference_time.strftime('%Y-%m-%dT%H:%M:%S')
                     }
-                    logger.debug(f"🔗 참조 시간 확보: {symbol} {timeframe} → {reference_time}")
+                    logger.debug(f"🔗 안전 범위 참조 시간 확보: {symbol} {timeframe} → {reference_time} "
+                                 f"(범위: [{safe_range_start}, {safe_range_end}])")
                 else:
-                    # 🆕 참조 시간이 없으면 api_start를 fallback_reference로 사용 (엣지 케이스 대응)
+                    # 🆕 안전 범위 내 참조 시간이 없으면 api_start를 fallback_reference로 사용
                     fallback_reference = {
                         'market': symbol,
                         'candle_date_time_utc': api_start.strftime('%Y-%m-%dT%H:%M:%S'),
                         'reference_time': api_start.strftime('%Y-%m-%dT%H:%M:%S')
                     }
-                    logger.debug(f"🔗 참조 시간 없음 → api_start 사용: {symbol} {timeframe} → {api_start}")
+                    logger.debug(f"🔗 안전 범위 내 참조 없음 → api_start 사용: {symbol} {timeframe} → {api_start}")
             except Exception as e:
-                logger.debug(f"참조 시간 조회 실패 (무시): {symbol} {timeframe} - {e}")
+                logger.debug(f"안전 범위 참조 시간 조회 실패 (무시): {symbol} {timeframe} - {e}")
                 # 🆕 조회 실패 시에도 api_start를 fallback_reference로 사용
                 if api_start:
                     fallback_reference = {
@@ -342,6 +347,11 @@ class CandleDataProvider:
                         'reference_time': api_start.strftime('%Y-%m-%dT%H:%M:%S')
                     }
                     logger.debug(f"🔗 조회 실패 → api_start 사용: {symbol} {timeframe} → {api_start}")
+
+        # 범위 정보가 없으면 안전성을 위해 빈 캔들 처리 건너뛰기
+        if not safe_range_start or not safe_range_end:
+            logger.debug(f"안전 범위 정보 없음 → 빈 캔들 처리 건너뛰기: {symbol} {timeframe}")
+            return api_candles
 
         detector = self._get_empty_candle_detector(timeframe)
         processed_candles = detector.detect_and_fill_gaps(
@@ -379,13 +389,19 @@ class CandleDataProvider:
         if end:
             logger.info(f"종료: {end}")
 
+        # 🚀 UTC 통일: 진입점에서 한 번만 정규화하여 내부 복잡성 제거
+        normalized_to = TimeUtils.normalize_datetime_to_utc(to)
+        normalized_end = TimeUtils.normalize_datetime_to_utc(end)
+
+        logger.debug(f"UTC 정규화: to={to} → {normalized_to}, end={end} → {normalized_end}")
+
         # 수집 시작
         request_id = self.start_collection(
             symbol=symbol,
             timeframe=timeframe,
             count=count,
-            to=to,
-            end=end
+            to=normalized_to,
+            end=normalized_end
         )
 
         try:
@@ -588,7 +604,7 @@ class CandleDataProvider:
             # 🔄 청크 끝 시간 기반 연속성 (빈 캔들과 무관한 논리적 연속성 보장)
             if completed_chunk.end:
                 # 청크의 논리적 끝 시간을 다음 청크 연속성에 사용
-                chunk_end_time = completed_chunk.end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                chunk_end_time = TimeUtils.format_datetime_utc(completed_chunk.end)
                 state.last_candle_time = chunk_end_time
                 logger.debug(f"청크 끝 시간 기반 연속성: {chunk_end_time}")
             elif last_candle_time:
@@ -635,6 +651,16 @@ class CandleDataProvider:
             tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
         """
 
+        # 🚀 안전한 참조 범위 계산 (첫 청크 ~ 현재 청크)
+        safe_range_start = None
+        safe_range_end = None
+        if state.completed_chunks and chunk_info.end:
+            # 첫 번째 완료된 청크의 시작점
+            safe_range_start = state.completed_chunks[0].to
+            # 현재 청크의 끝점
+            safe_range_end = chunk_info.end
+            logger.debug(f"🔒 안전 범위 계산: [{safe_range_start}, {safe_range_end}]")
+
         # 겹침 분석 (API 절약 효과 유지)
         overlap_result = None
         chunk_end = None
@@ -655,7 +681,8 @@ class CandleDataProvider:
 
             # 겹침 분석 결과에 따른 직접 저장
             saved_count, last_candle_time = await self._handle_overlap_direct_storage(
-                chunk_info, overlap_result, chunk_end, is_first_chunk
+                chunk_info, overlap_result, chunk_end, is_first_chunk,
+                safe_range_start, safe_range_end
             )
         else:
             # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
@@ -681,7 +708,9 @@ class CandleDataProvider:
         chunk_info: ChunkInfo,
         overlap_result,
         calculated_chunk_end: Optional[datetime] = None,
-        is_first_chunk: bool = False
+        is_first_chunk: bool = False,
+        safe_range_start: Optional[datetime] = None,
+        safe_range_end: Optional[datetime] = None
     ) -> tuple[int, Optional[str]]:
         """겹침 분석 결과에 따른 직접 저장 처리
 
@@ -704,7 +733,7 @@ class CandleDataProvider:
             # DB에 데이터 존재가 보장되므로 계산된 chunk_end 사용
             last_candle_time = None
             if calculated_chunk_end:
-                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             return 0, last_candle_time
 
         elif status == OverlapStatus.NO_OVERLAP:
@@ -724,7 +753,8 @@ class CandleDataProvider:
                 # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
                 if self._should_process_empty_candles(api_response, api_end):
                     final_candles = await self._process_api_candles_with_empty_filling(
-                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
+                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
+                        safe_range_start, safe_range_end
                     )
                 else:
                     final_candles = api_response
@@ -735,7 +765,7 @@ class CandleDataProvider:
             # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
             last_candle_time = None
             if calculated_chunk_end:
-                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
                 last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
             return saved_count, last_candle_time
@@ -767,7 +797,8 @@ class CandleDataProvider:
                     # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
                     if self._should_process_empty_candles(api_response, api_end):
                         final_candles = await self._process_api_candles_with_empty_filling(
-                            api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
+                            api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
+                            safe_range_start, safe_range_end
                         )
                     else:
                         final_candles = api_response
@@ -778,7 +809,7 @@ class CandleDataProvider:
                 # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
                 last_candle_time = None
                 if calculated_chunk_end:
-                    last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                    last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
                 else:
                     # 폴백: API 응답에서 추출
                     last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
@@ -786,7 +817,7 @@ class CandleDataProvider:
             # API 정보 없으면 계산된 값 사용
             last_candle_time = None
             if calculated_chunk_end:
-                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             return 0, last_candle_time
 
         else:
@@ -807,10 +838,12 @@ class CandleDataProvider:
             # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
             last_candle_time = None
             if calculated_chunk_end:
-                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
                 last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
-            return saved_count, last_candle_time    # =========================================================================
+            return saved_count, last_candle_time
+
+    # =========================================================================
     # 계획 수립
     # =========================================================================
 
@@ -993,9 +1026,9 @@ class CandleDataProvider:
         try:
             from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapRequest
 
-            # Timezone 안전 처리: 모든 datetime을 UTC로 통일
-            safe_start_time = self._ensure_utc_timezone(start_time)
-            safe_end_time = self._ensure_utc_timezone(end_time)
+            # 🚀 UTC 통일: 진입점에서 정규화되어 더 이상 검증 불필요
+            safe_start_time = start_time
+            safe_end_time = end_time
 
             # 예상 캔들 개수 계산
             expected_count = self._calculate_api_count(safe_start_time, safe_end_time, timeframe)
@@ -1095,7 +1128,8 @@ class CandleDataProvider:
                 to_datetime = to_param
             elif isinstance(to_param, str):
                 try:
-                    to_datetime = datetime.fromisoformat(to_param.replace('Z', '+00:00'))
+                    # 🚀 UTC 통일: 단순한 fromisoformat (진입점에서 이미 정규화됨)
+                    to_datetime = datetime.fromisoformat(to_param)
                 except (ValueError, TypeError):
                     logger.warning(f"'to' 파라미터 파싱 실패: {to_param}")
                     to_datetime = None
@@ -1140,8 +1174,8 @@ class CandleDataProvider:
         end_time_reached = False
         if state.target_end and state.last_candle_time:
             try:
-                # 마지막 캔들 시간을 datetime으로 변환
-                last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+                # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
+                last_time = datetime.fromisoformat(state.last_candle_time)
                 # 마지막 캔들 시간이 목표 종료 시간에 도달하거나 지나쳤는지 확인
                 end_time_reached = last_time <= state.target_end
 
@@ -1197,8 +1231,8 @@ class CandleDataProvider:
         # 🔄 청크 끝 시간 + 1틱 방식 연속성 (빈 캔들과 무관한 논리적 연속성)
         if state.last_candle_time:
             try:
-                # 이전 청크 끝 시간을 datetime으로 변환
-                last_chunk_end = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+                # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
+                last_chunk_end = datetime.fromisoformat(state.last_candle_time)
 
                 # 다음 청크 시작 = 이전 청크 끝 - 1틱 (연속성 보장)
                 next_chunk_start = TimeUtils.get_time_by_ticks(last_chunk_end, state.timeframe, -1)
@@ -1249,12 +1283,6 @@ class CandleDataProvider:
 
         return end_time
 
-    def _ensure_utc_timezone(self, dt: datetime) -> datetime:
-        """DateTime이 timezone을 가지지 않으면 UTC로 설정"""
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt
-
     def _calculate_api_count(self, start_time: datetime, end_time: datetime, timeframe: str) -> int:
         """API 요청에 필요한 캔들 개수 계산"""
         return TimeUtils.calculate_expected_count(start_time, end_time, timeframe)
@@ -1279,30 +1307,17 @@ class CandleDataProvider:
             candle_time_utc = last_candle.get('candle_date_time_utc')
 
             if candle_time_utc and isinstance(candle_time_utc, str):
-                # 🔧 API 시간을 datetime으로 변환 (항상 UTC timezone 보장)
-                if candle_time_utc.endswith('Z'):
-                    # 'Z' 형식: UTC 표시
-                    last_candle_time = datetime.fromisoformat(candle_time_utc.replace('Z', '+00:00'))
-                elif '+' not in candle_time_utc:
-                    # timezone 정보 없음: UTC로 간주
-                    dt = datetime.fromisoformat(candle_time_utc)
-                    last_candle_time = dt.replace(tzinfo=timezone.utc)
-                else:
-                    # 이미 timezone 정보 있음
-                    last_candle_time = datetime.fromisoformat(candle_time_utc)
+                # 🚀 UTC 통일: TimeUtils를 통한 표준 정규화 (aware datetime 보장)
+                parsed_time = datetime.fromisoformat(candle_time_utc)
+                last_candle_time = TimeUtils.normalize_datetime_to_utc(parsed_time)
 
-                # 🔧 Timezone 안전 비교: api_end가 naive datetime이면 UTC로 설정
-                safe_api_end = api_end
-                if api_end.tzinfo is None:
-                    safe_api_end = api_end.replace(tzinfo=timezone.utc)
-
-                # 마지막 캔들 시간과 api_end가 다르면 빈 캔들 처리 필요
-                needs_processing = last_candle_time != safe_api_end
+                # 🚀 UTC 통일: 동일한 형식(aware datetime) 간 비교로 정확성 보장
+                needs_processing = last_candle_time != api_end
 
                 if needs_processing:
-                    logger.debug(f"빈 캔들 처리 필요: 마지막캔들={last_candle_time} vs api_end={safe_api_end}")
+                    logger.debug(f"빈 캔들 처리 필요: 마지막캔들={last_candle_time} vs api_end={api_end}")
                 else:
-                    logger.debug(f"빈 캔들 처리 불필요: 마지막캔들={last_candle_time} == api_end={safe_api_end}")
+                    logger.debug(f"빈 캔들 처리 불필요: 마지막캔들={last_candle_time} == api_end={api_end}")
 
                 return needs_processing
 
@@ -1333,12 +1348,11 @@ class CandleDataProvider:
             last_candle = api_response[-1]
             candle_time_utc = last_candle.get('candle_date_time_utc')
 
-            if candle_time_utc:
-                # 업비트 API 시간 형식을 표준 ISO 형식으로 변환
-                if isinstance(candle_time_utc, str):
-                    # 기존 문자열을 datetime으로 파싱 후 다시 포맷
-                    dt = datetime.fromisoformat(candle_time_utc.replace('Z', '+00:00'))
-                    return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            if candle_time_utc and isinstance(candle_time_utc, str):
+                # 🚀 UTC 통일: TimeUtils를 통한 표준 정규화 후 형식 변환
+                parsed_time = datetime.fromisoformat(candle_time_utc)
+                normalized_time = TimeUtils.normalize_datetime_to_utc(parsed_time)
+                return TimeUtils.format_datetime_utc(normalized_time)
 
             logger.warning(f"API 응답에서 캔들 시간 추출 실패: {last_candle}")
             return None
