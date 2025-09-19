@@ -585,10 +585,16 @@ class CandleDataProvider:
             # 실제 저장 개수와 무관하게 청크가 담당한 범위 전체를 완료로 처리
             state.total_collected += completed_chunk.count
 
-            # 연속성을 위한 마지막 캔들 시간 업데이트
-            if last_candle_time:
+            # 🔄 청크 끝 시간 기반 연속성 (빈 캔들과 무관한 논리적 연속성 보장)
+            if completed_chunk.end:
+                # 청크의 논리적 끝 시간을 다음 청크 연속성에 사용
+                chunk_end_time = completed_chunk.end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+                state.last_candle_time = chunk_end_time
+                logger.debug(f"청크 끝 시간 기반 연속성: {chunk_end_time}")
+            elif last_candle_time:
+                # 폴백: 기존 last_candle_time 사용 (COUNT_ONLY 등)
                 state.last_candle_time = last_candle_time
-                logger.debug(f"마지막 캔들 시간 업데이트: {last_candle_time}")
+                logger.debug(f"폴백 연속성: {last_candle_time}")
 
             # 진행률 업데이트
             self._update_remaining_time_estimates(state)
@@ -655,17 +661,12 @@ class CandleDataProvider:
             # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
             api_response = await self._fetch_chunk_from_api(chunk_info)
 
-            # 🆕 첫 청크는 빈 캔들 처리 안 함 (안전성)
+            # 🆕 폴백 케이스: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
             if is_first_chunk:
                 logger.debug("첫 청크: 빈 캔들 처리 건너뛰기")
-                final_candles = api_response
             else:
-                # api_start, api_end 추출 (첫 청크가 아닌 경우만)
-                api_start, api_end = None, None  # COUNT_ONLY/END_ONLY는 빈 캔들 검출 범위 제한 없음
-
-                final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, state.symbol, state.symbol, state.timeframe, api_start, api_end
-                )
+                logger.debug("폴백 케이스: api_end 정보 없음 → 빈 캔들 처리 건너뛰기")
+            final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, final_candles
@@ -720,14 +721,23 @@ class CandleDataProvider:
                 api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
                 api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
 
-                final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
-                )
+                # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
+                if self._should_process_empty_candles(api_response, api_end):
+                    final_candles = await self._process_api_candles_with_empty_filling(
+                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
+                    )
+                else:
+                    final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, final_candles
             )
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
+            last_candle_time = None
+            if calculated_chunk_end:
+                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            else:
+                last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
             return saved_count, last_candle_time
 
         elif status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]:
@@ -754,21 +764,24 @@ class CandleDataProvider:
                     api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
                     api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
 
-                    final_candles = await self._process_api_candles_with_empty_filling(
-                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
-                    )
+                    # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
+                    if self._should_process_empty_candles(api_response, api_end):
+                        final_candles = await self._process_api_candles_with_empty_filling(
+                            api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end
+                        )
+                    else:
+                        final_candles = api_response
 
                 saved_count = await self.repository.save_raw_api_data(
                     chunk_info.symbol, chunk_info.timeframe, final_candles
                 )
-                # 부분 API 응답에서 마지막 캔들 시간 추출 후 전체 청크 범위로 보정
-                api_last_time = self._extract_last_candle_time_from_api_response(final_candles)
-                # 전체 청크의 예상 끝 시간 사용 (더 정확함)
+                # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
                 last_candle_time = None
                 if calculated_chunk_end:
                     last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
-                elif api_last_time:
-                    last_candle_time = api_last_time
+                else:
+                    # 폴백: API 응답에서 추출
+                    last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
                 return saved_count, last_candle_time
             # API 정보 없으면 계산된 값 사용
             last_candle_time = None
@@ -781,23 +794,23 @@ class CandleDataProvider:
             logger.debug("복잡한 겹침 → 전체 API 직접 저장 폴백")
             api_response = await self._fetch_chunk_from_api(chunk_info)
 
-            # 🆕 첫 번째 청크는 빈 캔들 처리 건너뛰기 (안전성)
+            # 🆕 복잡한 겹침 폴백: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
             if is_first_chunk:
                 logger.debug("첫 청크: 빈 캔들 처리 건너뛰기 (복잡한 겹침 폴백)")
-                final_candles = api_response
             else:
-                # 폴백에서는 api_start, api_end 없이 전체 처리
-                final_candles = await self._process_api_candles_with_empty_filling(
-                    api_response, chunk_info.symbol, chunk_info.timeframe, None, None
-                )
+                logger.debug("복잡한 겹침 폴백: api_end 정보 없음 → 빈 캔들 처리 건너뛰기")
+            final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, final_candles
             )
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
-            return saved_count, last_candle_time
-
-    # =========================================================================
+            # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
+            last_candle_time = None
+            if calculated_chunk_end:
+                last_candle_time = calculated_chunk_end.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+            else:
+                last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            return saved_count, last_candle_time    # =========================================================================
     # 계획 수립
     # =========================================================================
 
@@ -1181,20 +1194,20 @@ class CandleDataProvider:
             "count": chunk_size
         }
 
-        # 청크 간 연속성 보장 로직 (기존과 동일)
+        # 🔄 청크 끝 시간 + 1틱 방식 연속성 (빈 캔들과 무관한 논리적 연속성)
         if state.last_candle_time:
             try:
-                # 마지막 캔들 시간을 datetime으로 변환
-                last_time = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
+                # 이전 청크 끝 시간을 datetime으로 변환
+                last_chunk_end = datetime.fromisoformat(state.last_candle_time.replace('Z', '+00:00'))
 
-                if request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
-                    params["to"] = last_time
-                else:
-                    next_internal_time = TimeUtils.get_time_by_ticks(last_time, state.timeframe, -1)
-                    params["to"] = next_internal_time
+                # 다음 청크 시작 = 이전 청크 끝 - 1틱 (연속성 보장)
+                next_chunk_start = TimeUtils.get_time_by_ticks(last_chunk_end, state.timeframe, -1)
+                params["to"] = next_chunk_start
+
+                logger.debug(f"청크 연속성: {last_chunk_end} → {next_chunk_start}")
 
             except Exception as e:
-                logger.warning(f"시간 조정 실패: {e}")
+                logger.warning(f"청크 연속성 계산 실패: {e}")
 
         return params
 
@@ -1245,6 +1258,60 @@ class CandleDataProvider:
     def _calculate_api_count(self, start_time: datetime, end_time: datetime, timeframe: str) -> int:
         """API 요청에 필요한 캔들 개수 계산"""
         return TimeUtils.calculate_expected_count(start_time, end_time, timeframe)
+
+    def _should_process_empty_candles(self, api_response: List[Dict[str, Any]], api_end: Optional[datetime]) -> bool:
+        """API 응답의 마지막 캔들 시간과 api_end 비교하여 빈 캔들 처리 필요 여부 판단
+
+        Args:
+            api_response: 업비트 API 응답 리스트
+            api_end: 예상되는 청크 종료 시간
+
+        Returns:
+            bool: 빈 캔들 처리가 필요하면 True, 아니면 False
+        """
+        if not api_response or not api_end:
+            logger.debug("빈 캔들 처리 조건 확인: api_response 또는 api_end가 없음 → 처리 안 함")
+            return False
+
+        try:
+            # 업비트 API는 내림차순이므로 마지막 요소가 가장 과거 캔들
+            last_candle = api_response[-1]
+            candle_time_utc = last_candle.get('candle_date_time_utc')
+
+            if candle_time_utc and isinstance(candle_time_utc, str):
+                # 🔧 API 시간을 datetime으로 변환 (항상 UTC timezone 보장)
+                if candle_time_utc.endswith('Z'):
+                    # 'Z' 형식: UTC 표시
+                    last_candle_time = datetime.fromisoformat(candle_time_utc.replace('Z', '+00:00'))
+                elif '+' not in candle_time_utc:
+                    # timezone 정보 없음: UTC로 간주
+                    dt = datetime.fromisoformat(candle_time_utc)
+                    last_candle_time = dt.replace(tzinfo=timezone.utc)
+                else:
+                    # 이미 timezone 정보 있음
+                    last_candle_time = datetime.fromisoformat(candle_time_utc)
+
+                # 🔧 Timezone 안전 비교: api_end가 naive datetime이면 UTC로 설정
+                safe_api_end = api_end
+                if api_end.tzinfo is None:
+                    safe_api_end = api_end.replace(tzinfo=timezone.utc)
+
+                # 마지막 캔들 시간과 api_end가 다르면 빈 캔들 처리 필요
+                needs_processing = last_candle_time != safe_api_end
+
+                if needs_processing:
+                    logger.debug(f"빈 캔들 처리 필요: 마지막캔들={last_candle_time} vs api_end={safe_api_end}")
+                else:
+                    logger.debug(f"빈 캔들 처리 불필요: 마지막캔들={last_candle_time} == api_end={safe_api_end}")
+
+                return needs_processing
+
+        except Exception as e:
+            logger.warning(f"빈 캔들 처리 조건 확인 실패: {e} → 안전한 폴백으로 처리 안 함")
+            return False
+
+        logger.debug("빈 캔들 처리 조건 확인: 캔들 시간 파싱 실패 → 처리 안 함")
+        return False
 
     def _extract_last_candle_time_from_api_response(self, api_response: List[Dict[str, Any]]) -> Optional[str]:
         """API 응답에서 마지막 캔들 시간 추출 (연속성용)
