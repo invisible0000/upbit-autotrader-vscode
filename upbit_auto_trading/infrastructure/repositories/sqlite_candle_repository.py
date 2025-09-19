@@ -6,7 +6,7 @@ overlap_optimizer.py의 효율적인 쿼리 패턴을 활용하여 최적화된 
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import (
     CandleRepositoryInterface, DataRange
@@ -453,6 +453,92 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         except Exception as e:
             logger.debug(f"캔들 개수 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return 0
+
+    # === EmptyCandleDetector 빈 캔들 참조 지원 메서드 ===
+
+    async def find_real_reference_candle_near_time(
+        self,
+        symbol: str,
+        timeframe: str,
+        api_start: datetime
+    ) -> Optional[Dict[str, Any]]:
+        """
+        api_start 이후 가장 가까운 실제 캔들 찾기 (빈 캔들 참조 문제 해결)
+
+        핵심 로직:
+        1. api_start보다 큰 가장 가까운 캔들 1개 조회 (PRIMARY KEY 인덱스 활용)
+        2. blank_copy_from_utc가 NULL이면 실제 캔들의 candle_date_time_utc 사용
+        3. blank_copy_from_utc에 데이터가 있으면 해당 시간을 참조 시간으로 사용
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            api_start: 기준 시점 (이로부터 미래 방향으로 검색)
+
+        Returns:
+            빈 캔들 생성에 사용할 참조 캔들 (Dict 형태)
+            - 'reference_time': 실제 참조 시간 (candle_date_time_utc 또는 blank_copy_from_utc)
+            - 나머지 모든 API 필드 포함
+
+        효율성:
+        - O(log n) 성능: PRIMARY KEY 인덱스 직접 활용
+        - 단일 쿼리: WHERE + ORDER BY + LIMIT 1
+        - 빈 캔들 체인 자동 처리
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            with self.db_manager.get_connection("market_data") as conn:
+                # 🚀 최적화된 단일 쿼리: CASE 문으로 reference_time 직접 계산 + ASC 정렬
+                cursor = conn.execute(f"""
+                    SELECT
+                        candle_date_time_utc, market, candle_date_time_kst,
+                        opening_price, high_price, low_price, trade_price,
+                        timestamp, candle_acc_trade_price, candle_acc_trade_volume,
+                        blank_copy_from_utc,
+                        CASE
+                            WHEN blank_copy_from_utc IS NOT NULL
+                            THEN blank_copy_from_utc
+                            ELSE candle_date_time_utc
+                        END as reference_time
+                    FROM {table_name}
+                    WHERE candle_date_time_utc > ?
+                    ORDER BY candle_date_time_utc ASC
+                    LIMIT 1
+                """, (_to_utc_iso(api_start),))
+
+                row = cursor.fetchone()
+                if not row:
+                    logger.debug(f"참조 캔들 없음: {symbol} {timeframe}, api_start={api_start} 이후")
+                    return None
+
+                # DB 레코드를 Dict로 변환 (reference_time은 SQL에서 계산됨)
+                candle_dict = {
+                    'candle_date_time_utc': row[0],
+                    'market': row[1],
+                    'candle_date_time_kst': row[2],
+                    'opening_price': row[3],
+                    'high_price': row[4],
+                    'low_price': row[5],
+                    'trade_price': row[6],
+                    'timestamp': row[7],
+                    'candle_acc_trade_price': row[8],
+                    'candle_acc_trade_volume': row[9],
+                    'blank_copy_from_utc': row[10],
+                    'reference_time': row[11]  # 🎯 SQL에서 계산된 실제 참조 시간
+                }
+
+                # 로깅 (빈 캔들 체인 추적)
+                if candle_dict['blank_copy_from_utc'] is None:
+                    logger.debug(f"✅ 실제 캔들 참조: {symbol} {timeframe}, {row[11]}")
+                else:
+                    logger.debug(f"🔗 빈 캔들 체인: {symbol} {timeframe}, {row[0]} → {row[11]}")
+
+                return candle_dict
+
+        except Exception as e:
+            logger.debug(f"참조 캔들 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
+            return None
 
     # === OverlapAnalyzer v5.0 전용 새로운 메서드들 ===
 
