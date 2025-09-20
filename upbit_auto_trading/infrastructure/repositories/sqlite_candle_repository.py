@@ -588,6 +588,155 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             logger.debug(f"데이터 시작점 조회 실패: {symbol} {timeframe} - {type(e).__name__}: {e}")
             return None
 
+    # === 미참조 빈 캔들 참조점 자동 업데이트 메서드들 ===
+
+    async def find_unreferenced_empty_candle_in_range(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> Optional[dict]:
+        """
+        범위 내 미참조 빈 캔들 중 가장 미래의 레코드 조회
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            start_time: 검색 범위 시작점
+            end_time: 검색 범위 종료점
+
+        Returns:
+            {
+                'candle_date_time_utc': str,
+                'empty_copy_from_utc': str  # 'none_xxxxxxxx' 형태
+            } 또는 None (미참조 빈 캔들 없음)
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            start_str = _to_utc_iso(start_time)
+            end_str = _to_utc_iso(end_time)
+
+            # 업비트 시간 구조: start_time(최신) > end_time(과거)
+            # SQL BETWEEN: 작은값 AND 큰값 순서 필요
+            query = f"""
+            SELECT candle_date_time_utc, empty_copy_from_utc
+            FROM {table_name}
+            WHERE candle_date_time_utc BETWEEN ? AND ?
+              AND empty_copy_from_utc IS NOT NULL
+              AND empty_copy_from_utc LIKE 'none_%'
+            ORDER BY candle_date_time_utc DESC
+            LIMIT 1
+            """
+
+            with self.db_manager.get_connection("market_data") as conn:
+                # BETWEEN은 작은값(end_str), 큰값(start_str) 순서
+                cursor = conn.execute(query, (end_str, start_str))
+                row = cursor.fetchone()
+
+                if row:
+                    return {
+                        'candle_date_time_utc': row[0],
+                        'empty_copy_from_utc': row[1]
+                    }
+                else:
+                    logger.debug(f"범위 내 미참조 빈 캔들 없음: {symbol} {timeframe} {start_time}~{end_time}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"미참조 빈 캔들 검색 실패: {symbol} {timeframe} - {e}")
+            return None
+
+    async def get_record_by_time(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime
+    ) -> Optional[dict]:
+        """
+        특정 시간의 레코드 조회 (현재/미래 시점 모두 활용 가능)
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            target_time: 조회할 특정 시점
+
+        Returns:
+            {
+                'candle_date_time_utc': str,
+                'empty_copy_from_utc': Optional[str],
+                # 기타 필요 필드들...
+            } 또는 None (해당 시점 데이터 없음)
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            target_str = _to_utc_iso(target_time)
+
+            query = f"""
+            SELECT candle_date_time_utc, empty_copy_from_utc
+            FROM {table_name}
+            WHERE candle_date_time_utc = ?
+            """
+
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.execute(query, (target_str,))
+                row = cursor.fetchone()
+
+                if row:
+                    return {
+                        'candle_date_time_utc': row[0],
+                        'empty_copy_from_utc': row[1]
+                    }
+                else:
+                    logger.debug(f"특정 시점 레코드 없음: {symbol} {timeframe} {target_time}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"특정 시점 레코드 조회 실패: {symbol} {timeframe} {target_time} - {e}")
+            return None
+
+    async def update_empty_copy_reference_by_group(
+        self,
+        symbol: str,
+        timeframe: str,
+        old_group_id: str,
+        new_reference: str
+    ) -> int:
+        """
+        특정 그룹의 empty_copy_from_utc 일괄 업데이트 (트랜잭션)
+
+        Args:
+            symbol: 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 (예: '1m', '5m')
+            old_group_id: 기존 그룹 ID (예: 'none_d1dea30f')
+            new_reference: 새로운 참조 (시간 문자열 또는 참조 ID)
+
+        Returns:
+            업데이트된 레코드 수
+        """
+        table_name = self._get_table_name(symbol, timeframe)
+
+        try:
+            query = f"""
+            UPDATE {table_name}
+            SET empty_copy_from_utc = ?
+            WHERE empty_copy_from_utc = ?
+            """
+
+            with self.db_manager.get_connection("market_data") as conn:
+                cursor = conn.execute(query, (new_reference, old_group_id))
+                updated_count = cursor.rowcount
+                conn.commit()
+
+                logger.info(f"미참조 그룹 참조점 업데이트 완료: {old_group_id} → {new_reference} ({updated_count}개)")
+                return updated_count
+
+        except Exception as e:
+            logger.error(f"그룹 참조점 업데이트 실패: {symbol} {timeframe} {old_group_id} → {new_reference} - {e}")
+            return 0
+
     # === Interface 호환을 위한 최소 구현들 ===
 
     async def get_latest_candle(self, symbol: str, timeframe: str):

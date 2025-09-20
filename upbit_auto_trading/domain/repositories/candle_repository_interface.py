@@ -222,6 +222,91 @@ class CandleRepositoryInterface(ABC):
         """
         pass
 
+    # === 미참조 빈 캔들 참조점 자동 업데이트 메서드들 ===
+
+    @abstractmethod
+    async def find_unreferenced_empty_candle_in_range(
+        self,
+        symbol: str,
+        timeframe: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> Optional[dict]:
+        """범위 내 미참조 빈 캔들 중 가장 미래의 레코드 조회
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            start_time: 검색 범위 시작점
+            end_time: 검색 범위 종료점
+
+        Returns:
+            Optional[dict]: {
+                'candle_date_time_utc': str,
+                'empty_copy_from_utc': str  # 'none_xxxxxxxx' 형태
+            } 또는 None (미참조 빈 캔들 없음)
+
+        Note:
+            - 오버랩 분석 완료 후 후처리용
+            - 'none_'으로 시작하는 empty_copy_from_utc 레코드 탐지
+            - 범위 기반 처리로 데이터 품질 일괄 향상
+        """
+        pass
+
+    @abstractmethod
+    async def get_record_by_time(
+        self,
+        symbol: str,
+        timeframe: str,
+        target_time: datetime
+    ) -> Optional[dict]:
+        """특정 시간의 레코드 조회 (참조점 업데이트용)
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            target_time: 조회할 특정 시점
+
+        Returns:
+            Optional[dict]: {
+                'candle_date_time_utc': str,
+                'empty_copy_from_utc': Optional[str],
+                # 기타 필요 필드들...
+            } 또는 None (해당 시점 데이터 없음)
+
+        Note:
+            - 미참조 빈 캔들의 참조점 결정용
+            - 현재 시점과 한 틱 미래 시점 조회에 활용
+            - TimeUtils와 연동하여 정확한 시간 계산
+        """
+        pass
+
+    @abstractmethod
+    async def update_empty_copy_reference_by_group(
+        self,
+        symbol: str,
+        timeframe: str,
+        old_group_id: str,
+        new_reference: str
+    ) -> int:
+        """특정 그룹의 empty_copy_from_utc 일괄 업데이트
+
+        Args:
+            symbol: 거래 심볼 (예: 'KRW-BTC')
+            timeframe: 타임프레임 ('1m', '5m', '15m', etc.)
+            old_group_id: 기존 그룹 ID (예: 'none_d1dea30f')
+            new_reference: 새로운 참조 (시간 문자열 또는 참조 ID)
+
+        Returns:
+            int: 업데이트된 레코드 수
+
+        Note:
+            - 미참조 그룹 전체를 새 참조점으로 일괄 변경
+            - 트랜잭션으로 데이터 일관성 보장
+            - 성능 최적화: 단일 UPDATE 쿼리로 처리
+        """
+        pass
+
     # === CandleDataProvider v4.0 새로운 메서드들 ===
 
     @abstractmethod

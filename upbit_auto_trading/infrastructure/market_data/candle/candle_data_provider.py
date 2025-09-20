@@ -35,6 +35,9 @@ from upbit_auto_trading.infrastructure.market_data.candle.overlap_analyzer impor
 from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector import (
     EmptyCandleDetector
 )
+from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_reference_updater import (
+    EmptyCandleReferenceUpdater
+)
 
 logger = create_component_logger("CandleDataProvider")
 
@@ -264,9 +267,13 @@ class CandleDataProvider:
         self.enable_empty_candle_processing = enable_empty_candle_processing
         self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # (symbol, timeframe) 조합 캐시
 
+        # 미참조 빈 캔들 참조점 자동 업데이트 처리기
+        self.reference_updater = EmptyCandleReferenceUpdater(repository)
+
         logger.info("CandleDataProvider v6.2 (빈 캔들 처리 + ChunkInfo 확장 최적화) 초기화")
         logger.info(f"청크 크기: {self.chunk_size}, API Rate Limit: {self.api_rate_limit_rps} RPS")
         logger.info(f"빈 캔들 처리: {'활성화' if enable_empty_candle_processing else '비활성화'}")
+        logger.info("미참조 빈 캔들 참조점 자동 업데이트 활성화")
 
     # =========================================================================
     # 핵심 공개 API
@@ -823,7 +830,16 @@ class CandleDataProvider:
                 last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
                 last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
-            return saved_count, last_candle_time
+
+        # 🆕 오버랩 분석 완료 후 미참조 빈 캔들 참조점 자동 업데이트 (후처리)
+        try:
+            await self.reference_updater.process_unreferenced_empty_candles(
+                overlap_result, chunk_info.symbol, chunk_info.timeframe
+            )
+        except Exception as e:
+            logger.warning(f"미참조 빈 캔들 업데이트 실패 (무시): {chunk_info.symbol} {chunk_info.timeframe} - {e}")
+
+        return saved_count, last_candle_time
 
     # =========================================================================
     # 계획 수립
