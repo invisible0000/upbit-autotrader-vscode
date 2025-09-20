@@ -294,7 +294,7 @@ class CandleDataProvider:
         API 캔들 응답에 빈 캔들 처리 적용 (save_raw_api_data 전 호출)
 
         처리 순서:
-        1. DB에서 참조 시간 조회 (전체 범위 빈 캔들 생성용)
+        1. DB에서 참조 상태 조회 (빈 캔들 그룹 참조용, 없으면 UUID 그룹 생성)
         2. API 캔들 응답에 빈캔들 검사 (api_start ~ api_end 범위 내)
         3. 검출된 Gap을 빈 캔들로 채우기
         4. API 캔들 응답과 통합하여 완전한 시계열 생성
@@ -314,25 +314,21 @@ class CandleDataProvider:
         if not self.enable_empty_candle_processing:
             return api_candles
 
-        # ✅ 참조 시간 조회 (단순화된 datetime 반환)
+        # ✅ 참조 상태 조회 (문자열 기반)
         fallback_reference = None
         if api_start and api_candles and safe_range_start and safe_range_end:
             try:
-                reference_time = await self.repository.find_reference_previous_chunks(
+                reference_state = await self.repository.find_reference_previous_chunks(
                     symbol, timeframe, api_start, safe_range_start, safe_range_end
                 )
-                if reference_time:
-                    fallback_reference = reference_time  # ✅ 직접 datetime 사용
-                    logger.debug(f"🔗 안전 범위 참조 시간 확보: {symbol} {timeframe} → {reference_time} "
-                                 f"(범위: [{safe_range_start}, {safe_range_end}])")
+                if reference_state:
+                    fallback_reference = reference_state  # ✅ 문자열 상태 사용
+                    logger.debug(f"🔗 안전 범위 참조 상태 확보: {symbol} {timeframe} → {reference_state}")
                 else:
-                    fallback_reference = api_start  # ✅ 직접 datetime 사용
-                    logger.debug(f"🔗 안전 범위 내 참조 없음 → api_start 사용: {symbol} {timeframe} → {api_start}")
+                    # reference_state가 None이면 EmptyCandleDetector가 UUID 그룹 생성하도록 None 유지
+                    logger.debug(f"🔗 안전 범위 내 참조 없음 → UUID 그룹 생성됨: {symbol} {timeframe}")
             except Exception as e:
-                logger.debug(f"안전 범위 참조 시간 조회 실패 (무시): {symbol} {timeframe} - {e}")
-                if api_start:
-                    fallback_reference = api_start  # ✅ 직접 datetime 사용
-                    logger.debug(f"🔗 조회 실패 → api_start 사용: {symbol} {timeframe} → {api_start}")
+                logger.debug(f"안전 범위 참조 상태 조회 실패 → UUID 그룹 생성됨: {symbol} {timeframe} - {e}")
 
         # 범위 정보가 없으면 안전성을 위해 빈 캔들 처리 건너뛰기
         if not safe_range_start or not safe_range_end:
@@ -344,7 +340,7 @@ class CandleDataProvider:
             api_candles,
             api_start=api_start,
             api_end=api_end,
-            fallback_reference=fallback_reference  # ✅ 단순화된 datetime 전달
+            fallback_reference=fallback_reference  # ✅ 문자열 상태 전달 (None이면 UUID 그룹 생성)
         )
 
         # 캔들 수 보정 로깅

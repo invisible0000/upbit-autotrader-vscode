@@ -63,7 +63,7 @@ class CandleData:
     converted_trade_price: Optional[float] = None  # 일봉: 환산 종가 (선택적)
 
     # === 빈 캔들 처리 필드 ===
-    blank_copy_from_utc: Optional[str] = None  # 빈 캔들 식별용 (참조 캔들의 UTC 시간)
+    empty_copy_from_utc: Optional[str] = None  # 빈 캔들 식별용 (참조 상태 문자열)
 
     # === 편의성 필드 (호환성) ===
     symbol: str = ""                     # market에서 추출
@@ -74,8 +74,8 @@ class CandleData:
         # ============================================
         # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
         # ============================================
-        # 빈 캔들 허용: blank_copy_from_utc가 있으면 가격/거래량 검증 건너뛰기
-        if self.blank_copy_from_utc is not None:
+        # 빈 캔들 허용: empty_copy_from_utc가 있으면 가격/거래량 검증 건너뛰기
+        if self.empty_copy_from_utc is not None:
             # 빈 캔들: 검증 생략 (NULL 값 허용)
             pass
         else:

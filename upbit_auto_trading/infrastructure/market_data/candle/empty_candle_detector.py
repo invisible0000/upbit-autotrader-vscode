@@ -35,7 +35,7 @@ class GapInfo:
     gap_start: datetime                    # Gap 시작 시간 (미래) - 업비트 정렬 [5,4,3,2,1]에서 더 큰 값
     gap_end: datetime                      # Gap 종료 시간 (과거) - 업비트 정렬에서 더 작은 값
     market: str                            # 🚀 마켓 정보 (예: "KRW-BTC") - 직접 저장으로 단순화
-    reference_time: Optional[datetime]     # 🚀 참조 캔들 시간 (blank_copy_from_utc용)
+    reference_state: Optional[str]         # 🚀 참조 상태 (empty_copy_from_utc용 - 문자열 기반)
     timeframe: str                         # 타임프레임
 
     def __post_init__(self):
@@ -83,7 +83,7 @@ class EmptyCandleDetector:
         api_candles: List[Dict[str, Any]],
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
-        fallback_reference: Optional[datetime] = None  # 🚀 단순화된 참조 시간
+        fallback_reference: Optional[str] = None  # 🚀 단순화된 참조 상태 (문자열)
     ) -> List[Dict[str, Any]]:
         """
         API 응답에서 Gap 감지하고 빈 캔들(Dict)로 채워서 완전한 List[Dict] 반환
@@ -143,7 +143,7 @@ class EmptyCandleDetector:
                     gap_start=api_start,
                     gap_end=api_end,
                     market=self.symbol,
-                    reference_time=fallback_reference,  # ✅ 직접 datetime 사용
+                    reference_state=fallback_reference,  # ✅ 직접 문자열 사용
                     timeframe=self.timeframe
                 )
                 empty_candle_dicts = self._generate_empty_candle_dicts([gap_info])
@@ -179,7 +179,7 @@ class EmptyCandleDetector:
         market: str,
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
-        fallback_reference: Optional[datetime] = None
+        fallback_reference: Optional[str] = None
     ) -> List[GapInfo]:
         """
         🚀 순수 datetime 리스트 기반 Gap 감지 (최대 메모리 절약)
@@ -194,7 +194,7 @@ class EmptyCandleDetector:
             market: 마켓 정보 (예: "KRW-BTC") - 명시적 전달
             api_start: Gap 검출 시작점
             api_end: Gap 검출 종료점
-            fallback_reference: 안전한 참조 시간 (datetime 객체 또는 None)
+            fallback_reference: 안전한 참조 상태 (문자열 또는 None)
 
         Returns:
             List[GapInfo]: 감지된 Gap 정보 (순수 datetime + market 기반)
@@ -221,7 +221,7 @@ class EmptyCandleDetector:
                     gap_start=expected_first,      # 미래 (있어야 할 캔들)
                     gap_end=first_time,           # 과거 (실제 존재하는 캔들)
                     market=market,
-                    reference_time=fallback_reference,  # ✅ 직접 datetime 사용
+                    reference_state=fallback_reference,  # ✅ 직접 문자열 사용
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
@@ -250,7 +250,7 @@ class EmptyCandleDetector:
                     gap_start=expected_current,         # 미래 (다음에 있어야 할 캔들)
                     gap_end=gap_end_time,              # 과거 (실제 존재하는 캔들 + 1틱)
                     market=market,
-                    reference_time=previous_time,        # 🚀 현재 캔들 시간을 참조로 사용
+                    reference_state=previous_time.strftime('%Y-%m-%dT%H:%M:%S'),  # 🚀 문자열로 변환
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
@@ -270,13 +270,13 @@ class EmptyCandleDetector:
 
         핵심 최적화:
         - 🚀 Timestamp 생성: 첫 번째만 datetime 변환, 나머지는 단순 덧셈 (76배 빠름)
-        - 🚀 참조 정보: market과 reference_time 직접 사용 (인덱스 시스템 불필요)
+        - 🚀 참조 정보: market과 reference_state 직접 사용 (문자열 기반)
         - Dict 형태 유지: CandleDataProvider v6.0 성능 최적화 보존
         """
         all_empty_candles = []
 
         for gap_info in gaps:
-            # 🚀 순수 datetime 기반: market과 reference_time 직접 사용
+            # 🚀 문자열 기반: market과 reference_state 직접 사용
 
             # Gap 구간의 시간점 배치 생성
             time_points = self._generate_gap_time_points(gap_info)
@@ -294,7 +294,7 @@ class EmptyCandleDetector:
                 empty_dict = self._create_empty_candle_dict(
                     target_time=current_time,
                     market=gap_info.market,
-                    reference_time=gap_info.reference_time,
+                    reference_state=gap_info.reference_state,
                     timestamp_ms=timestamp_ms
                 )
                 all_empty_candles.append(empty_dict)
@@ -331,7 +331,7 @@ class EmptyCandleDetector:
         self,
         target_time: datetime,
         market: str,
-        reference_time: Optional[datetime],
+        reference_state: Optional[str],
         timestamp_ms: int
     ) -> Dict[str, Any]:
         """
@@ -340,21 +340,24 @@ class EmptyCandleDetector:
         빈 캔들 특징:
         - 가격: NULL로 설정하여 용량 절약
         - 거래량/거래대금: NULL로 설정하여 용량 절약
-        - blank_copy_from_utc: 참조 시간 사용 (인덱스 시스템 불필요)
+        - empty_copy_from_utc: 참조 상태 사용 (문자열 기반)
         - timestamp: 정확한 밀리초 단위 timestamp
         """
-        # 참조 시간 결정 (reference_time 우선, 없으면 target_time 사용)
-        ref_time_str = None
-        if reference_time:
-            ref_time_str = reference_time.strftime('%Y-%m-%dT%H:%M:%S')
+        # 참조 상태 결정 (reference_state 우선, 없으면 UUID 그룹 생성)
+        ref_state_str = None
+        if reference_state:
+            ref_state_str = reference_state
         else:
-            ref_time_str = target_time.strftime('%Y-%m-%dT%H:%M:%S')
+            # 참조가 없는 경우 UUID 그룹 생성
+            import uuid
+            ref_state_str = f"none_{uuid.uuid4().hex[:8]}"
 
         return {
             # === 업비트 API 공통 필드 ===
             "market": market,
             "candle_date_time_utc": target_time.strftime('%Y-%m-%dT%H:%M:%S'),
             "candle_date_time_kst": self._utc_to_kst_string(target_time),
+            # "candle_date_time_kst": None,    # KST는 필요시 계산 (용량 절약)
             "opening_price": None,           # 빈 캔들: NULL (용량 절약)
             "high_price": None,              # 빈 캔들: NULL (용량 절약)
             "low_price": None,               # 빈 캔들: NULL (용량 절약)
@@ -364,7 +367,7 @@ class EmptyCandleDetector:
             "candle_acc_trade_volume": None,  # 빈 캔들: NULL (용량 절약)
 
             # === 빈 캔들 식별 필드 ===
-            "blank_copy_from_utc": ref_time_str,  # 🚀 참조 시간 사용 (인덱스 불필요)
+            "empty_copy_from_utc": ref_state_str,  # 🚀 참조 상태 사용 (문자열 기반)
 
             # === 타임프레임별 선택적 필드 (필요시 추가) ===
             # unit, prev_closing_price 등은 필요시 reference_candle에서 복사

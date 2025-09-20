@@ -98,7 +98,7 @@ class CandleDBCleaner:
                 candle_acc_trade_volume REAL,  -- 빈 캔들에서는 NULL (용량 절약)
 
                 -- 빈 캔들 처리 필드
-                blank_copy_from_utc TEXT,
+                empty_copy_from_utc TEXT,
 
                 -- 메타데이터
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP

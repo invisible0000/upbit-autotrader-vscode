@@ -201,7 +201,7 @@ class CandleRepositoryInterface(ABC):
         api_start: datetime,
         range_start: datetime,
         range_end: datetime
-    ) -> Optional[datetime]:
+    ) -> Optional[str]:
         """수집된 청크 범위 내에서 api_start 이후 가장 가까운 참조 시간 찾기 (안전한 범위 제한)
 
         Args:
@@ -212,13 +212,13 @@ class CandleRepositoryInterface(ABC):
             range_end: 안전한 검색 범위 종료점 (현재 청크 끝)
 
         Returns:
-            참조할 수 있는 시간 (datetime) 또는 None (범위 내 데이터 없음)
+            참조할 수 있는 상태 (문자열) 또는 None (범위 내 데이터 없음)
 
         Note:
             - EmptyCandleDetector의 빈 캔들 생성 시 참조점 조회용
             - 수집하지 않은 구간을 건너서 잘못된 참조점을 찾는 엣지 케이스 방지
             - 확실히 수집한 청크 범위 내에서만 안전하게 참조점 조회
-            - blank_copy_from_utc 체인 자동 처리로 빈 캔들 → 실제 캔들 추적
+            - empty_copy_from_utc 체인 자동 처리로 빈 캔들 → 실제 캔들 추적
         """
         pass
 

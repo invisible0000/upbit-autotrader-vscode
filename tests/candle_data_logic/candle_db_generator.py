@@ -133,6 +133,7 @@ class CandleDBGenerator:
                 'timestamp': timestamp,
                 'candle_acc_trade_price': round(acc_trade_price, 0),
                 'candle_acc_trade_volume': round(volume, 6),
+                'empty_copy_from_utc': None,  # 빈 캔들 식별 필드
                 'created_at': datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
             }
 
@@ -164,6 +165,9 @@ class CandleDBGenerator:
                     candle_acc_trade_price REAL NOT NULL,
                     candle_acc_trade_volume REAL NOT NULL,
 
+                    -- 빈 캔들 처리 필드
+                    empty_copy_from_utc TEXT,
+
                     -- 메타데이터
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
@@ -188,7 +192,7 @@ class CandleDBGenerator:
                 try:
                     cursor.execute(f"""
                         INSERT OR REPLACE INTO {self.table_name}
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         record['candle_date_time_utc'],
                         record['market'],
@@ -200,6 +204,7 @@ class CandleDBGenerator:
                         record['timestamp'],
                         record['candle_acc_trade_price'],
                         record['candle_acc_trade_volume'],
+                        record['empty_copy_from_utc'],
                         record['created_at']
                     ))
                     saved_count += 1

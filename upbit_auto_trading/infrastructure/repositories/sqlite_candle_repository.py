@@ -463,14 +463,14 @@ class SqliteCandleRepository(CandleRepositoryInterface):
         api_start: datetime,
         range_start: datetime,
         range_end: datetime
-    ) -> Optional[datetime]:
+    ) -> Optional[str]:
         """
         수집된 청크 범위 내에서 api_start 이후 가장 가까운 참조 시간 찾기 (안전한 범위 제한)
 
         핵심 로직:
         1. api_start보다 크고 range_start~range_end 범위 내의 가장 가까운 캔들 1개 조회
-        2. blank_copy_from_utc가 NULL이면 실제 캔들의 candle_date_time_utc 사용
-        3. blank_copy_from_utc에 데이터가 있으면 해당 시간을 참조 시간으로 사용
+        2. empty_copy_from_utc가 NULL이면 실제 캔들의 candle_date_time_utc 사용
+        3. empty_copy_from_utc에 데이터가 있으면 해당 값을 그대로 반환
         4. 🚀 범위 제한으로 수집하지 않은 구간의 잘못된 참조점 방지
 
         Args:
@@ -481,7 +481,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             range_end: 안전한 검색 범위 종료점 (현재 청크 끝)
 
         Returns:
-            참조할 수 있는 시간 (datetime) 또는 None (범위 내 데이터 없음)
+            참조할 수 있는 상태 (문자열) 또는 None (범위 내 데이터 없음)
 
         효율성:
         - O(log n) 성능: PRIMARY KEY 인덱스 직접 활용
@@ -497,11 +497,11 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 cursor = conn.execute(f"""
                     SELECT
                         CASE
-                            WHEN blank_copy_from_utc IS NOT NULL
-                            THEN blank_copy_from_utc
+                            WHEN empty_copy_from_utc IS NOT NULL
+                            THEN empty_copy_from_utc
                             ELSE candle_date_time_utc
-                        END as reference_time,
-                        blank_copy_from_utc IS NOT NULL as is_blank_candle
+                        END as reference_state,
+                        empty_copy_from_utc IS NOT NULL as is_empty_candle
                     FROM {table_name}
                     WHERE candle_date_time_utc > ?
                       AND candle_date_time_utc BETWEEN ? AND ?
@@ -511,22 +511,21 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
                 row = cursor.fetchone()
                 if not row:
-                    logger.debug(f"참조 시간 없음: {symbol} {timeframe}, api_start={api_start} 이후, 범위=[{range_start}, {range_end}]")
+                    logger.debug(f"참조 상태 없음: {symbol} {timeframe}, api_start={api_start} 이후, 범위=[{range_start}, {range_end}]")
                     return None
 
-                reference_time_str = row[0]
-                is_blank_candle = bool(row[1])
+                reference_state_str = row[0]
+                is_empty_candle = bool(row[1])
 
-                # ISO 문자열을 datetime으로 변환
-                reference_time = _from_utc_iso(reference_time_str)
+                # 문자열 그대로 반환 (변환 없이 DB 원본 유지)
 
                 # 로깅 (빈 캔들 체인 추적 + 범위 정보)
-                if is_blank_candle:
-                    logger.debug(f"🔗 빈 캔들 체인 참조: {symbol} {timeframe} → {reference_time} (범위: [{range_start}, {range_end}])")
+                if is_empty_candle:
+                    logger.debug(f"🔗 빈 캔들 체인 참조: {symbol} {timeframe} → {reference_state_str}")
                 else:
-                    logger.debug(f"✅ 실제 캔들 참조: {symbol} {timeframe} → {reference_time} (범위: [{range_start}, {range_end}])")
+                    logger.debug(f"✅ 실제 캔들 참조: {symbol} {timeframe} → {reference_state_str}")
 
-                return reference_time
+                return reference_state_str
 
         except Exception as e:
             logger.debug(f"참조 시간 조회 실패: {symbol} {timeframe}, 범위=[{range_start}, {range_end}] - {type(e).__name__}: {e}")
@@ -621,7 +620,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_acc_trade_volume REAL,  -- 빈 캔들에서는 NULL (용량 절약)
 
             -- 빈 캔들 처리 필드
-            blank_copy_from_utc TEXT,
+            empty_copy_from_utc TEXT,
 
             -- 메타데이터
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -687,7 +686,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                     _safe_int(api_dict.get('timestamp', 0)),       # 타임스탬프
                     _safe_float(api_dict.get('candle_acc_trade_price')),  # 누적 거래대금 (빈 캔들: NULL)
                     _safe_float(api_dict.get('candle_acc_trade_volume')),   # 누적 거래량 (빈 캔들: NULL)
-                    api_dict.get('blank_copy_from_utc')  # 빈 캔들 식별 필드
+                    api_dict.get('empty_copy_from_utc', None)  # 빈 캔들 식별 필드 (업비트 API엔 없음, 기본 NULL)
                 ))
             except (ValueError, KeyError) as e:
                 logger.warning(f"잘못된 API 데이터 스키핑: {api_dict}, 오류: {e}")
@@ -703,7 +702,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
             timestamp, candle_acc_trade_price, candle_acc_trade_volume,
-            blank_copy_from_utc, created_at
+            empty_copy_from_utc, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
 
@@ -752,7 +751,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                     _safe_int(db_dict.get('timestamp', 0)),           # timestamp 안전 처리
                     _safe_float(db_dict.get('candle_acc_trade_price')),  # 빈 캔들: NULL
                     _safe_float(db_dict.get('candle_acc_trade_volume')),  # 빈 캔들: NULL
-                    db_dict.get('blank_copy_from_utc')
+                    db_dict.get('empty_copy_from_utc', None)  # 빈 캔들 식별 필드
                 ))
             else:
                 # 호환성을 위한 기존 형식 지원 (추후 제거 예정)
@@ -831,7 +830,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                             timestamp=row[7],
                             candle_acc_trade_price=row[8],
                             candle_acc_trade_volume=row[9],
-                            blank_copy_from_utc=row[10],
+                            empty_copy_from_utc=row[10],
 
                             # 편의성 필드
                             symbol=row[1],  # market과 동일
