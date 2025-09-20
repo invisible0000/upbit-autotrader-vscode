@@ -165,6 +165,7 @@
   },
   "active": "5bd0f060c9299ce7",
   "lastOpenFiles": [
+    "upbit_auto_trading/infrastructure/market_data/candle/미참조_빈캔들_참조점_자동업데이트_기능_검토.md",
     "data/strategies.sqlite3-shm",
     "data/strategies.sqlite3-wal",
     "data/settings.sqlite3-shm",
@@ -175,7 +176,6 @@
     "legacy/analyze_realistic_rpm_scenarios.py",
     "legacy/demonstrate_rpm_gcra_suppression.py",
     "legacy/market_data_db_manager.py",
-    "logs/session_20250920_190445_PID53172.log",
     "upbit_auto_trading/infrastructure/market_data/candle/캔들 데이터 제공자 to 시간 문제.md",
     "upbit_auto_trading/infrastructure/market_data/candle/docs/TIME_HANDLING_GUIDE.md",
     "upbit_auto_trading/infrastructure/market_data/candle/docs/PERFORMANCE_OPTIMIZATION_ANALYSIS.md",
