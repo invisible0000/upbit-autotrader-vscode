@@ -219,6 +219,9 @@ class CollectionState:
     remaining_chunks: int = 0
     estimated_remaining_seconds: float = 0.0
 
+    # 업비트 데이터 끝 도달 플래그
+    reached_upbit_data_end: bool = False
+
 
 @dataclass
 class CollectionPlan:
@@ -608,6 +611,13 @@ class CandleDataProvider:
                         f"저장: {saved_count}개, 청크범위: {completed_chunk.count}개, "
                         f"누적: {state.total_collected}/{state.total_requested}")
 
+            # 🆕 업비트 데이터 끝 도달 확인 (최우선 종료 조건)
+            if state.reached_upbit_data_end:
+                state.is_completed = True
+                state.current_chunk = None
+                logger.info(f"🔴 업비트 데이터 끝 도달로 수집 완료: {request_id} - 요청 범위에 업비트 데이터 끝이 포함됨")
+                return True
+
             # 수집 완료 확인
             if self._is_collection_complete(state):
                 state.is_completed = True
@@ -670,12 +680,19 @@ class CandleDataProvider:
 
             # 겹침 분석 결과에 따른 직접 저장
             saved_count, last_candle_time = await self._handle_overlap_direct_storage(
-                chunk_info, overlap_result, chunk_end, is_first_chunk,
+                chunk_info, overlap_result, state, chunk_end, is_first_chunk,
                 safe_range_start, safe_range_end
             )
         else:
             # 폴백: 직접 API → 저장 (COUNT_ONLY/END_ONLY 첫 청크 포함)
             api_response = await self._fetch_chunk_from_api(chunk_info)
+
+            # 🆕 업비트 데이터 끝 도달 감지
+            api_count, _ = chunk_info.get_api_params()
+            if len(api_response) < api_count:
+                state.reached_upbit_data_end = True
+                logger.warning(f"📊 업비트 데이터 끝 도달 (폴백): {chunk_info.symbol} {chunk_info.timeframe} - "
+                               f"요청={api_count}개, 응답={len(api_response)}개")
 
             # 🆕 폴백 케이스: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
             if is_first_chunk:
@@ -696,6 +713,7 @@ class CandleDataProvider:
         self,
         chunk_info: ChunkInfo,
         overlap_result,
+        state: CollectionState,
         calculated_chunk_end: Optional[datetime] = None,
         is_first_chunk: bool = False,
         safe_range_start: Optional[datetime] = None,
@@ -729,6 +747,13 @@ class CandleDataProvider:
             # 겹침 없음: API → 직접 저장
             logger.debug("겹침 없음 → 전체 API 직접 저장")
             api_response = await self._fetch_chunk_from_api(chunk_info)
+
+            # 🆕 업비트 데이터 끝 도달 감지
+            api_count, _ = chunk_info.get_api_params()
+            if len(api_response) < api_count:
+                state.reached_upbit_data_end = True
+                logger.warning(f"📊 업비트 데이터 끝 도달: {chunk_info.symbol} {chunk_info.timeframe} - "
+                               f"요청={api_count}개, 응답={len(api_response)}개")
 
             # 🆕 첫 번째 청크는 빈 캔들 처리 건너뛰기 (안전성)
             if is_first_chunk:
@@ -774,6 +799,12 @@ class CandleDataProvider:
                 chunk_info.set_overlap_info(overlap_result, api_count)
                 api_response = await self._fetch_chunk_from_api(chunk_info)
 
+                # 🆕 부분 겹침에서도 업비트 데이터 끝 도달 감지 (API 부분 요청에서도 발생 가능)
+                if len(api_response) < api_count:
+                    state.reached_upbit_data_end = True
+                    logger.warning(f"📊 업비트 데이터 끝 도달 (부분겹침): {chunk_info.symbol} {chunk_info.timeframe} - "
+                                   f"요청={api_count}개, 응답={len(api_response)}개")
+
                 # 🆕 첫 번째 청크는 빈 캔들 처리 건너뛰기 (안전성)
                 if is_first_chunk:
                     logger.debug("첫 청크: 빈 캔들 처리 건너뛰기 (PARTIAL_OVERLAP)")
@@ -813,6 +844,13 @@ class CandleDataProvider:
             # PARTIAL_MIDDLE_FRAGMENT 또는 기타: 안전한 폴백 → 전체 API 저장
             logger.debug("복잡한 겹침 → 전체 API 직접 저장 폴백")
             api_response = await self._fetch_chunk_from_api(chunk_info)
+
+            # 🆕 복잡한 겹침 폴백에서도 업비트 데이터 끝 도달 감지
+            api_count, _ = chunk_info.get_api_params()
+            if len(api_response) < api_count:
+                state.reached_upbit_data_end = True
+                logger.warning(f"📊 업비트 데이터 끝 도달 (폴백): {chunk_info.symbol} {chunk_info.timeframe} - "
+                               f"요청={api_count}개, 응답={len(api_response)}개")
 
             # 🆕 복잡한 겹침 폴백: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
             if is_first_chunk:
@@ -900,7 +938,11 @@ class CandleDataProvider:
     # =========================================================================
 
     async def _fetch_chunk_from_api(self, chunk_info: ChunkInfo) -> List[Dict[str, Any]]:
-        """실제 API 호출을 통한 청크 데이터 수집 - Overlap 최적화 지원"""
+        """실제 API 호출을 통한 청크 데이터 수집 - Overlap 최적화 지원
+
+        Returns:
+            List[Dict[str, Any]]: 캔들 데이터
+        """
         logger.debug(f"API 청크 요청: {chunk_info.chunk_id}")
 
         # 🟢 개선: ChunkInfo에서 최적화된 API 파라미터 추출
@@ -1002,9 +1044,10 @@ class CandleDataProvider:
             else:
                 raise ValueError(f"지원하지 않는 타임프레임: {chunk_info.timeframe}")
 
-            # 🟢 개선: 최적화된 로깅 (overlap 정보 표시)
+            #  개선: 최적화된 로깅 (overlap 정보 표시)
             overlap_info = f" (overlap: {chunk_info.overlap_status.value})" if chunk_info.has_overlap_info() else ""
             logger.info(f"API 청크 완료: {chunk_info.chunk_id}, 수집: {len(candles)}개{overlap_info}")
+
             return candles
 
         except Exception as e:
