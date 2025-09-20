@@ -207,11 +207,12 @@ class EmptyCandleDetector:
         Returns:
             List[GapInfo]: 감지된 Gap 정보 (순수 datetime + market 기반)
         """
-        if not datetime_list:
-            return []  # datetime 리스트가 없으면 Gap 없음
 
         # 업비트 내림차순 정렬 확보 (최신 → 과거)
         sorted_datetimes = sorted(datetime_list, reverse=True)
+
+        # 🚀 api_end 처리: 마지막 Gap 감지를 위해 api_end-1틱을 리스트에 추가
+        sorted_datetimes.append(TimeUtils.get_time_by_ticks(api_end, self.timeframe, -1))
 
         gaps = []
 
@@ -259,19 +260,18 @@ class EmptyCandleDetector:
                 # Gap 발견: 순수 datetime + market 기반 GapInfo 생성
                 gap_info = GapInfo(
                     gap_start=expected_current,         # 미래 (다음에 있어야 할 캔들)
-                    gap_end=current_time,              # 과거 (마지막 존재하는 캔들)
+                    # gap_end=current_time,              # 과거 (마지막 존재하는 캔들)
+                    gap_end=TimeUtils.get_time_by_ticks(current_time, self.timeframe, 1),  # 🔧 수정: gap_end를 current_time의 +1틱으로 설정 (current_time은 실제 존재하는 캔들이므로)
                     market=market,
                     reference_time=previous_time,        # 🚀 현재 캔들 시간을 참조로 사용
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
-                logger.debug(f"✅ Gap 등록: {expected_current} ~ {current_time}, 참조: {current_time}")
+                logger.debug(f"✅ Gap 등록: {expected_current} ~ {current_time}, 참조: {previous_time}")
             else:
                 logger.debug("✅ 연속적: Gap 없음")
 
-            # 🚪 api_end 도달 시 루프 중지
-            if api_end and current_time <= api_end:
-                break
+            # Break 로직 제거: api_end-1틱이 리스트에 포함되어 자연스럽게 루프 종료됨
 
         return gaps
 
