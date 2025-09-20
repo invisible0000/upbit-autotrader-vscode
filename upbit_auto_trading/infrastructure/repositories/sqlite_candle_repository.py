@@ -763,7 +763,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
             timestamp, candle_acc_trade_price, candle_acc_trade_volume,
-            blank_copy_from_utc, created_at
+            empty_copy_from_utc, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """
 
@@ -794,7 +794,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
             candle_date_time_utc, market, candle_date_time_kst,
             opening_price, high_price, low_price, trade_price,
             timestamp, candle_acc_trade_price, candle_acc_trade_volume,
-            blank_copy_from_utc
+            empty_copy_from_utc
         FROM {table_name}
         WHERE candle_date_time_utc BETWEEN ? AND ?
         ORDER BY candle_date_time_utc DESC

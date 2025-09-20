@@ -276,7 +276,11 @@ class EmptyCandleDetector:
         all_empty_candles = []
 
         for gap_info in gaps:
-            # 🚀 문자열 기반: market과 reference_state 직접 사용
+            # 🚀 Gap별 UUID 미리 생성 (reference_state가 None일 때만 사용)
+            gap_group_uuid = None
+            if gap_info.reference_state is None:
+                import uuid
+                gap_group_uuid = f"none_{uuid.uuid4().hex[:8]}"
 
             # Gap 구간의 시간점 배치 생성
             time_points = self._generate_gap_time_points(gap_info)
@@ -295,6 +299,7 @@ class EmptyCandleDetector:
                     target_time=current_time,
                     market=gap_info.market,
                     reference_state=gap_info.reference_state,
+                    gap_group_uuid=gap_group_uuid,
                     timestamp_ms=timestamp_ms
                 )
                 all_empty_candles.append(empty_dict)
@@ -332,23 +337,25 @@ class EmptyCandleDetector:
         target_time: datetime,
         market: str,
         reference_state: Optional[str],
+        gap_group_uuid: Optional[str],
         timestamp_ms: int
     ) -> Dict[str, Any]:
         """
-        업비트 API 형식의 빈 캔들 Dict 생성 (순수 datetime + market 기반)
+        업비트 API 형식의 빈 캔들 Dict 생성 (Gap 그룹 UUID 지원)
 
         빈 캔들 특징:
         - 가격: NULL로 설정하여 용량 절약
         - 거래량/거래대금: NULL로 설정하여 용량 절약
-        - empty_copy_from_utc: 참조 상태 사용 (문자열 기반)
+        - empty_copy_from_utc: reference_state 우선, 없으면 Gap 그룹 UUID 사용
         - timestamp: 정확한 밀리초 단위 timestamp
         """
-        # 참조 상태 결정 (reference_state 우선, 없으면 UUID 그룹 생성)
-        ref_state_str = None
+        # 🚀 참조 상태 결정: reference_state 우선, 없으면 Gap 그룹 UUID 사용
         if reference_state:
             ref_state_str = reference_state
+        elif gap_group_uuid:
+            ref_state_str = gap_group_uuid
         else:
-            # 참조가 없는 경우 UUID 그룹 생성
+            # 폴백: 개별 UUID 생성 (예상치 못한 경우)
             import uuid
             ref_state_str = f"none_{uuid.uuid4().hex[:8]}"
 
@@ -367,7 +374,7 @@ class EmptyCandleDetector:
             "candle_acc_trade_volume": None,  # 빈 캔들: NULL (용량 절약)
 
             # === 빈 캔들 식별 필드 ===
-            "empty_copy_from_utc": ref_state_str,  # 🚀 참조 상태 사용 (문자열 기반)
+            "empty_copy_from_utc": ref_state_str,  # 🚀 reference_state 우선, 없으면 Gap 그룹 UUID 사용
 
             # === 타임프레임별 선택적 필드 (필요시 추가) ===
             # unit, prev_closing_price 등은 필요시 reference_candle에서 복사

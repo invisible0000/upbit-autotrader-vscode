@@ -122,7 +122,7 @@ class CandleData:
             converted_trade_price=api_data.get("converted_trade_price"),
 
             # 빈 캔들 처리 필드
-            blank_copy_from_utc=api_data.get("blank_copy_from_utc"),
+            empty_copy_from_utc=api_data.get("empty_copy_from_utc"),
 
             # 편의성 필드
             symbol=api_data["market"],
@@ -197,7 +197,7 @@ class CandleData:
             "timestamp": self.timestamp,
             "candle_acc_trade_price": self.candle_acc_trade_price,
             "candle_acc_trade_volume": self.candle_acc_trade_volume,
-            "blank_copy_from_utc": self.blank_copy_from_utc,
+            "empty_copy_from_utc": self.empty_copy_from_utc,
         }
 
 
