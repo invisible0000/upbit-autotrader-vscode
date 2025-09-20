@@ -262,7 +262,7 @@ class CandleDataProvider:
 
         # 빈 캔들 처리 설정
         self.enable_empty_candle_processing = enable_empty_candle_processing
-        self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # timeframe별 캠시
+        self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # (symbol, timeframe) 조합 캐시
 
         logger.info("CandleDataProvider v6.2 (빈 캔들 처리 + ChunkInfo 확장 최적화) 초기화")
         logger.info(f"청크 크기: {self.chunk_size}, API Rate Limit: {self.api_rate_limit_rps} RPS")
@@ -272,12 +272,13 @@ class CandleDataProvider:
     # 핵심 공개 API
     # =========================================================================
 
-    def _get_empty_candle_detector(self, timeframe: str) -> EmptyCandleDetector:
-        """타임프레임별 EmptyCandleDetector 캐시 (성능 최적화)"""
-        if timeframe not in self.empty_candle_detectors:
-            self.empty_candle_detectors[timeframe] = EmptyCandleDetector(timeframe)
-            logger.debug(f"EmptyCandleDetector 생성: {timeframe}")
-        return self.empty_candle_detectors[timeframe]
+    def _get_empty_candle_detector(self, symbol: str, timeframe: str) -> EmptyCandleDetector:
+        """(symbol, timeframe) 조합별 EmptyCandleDetector 캐시 (완전 간소화)"""
+        cache_key = f"{symbol}_{timeframe}"
+        if cache_key not in self.empty_candle_detectors:
+            self.empty_candle_detectors[cache_key] = EmptyCandleDetector(symbol, timeframe)
+            logger.debug(f"EmptyCandleDetector 생성: {symbol} {timeframe}")
+        return self.empty_candle_detectors[cache_key]
 
     async def _process_api_candles_with_empty_filling(
         self,
@@ -313,7 +314,7 @@ class CandleDataProvider:
         if not self.enable_empty_candle_processing:
             return api_candles
 
-        # 🚀 참조 시간 조회 (안전한 범위 제한으로 빈 캔듡 생성용)
+        # ✅ 참조 시간 조회 (단순화된 datetime 반환)
         fallback_reference = None
         if api_start and api_candles and safe_range_start and safe_range_end:
             try:
@@ -321,31 +322,16 @@ class CandleDataProvider:
                     symbol, timeframe, api_start, safe_range_start, safe_range_end
                 )
                 if reference_time:
-                    # 참조 시간을 포함한 fallback_reference 생성
-                    fallback_reference = {
-                        'market': symbol,
-                        'candle_date_time_utc': reference_time.strftime('%Y-%m-%dT%H:%M:%S'),
-                        'reference_time': reference_time.strftime('%Y-%m-%dT%H:%M:%S')
-                    }
+                    fallback_reference = reference_time  # ✅ 직접 datetime 사용
                     logger.debug(f"🔗 안전 범위 참조 시간 확보: {symbol} {timeframe} → {reference_time} "
                                  f"(범위: [{safe_range_start}, {safe_range_end}])")
                 else:
-                    # 🆕 안전 범위 내 참조 시간이 없으면 api_start를 fallback_reference로 사용
-                    fallback_reference = {
-                        'market': symbol,
-                        'candle_date_time_utc': api_start.strftime('%Y-%m-%dT%H:%M:%S'),
-                        'reference_time': api_start.strftime('%Y-%m-%dT%H:%M:%S')
-                    }
+                    fallback_reference = api_start  # ✅ 직접 datetime 사용
                     logger.debug(f"🔗 안전 범위 내 참조 없음 → api_start 사용: {symbol} {timeframe} → {api_start}")
             except Exception as e:
                 logger.debug(f"안전 범위 참조 시간 조회 실패 (무시): {symbol} {timeframe} - {e}")
-                # 🆕 조회 실패 시에도 api_start를 fallback_reference로 사용
                 if api_start:
-                    fallback_reference = {
-                        'market': symbol,
-                        'candle_date_time_utc': api_start.strftime('%Y-%m-%dT%H:%M:%S'),
-                        'reference_time': api_start.strftime('%Y-%m-%dT%H:%M:%S')
-                    }
+                    fallback_reference = api_start  # ✅ 직접 datetime 사용
                     logger.debug(f"🔗 조회 실패 → api_start 사용: {symbol} {timeframe} → {api_start}")
 
         # 범위 정보가 없으면 안전성을 위해 빈 캔들 처리 건너뛰기
@@ -353,12 +339,12 @@ class CandleDataProvider:
             logger.debug(f"안전 범위 정보 없음 → 빈 캔들 처리 건너뛰기: {symbol} {timeframe}")
             return api_candles
 
-        detector = self._get_empty_candle_detector(timeframe)
+        detector = self._get_empty_candle_detector(symbol, timeframe)
         processed_candles = detector.detect_and_fill_gaps(
             api_candles,
             api_start=api_start,
             api_end=api_end,
-            fallback_reference=fallback_reference  # 🚀 참조 시간 전달
+            fallback_reference=fallback_reference  # ✅ 단순화된 datetime 전달
         )
 
         # 캔들 수 보정 로깅
