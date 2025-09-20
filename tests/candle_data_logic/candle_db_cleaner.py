@@ -88,7 +88,7 @@ class CandleDBCleaner:
 
                 -- 업비트 API 공통 필드들
                 market TEXT NOT NULL,
-                candle_date_time_kst TEXT NOT NULL,
+                candle_date_time_kst TEXT,  -- 빈 캔들에서는 NULL (용량 절약)
                 opening_price REAL,        -- 빈 캔들에서는 NULL (용량 절약)
                 high_price REAL,           -- 빈 캔들에서는 NULL (용량 절약)
                 low_price REAL,            -- 빈 캔들에서는 NULL (용량 절약)

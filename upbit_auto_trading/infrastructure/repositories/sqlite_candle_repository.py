@@ -610,7 +610,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
 
             -- 업비트 API 공통 필드들
             market TEXT NOT NULL,
-            candle_date_time_kst TEXT NOT NULL,
+            candle_date_time_kst TEXT,  -- 빈 캔들에서는 NULL (용량 절약)
             opening_price REAL,        -- 빈 캔들에서는 NULL (용량 절약)
             high_price REAL,           -- 빈 캔들에서는 NULL (용량 절약)
             low_price REAL,            -- 빈 캔들에서는 NULL (용량 절약)
@@ -678,7 +678,8 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 db_records.append((
                     api_dict['candle_date_time_utc'],    # PRIMARY KEY
                     api_dict['market'],                  # 심볼
-                    api_dict.get('candle_date_time_kst', ''),  # KST 시간
+                    # api_dict.get('candle_date_time_kst', ''),  # KST 시간
+                    api_dict.get('candle_date_time_kst'),  # KST 시간 (빈 캔들: None으로 용량 절약)
                     _safe_float(api_dict.get('opening_price')),    # 시가 (빈 캔들: NULL)
                     _safe_float(api_dict.get('high_price')),       # 고가 (빈 캔들: NULL)
                     _safe_float(api_dict.get('low_price')),        # 저가 (빈 캔들: NULL)

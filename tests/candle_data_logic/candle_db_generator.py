@@ -156,14 +156,14 @@ class CandleDBGenerator:
 
                     -- 업비트 API 공통 필드들
                     market TEXT NOT NULL,
-                    candle_date_time_kst TEXT NOT NULL,
-                    opening_price REAL NOT NULL,
-                    high_price REAL NOT NULL,
-                    low_price REAL NOT NULL,
-                    trade_price REAL NOT NULL,
+                    candle_date_time_kst TEXT,  -- 빈 캔들에서는 NULL (용량 절약)
+                    opening_price REAL,        -- 빈 캔들에서는 NULL (용량 절약)
+                    high_price REAL,           -- 빈 캔들에서는 NULL (용량 절약)
+                    low_price REAL,            -- 빈 캔들에서는 NULL (용량 절약)
+                    trade_price REAL,         -- 빈 캔들에서는 NULL (용량 절약)
                     timestamp INTEGER NOT NULL,
-                    candle_acc_trade_price REAL NOT NULL,
-                    candle_acc_trade_volume REAL NOT NULL,
+                    candle_acc_trade_price REAL,  -- 빈 캔들에서는 NULL (용량 절약)
+                    candle_acc_trade_volume REAL, -- 빈 캔들에서는 NULL (용량 절약)
 
                     -- 빈 캔들 처리 필드
                     empty_copy_from_utc TEXT,

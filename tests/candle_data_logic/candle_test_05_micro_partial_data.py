@@ -35,10 +35,10 @@ TEST_CONFIG = {
     # 기본 설정
     "symbol": "KRW-BTC",
     "timeframe": "1m",
-    "start_time": "2025-09-09 00:50:00",
-    # "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
-    "count": 10,
-    "chunk_size": 10,
+    # "start_time": "2025-09-09 00:50:00",
+    "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
+    "count": 200,
+    "chunk_size": 5,
 
     # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
     # "partial_records": [],

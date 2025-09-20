@@ -45,7 +45,7 @@ class CandleData:
     # === 업비트 API 응답 필드 (1:1 매칭) ===
     market: str                                    # 페어 코드 (KRW-BTC)
     candle_date_time_utc: str                     # UTC 시간 문자열
-    candle_date_time_kst: str                     # KST 시간 문자열
+    candle_date_time_kst: Optional[str]           # KST 시간 문자열 (빈 캔들에서는 None)
     opening_price: Optional[float]                # 시가 (빈 캔들에서는 None)
     high_price: Optional[float]                   # 고가 (빈 캔들에서는 None)
     low_price: Optional[float]                    # 저가 (빈 캔들에서는 None)
@@ -160,7 +160,8 @@ class CandleData:
             # === 업비트 API 공통 필드 ===
             market=market,
             candle_date_time_utc=target_time.strftime('%Y-%m-%dT%H:%M:%S'),  # UTC 형식 (timezone 정보 없음)
-            candle_date_time_kst=cls._utc_to_kst_string(target_time),
+            # candle_date_time_kst=cls._utc_to_kst_string(target_time),
+            candle_date_time_kst=None,  # 빈 캔들에서는 None (용량 절약)
             opening_price=0.0,      # 빈 캔들: 기본값 (실제값은 Dict에서 설정)
             high_price=0.0,
             low_price=0.0,

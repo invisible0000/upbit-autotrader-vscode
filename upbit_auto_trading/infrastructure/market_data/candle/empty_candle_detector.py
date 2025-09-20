@@ -363,8 +363,8 @@ class EmptyCandleDetector:
             # === 업비트 API 공통 필드 ===
             "market": market,
             "candle_date_time_utc": target_time.strftime('%Y-%m-%dT%H:%M:%S'),
-            "candle_date_time_kst": self._utc_to_kst_string(target_time),
-            # "candle_date_time_kst": None,    # KST는 필요시 계산 (용량 절약)
+            # "candle_date_time_kst": self._utc_to_kst_string(target_time),
+            "candle_date_time_kst": None,    # KST는 필요시 계산 (용량 절약)
             "opening_price": None,           # 빈 캔들: NULL (용량 절약)
             "high_price": None,              # 빈 캔들: NULL (용량 절약)
             "low_price": None,               # 빈 캔들: NULL (용량 절약)
