@@ -83,7 +83,7 @@ class EmptyCandleDetector:
         api_candles: List[Dict[str, Any]],
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
-        is_first_chunk: bool = False  # 🚀 첫 청크 여부 (api_start +1틱 추가 제어)
+        fallback_reference: Optional[str] = None  # 🚀 단순화된 참조 상태 (문자열)
     ) -> List[Dict[str, Any]]:
         """
         API 응답에서 Gap 감지하고 빈 캔들(Dict)로 채워서 완전한 List[Dict] 반환
@@ -95,6 +95,7 @@ class EmptyCandleDetector:
             api_candles: 업비트 API 원시 응답 데이터 (Dict 리스트)
             api_start: API 검출 범위 시작 시간 (미래 방향, None이면 제한 없음)
             api_end: API 검출 범위 종료 시간 (과거 방향, None이면 제한 없음)
+            fallback_reference: 안전한 참조 시간 (datetime 객체 또는 None)
 
         Returns:
             List[Dict]: 실제 캔들 + 빈 캔들이 병합된 완전한 시계열 (Dict 형태 유지)
@@ -110,9 +111,9 @@ class EmptyCandleDetector:
         datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in api_candles]
         logger.debug(f"🚀 최대 경량화: {len(api_candles)}개 캔들 → {len(datetime_list)}개 datetime + symbol='{self.symbol}'")
 
-        # Gap 감지 (실제 is_first_chunk 값 전달)
+        # Gap 감지 (첫 청크 여부는 임시로 True 설정)
         gaps = self._detect_gaps_in_datetime_list(
-            datetime_list, self.symbol, api_start, api_end, is_first_chunk=is_first_chunk
+            datetime_list, self.symbol, api_start, api_end, fallback_reference, is_first_chunk=True
         )
 
         if not gaps:
@@ -139,6 +140,7 @@ class EmptyCandleDetector:
         market: str,
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
+        fallback_reference: Optional[str] = None,
         is_first_chunk: bool = False
     ) -> List[GapInfo]:
         """
@@ -155,6 +157,7 @@ class EmptyCandleDetector:
             market: 마켓 정보 (예: "KRW-BTC")
             api_start: Gap 검출 시작점
             api_end: Gap 검출 종료점
+            fallback_reference: 안전한 참조 상태 (문자열 또는 None)
             is_first_chunk: 첫 번째 청크 여부 (api_start +1틱 추가 제어)
 
         Returns:
@@ -174,29 +177,29 @@ class EmptyCandleDetector:
         else:
             extended_datetimes = sorted_datetimes
 
-        # # api_end 처리: 마지막 Gap 감지를 위해 api_end-1틱을 리스트에 추가
-        # if api_end:
-        #     extended_datetimes.append(TimeUtils.get_time_by_ticks(api_end, self.timeframe, -1))
+        # api_end 처리: 마지막 Gap 감지를 위해 api_end-1틱을 리스트에 추가
+        if api_end:
+            extended_datetimes.append(TimeUtils.get_time_by_ticks(api_end, self.timeframe, -1))
 
         gaps = []
 
-        # # 🆕 1. 첫 번째 캔들과 api_start 비교 (첫 청크에서만 적용)
-        # if api_start and is_first_chunk and extended_datetimes:
-        #     first_time = extended_datetimes[0]
-        #     if first_time < api_start:
-        #         # 🚀 GapInfo 구조에 맞춰 실제 빈 캔들 범위 저장 (업비트 내림차순: start > end)
-        #         gap_start_time = TimeUtils.get_time_by_ticks(api_start, self.timeframe, -1)  # 첫 번째 빈 캔들 (최신)
-        #         gap_end_time = TimeUtils.get_time_by_ticks(first_time, self.timeframe, 1)    # 마지막 빈 캔들 (과거)
+        # 🆕 1. 첫 번째 캔들과 api_start 비교 (첫 청크에서만 적용)
+        if api_start and is_first_chunk and extended_datetimes:
+            first_time = extended_datetimes[0]
+            if first_time < api_start:
+                # 🚀 GapInfo 구조에 맞춰 실제 빈 캔들 범위 저장 (업비트 내림차순: start > end)
+                gap_start_time = TimeUtils.get_time_by_ticks(api_start, self.timeframe, -1)  # 첫 번째 빈 캔들 (최신)
+                gap_end_time = TimeUtils.get_time_by_ticks(first_time, self.timeframe, 1)    # 마지막 빈 캔들 (과거)
 
-        #         gap_info = GapInfo(
-        #             gap_start=gap_start_time,     # 실제 첫 번째 빈 캔들 시간
-        #             gap_end=gap_end_time,         # 실제 마지막 빈 캔들 시간
-        #             market=market,
-        #             reference_state=first_time.strftime('%Y-%m-%dT%H:%M:%S'),  # 🚀 과거 참조점
-        #             timeframe=self.timeframe
-        #         )
-        #         gaps.append(gap_info)
-        #         logger.debug(f"✅ 첫 Gap 감지 : {api_start} ~ {first_time}")
+                gap_info = GapInfo(
+                    gap_start=gap_start_time,     # 실제 첫 번째 빈 캔들 시간
+                    gap_end=gap_end_time,         # 실제 마지막 빈 캔들 시간
+                    market=market,
+                    reference_state=first_time.strftime('%Y-%m-%dT%H:%M:%S'),  # 🚀 과거 참조점
+                    timeframe=self.timeframe
+                )
+                gaps.append(gap_info)
+                logger.debug(f"✅ 첫 Gap 감지 : {api_start} ~ {first_time}")
 
         # 🚀 2. 순차적 Gap 검출 루프
         for i in range(1, len(extended_datetimes)):

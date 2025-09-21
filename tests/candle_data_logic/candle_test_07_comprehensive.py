@@ -36,23 +36,36 @@ TEST_CONFIG = {
     "symbol": "KRW-BTC",
     "timeframe": "1m",
     # "start_time": "2025-09-09 00:50:00",
-    "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
-    "count": 13,
+    # "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
+    # "start_time": "2025-07-30 16:40:00",  # 빈캔들 21개 전 시점
+    "start_time": "2025-07-30 16:19:00",  # 빈캔들 11개 전 시점
+    "end_time": "",  # 비어있으면 사용하지 않음. 예: "2025-07-30 16:10:00"
+    "count": 15,
     "chunk_size": 5,
 
-    # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
-    # "partial_records": [],
-    "partial_records": [
-        {"start_time": "2025-09-09 00:47:00", "count": 2},  # 2개 캔들 조각
-        {"start_time": "2025-09-09 00:41:00", "count": 2},   # 2개 캔들 조각
-        {"start_time": "2025-09-09 00:37:00", "count": 1}
-    ],
+    # 제어 설정
+    "enable_db_clean": True,  # False이면 DB 청소 건너뜀
 
-    # 고급 설정
-    "table_name": "candles_KRW_BTC_1m",
+    # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
+    "partial_records": [],
+    # "partial_records": [
+    #     {"start_time": "2025-09-09 00:47:00", "count": 2},  # 2개 캔들 조각
+    #     {"start_time": "2025-09-09 00:41:00", "count": 2},   # 2개 캔들 조각
+    #     {"start_time": "2025-09-09 00:37:00", "count": 1}
+    # ],
+
+    # 고급 설정 (table_name은 symbol + timeframe으로 자동 생성)
     "pause_for_verification": False,  # 파편 생성 후 사용자 확인 대기
     "complete_db_table_view": False  # 테스트 후 DB 테이블 전체 보기
 }
+
+
+def get_table_name(symbol: str, timeframe: str) -> str:
+    """
+    symbol과 timeframe으로 테이블명 생성
+    예: KRW-BTC, 1m → candles_KRW_BTC_1m
+    """
+    return f"candles_{symbol.replace('-', '_')}_{timeframe}"
 
 
 class OverlapPartialDataTester:
@@ -137,26 +150,38 @@ class OverlapPartialDataTester:
 
     async def run_overlap_test(self):
         """오버랩 부분 데이터 테스트 실행"""
+        # 테이블명 동적 생성
+        table_name = get_table_name(TEST_CONFIG['symbol'], TEST_CONFIG['timeframe'])
+
         print("🔍 === 오버랩 부분 데이터 테스트 ===")
         print(f"심볼: {TEST_CONFIG['symbol']}")
         print(f"타임프레임: {TEST_CONFIG['timeframe']}")
+        print(f"테이블명: {table_name}")
         print(f"수집 시작: {TEST_CONFIG['start_time']}")
+        if TEST_CONFIG.get('end_time'):
+            print(f"수집 종료: {TEST_CONFIG['end_time']}")
         print(f"수집 개수: {TEST_CONFIG['count']}개")
         print(f"청크 크기: {TEST_CONFIG['chunk_size']}개")
+        print(f"DB 청소: {'활성화' if TEST_CONFIG.get('enable_db_clean', True) else '비활성화'}")
         print(f"파편 레코드: {len(TEST_CONFIG['partial_records'])}개")
         print("=" * 60)
 
-        # 1. DB 청소
-        print(" 1️⃣ DB 청소...")
-        clear_result = self.db_cleaner.clear_candle_table(TEST_CONFIG["table_name"])
-        if not clear_result.get('success', False):
-            print(f"❌ DB 청소 실패: {clear_result.get('error')}")
-            return False
-
-        print(f"✅ DB 청소 완료 (이전 레코드: {clear_result.get('records_before', 0)}개)")
+        # 1. DB 청소 (조건부)
+        step_number = 1
+        if TEST_CONFIG.get('enable_db_clean', True):
+            print(f" {step_number}️⃣ DB 청소...")
+            clear_result = self.db_cleaner.clear_candle_table(table_name)
+            if not clear_result.get('success', False):
+                print(f"❌ DB 청소 실패: {clear_result.get('error')}")
+                return False
+            print(f"✅ DB 청소 완료 (이전 레코드: {clear_result.get('records_before', 0)}개)")
+            step_number += 1
+        else:
+            print(" 🚫 DB 청소 건너뜀 (enable_db_clean: False)")
 
         # 2. 파편화 레코드 생성
-        print(" 2️⃣ 파편화 레코드 생성...")
+        print(f" {step_number}️⃣ 파편화 레코드 생성...")
+        step_number += 1
         partial_records = TEST_CONFIG["partial_records"]
 
         if not partial_records:
@@ -183,7 +208,8 @@ class OverlapPartialDataTester:
                     return False
 
         # 3. 파편화 확인
-        print(" 3️⃣ 파편화 데이터 확인...")
+        print(f" {step_number}️⃣ 파편화 데이터 확인...")
+        step_number += 1
         analysis = self.analyzer.analyze()
         if analysis.get('success'):
             total_count = analysis['basic_stats']['total_count']
@@ -203,13 +229,15 @@ class OverlapPartialDataTester:
             print(" ⏸️  파편화 데이터 생성 완료. DB 상태를 확인하고 엔터를 눌러 계속...")
             input()
 
-        # 5. CandleDataProvider 초기화
-        print(" 4️⃣ CandleDataProvider 초기화...")
+        # CandleDataProvider 초기화
+        print(f" {step_number}️⃣ CandleDataProvider 초기화...")
         if not await self.setup_candle_provider():
             return False
+        step_number += 1
 
-        # 6. 캔들 수집 (get_candles 사용)
-        print(" 5️⃣ 캔들 수집 실행...")
+        # 캔들 수집 (get_candles 사용)
+        print(f" {step_number}️⃣ 캔들 수집 실행...")
+        step_number += 1
         start_time_str = TEST_CONFIG["start_time"]
         count = TEST_CONFIG["count"]
 
@@ -222,20 +250,45 @@ class OverlapPartialDataTester:
             print(f"❌ 시간 파싱 실패: {e}")
             return False
 
+        # 종료 시간 파싱 (선택적)
+        end_time = None
+        end_time_str = TEST_CONFIG.get('end_time', '').strip()
+        if end_time_str:
+            try:
+                end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
+                end_time = end_time.replace(tzinfo=timezone.utc)
+                print(f"  수집 종료 시간: {end_time} (UTC)")
+            except ValueError as e:
+                print(f"❌ 종료 시간 파싱 실패: {e}")
+                return False
+
         # get_candles 호출
         try:
-            print(f"  📥 get_candles 호출: {TEST_CONFIG['symbol']} {TEST_CONFIG['timeframe']} count={count}")
+            # 파라미터 구성
+            call_params = {
+                'symbol': TEST_CONFIG['symbol'],
+                'timeframe': TEST_CONFIG['timeframe'],
+                'count': count,
+                'to': start_time
+            }
+
+            # end_time이 있으면 추가
+            if end_time:
+                call_params['end'] = end_time
+                start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+                end_str = end_time.strftime('%Y-%m-%d %H:%M:%S')
+                print(f"  📥 get_candles 호출: {TEST_CONFIG['symbol']} {TEST_CONFIG['timeframe']}")
+                print(f"    count={count} to={start_str} end={end_str}")
+            else:
+                start_str = start_time.strftime('%Y-%m-%d %H:%M:%S')
+                print(f"  📥 get_candles 호출: {TEST_CONFIG['symbol']} {TEST_CONFIG['timeframe']}")
+                print(f"    count={count} to={start_str}")
 
             # ⏱️ 성능 측정 시작
             import time
             start_performance = time.time()
 
-            collected_candles = await self.candle_provider.get_candles(
-                symbol=TEST_CONFIG['symbol'],
-                timeframe=TEST_CONFIG['timeframe'],
-                count=count,
-                to=start_time
-            )
+            collected_candles = await self.candle_provider.get_candles(**call_params)
 
             # ⏱️ 성능 측정 완료
             end_performance = time.time()
@@ -249,8 +302,8 @@ class OverlapPartialDataTester:
             print(f"❌ 캔들 수집 실패: {e}")
             return False
 
-        # 7. 결과 확인
-        print(" 6️⃣ 결과 확인 및 검증...")
+        # 결과 확인
+        print(f" {step_number}️⃣ 결과 확인 및 검증...")
 
         # 최종 DB 분석
         final_analysis = self.analyzer.analyze()
@@ -286,11 +339,11 @@ class OverlapPartialDataTester:
                 conn = sqlite3.connect('data/market_data.sqlite3')
                 cursor = conn.cursor()
                 cursor.execute(
-                    'SELECT candle_date_time_utc, candle_date_time_kst, timestamp '
-                    'FROM candles_KRW_BTC_1m ORDER BY candle_date_time_utc DESC'
+                    f'SELECT candle_date_time_utc, candle_date_time_kst, timestamp '
+                    f'FROM {table_name} ORDER BY candle_date_time_utc DESC'
                 )
                 results = cursor.fetchall()
-                print('=== KRW-BTC 1분 캔들 데이터 (UTC 시간 내림차순) ===')
+                print(f'=== {TEST_CONFIG["symbol"]} {TEST_CONFIG["timeframe"]} 캔들 데이터 (UTC 시간 내림차순) ===')
                 print('UTC 시간\t\t\tKST 시간\t\t\t타임스탬프')
                 print('-' * 80)
                 for row in results:
@@ -305,12 +358,12 @@ class OverlapPartialDataTester:
                 import sqlite3
                 conn = sqlite3.connect('data/market_data.sqlite3')
                 cursor = conn.cursor()
-                cursor.execute('SELECT COUNT(*) FROM candles_KRW_BTC_1m')
+                cursor.execute(f'SELECT COUNT(*) FROM {table_name}')
                 total_records = cursor.fetchone()[0]
 
                 cursor.execute(
-                    'SELECT MIN(candle_date_time_utc), MAX(candle_date_time_utc) '
-                    'FROM candles_KRW_BTC_1m'
+                    f'SELECT MIN(candle_date_time_utc), MAX(candle_date_time_utc) '
+                    f'FROM {table_name}'
                 )
                 min_time, max_time = cursor.fetchone()
                 conn.close()

@@ -298,7 +298,8 @@ class CandleDataProvider:
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
         safe_range_start: Optional[datetime] = None,
-        safe_range_end: Optional[datetime] = None
+        safe_range_end: Optional[datetime] = None,
+        is_first_chunk: bool = False
     ) -> List[Dict[str, Any]]:
         """
         API 캔들 응답에 빈 캔들 처리 적용 (save_raw_api_data 전 호출)
@@ -324,33 +325,17 @@ class CandleDataProvider:
         if not self.enable_empty_candle_processing:
             return api_candles
 
-        # ✅ 참조 상태 조회 (문자열 기반)
-        fallback_reference = None
-        if api_start and api_candles and safe_range_start and safe_range_end:
-            try:
-                reference_state = await self.repository.find_reference_previous_chunks(
-                    symbol, timeframe, api_start, safe_range_start, safe_range_end
-                )
-                if reference_state:
-                    fallback_reference = reference_state  # ✅ 문자열 상태 사용
-                    logger.debug(f"🔗 안전 범위 참조 상태 확보: {symbol} {timeframe} → {reference_state}")
-                else:
-                    # reference_state가 None이면 EmptyCandleDetector가 UUID 그룹 생성하도록 None 유지
-                    logger.debug(f"🔗 안전 범위 내 참조 없음 → UUID 그룹 생성됨: {symbol} {timeframe}")
-            except Exception as e:
-                logger.debug(f"안전 범위 참조 상태 조회 실패 → UUID 그룹 생성됨: {symbol} {timeframe} - {e}")
-
         # 범위 정보가 없으면 안전성을 위해 빈 캔들 처리 건너뛰기
-        if not safe_range_start or not safe_range_end:
-            logger.debug(f"안전 범위 정보 없음 → 빈 캔들 처리 건너뛰기: {symbol} {timeframe}")
-            return api_candles
+        # if not safe_range_start or not safe_range_end:
+        #     logger.debug(f"안전 범위 정보 없음 → 빈 캔들 처리 건너뛰기: {symbol} {timeframe}")
+        #     return api_candles
 
         detector = self._get_empty_candle_detector(symbol, timeframe)
         processed_candles = detector.detect_and_fill_gaps(
             api_candles,
             api_start=api_start,
             api_end=api_end,
-            fallback_reference=fallback_reference  # ✅ 문자열 상태 전달 (None이면 UUID 그룹 생성)
+            is_first_chunk=is_first_chunk  # 🚀 첫 청크 정보 전달 (api_start +1틱 추가 제어)
         )
 
         # 캔들 수 보정 로깅
@@ -694,12 +679,27 @@ class CandleDataProvider:
                 logger.warning(f"📊 업비트 데이터 끝 도달 (폴백): {chunk_info.symbol} {chunk_info.timeframe} - "
                                f"요청={api_count}개, 응답={len(api_response)}개")
 
-            # 🆕 폴백 케이스: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
+            # 🚀 첫 청크에서도 빈 캔들 처리 허용 (EmptyCandleDetector 내부 안전 처리 로직 적용)
             if is_first_chunk:
-                logger.debug("첫 청크: 빈 캔들 처리 건너뛰기")
+                logger.debug("첫 청크: 빈 캔들 처리 적용")
+                # 첫 청크를 위한 안전 범위 설정
+                first_chunk_safe_start = chunk_info.to  # 청크 시작점
+                first_chunk_safe_end = chunk_info.end   # 청크 끝점
+
+                final_candles = await self._process_api_candles_with_empty_filling(
+                    api_response,
+                    state.symbol,
+                    state.timeframe,
+                    api_start=chunk_info.to,
+                    api_end=chunk_info.end,
+                    safe_range_start=first_chunk_safe_start,
+                    safe_range_end=first_chunk_safe_end,
+                    is_first_chunk=True  # 🚀 첫 청크임을 명시 (api_start +1틱 추가 방지)
+                )
+                logger.info(f"첫 청크 빈 캔들 처리 완료: {len(api_response)}개 → {len(final_candles)}개")
             else:
                 logger.debug("폴백 케이스: api_end 정보 없음 → 빈 캔들 처리 건너뛰기")
-            final_candles = api_response
+                final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, final_candles
@@ -755,23 +755,19 @@ class CandleDataProvider:
                 logger.warning(f"📊 업비트 데이터 끝 도달: {chunk_info.symbol} {chunk_info.timeframe} - "
                                f"요청={api_count}개, 응답={len(api_response)}개")
 
-            # 🆕 첫 번째 청크는 빈 캔들 처리 건너뛰기 (안전성)
-            if is_first_chunk:
-                logger.debug("첫 청크: 빈 캔들 처리 건너뛰기 (NO_OVERLAP)")
-                final_candles = api_response
-            else:
-                # overlap_result에서 api_start, api_end 추출
-                api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
-                api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
+            # 🚀 첫 청크에서도 빈 캔들 처리 허용 (NO_OVERLAP)
+            # overlap_result에서 api_start, api_end 추출
+            api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
+            api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
 
-                # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
-                if self._should_process_empty_candles(api_response, api_end):
-                    final_candles = await self._process_api_candles_with_empty_filling(
-                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
-                        safe_range_start, safe_range_end
-                    )
-                else:
-                    final_candles = api_response
+            # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
+            if self._should_process_empty_candles(api_response, api_end):
+                final_candles = await self._process_api_candles_with_empty_filling(
+                    api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
+                    safe_range_start, safe_range_end, is_first_chunk=is_first_chunk
+                )
+            else:
+                final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, final_candles
@@ -805,23 +801,19 @@ class CandleDataProvider:
                     logger.warning(f"📊 업비트 데이터 끝 도달 (부분겹침): {chunk_info.symbol} {chunk_info.timeframe} - "
                                    f"요청={api_count}개, 응답={len(api_response)}개")
 
-                # 🆕 첫 번째 청크는 빈 캔들 처리 건너뛰기 (안전성)
-                if is_first_chunk:
-                    logger.debug("첫 청크: 빈 캔들 처리 건너뛰기 (PARTIAL_OVERLAP)")
-                    final_candles = api_response
-                else:
-                    # overlap_result에서 api_start, api_end 추출
-                    api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
-                    api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
+                # 🚀 첫 청크에서도 빈 캔들 처리 허용 (PARTIAL_OVERLAP)
+                # overlap_result에서 api_start, api_end 추출
+                api_start = overlap_result.api_start if hasattr(overlap_result, 'api_start') else None
+                api_end = overlap_result.api_end if hasattr(overlap_result, 'api_end') else None
 
-                    # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
-                    if self._should_process_empty_candles(api_response, api_end):
-                        final_candles = await self._process_api_candles_with_empty_filling(
-                            api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
-                            safe_range_start, safe_range_end
-                        )
-                    else:
-                        final_candles = api_response
+                # 🔍 조건부 빈 캔들 처리: API 응답의 마지막 캔들과 api_end가 다를 때만
+                if self._should_process_empty_candles(api_response, api_end):
+                    final_candles = await self._process_api_candles_with_empty_filling(
+                        api_response, chunk_info.symbol, chunk_info.timeframe, api_start, api_end,
+                        safe_range_start, safe_range_end, is_first_chunk=is_first_chunk
+                    )
+                else:
+                    final_candles = api_response
 
                 saved_count = await self.repository.save_raw_api_data(
                     chunk_info.symbol, chunk_info.timeframe, final_candles
@@ -853,10 +845,8 @@ class CandleDataProvider:
                                f"요청={api_count}개, 응답={len(api_response)}개")
 
             # 🆕 복잡한 겹침 폴백: api_end 정보가 없으므로 빈 캔들 처리 건너뛰기 (안전성)
-            if is_first_chunk:
-                logger.debug("첫 청크: 빈 캔들 처리 건너뛰기 (복잡한 겹침 폴백)")
-            else:
-                logger.debug("복잡한 겹침 폴백: api_end 정보 없음 → 빈 캔들 처리 건너뛰기")
+            # 첫 청크와 관계없이 api_end 정보 부족으로 인한 안전한 폴백
+            logger.debug(f"복잡한 겹침 폴백: api_end 정보 없음 → 빈 캔들 처리 건너뛰기 (is_first_chunk={is_first_chunk})")
             final_candles = api_response
 
             saved_count = await self.repository.save_raw_api_data(
