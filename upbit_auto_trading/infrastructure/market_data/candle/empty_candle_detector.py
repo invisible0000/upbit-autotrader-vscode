@@ -32,8 +32,8 @@ logger = create_component_logger("EmptyCandleDetector")
 @dataclass
 class GapInfo:
     """Gap 정보 저장용 모델 (EmptyCandleDetector 전용) - 순수 datetime 기반 최적화"""
-    gap_start: datetime                    # Gap 시작 시간 (미래) - 업비트 정렬 [5,4,3,2,1]에서 더 큰 값
-    gap_end: datetime                      # Gap 종료 시간 (과거) - 업비트 정렬에서 더 작은 값
+    gap_start: datetime                    # 실제 빈 캔들 시작 시간 (첫 번째 빈 캔들)
+    gap_end: datetime                      # 실제 빈 캔들 종료 시간 (마지막 빈 캔들)
     market: str                            # 🚀 마켓 정보 (예: "KRW-BTC") - 직접 저장으로 단순화
     reference_state: Optional[str]         # 🚀 참조 상태 (empty_copy_from_utc용 - 문자열 기반)
     timeframe: str                         # 타임프레임
@@ -71,8 +71,8 @@ class EmptyCandleDetector:
         self.timeframe = timeframe
         self.gap_threshold_ms = self._get_gap_threshold(timeframe)
 
-        # 성능 최적화를 위한 캐싱
-        self._timeframe_delta_ms = TimeUtils.get_timeframe_seconds(timeframe) * 1000
+        # 성능 최적화를 위한 캐싱 (마이크로 최적화 적용)
+        self._timeframe_delta_ms = TimeUtils.get_timeframe_ms(timeframe)
 
         logger.info(f"EmptyCandleDetector 초기화: {symbol} {timeframe}, Gap 임계값: {self.gap_threshold_ms}ms")
 
@@ -216,10 +216,13 @@ class EmptyCandleDetector:
             logger.debug(f"🔍 첫 캔들 Gap 검사: api_start={api_start}, first_time={first_time}")
 
             if first_time < expected_first:
-                # ✅ 첫 번째 Gap: fallback_reference를 직접 사용 (파싱 불필요)
+                # ✅ 첫 번째 Gap: 실제 빈 캔들 범위 계산
+                # 🚀 최적화: gap_start/gap_end에 실제 빈 캔들 시간 저장
+                gap_start_time = TimeUtils.get_time_by_ticks(expected_first, self.timeframe, -1)
+                gap_end_time = TimeUtils.get_time_by_ticks(first_time, self.timeframe, 1)
                 gap_info = GapInfo(
-                    gap_start=expected_first,      # 미래 (있어야 할 캔들)
-                    gap_end=first_time,           # 과거 (실제 존재하는 캔들)
+                    gap_start=gap_start_time,     # 실제 첫 번째 빈 캔들 시간
+                    gap_end=gap_end_time,         # 실제 마지막 빈 캔들 시간
                     market=market,
                     reference_state=fallback_reference,  # ✅ 직접 문자열 사용
                     timeframe=self.timeframe
@@ -243,12 +246,13 @@ class EmptyCandleDetector:
             )
 
             if current_time < expected_current:
-                # Gap 발견: 순수 datetime + market 기반 GapInfo 생성
-                # gap_end를 current_time의 +1틱으로 설정 (current_time은 실제 존재하는 캔들이므로)
+                # Gap 발견: 실제 빈 캔들 범위를 GapInfo에 저장
+                # 🚀 최적화: gap_start/gap_end에 실제 빈 캔들 시간 저장
+                gap_start_time = TimeUtils.get_time_by_ticks(expected_current, self.timeframe, -1)
                 gap_end_time = TimeUtils.get_time_by_ticks(current_time, self.timeframe, 1)
                 gap_info = GapInfo(
-                    gap_start=expected_current,         # 미래 (다음에 있어야 할 캔들)
-                    gap_end=gap_end_time,              # 과거 (실제 존재하는 캔들 + 1틱)
+                    gap_start=gap_start_time,          # 실제 첫 번째 빈 캔들 시간
+                    gap_end=gap_end_time,              # 실제 마지막 빈 캔들 시간
                     market=market,
                     reference_state=previous_time.strftime('%Y-%m-%dT%H:%M:%S'),  # 🚀 문자열로 변환
                     timeframe=self.timeframe
@@ -310,18 +314,19 @@ class EmptyCandleDetector:
         """
         Gap 구간의 모든 시간점 배치 생성 (업비트 정렬: 미래→과거)
 
-        Gap 범위: gap_start >= missing_times >= gap_end (업비트 정렬)
-        - gap_start부터 바로 시작 (첫 번째 빈 캔들 포함)
-        - gap_end까지 포함 (api_end로 조정된 경우 gap_end도 빈 캔들로 생성)
+        🔧 최적화: gap_start/gap_end는 이미 실제 빈 캔들 범위
+        - gap_start: 첫 번째 빈 캔들 시간
+        - gap_end: 마지막 빈 캔들 시간
+        - TimeUtils 호출 없이 바로 사용 가능!
 
         예: Gap 16:19:00 ~ 16:12:00 → 생성할 빈 캔들: 16:19:00, 16:18:00, ..., 16:12:00
         """
         time_points = []
-        current_time = gap_info.gap_start  # 🔧 수정: gap_start부터 바로 시작 (ticks 변환 없이)
+        current_time = gap_info.gap_start  # 실제 첫 번째 빈 캔들 시간
 
         logger.debug(f"🕐 빈 캔들 시간점 생성 시작: {gap_info.gap_start} ~ {gap_info.gap_end}")
 
-        # gap_end까지 포함하여 생성 (>= 조건으로 변경)
+        # gap_end까지 포함하여 생성 (>= 조건 유지)
         while current_time >= gap_info.gap_end:
             time_points.append(current_time)
             logger.debug(f"  ➕ 빈 캔들 시간점 추가: {current_time}")
