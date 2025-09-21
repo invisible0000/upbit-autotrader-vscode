@@ -104,45 +104,21 @@ class EmptyCandleDetector:
         # ✅ Market 정보는 인스턴스 속성으로 사용 (완전 간소화)
         logger.debug(f"✅ 인스턴스 symbol: '{self.symbol}'")
 
-        # 🚀 사전 필터링 제거: api_candles를 직접 사용 (청크 독립성 유지)
-        processed_candles = api_candles or []
-
-        logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(processed_candles)}개 캔들")
+        logger.debug(f"Gap 감지 및 빈 캔들 채우기 시작: {len(api_candles)}개 캔들")
         logger.debug(f"검출 범위: api_start={api_start}, api_end={api_end}")
 
         #  순수 시간 정보 추출 (최대 메모리 절약)
-        datetime_list = []
+        datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in api_candles]
+        logger.debug(f"🚀 최대 경량화: {len(api_candles)}개 캔들 → {len(datetime_list)}개 datetime + symbol='{self.symbol}'")
 
-        if processed_candles:
-            # 시간 정보만 추출 (전체 Dict 대신 datetime만)
-            datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in processed_candles]
-            logger.debug(f"🚀 최대 경량화: {len(processed_candles)}개 캔들 → {len(datetime_list)}개 datetime + symbol='{self.symbol}'")
-
-        # 🆕 케이스 1: 빈 배열 처리 (전체 범위가 빈 캔들)
-        if not processed_candles:
-            if self.symbol and api_start and api_end:
-                logger.debug(f"📦 전체 범위 빈 캔들 생성: {api_start} ~ {api_end}")
-                gap_info = GapInfo(
-                    gap_start=api_start,
-                    gap_end=api_end,
-                    market=self.symbol,
-                    reference_state=fallback_reference,  # ✅ 직접 문자열 사용
-                    timeframe=self.timeframe
-                )
-                empty_candle_dicts = self._generate_empty_candle_dicts([gap_info])
-                logger.info(f"전체 범위 빈 캔들 생성 완료: {len(empty_candle_dicts)}개")
-                return empty_candle_dicts
-            logger.debug("빈 API 응답, 처리할 캔들 없음")
-            return []
-
-        # 4. Gap 감지 (벡터화 로직으로 완전 교체, 첫 청크 여부는 임시로 True 설정)
+        # Gap 감지 (첫 청크 여부는 임시로 True 설정)
         gaps = self._detect_gaps_in_datetime_list(
             datetime_list, self.symbol, api_start, api_end, fallback_reference, is_first_chunk=True
         )
 
         if not gaps:
             logger.debug("Gap 없음, 원본 응답 반환")
-            return processed_candles
+            return api_candles
 
         logger.info(f"{len(gaps)}개 Gap 감지, 빈 캔들 생성 시작")
 
@@ -150,9 +126,9 @@ class EmptyCandleDetector:
         empty_candle_dicts = self._generate_empty_candle_dicts(gaps)
 
         # 3. 실제 + 빈 캔들 병합 및 정렬
-        merged_candles = self._merge_real_and_empty_candles(processed_candles, empty_candle_dicts)
+        merged_candles = self._merge_real_and_empty_candles(api_candles, empty_candle_dicts)
 
-        logger.info(f"빈 캔들 처리 완료: 실제 {len(processed_candles)}개 + 빈 {len(empty_candle_dicts)}개 = 총 {len(merged_candles)}개")
+        logger.info(f"빈 캔들 처리 완료: 실제 {len(api_candles)}개 + 빈 {len(empty_candle_dicts)}개 = 총 {len(merged_candles)}개")
 
         return merged_candles
 

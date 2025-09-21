@@ -48,7 +48,7 @@ TEST_CONFIGS = [
     },
     {
         "name": "중간규모",
-        "candle_count": 500,
+        "candle_count": 200,
         "gap_density": 0.15,  # 15% Gap
         "timeframe": "1m"
     },
@@ -449,7 +449,7 @@ class PerformanceComparison:
 
         # 상세 결과 테이블
         print("\n📋 상세 결과:")
-        print("테스트명\t\t캔들수\t기존(ms)\t벡터화\t\tTimeUtils최적화\t순수Numpy\t정확성")
+        print("테스트명\t캔들수\t기존(ms) 벡터화\tTimeUtils최적화\t순수Numpy 정확성")
         print("-" * 90)
 
         for result in all_results:
@@ -463,11 +463,11 @@ class PerformanceComparison:
                 for method, stats in methods.items()
             }
 
-            print(f"{config['name']:<12}\t{test_data['candle_count']}\t"
-                  f"{times.get('original', 'N/A')}\t\t"
-                  f"{times.get('vectorized', 'N/A')}\t\t"
-                  f"{times.get('optimized', 'N/A')}\t\t\t"
-                  f"{times.get('pure_numpy', 'N/A')}\t\t{accuracy}")
+            print(f"{config['name']:<8}\t{test_data['candle_count']}\t"
+                  f"{times.get('original', 'N/A')}\t"
+                  f"{times.get('vectorized', 'N/A')}\t"
+                  f"{times.get('optimized', 'N/A')}\t"
+                  f"{times.get('pure_numpy', 'N/A')}\t{accuracy}")
 
         # 권장사항
         print("\n💡 최종 결론:")

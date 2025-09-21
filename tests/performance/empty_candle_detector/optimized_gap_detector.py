@@ -237,26 +237,9 @@ class OptimizedGapDetector:
         Returns:
             List[OptimizedGapInfo]: 감지된 Gap 정보
         """
-        # 사전 필터링 제거: api_candles를 직접 사용 (청크 독립성 유지)
-        processed_candles = api_candles or []
 
         # 순수 시간 정보 추출
-        datetime_list = []
-        if processed_candles:
-            datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in processed_candles]
-
-        # 빈 배열 처리 (전체 범위가 빈 캔들)
-        if not processed_candles:
-            if self.symbol and api_start and api_end:
-                gap_info = OptimizedGapInfo(
-                    gap_start=api_start,
-                    gap_end=api_end,
-                    market=self.symbol,
-                    reference_state=fallback_reference,
-                    timeframe=self.timeframe
-                )
-                return [gap_info]
-            return []
+        datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in api_candles]
 
         # Gap 감지 (TimeUtils 최적화 방식)
         gaps = self.detect_gaps_optimized(

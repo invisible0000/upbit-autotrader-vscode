@@ -197,26 +197,12 @@ class VectorizedGapDetector:
         Returns:
             List[VectorizedGapInfo]: 감지된 Gap 정보
         """
-        # 🚀 사전 필터링 제거: api_candles를 직접 사용 (청크 독립성 유지)
+        # 🚀 api_candles 필터링 제거로 빈 배열 발생하지 않음
+        # 빈 배열 전체 청크 처리 로직 제거됨
         processed_candles = api_candles or []
 
         # 순수 시간 정보 추출 (최대 메모리 절약)
-        datetime_list = []
-        if processed_candles:
-            datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in processed_candles]
-
-        # 빈 배열 처리 (전체 범위가 빈 캔들)
-        if not processed_candles:
-            if self.symbol and api_start and api_end:
-                gap_info = VectorizedGapInfo(
-                    gap_start=api_start,
-                    gap_end=api_end,
-                    market=self.symbol,
-                    reference_state=fallback_reference,
-                    timeframe=self.timeframe
-                )
-                return [gap_info]
-            return []
+        datetime_list = [self._parse_utc_time(candle["candle_date_time_utc"]) for candle in processed_candles]
 
         # Gap 감지 (벡터화 방식)
         gaps = self.detect_gaps_vectorized(
