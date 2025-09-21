@@ -310,7 +310,7 @@ class PerformanceBenchmark:
             # 메모리 정리
             gc.collect()
 
-            # 🚀 벡터화 방식 테스트
+            # 🚀 벡터화 방식 테스트 (is_first_chunk=True로 설정)
             try:
                 vectorized_metrics = self.measure_performance(
                     vectorized_detector.detect_gaps_vectorized,
@@ -320,7 +320,7 @@ class PerformanceBenchmark:
                 vectorized_memories.append(vectorized_metrics["memory_delta_mb"])
                 vectorized_gap_count = vectorized_metrics["result_count"]
             except Exception as e:
-                logger.error(f"벡터화 방식 테스트 실패 (#{i+1}): {e}")
+                logger.error(f"벡터화 방식 테스트 실패 (#{i + 1}): {e}")
                 continue
 
         # 결과 정확성 검증
