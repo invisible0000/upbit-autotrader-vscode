@@ -560,7 +560,7 @@ class ChunkInfo:
 
     # === 청크 파라미터 (실시간 조정 가능) ===
     count: int                            # 이 청크에서 요청할 캔들 개수
-    to: Optional[datetime] = None         # 이 청크의 마지막 캔들 시간
+    to: Optional[datetime] = None         # 이 청크의 시작 캔들 시간
     end: Optional[datetime] = None        # 이 청크의 종료 시간
 
     # === 🆕 Overlap 최적화 필드들 ===
