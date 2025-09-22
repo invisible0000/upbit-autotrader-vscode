@@ -38,13 +38,15 @@ TEST_CONFIG = {
     # "start_time": "2025-09-09 00:50:00",
     # "start_time": "2025-07-30 16:22:00",  # 빈캔들 3개 전 시점
     # "start_time": "2025-07-30 16:40:00",  # 빈캔들 21개 전 시점
-    "start_time": "2025-07-30 16:19:00",  # 빈캔들 11개 전 시점
+    "start_time": "2025-07-30 16:21:00",  # 빈캔들 11개 전 시점
+    # "start_time": "",  # 비었으면 to 없이 count만 수집 <-- 현재 동작안한, 수정필요
     "end_time": "",  # 비어있으면 사용하지 않음. 예: "2025-07-30 16:10:00"
     "count": 15,
     "chunk_size": 5,
 
     # 제어 설정
-    "enable_db_clean": True,  # False이면 DB 청소 건너뜀
+    # "enable_db_clean": True,  # False이면 DB 청소 건너뜀
+    "enable_db_clean": False,  # False이면 DB 청소 건너뜀
 
     # 파편 레코드 설정 (오버랩 상황 시뮬레이션)
     "partial_records": [],

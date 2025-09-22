@@ -130,9 +130,8 @@ class RequestInfo:
                 )
                 object.__setattr__(self, 'expected_count', calculated_count)
             else:
-                # END_ONLY의 경우 현재 시간 기준으로 계산
-                current_time = datetime.now(timezone.utc)
-                aligned_current = TimeUtils.align_to_candle_boundary(current_time, self.timeframe)
+                # END_ONLY의 경우 요청 시점 기준으로 계산
+                aligned_current = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
                 calculated_count = TimeUtils.calculate_expected_count(
                     aligned_current, self.aligned_end, self.timeframe
                 )
@@ -325,11 +324,6 @@ class CandleDataProvider:
         if not self.enable_empty_candle_processing:
             return api_candles
 
-        # 범위 정보가 없으면 안전성을 위해 빈 캔들 처리 건너뛰기
-        # if not safe_range_start or not safe_range_end:
-        #     logger.debug(f"안전 범위 정보 없음 → 빈 캔들 처리 건너뛰기: {symbol} {timeframe}")
-        #     return api_candles
-
         detector = self._get_empty_candle_detector(symbol, timeframe)
         processed_candles = detector.detect_and_fill_gaps(
             api_candles,
@@ -431,12 +425,11 @@ class CandleDataProvider:
                     symbol, timeframe, aligned_to, end_time
                 )
             elif count:
-                # count만 방식 - 최신 데이터부터 count개
-                current_time = datetime.now(timezone.utc)
-                aligned_current = TimeUtils.align_to_candle_boundary(current_time, timeframe)
-                start_time = TimeUtils.get_time_by_ticks(aligned_current, timeframe, -(count - 1))
+                # count만 방식 - 요청 시점 기준 최신 데이터부터 count개
+                aligned_current = TimeUtils.align_to_candle_boundary(collection_state.request_info.request_at, timeframe)
+                end_time = TimeUtils.get_time_by_ticks(aligned_current, timeframe, -(count - 1))
                 return await self.repository.get_candles_by_range(
-                    symbol, timeframe, aligned_current, start_time
+                    symbol, timeframe, aligned_current, end_time
                 )
             elif to and end:
                 # to + end 방식
@@ -446,10 +439,9 @@ class CandleDataProvider:
                     symbol, timeframe, aligned_to, aligned_end
                 )
             elif end:
-                # end만 방식
+                # end만 방식 - 요청 시점 기준
                 aligned_end = collection_state.request_info.get_aligned_end_time()
-                current_time = datetime.now(timezone.utc)
-                aligned_current = TimeUtils.align_to_candle_boundary(current_time, timeframe)
+                aligned_current = TimeUtils.align_to_candle_boundary(collection_state.request_info.request_at, timeframe)
                 return await self.repository.get_candles_by_range(
                     symbol, timeframe, aligned_current, aligned_end
                 )
@@ -893,15 +885,14 @@ class CandleDataProvider:
 
         logger.info(f"수집 계획 수립: {request_info.to_log_string()}")
 
-        # 동적 비즈니스 검증
-        current_time = datetime.now(timezone.utc)
-        if to is not None and to > current_time:
+        # 동적 비즈니스 검증 - 요청 시점 기준
+        if to is not None and to > request_info.request_at:
             raise ValueError(f"to 시점이 미래입니다: {to}")
-        if end is not None and end > current_time:
+        if end is not None and end > request_info.request_at:
             raise ValueError(f"end 시점이 미래입니다: {end}")
 
         # 총 캔들 개수 계산
-        total_count = self._calculate_total_count_by_type(request_info, current_time)
+        total_count = self._calculate_total_count_by_type(request_info)
 
         # 예상 청크 수 계산
         estimated_chunks = (total_count + self.chunk_size - 1) // self.chunk_size
@@ -910,7 +901,7 @@ class CandleDataProvider:
         estimated_duration_seconds = estimated_chunks / self.api_rate_limit_rps
 
         # 첫 번째 청크 파라미터 생성
-        first_chunk_params = self._create_first_chunk_params_by_type(request_info, current_time)
+        first_chunk_params = self._create_first_chunk_params_by_type(request_info)
 
         plan = CollectionPlan(
             total_count=total_count,
@@ -1087,8 +1078,7 @@ class CandleDataProvider:
 
     def _calculate_total_count_by_type(
         self,
-        request_info: RequestInfo,
-        current_time: datetime
+        request_info: RequestInfo
     ) -> int:
         """사전 계산된 예상 캔들 개수 반환"""
         expected_count = request_info.get_expected_count()
@@ -1100,8 +1090,7 @@ class CandleDataProvider:
 
     def _create_first_chunk_params_by_type(
         self,
-        request_info: RequestInfo,
-        current_time: datetime
+        request_info: RequestInfo
     ) -> Dict[str, Any]:
         """요청 타입별 첫 번째 청크 파라미터 생성"""
         request_type = request_info.get_request_type()
