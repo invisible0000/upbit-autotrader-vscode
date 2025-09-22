@@ -35,7 +35,7 @@ TEST_CONFIG = {
     # 기본 설정 (table_name은 symbol + timeframe으로 자동 생성)
     # "symbol": "KRW-BTC",
     "symbol": "KRW-ELF",
-    "timeframe": "1s",
+    "timeframe": "1m",
 
     # 수집설정(get_cadles 파라미터로 변환)
     # 시간대 표기 예시:

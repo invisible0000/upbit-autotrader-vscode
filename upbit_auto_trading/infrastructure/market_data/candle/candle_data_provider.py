@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
 from upbit_auto_trading.infrastructure.market_data.candle.models import (
-    ChunkInfo, CandleData
+    ChunkInfo, CandleData, CollectionState, RequestInfo, RequestType
 )
 from upbit_auto_trading.domain.repositories.candle_repository_interface import (
     CandleRepositoryInterface
@@ -37,294 +37,6 @@ from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector 
 )
 
 logger = create_component_logger("CandleDataProvider")
-
-
-class RequestType(Enum):
-    """요청 타입 분류 - 시간 정렬 및 OverlapAnalyzer 최적화용"""
-    COUNT_ONLY = "count_only"      # count만, to=None (첫 청크 OverlapAnalyzer 건너뜀)
-    TO_COUNT = "to_count"          # to + count (to만 정렬, OverlapAnalyzer 사용)
-    TO_END = "to_end"              # to + end (to만 정렬, OverlapAnalyzer 사용)
-    END_ONLY = "end_only"          # end만, COUNT_ONLY처럼 동작 (동적 count 계산)
-
-
-@dataclass(frozen=True)
-class RequestInfo:
-    """
-    요청 정보 모델 - 사전 계산된 안전한 시간 정렬 지원
-    """
-    # 필수 파라미터
-    symbol: str
-    timeframe: str
-
-    # 선택적 파라미터 (원시 입력)
-    count: Optional[int] = None
-    to: Optional[datetime] = None
-    end: Optional[datetime] = None
-
-    # 요청 시점 기록
-    request_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    # 사전 계산된 필드들 (성능 + 일관성 보장, 항상 존재)
-    aligned_to: datetime = field(init=False)
-    aligned_end: datetime = field(init=False)
-    expected_count: int = field(init=False)
-
-    def __post_init__(self):
-        """요청 정보 검증 및 사전 계산"""
-        # 기본 파라미터 검증
-        if not self.symbol:
-            raise ValueError("symbol은 필수입니다")
-        if not self.timeframe:
-            raise ValueError("timeframe은 필수입니다")
-
-        # count 범위 검증
-        if self.count is not None and self.count < 1:
-            raise ValueError("count는 1 이상이어야 합니다")
-
-        # 시간 순서 검증 (to > end 이어야 함)
-        if self.to is not None and self.end is not None and self.to <= self.end:
-            raise ValueError("to 시점은 end 시점보다 미래여야 합니다")
-
-        # count와 end 동시 사용 방지
-        if self.count is not None and self.end is not None:
-            raise ValueError("count와 end는 동시에 사용할 수 없습니다")
-
-        # 최소 파라미터 조합 확인
-        has_count = self.count is not None
-        has_to = self.to is not None
-        has_end = self.end is not None
-
-        valid_combinations = [
-            has_count and not has_end,  # count만 또는 to + count
-            has_to and has_end and not has_count,  # to + end
-            has_end and not has_count and not has_to  # end만
-        ]
-
-        if not any(valid_combinations):
-            raise ValueError("유효하지 않은 파라미터 조합입니다")
-
-        # 사전 계산 영역 - 성능 + 일관성 보장 (모든 요청 타입에서 항상 계산)
-        request_type = self._get_request_type_internal()
-
-        # 1. aligned_to 계산 (모든 요청 타입에서 항상 존재)
-        if request_type in [RequestType.TO_COUNT, RequestType.TO_END]:
-            # 사용자 제공 to 시간 기준
-            aligned_to = TimeUtils.align_to_candle_boundary(self.to, self.timeframe)
-        else:  # COUNT_ONLY, END_ONLY
-            # 요청 시점 기준
-            aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
-        object.__setattr__(self, 'aligned_to', aligned_to)
-
-        # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
-        if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
-            # 사용자 제공 end 시간 기준
-            aligned_end = TimeUtils.align_to_candle_boundary(self.end, self.timeframe)
-        else:  # COUNT_ONLY, TO_COUNT
-            # aligned_to에서 count-1틱 뒤로 계산
-            aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
-        object.__setattr__(self, 'aligned_end', aligned_end)
-
-        # 3. expected_count 계산 (모든 요청 타입에서 항상 존재)
-        if request_type in [RequestType.COUNT_ONLY, RequestType.TO_COUNT]:
-            # 사용자 제공 count
-            expected_count = self.count
-        else:  # TO_END, END_ONLY
-            # 시간 차이로 계산
-            expected_count = TimeUtils.calculate_expected_count(aligned_to, aligned_end, self.timeframe)
-        object.__setattr__(self, 'expected_count', expected_count)
-
-    def _get_request_type_internal(self) -> RequestType:
-        """내부용 요청 타입 계산"""
-        has_count = self.count is not None
-        has_to = self.to is not None
-        has_end = self.end is not None
-
-        if has_count and not has_to and not has_end:
-            return RequestType.COUNT_ONLY
-        elif has_to and has_count and not has_end:
-            return RequestType.TO_COUNT
-        elif has_to and has_end and not has_count:
-            return RequestType.TO_END
-        elif has_end and not has_to and not has_count:
-            return RequestType.END_ONLY
-        else:
-            raise ValueError(f"알 수 없는 요청 타입: count={has_count}, to={has_to}, end={has_end}")
-
-    def get_request_type(self) -> RequestType:
-        """요청 타입 자동 분류"""
-        return self._get_request_type_internal()
-
-    def should_align_time(self) -> bool:
-        """시간 정렬 필요 여부 - TO_COUNT, TO_END만 true"""
-        request_type = self.get_request_type()
-        return request_type in [RequestType.TO_COUNT, RequestType.TO_END]
-
-    def needs_current_time_fallback(self) -> bool:
-        """현재 시간 폴백 필요 여부 - END_ONLY만 true"""
-        return self.get_request_type() == RequestType.END_ONLY
-
-    def should_skip_overlap_analysis_for_first_chunk(self) -> bool:
-        """첫 청크 OverlapAnalyzer 건너뛸지 - COUNT_ONLY와 END_ONLY만 true"""
-        request_type = self.get_request_type()
-        return request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]
-
-    def get_aligned_to_time(self) -> datetime:
-        """사전 계산된 정렬 시간 반환 (항상 존재 보장)"""
-        return self.aligned_to
-
-    def get_aligned_end_time(self) -> datetime:
-        """사전 계산된 정렬 종료 시간 반환 (항상 존재 보장)"""
-        return self.aligned_end
-
-    def get_expected_count(self) -> int:
-        """사전 계산된 예상 캔들 개수 반환 (항상 존재 보장)"""
-        return self.expected_count
-
-    def to_log_string(self) -> str:
-        """사용자 인터페이스 로깅용 문자열 (원시 입력)"""
-        request_type = self.get_request_type()
-        return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
-                f"count={self.count}, to={self.to}, end={self.end}")
-
-    def to_internal_log_string(self) -> str:
-        """내부 처리 로깅용 문자열 (정규화된 계산값)"""
-        request_type = self.get_request_type()
-        return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
-                f"aligned_to={self.aligned_to}, aligned_end={self.aligned_end}, "
-                f"expected_count={self.expected_count}")
-
-
-@dataclass
-class CollectionState:
-    """캔들 수집 상태 관리"""
-    request_id: str
-    request_info: RequestInfo
-    symbol: str
-    timeframe: str
-    total_requested: int
-    total_collected: int = 0
-    completed_chunks: List[ChunkInfo] = field(default_factory=list)
-    current_chunk: Optional[ChunkInfo] = None
-    estimated_total_chunks: int = 0
-    estimated_completion_time: Optional[datetime] = None
-    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    is_completed: bool = False
-    error_message: Optional[str] = None
-    # 실시간 시간 추적 필드들
-    last_update_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    avg_chunk_duration: float = 0.0
-    remaining_chunks: int = 0
-    estimated_remaining_seconds: float = 0.0
-
-    # 업비트 데이터 끝 도달 플래그
-    reached_upbit_data_end: bool = False
-
-    # === 🆕 ChunkInfo 기반 계산 속성 (정보 중복 제거) ===
-
-    @property
-    def target_end(self) -> Optional[datetime]:
-        """목표 종료 시간 (RequestInfo 위임) - 호환성 유지용"""
-        return self.request_info.get_aligned_end_time()
-
-    def get_last_effective_time(self) -> Optional[str]:
-        """마지막 완료 청크의 유효 끝 시간 (ChunkInfo 기반)"""
-        if self.completed_chunks:
-            last_chunk = self.completed_chunks[-1]
-            effective_time = last_chunk.get_effective_end_time()
-            if effective_time:
-                return TimeUtils.format_datetime_utc(effective_time)
-        return None
-
-    def get_last_effective_time_datetime(self) -> Optional[datetime]:
-        """마지막 완료 청크의 유효 끝 시간 (datetime 형태)"""
-        if self.completed_chunks:
-            return self.completed_chunks[-1].get_effective_end_time()
-        return None
-
-    def get_last_time_source(self) -> str:
-        """마지막 시간 정보의 출처 (디버깅용)"""
-        if self.completed_chunks:
-            return self.completed_chunks[-1].get_time_source()
-        return "none"
-
-    def has_complete_time_info(self) -> bool:
-        """모든 완료 청크가 완전한 시간 정보를 보유하는지 확인"""
-        return all(chunk.has_complete_time_info() for chunk in self.completed_chunks)
-
-    # === 🆕 완료 조건 통합 메서드들 ===
-
-    def get_completion_check_info(self) -> dict:
-        """완료 조건 확인을 위한 모든 정보 수집"""
-        return {
-            'count_info': {
-                'collected': self.total_collected,
-                'requested': self.total_requested,
-                'count_reached': self.total_collected >= self.total_requested
-            },
-            'time_info': {
-                'last_processed': self.get_last_effective_time_datetime(),
-                'target_end': self.target_end,
-                'time_source': self.get_last_time_source(),
-                'time_reached': self._check_time_reached()
-            },
-            'chunk_info': {
-                'total_chunks': len(self.completed_chunks),
-                'all_have_time_info': self.has_complete_time_info(),
-                'last_chunk_id': self.completed_chunks[-1].chunk_id if self.completed_chunks else None
-            },
-            'upbit_info': {
-                'reached_data_end': self.reached_upbit_data_end
-            }
-        }
-
-    def _check_time_reached(self) -> bool:
-        """시간 도달 확인 (내부 로직)"""
-        last_time = self.get_last_effective_time_datetime()
-        target_time = self.target_end
-
-        if last_time and target_time:
-            return last_time <= target_time
-        return False
-
-    def should_continue_collection(self) -> tuple[bool, list[str]]:
-        """수집 계속 여부 및 이유 반환"""
-        info = self.get_completion_check_info()
-
-        stop_reasons = []
-        if info['count_info']['count_reached']:
-            stop_reasons.append('count_reached')
-        if info['time_info']['time_reached']:
-            stop_reasons.append('time_reached')
-        if info['upbit_info']['reached_data_end']:
-            stop_reasons.append('upbit_data_end')
-
-        should_stop = len(stop_reasons) > 0
-        return not should_stop, stop_reasons
-
-    def get_real_time_status(self) -> dict:
-        """실시간 수집 상태 정보"""
-        continue_flag, reasons = self.should_continue_collection()
-
-        return {
-            'request_id': self.request_id,
-            'should_continue': continue_flag,
-            'stop_reasons': reasons,
-            'progress': {
-                'collected': self.total_collected,
-                'requested': self.total_requested,
-                'percentage': (self.total_collected / self.total_requested * 100) if self.total_requested > 0 else 0
-            },
-            'timing': {
-                'last_processed_time': self.get_last_effective_time(),
-                'target_end_time': self.target_end.strftime('%Y-%m-%d %H:%M:%S UTC') if self.target_end else None,
-                'time_source': self.get_last_time_source()
-            },
-            'chunk_status': {
-                'completed_chunks': len(self.completed_chunks),
-                'current_chunk': self.current_chunk.chunk_id if self.current_chunk else None,
-                'all_chunks_complete_time': self.has_complete_time_info()
-            }
-        }
 
 
 @dataclass
@@ -677,8 +389,8 @@ class CandleDataProvider:
             time_source = completed_chunk.get_time_source()
             logger.debug(f"청크 완료 - 시간정보: {effective_time} (출처: {time_source})")
 
-            # 진행률 업데이트
-            self._update_remaining_time_estimates(state)
+            # 진행률 업데이트는 CollectionState Property에서 자동 계산됨 (last_update_time만 업데이트)
+            state.last_update_time = datetime.now(timezone.utc)
 
             logger.info(f"청크 완료: {completed_chunk.chunk_id}, "
                         f"저장: {saved_count}개, 청크범위: {completed_chunk.count}개, "
@@ -757,7 +469,7 @@ class CandleDataProvider:
             chunk_info.set_overlap_info(overlap_result)
 
             # 겹침 분석 결과에 따른 직접 저장 (ChunkInfo 기반으로 last_candle_time 불필요)
-            saved_count, _ = await self._handle_overlap_direct_storage(
+            saved_count, last_candle_time = await self._handle_overlap_direct_storage(
                 chunk_info, overlap_result, state, chunk_end, is_first_chunk,
                 safe_range_start, safe_range_end
             )
@@ -1377,27 +1089,13 @@ class CandleDataProvider:
         return params
 
     def _update_remaining_time_estimates(self, state: CollectionState):
-        """실시간 남은 시간 추정 업데이트"""
-        current_time = datetime.now(timezone.utc)
-        completed_chunks_count = len(state.completed_chunks)
+        """실시간 남은 시간 추정 업데이트
 
-        if completed_chunks_count == 0:
-            return
-
-        # 평균 청크 처리 시간 계산
-        total_elapsed = (current_time - state.start_time).total_seconds()
-        state.avg_chunk_duration = total_elapsed / completed_chunks_count
-
-        # 남은 청크 수 계산
-        state.remaining_chunks = state.estimated_total_chunks - completed_chunks_count
-
-        # 실시간 남은 시간 추정
-        if state.remaining_chunks > 0:
-            state.estimated_remaining_seconds = state.remaining_chunks * state.avg_chunk_duration
-        else:
-            state.estimated_remaining_seconds = 0.0
-
-        state.last_update_time = current_time
+        Note: avg_chunk_duration, remaining_chunks, estimated_remaining_seconds는
+        이제 CollectionState의 @property로 자동 계산되므로 수동 업데이트 불필요.
+        last_update_time만 업데이트합니다.
+        """
+        state.last_update_time = datetime.now(timezone.utc)
 
     # =========================================================================
     # 헬퍼 메서드들

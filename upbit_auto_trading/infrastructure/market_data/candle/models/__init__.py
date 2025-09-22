@@ -25,6 +25,7 @@ from .candle_core_models import (
 
 # === 요청/응답 모델 ===
 from .candle_request_models import (
+    RequestType,
     CandleChunk,
     OverlapRequest,
     OverlapResult,
@@ -73,7 +74,7 @@ __all__ = [
     'OverlapStatus', 'ChunkStatus', 'CandleData', 'CandleDataResponse',
 
     # 요청/응답 모델
-    'CandleChunk', 'OverlapRequest', 'OverlapResult', 'TimeChunk',
+    'RequestType', 'CandleChunk', 'OverlapRequest', 'OverlapResult', 'TimeChunk',
     'CollectionResult', 'RequestInfo',
 
     # 수집 프로세스 모델

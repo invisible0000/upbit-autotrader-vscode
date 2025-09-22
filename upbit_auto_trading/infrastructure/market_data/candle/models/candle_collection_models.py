@@ -7,14 +7,14 @@ Purpose: CollectionState, ChunkInfo, ProcessingStats 등 수집 과정 추적 �
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 
 # TYPE_CHECKING을 사용하여 순환 import 방지
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .candle_core_models import OverlapStatus
-    from .candle_request_models import OverlapResult
+    from .candle_request_models import OverlapResult, RequestInfo
 
 
 @dataclass
@@ -29,16 +29,97 @@ class CollectionState:
     current_chunk: Optional['ChunkInfo'] = None
     last_candle_time: Optional[str] = None  # 마지막 수집된 캔들 시간 (연속성용)
     estimated_total_chunks: int = 0
-    estimated_completion_time: Optional[datetime] = None
     start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     is_completed: bool = False
     error_message: Optional[str] = None
 
-    # 남은 시간 추적 필드들
+    # 상태 추적 필드
     last_update_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    avg_chunk_duration: float = 0.0  # 평균 청크 처리 시간 (초)
-    remaining_chunks: int = 0  # 남은 청크 수
-    estimated_remaining_seconds: float = 0.0  # 실시간 계산된 남은 시간
+
+    # CandleDataProvider v6.3 호환성 필드들
+    request_info: Optional['RequestInfo'] = None  # RequestInfo 객체 참조
+    estimated_completion_time: Optional[datetime] = None  # 예상 완료 시간
+    reached_upbit_data_end: bool = False  # 업비트 데이터 끝 도달 플래그
+    remaining_chunks: int = 0  # 남은 청크 수 (실시간 업데이트)
+    estimated_remaining_seconds: float = 0.0  # 예상 남은 시간 (초)
+
+    # === Property 메서드들 (계산된 값들) ===
+
+    @property
+    def elapsed_seconds(self) -> float:
+        """시작부터 현재까지 경과 시간 (초)"""
+        return (datetime.now(timezone.utc) - self.start_time).total_seconds()
+
+    @property
+    def progress_percentage(self) -> float:
+        """진행률 퍼센트 (0.0 ~ 100.0)"""
+        if self.total_requested <= 0:
+            return 0.0
+        return (self.total_collected / self.total_requested) * 100.0
+
+    @property
+    def avg_chunk_duration(self) -> float:
+        """평균 청크 처리 시간 (초)"""
+        if not self.completed_chunks:
+            return 0.0
+        return self.elapsed_seconds / len(self.completed_chunks)
+
+    # === CandleDataProvider v6.3 호환성 메서드들 ===
+
+    def get_completion_check_info(self) -> Dict[str, Any]:
+        """완료 조건 체크 정보 반환"""
+        # 개수 정보
+        count_info = {
+            'collected': self.total_collected,
+            'requested': self.total_requested,
+            'count_reached': self.total_collected >= self.total_requested
+        }
+
+        # 시간 정보 (ChunkInfo 기반)
+        last_effective_time = self.get_last_effective_time_datetime()
+        target_end = None
+        time_reached = False
+        time_source = "none"
+
+        if self.request_info and hasattr(self.request_info, 'end') and self.request_info.end:
+            target_end = self.request_info.end
+            if last_effective_time and target_end:
+                time_reached = last_effective_time <= target_end
+                time_source = self.get_last_time_source()
+
+        time_info = {
+            'last_processed': last_effective_time,
+            'target_end': target_end,
+            'time_reached': time_reached,
+            'time_source': time_source
+        }
+
+        # 업비트 정보
+        upbit_info = {
+            'reached_data_end': self.reached_upbit_data_end
+        }
+
+        return {
+            'count_info': count_info,
+            'time_info': time_info,
+            'upbit_info': upbit_info
+        }
+
+    def get_last_effective_time_datetime(self) -> Optional[datetime]:
+        """마지막 유효 시간 반환 (ChunkInfo 기반)"""
+        if not self.completed_chunks:
+            return None
+
+        last_chunk = self.completed_chunks[-1]
+        return last_chunk.get_effective_end_time()
+
+    def get_last_time_source(self) -> str:
+        """마지막 시간 정보 출처 반환"""
+        if not self.completed_chunks:
+            return "none"
+
+        last_chunk = self.completed_chunks[-1]
+        return last_chunk.get_time_source()
 
 
 @dataclass

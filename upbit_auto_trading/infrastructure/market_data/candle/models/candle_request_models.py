@@ -6,14 +6,23 @@ Created: 2025-09-22
 Purpose: API 요청, 분석 결과, 시간 청크 등 요청 관련 데이터 구조
 """
 
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
+from enum import Enum
 
 # TYPE_CHECKING을 사용하여 순환 import 방지
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .candle_core_models import CandleData, OverlapStatus
+
+
+class RequestType(Enum):
+    """요청 타입 분류 - 시간 정렬 및 OverlapAnalyzer 최적화용"""
+    COUNT_ONLY = "count_only"      # count만, to=None (첫 청크 OverlapAnalyzer 건너뜀)
+    TO_COUNT = "to_count"          # to + count (to만 정렬, OverlapAnalyzer 사용)
+    TO_END = "to_end"              # to + end (to만 정렬, OverlapAnalyzer 사용)
+    END_ONLY = "end_only"          # end만, COUNT_ONLY처럼 동작 (동적 count 계산)
 
 
 @dataclass
@@ -123,49 +132,148 @@ class CollectionResult:
 @dataclass(frozen=True)
 class RequestInfo:
     """
-    CandleDataProvider v4.1 간략화된 요청 정보 모델
-
-    업비트 API 파라미터 조합을 단순하게 표현:
-    - 모든 요청은 최종적으로 to + end 형태로 정규화됨
+    요청 정보 모델 - 사전 계산된 안전한 시간 정렬 지원
     """
-    # === 필수 파라미터 ===
-    symbol: str                           # 거래 심볼 (예: 'KRW-BTC')
-    timeframe: str                        # 타임프레임 ('1m', '5m', '1h' 등)
-    count: int                            # 요청 캔들 개수 (1~200)
+    # 필수 파라미터
+    symbol: str
+    timeframe: str
 
-    # === API 파라미터 (정규화됨) ===
-    to: Optional[str] = None              # 마지막 캔들 시각 (ISO format UTC)
-    end: Optional[str] = None             # 종료 시점 (ISO format UTC)
+    # 선택적 파라미터 (원시 입력)
+    count: Optional[int] = None
+    to: Optional[datetime] = None
+    end: Optional[datetime] = None
+
+    # 요청 시점 기록
+    request_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # 사전 계산된 필드들 (성능 + 일관성 보장, 항상 존재)
+    aligned_to: datetime = field(init=False)
+    aligned_end: datetime = field(init=False)
+    expected_count: int = field(init=False)
 
     def __post_init__(self):
-        """요청 정보 검증"""
-        if self.count <= 0 or self.count > 200:
-            raise ValueError(f"요청 개수는 1-200 사이여야 합니다: {self.count}")
+        """요청 정보 검증 및 사전 계산"""
+        # TimeUtils를 지연 import하여 순환 import 방지
+        from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
 
-        # to와 end는 둘 중 하나만 설정 가능
-        if self.to is not None and self.end is not None:
-            raise ValueError("to와 end는 동시에 설정할 수 없습니다")
+        # 기본 파라미터 검증
+        if not self.symbol:
+            raise ValueError("symbol은 필수입니다")
+        if not self.timeframe:
+            raise ValueError("timeframe은 필수입니다")
 
-    def to_api_params(self) -> Dict[str, Any]:
-        """업비트 API 요청 파라미터로 변환"""
-        params = {
-            "market": self.symbol,
-            "count": self.count
-        }
+        # count 범위 검증
+        if self.count is not None and self.count < 1:
+            raise ValueError("count는 1 이상이어야 합니다")
 
-        if self.to is not None:
-            params["to"] = self.to
-        elif self.end is not None:
-            params["to"] = self.end
+        # 시간 순서 검증 (to > end 이어야 함)
+        if self.to is not None and self.end is not None and self.to <= self.end:
+            raise ValueError("to 시점은 end 시점보다 미래여야 합니다")
 
-        return params
+        # count와 end 동시 사용 방지
+        if self.count is not None and self.end is not None:
+            raise ValueError("count와 end는 동시에 사용할 수 없습니다")
 
-    def get_description(self) -> str:
-        """요청 정보 설명 문자열"""
-        base = f"{self.symbol} {self.timeframe} {self.count}개"
-        if self.to:
-            return f"{base} (to: {self.to})"
-        elif self.end:
-            return f"{base} (end: {self.end})"
+        # 최소 파라미터 조합 확인
+        has_count = self.count is not None
+        has_to = self.to is not None
+        has_end = self.end is not None
+
+        valid_combinations = [
+            has_count and not has_end,  # count만 또는 to + count
+            has_to and has_end and not has_count,  # to + end
+            has_end and not has_count and not has_to  # end만
+        ]
+
+        if not any(valid_combinations):
+            raise ValueError("유효하지 않은 파라미터 조합입니다")
+
+        # 사전 계산 영역 - 성능 + 일관성 보장 (모든 요청 타입에서 항상 계산)
+        request_type = self._get_request_type_internal()
+
+        # 1. aligned_to 계산 (모든 요청 타입에서 항상 존재)
+        if request_type in [RequestType.TO_COUNT, RequestType.TO_END]:
+            # 사용자 제공 to 시간 기준
+            aligned_to = TimeUtils.align_to_candle_boundary(self.to, self.timeframe)
+        else:  # COUNT_ONLY, END_ONLY
+            # 요청 시점 기준
+            aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
+        object.__setattr__(self, 'aligned_to', aligned_to)
+
+        # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
+        if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
+            # 사용자 제공 end 시간 기준
+            aligned_end = TimeUtils.align_to_candle_boundary(self.end, self.timeframe)
+        else:  # COUNT_ONLY, TO_COUNT
+            # aligned_to에서 count-1틱 뒤로 계산
+            aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
+        object.__setattr__(self, 'aligned_end', aligned_end)
+
+        # 3. expected_count 계산 (모든 요청 타입에서 항상 존재)
+        if request_type in [RequestType.COUNT_ONLY, RequestType.TO_COUNT]:
+            # 사용자 제공 count
+            expected_count = self.count
+        else:  # TO_END, END_ONLY
+            # 시간 차이로 계산
+            expected_count = TimeUtils.calculate_expected_count(aligned_to, aligned_end, self.timeframe)
+        object.__setattr__(self, 'expected_count', expected_count)
+
+    def _get_request_type_internal(self) -> RequestType:
+        """내부용 요청 타입 계산"""
+        has_count = self.count is not None
+        has_to = self.to is not None
+        has_end = self.end is not None
+
+        if has_count and not has_to and not has_end:
+            return RequestType.COUNT_ONLY
+        elif has_to and has_count and not has_end:
+            return RequestType.TO_COUNT
+        elif has_to and has_end and not has_count:
+            return RequestType.TO_END
+        elif has_end and not has_to and not has_count:
+            return RequestType.END_ONLY
         else:
-            return f"{base} (최신)"
+            raise ValueError(f"알 수 없는 요청 타입: count={has_count}, to={has_to}, end={has_end}")
+
+    def get_request_type(self) -> RequestType:
+        """요청 타입 자동 분류"""
+        return self._get_request_type_internal()
+
+    def should_align_time(self) -> bool:
+        """시간 정렬 필요 여부 - TO_COUNT, TO_END만 true"""
+        request_type = self.get_request_type()
+        return request_type in [RequestType.TO_COUNT, RequestType.TO_END]
+
+    def needs_current_time_fallback(self) -> bool:
+        """현재 시간 폴백 필요 여부 - END_ONLY만 true"""
+        return self.get_request_type() == RequestType.END_ONLY
+
+    def should_skip_overlap_analysis_for_first_chunk(self) -> bool:
+        """첫 청크 OverlapAnalyzer 건너뛸지 - COUNT_ONLY와 END_ONLY만 true"""
+        request_type = self.get_request_type()
+        return request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]
+
+    def get_aligned_to_time(self) -> datetime:
+        """사전 계산된 정렬 시간 반환 (항상 존재 보장)"""
+        return self.aligned_to
+
+    def get_aligned_end_time(self) -> datetime:
+        """사전 계산된 정렬 종료 시간 반환 (항상 존재 보장)"""
+        return self.aligned_end
+
+    def get_expected_count(self) -> int:
+        """사전 계산된 예상 캔들 개수 반환 (항상 존재 보장)"""
+        return self.expected_count
+
+    def to_log_string(self) -> str:
+        """사용자 인터페이스 로깅용 문자열 (원시 입력)"""
+        request_type = self.get_request_type()
+        return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
+                f"count={self.count}, to={self.to}, end={self.end}")
+
+    def to_internal_log_string(self) -> str:
+        """내부 처리 로깅용 문자열 (정규화된 계산값)"""
+        request_type = self.get_request_type()
+        return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
+                f"aligned_to={self.aligned_to}, aligned_end={self.aligned_end}, "
+                f"expected_count={self.expected_count}")
