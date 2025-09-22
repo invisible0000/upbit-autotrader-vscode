@@ -205,7 +205,6 @@ class CollectionState:
     total_collected: int = 0
     completed_chunks: List[ChunkInfo] = field(default_factory=list)
     current_chunk: Optional[ChunkInfo] = None
-    last_candle_time: Optional[str] = None  # ⚠️ Deprecated: get_last_effective_time() 사용 권장
     estimated_total_chunks: int = 0
     estimated_completion_time: Optional[datetime] = None
     start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -1379,9 +1378,3 @@ class CandleDataProvider:
 
         logger.debug("빈 캔들 처리 조건 확인: 캔들 시간 파싱 실패 → 처리 안 함")
         return False
-
-    # ✅ 제거됨: ChunkInfo.get_effective_end_time()으로 대체
-    # def _extract_last_candle_time_from_api_response(self, api_response: List[Dict[str, Any]]) -> Optional[str]:
-    #     """API 응답에서 마지막 캔들 시간 추출 - ChunkInfo로 대체됨"""
-    #     # ChunkInfo.set_final_candle_info() -> get_effective_end_time() 사용 권장
-    #     pass

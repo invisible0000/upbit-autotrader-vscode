@@ -282,14 +282,8 @@ class OverlapResult:
     partial_end: Optional[datetime] = None    # 연속 데이터의 끝점
     partial_start: Optional[datetime] = None  # 데이터 시작점 (중간 겹침용)
 
-    # 하위 호환성 유지
-    connected_end: Optional[datetime] = None  # deprecated: partial_end 사용 권장
-
     def __post_init__(self):
         """분석 결과 검증 - v5.0 로직"""
-        # 하위 호환성: connected_end가 있으면 partial_end에 복사 (유지 필요)
-        if self.connected_end is not None and self.partial_end is None:
-            object.__setattr__(self, 'partial_end', self.connected_end)
 
         # ============================================
         # 🔍 VALIDATION ZONE - 성능 최적화시 제거 가능
@@ -776,10 +770,12 @@ class ChunkInfo:
         first_candle_time = candles[0]['candle_date_time_utc']
         last_candle_time = candles[-1]['candle_date_time_utc']
 
-        # datetime 변환
+        # datetime 변환 (timezone-aware로 직접 생성)
         try:
-            self.final_candle_start = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
-            self.final_candle_end = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+            start_dt = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+            self.final_candle_start = start_dt.replace(tzinfo=timezone.utc)
+            self.final_candle_end = end_dt.replace(tzinfo=timezone.utc)
         except Exception:
             self.final_candle_start = None
             self.final_candle_end = None

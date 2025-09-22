@@ -38,8 +38,8 @@ logs/
 *.sqlite3
 data/*.sqlite3
 data/backups/
-*.shm
-*.wal
+*.sqlite3-shm
+*.sqlite3-wal
 data/cache/
 
 # 환경 변수 파일 (보안)

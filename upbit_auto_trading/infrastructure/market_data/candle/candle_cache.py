@@ -325,18 +325,18 @@ class CandleCache:
             "default_ttl_seconds": self.default_ttl_seconds
         }
 
-    def print_cache_status(self) -> None:
-        """캐시 상태 출력 (디버깅용)"""
+    def log_cache_status(self) -> None:
+        """캐시 상태 로깅 (디버깅용)"""
         info = self.get_cache_info()
 
-        print(f"""
-🔄 CandleCache 상태:
-  📊 엔트리: {info['cache_entries']}개
-  💾 메모리: {info['memory_usage_mb']}MB / {info['memory_limit_mb']}MB
-  🎯 히트율: {info['hit_rate']}%
-  ✅ 히트: {info['total_hits']}회
-  ❌ 미스: {info['total_misses']}회
-  🗑️  제거: {info['total_evictions']}회
-  ⏰ 만료: {info['total_expired']}회
-  🕒 TTL: {info['default_ttl_seconds']}초
-        """)
+        status_message = f"""🔄 CandleCache 상태:
+📊 엔트리: {info['cache_entries']}개
+💾 메모리: {info['memory_usage_mb']}MB / {info['memory_limit_mb']}MB
+🎯 히트율: {info['hit_rate']}%
+✅ 히트: {info['total_hits']}회
+❌ 미스: {info['total_misses']}회
+🗑️  제거: {info['total_evictions']}회
+⏰ 만료: {info['total_expired']}회
+🕒 TTL: {info['default_ttl_seconds']}초"""
+
+        logger.info(status_message)
