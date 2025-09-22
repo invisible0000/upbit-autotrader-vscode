@@ -67,10 +67,10 @@ class RequestInfo:
     # 요청 시점 기록
     request_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    # 사전 계산된 필드들 (성능 + 일관성 보장)
-    aligned_to: Optional[datetime] = field(init=False)
-    aligned_end: Optional[datetime] = field(init=False)
-    expected_count: Optional[int] = field(init=False)
+    # 사전 계산된 필드들 (성능 + 일관성 보장, 항상 존재)
+    aligned_to: datetime = field(init=False)
+    aligned_end: datetime = field(init=False)
+    expected_count: int = field(init=False)
 
     def __post_init__(self):
         """요청 정보 검증 및 사전 계산"""
@@ -106,38 +106,35 @@ class RequestInfo:
         if not any(valid_combinations):
             raise ValueError("유효하지 않은 파라미터 조합입니다")
 
-        # 사전 계산 영역 - 성능 + 일관성 보장
+        # 사전 계산 영역 - 성능 + 일관성 보장 (모든 요청 타입에서 항상 계산)
         request_type = self._get_request_type_internal()
 
-        # 1. 시간 정렬 사전 계산
-        if request_type in [RequestType.TO_COUNT, RequestType.TO_END] and self.to is not None:
-            object.__setattr__(self, 'aligned_to', TimeUtils.align_to_candle_boundary(self.to, self.timeframe))
-        else:
-            object.__setattr__(self, 'aligned_to', None)
+        # 1. aligned_to 계산 (모든 요청 타입에서 항상 존재)
+        if request_type in [RequestType.TO_COUNT, RequestType.TO_END]:
+            # 사용자 제공 to 시간 기준
+            aligned_to = TimeUtils.align_to_candle_boundary(self.to, self.timeframe)
+        else:  # COUNT_ONLY, END_ONLY
+            # 요청 시점 기준
+            aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
+        object.__setattr__(self, 'aligned_to', aligned_to)
 
-        if self.end is not None:
-            object.__setattr__(self, 'aligned_end', TimeUtils.align_to_candle_boundary(self.end, self.timeframe))
-        else:
-            object.__setattr__(self, 'aligned_end', None)
+        # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
+        if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
+            # 사용자 제공 end 시간 기준
+            aligned_end = TimeUtils.align_to_candle_boundary(self.end, self.timeframe)
+        else:  # COUNT_ONLY, TO_COUNT
+            # aligned_to에서 count-1틱 뒤로 계산
+            aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
+        object.__setattr__(self, 'aligned_end', aligned_end)
 
-        # 2. 예상 캔들 개수 사전 계산
+        # 3. expected_count 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.COUNT_ONLY, RequestType.TO_COUNT]:
-            object.__setattr__(self, 'expected_count', self.count)
-        elif request_type in [RequestType.TO_END, RequestType.END_ONLY]:
-            if self.aligned_to and self.aligned_end:
-                calculated_count = TimeUtils.calculate_expected_count(
-                    self.aligned_to, self.aligned_end, self.timeframe
-                )
-                object.__setattr__(self, 'expected_count', calculated_count)
-            else:
-                # END_ONLY의 경우 요청 시점 기준으로 계산
-                aligned_current = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
-                calculated_count = TimeUtils.calculate_expected_count(
-                    aligned_current, self.aligned_end, self.timeframe
-                )
-                object.__setattr__(self, 'expected_count', calculated_count)
-        else:
-            object.__setattr__(self, 'expected_count', None)
+            # 사용자 제공 count
+            expected_count = self.count
+        else:  # TO_END, END_ONLY
+            # 시간 차이로 계산
+            expected_count = TimeUtils.calculate_expected_count(aligned_to, aligned_end, self.timeframe)
+        object.__setattr__(self, 'expected_count', expected_count)
 
     def _get_request_type_internal(self) -> RequestType:
         """내부용 요청 타입 계산"""
@@ -174,23 +171,30 @@ class RequestInfo:
         request_type = self.get_request_type()
         return request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]
 
-    def get_aligned_to_time(self) -> Optional[datetime]:
-        """사전 계산된 정렬 시간 반환"""
+    def get_aligned_to_time(self) -> datetime:
+        """사전 계산된 정렬 시간 반환 (항상 존재 보장)"""
         return self.aligned_to
 
-    def get_aligned_end_time(self) -> Optional[datetime]:
-        """사전 계산된 정렬 종료 시간 반환"""
+    def get_aligned_end_time(self) -> datetime:
+        """사전 계산된 정렬 종료 시간 반환 (항상 존재 보장)"""
         return self.aligned_end
 
-    def get_expected_count(self) -> Optional[int]:
-        """사전 계산된 예상 캔들 개수 반환"""
+    def get_expected_count(self) -> int:
+        """사전 계산된 예상 캔들 개수 반환 (항상 존재 보장)"""
         return self.expected_count
 
     def to_log_string(self) -> str:
-        """로깅용 문자열"""
+        """사용자 인터페이스 로깅용 문자열 (원시 입력)"""
         request_type = self.get_request_type()
         return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
                 f"count={self.count}, to={self.to}, end={self.end}")
+
+    def to_internal_log_string(self) -> str:
+        """내부 처리 로깅용 문자열 (정규화된 계산값)"""
+        request_type = self.get_request_type()
+        return (f"RequestInfo[{request_type.value}]: {self.symbol} {self.timeframe}, "
+                f"aligned_to={self.aligned_to}, aligned_end={self.aligned_end}, "
+                f"expected_count={self.expected_count}")
 
 
 @dataclass
@@ -415,39 +419,23 @@ class CandleDataProvider:
         to: Optional[datetime],
         end: Optional[datetime]
     ) -> List[CandleData]:
-        """최종 결과 조회 (CandleData 변환은 여기서만 수행)"""
+        """최종 결과 조회 (CandleData 변환은 여기서만 수행) - 업비트 API 특성 반영"""
         try:
-            if to and count:
-                # to + count 방식
-                aligned_to = collection_state.completed_chunks[0].to
-                end_time = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -(count - 1))
-                return await self.repository.get_candles_by_range(
-                    symbol, timeframe, aligned_to, end_time
-                )
-            elif count:
-                # count만 방식 - 요청 시점 기준 최신 데이터부터 count개
-                aligned_current = TimeUtils.align_to_candle_boundary(collection_state.request_info.request_at, timeframe)
-                end_time = TimeUtils.get_time_by_ticks(aligned_current, timeframe, -(count - 1))
-                return await self.repository.get_candles_by_range(
-                    symbol, timeframe, aligned_current, end_time
-                )
-            elif to and end:
-                # to + end 방식
-                aligned_to = collection_state.request_info.get_aligned_to_time()
-                aligned_end = collection_state.request_info.get_aligned_end_time()
-                return await self.repository.get_candles_by_range(
-                    symbol, timeframe, aligned_to, aligned_end
-                )
-            elif end:
-                # end만 방식 - 요청 시점 기준
-                aligned_end = collection_state.request_info.get_aligned_end_time()
-                aligned_current = TimeUtils.align_to_candle_boundary(collection_state.request_info.request_at, timeframe)
-                return await self.repository.get_candles_by_range(
-                    symbol, timeframe, aligned_current, aligned_end
-                )
-            else:
-                logger.warning("알 수 없는 파라미터 조합")
-                return []
+            # 🚀 업비트 API 특성 고려한 실제 수집 범위 계산
+            aligned_to = collection_state.request_info.get_aligned_to_time()
+            expected_count = collection_state.request_info.get_expected_count()
+
+            # 1. 업비트 to exclusive 특성: aligned_to에서 1틱 과거로 이동 (실제 수집 시작점)
+            actual_start = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1)
+
+            # 2. Count 기반 종료점 재계산: actual_start에서 expected_count-1틱 과거 (실제 수집 종료점)
+            actual_end = TimeUtils.get_time_by_ticks(actual_start, timeframe, -(expected_count - 1))
+
+            logger.debug(f"🔍 실제 수집 범위: {aligned_to} → {actual_start} ~ {actual_end} ({expected_count}개)")
+
+            return await self.repository.get_candles_by_range(
+                symbol, timeframe, actual_start, actual_end
+            )
 
         except Exception as e:
             logger.error(f"최종 결과 조회 실패: {e}")
@@ -883,7 +871,7 @@ class CandleDataProvider:
             end=end
         )
 
-        logger.info(f"수집 계획 수립: {request_info.to_log_string()}")
+        logger.info(f"수집 계획 수립: {request_info.to_internal_log_string()}")
 
         # 동적 비즈니스 검증 - 요청 시점 기준
         if to is not None and to > request_info.request_at:
@@ -1080,13 +1068,8 @@ class CandleDataProvider:
         self,
         request_info: RequestInfo
     ) -> int:
-        """사전 계산된 예상 캔들 개수 반환"""
-        expected_count = request_info.get_expected_count()
-
-        if expected_count is None:
-            raise ValueError(f"예상 캔들 개수가 계산되지 않았습니다: {request_info.get_request_type()}")
-
-        return expected_count
+        """사전 계산된 예상 캔들 개수 반환 (항상 존재 보장)"""
+        return request_info.get_expected_count()
 
     def _create_first_chunk_params_by_type(
         self,
