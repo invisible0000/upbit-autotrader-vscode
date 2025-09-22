@@ -17,7 +17,7 @@ from typing import Optional
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .candle_models import OverlapStatus, OverlapResult, OverlapRequest
+from .models import OverlapStatus, OverlapResult, OverlapRequest
 
 logger = create_component_logger("OverlapAnalyzer")
 

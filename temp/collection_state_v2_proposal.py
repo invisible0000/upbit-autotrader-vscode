@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from upbit_auto_trading.infrastructure.market_data.candle.candle_models import ChunkInfo
+from upbit_auto_trading.infrastructure.market_data.candle.models import ChunkInfo
 
 
 @dataclass

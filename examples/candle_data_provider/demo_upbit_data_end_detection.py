@@ -33,7 +33,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.market_data.candle.candle_data_provider import (
     CandleDataProvider, CollectionState, RequestInfo
 )
-from upbit_auto_trading.infrastructure.market_data.candle.candle_models import ChunkInfo
+from upbit_auto_trading.infrastructure.market_data.candle.models import ChunkInfo
 
 logger = create_component_logger("DataEndDetectionDemo")
 

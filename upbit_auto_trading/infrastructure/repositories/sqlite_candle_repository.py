@@ -967,7 +967,7 @@ class SqliteCandleRepository(CandleRepositoryInterface):
                 for row in rows:
                     try:
                         # 동적 import로 순환 참조 방지
-                        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import CandleData
+                        from upbit_auto_trading.infrastructure.market_data.candle.models import CandleData
 
                         candle = CandleData(
                             market=row[1],

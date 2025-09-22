@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapResult
+from upbit_auto_trading.infrastructure.market_data.candle.models import OverlapResult
 from upbit_auto_trading.domain.repositories.candle_repository_interface import (
     CandleRepositoryInterface
 )

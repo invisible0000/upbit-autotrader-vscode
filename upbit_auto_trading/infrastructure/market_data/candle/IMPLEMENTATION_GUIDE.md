@@ -6,6 +6,160 @@
 
 ---
 
+## 📋 Phase 0: 폴더 구조 개편 (NEW - 최우선)
+
+### 현재 문제점
+
+#### 문제 1: 파일 구조 혼재
+```
+candle/
+├── candle_models.py (1081줄) - 너무 비대함
+├── candle_data_provider.py
+├── candle_collection_monitor.py
+├── candle_cache.py
+├── overlap_analyzer.py
+├── empty_candle_detector.py
+├── time_utils.py
+└── docs/
+```
+
+**문제점**:
+- 모든 파일이 한 폴더에 평면적으로 나열
+- candle_models.py가 1081줄로 과도하게 비대화
+- 기능별 그룹핑 부재로 코드 탐색 어려움
+- import 구문이 길고 복잡함
+
+#### 문제 2: 책임 혼재
+- 모델, 제공자, 분석기, 유틸리티가 모두 같은 레벨에 존재
+- 각 컴포넌트의 역할과 의존성이 명확하지 않음
+
+### 현재 구현된 구조 (2025-09-22)
+
+```
+candle/
+├── models/                    # 📊 데이터 모델 (✅ 완료)
+│   ├── __init__.py
+│   ├── candle_core_models.py      # CandleData, CandleDataResponse, Enum 등
+│   ├── candle_request_models.py   # OverlapRequest, TimeChunk 등
+│   ├── candle_cache_models.py     # CacheKey, CacheEntry 등
+│   └── candle_collection_models.py # CollectionState, ChunkInfo 등
+├── candle_data_provider.py   # 🔄 메인 데이터 제공자
+├── candle_collection_monitor.py # � 모니터링 전용 클래스
+├── overlap_analyzer.py        # 🔍 겹침 분석
+├── empty_candle_detector.py   # 🔍 빈 캔들 처리
+├── time_utils.py             # 🛠️ 시간 유틸리티
+├── candle_cache.py           # 🛠️ 캐시 관리
+├── candle_models.py          # 🔗 호환성 레이어
+└── docs/                     # 📚 문서
+```
+
+**참고**: providers/, analyzers/, utils/ 폴더는 필요시 단계별로 추가 예정
+
+### 개선 효과
+
+#### 1. 명확한 책임 분리
+```python
+# Before (혼재된 import)
+from .candle_models import CandleData, CacheKey, CollectionState, OverlapRequest
+
+# After (역할별 import) - 현재 구현된 구조
+from .models import CandleData, CollectionState, OverlapRequest
+from .models.candle_cache_models import CacheKey
+from . import candle_data_provider, overlap_analyzer  # 아직 폴더 분리 안됨
+```
+
+#### 2. 효율적인 import 구조
+```python
+# __init__.py를 통한 깔끔한 import
+from upbit_auto_trading.infrastructure.market_data.candle import (
+    CandleData,           # models/core_models.py
+    CandleDataProvider,   # providers/candle_data_provider.py
+    OverlapAnalyzer,      # analyzers/overlap_analyzer.py
+)
+```
+
+#### 3. 확장성 향상
+- 새로운 모델 추가시 적절한 models/ 하위 파일에만 추가
+- 새로운 분석기 추가시 analyzers/ 폴더에만 영향
+- 각 영역의 독립적 개발 가능
+
+### 구현 단계
+
+#### ✅ Step 0-1: 현재 구조 분석 (완료)
+- [x] 기존 파일들의 역할과 의존성 파악 완료
+- [x] 새로운 폴더 구조 설계 완료
+
+#### ✅ Step 0-2: models/ 폴더 생성 (완료)
+```python
+# models/__init__.py
+"""Candle Data Models - 캔들 데이터 관련 모델들
+
+모든 데이터 구조와 DTO 클래스들을 포함합니다.
+"""
+
+# 핵심 모델 (가장 자주 사용)
+from .candle_core_models import (
+    CandleData,
+    CandleDataResponse,
+    OverlapStatus,
+    ChunkStatus
+)
+
+# 요청/응답 모델
+from .candle_request_models import (
+    CandleChunk,
+    OverlapRequest,
+    OverlapResult,
+    TimeChunk,
+    CollectionResult
+)
+
+# 수집 프로세스 모델
+from .candle_collection_models import (
+    CollectionState,
+    CollectionPlan,
+    RequestInfo,
+    ChunkInfo,
+    ProcessingStats
+)
+
+# 캐시 모델 (선택적 import)
+# from .cache_models import CacheKey, CacheEntry, CacheStats
+
+__all__ = [
+    # 핵심 모델
+    'CandleData', 'CandleDataResponse', 'OverlapStatus', 'ChunkStatus',
+    # 요청 모델
+    'CandleChunk', 'OverlapRequest', 'OverlapResult', 'TimeChunk', 'CollectionResult',
+    # 수집 모델
+    'CollectionState', 'CollectionPlan', 'RequestInfo', 'ChunkInfo', 'ProcessingStats',
+]
+```
+
+#### ✅ Step 0-3: candle_models.py 분할 (완료)
+1. **candle_core_models.py**: CandleData, CandleDataResponse, OverlapStatus, ChunkStatus ✅
+2. **candle_request_models.py**: OverlapRequest, TimeChunk, CollectionResult, RequestInfo ✅
+3. **candle_cache_models.py**: CacheKey, CacheEntry, CacheStats ✅
+4. **candle_collection_models.py**: CollectionState, ChunkInfo, ProcessingStats ✅
+
+#### [ ] Step 0-4: 추가 폴더 정리 (필요시 진행)
+1. **providers/**: candle_data_provider.py, candle_collection_monitor.py 이동 (보류)
+2. **analyzers/**: overlap_analyzer.py, empty_candle_detector.py 이동 (보류)
+3. **utils/**: time_utils.py, candle_cache.py 이동 (보류)
+
+#### ✅ Step 0-5: models/__init__.py 파일 작성 (완료)
+깔끔한 import 구조 구축 완료
+
+#### ✅ Step 0-6: import 구문 업데이트 (완료)
+전체 프로젝트의 import 구문을 새로운 models 구조에 맞게 업데이트 완료
+
+#### ✅ Step 0-7: 테스트 및 검증 (완료)
+- ✅ 모델 import 및 기본 기능 테스트 성공
+- ✅ ChunkInfo.get_api_params() 메서드 누락 문제 해결
+- ✅ 전체 캔들 모델 시스템 정상 작동 확인
+
+---
+
 ## 📋 Task 1: CollectionState v2.0 구현
 
 ### 현재 문제점과 해결책
@@ -406,6 +560,19 @@ class TestCandleCollectionMonitor:
 
 ## 🔧 구현 체크리스트
 
+### Phase 0: Models 폴더 구조 개편 (✅ 완료)
+- [x] 현재 구조 분석 및 새 구조 설계
+- [x] models/ 폴더 생성
+- [x] candle_models.py 분석 및 클래스 분류
+- [x] candle_core_models.py 생성 (CandleData, CandleDataResponse, Enum 등)
+- [x] candle_request_models.py 생성 (OverlapRequest, TimeChunk 등)
+- [x] candle_cache_models.py 생성 (CacheKey, CacheEntry 등)
+- [x] candle_collection_models.py 생성 (CollectionState, ChunkInfo 등)
+- [x] models/__init__.py 작성
+- [x] 전체 프로젝트 import 구문 업데이트
+- [x] 기존 candle_models.py → 호환성 레이어로 변경
+- [x] 테스트 실행 및 검증 (ChunkInfo 메서드 누락 문제 해결)
+
 ### CollectionState v2.0
 - [ ] 새 클래스 정의 완료
 - [ ] Property 메서드들 구현
@@ -415,8 +582,8 @@ class TestCandleCollectionMonitor:
 - [ ] 테스트 케이스 작성
 - [ ] 성능 벤치마크
 
-### 캐시 모델 분리
-- [ ] candle_cache_models.py 생성
+### 캐시 모델 분리 (Phase 0에 통합됨)
+- [x] models/candle_cache_models.py 생성 (Phase 0에서 처리)
 - [ ] 클래스 이전 완료
 - [ ] Import 구문 업데이트
 - [ ] 원본 파일에서 제거

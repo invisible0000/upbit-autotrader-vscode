@@ -22,7 +22,7 @@ from typing import Optional, Dict, Any, Generator
 import time
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.market_data.candle.candle_models import CollectionState
+from upbit_auto_trading.infrastructure.market_data.candle.models import CollectionState
 
 logger = create_component_logger("CandleCollectionMonitor")
 

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-from upbit_auto_trading.infrastructure.market_data.candle.candle_models import (
+from upbit_auto_trading.infrastructure.market_data.candle.models import (
     ChunkInfo, CandleData
 )
 from upbit_auto_trading.domain.repositories.candle_repository_interface import (
@@ -827,7 +827,7 @@ class CandleDataProvider:
         Returns:
             tuple[int, Optional[str]]: (saved_count, last_candle_time_str)
         """
-        from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapStatus
+        from upbit_auto_trading.infrastructure.market_data.candle.models import OverlapStatus
 
         status = overlap_result.status
 
@@ -1153,7 +1153,7 @@ class CandleDataProvider:
         logger.debug(f"겹침 분석: {symbol} {timeframe}")
 
         try:
-            from upbit_auto_trading.infrastructure.market_data.candle.candle_models import OverlapRequest
+            from upbit_auto_trading.infrastructure.market_data.candle.models import OverlapRequest
 
             # 🚀 UTC 통일: 진입점에서 정규화되어 더 이상 검증 불필요
             safe_start_time = start_time
