@@ -251,6 +251,81 @@ class CollectionState:
         """모든 완료 청크가 완전한 시간 정보를 보유하는지 확인"""
         return all(chunk.has_complete_time_info() for chunk in self.completed_chunks)
 
+    # === 🆕 완료 조건 통합 메서드들 ===
+
+    def get_completion_check_info(self) -> dict:
+        """완료 조건 확인을 위한 모든 정보 수집"""
+        return {
+            'count_info': {
+                'collected': self.total_collected,
+                'requested': self.total_requested,
+                'count_reached': self.total_collected >= self.total_requested
+            },
+            'time_info': {
+                'last_processed': self.get_last_effective_time_datetime(),
+                'target_end': self.target_end,
+                'time_source': self.get_last_time_source(),
+                'time_reached': self._check_time_reached()
+            },
+            'chunk_info': {
+                'total_chunks': len(self.completed_chunks),
+                'all_have_time_info': self.has_complete_time_info(),
+                'last_chunk_id': self.completed_chunks[-1].chunk_id if self.completed_chunks else None
+            },
+            'upbit_info': {
+                'reached_data_end': self.reached_upbit_data_end
+            }
+        }
+
+    def _check_time_reached(self) -> bool:
+        """시간 도달 확인 (내부 로직)"""
+        last_time = self.get_last_effective_time_datetime()
+        target_time = self.target_end
+
+        if last_time and target_time:
+            return last_time <= target_time
+        return False
+
+    def should_continue_collection(self) -> tuple[bool, list[str]]:
+        """수집 계속 여부 및 이유 반환"""
+        info = self.get_completion_check_info()
+
+        stop_reasons = []
+        if info['count_info']['count_reached']:
+            stop_reasons.append('count_reached')
+        if info['time_info']['time_reached']:
+            stop_reasons.append('time_reached')
+        if info['upbit_info']['reached_data_end']:
+            stop_reasons.append('upbit_data_end')
+
+        should_stop = len(stop_reasons) > 0
+        return not should_stop, stop_reasons
+
+    def get_real_time_status(self) -> dict:
+        """실시간 수집 상태 정보"""
+        continue_flag, reasons = self.should_continue_collection()
+
+        return {
+            'request_id': self.request_id,
+            'should_continue': continue_flag,
+            'stop_reasons': reasons,
+            'progress': {
+                'collected': self.total_collected,
+                'requested': self.total_requested,
+                'percentage': (self.total_collected / self.total_requested * 100) if self.total_requested > 0 else 0
+            },
+            'timing': {
+                'last_processed_time': self.get_last_effective_time(),
+                'target_end_time': self.target_end.strftime('%Y-%m-%d %H:%M:%S UTC') if self.target_end else None,
+                'time_source': self.get_last_time_source()
+            },
+            'chunk_status': {
+                'completed_chunks': len(self.completed_chunks),
+                'current_chunk': self.current_chunk.chunk_id if self.current_chunk else None,
+                'all_chunks_complete_time': self.has_complete_time_info()
+            }
+        }
+
 
 @dataclass
 class CollectionPlan:
@@ -1211,46 +1286,46 @@ class CandleDataProvider:
         return chunk_info
 
     def _is_collection_complete(self, state: CollectionState) -> bool:
-        """수집 완료 여부 확인 - 청크 담당 범위 기준 + End 시간 검증"""
-        # 1. 개수 달성 확인 (청크 담당 범위 기준)
-        count_reached = state.total_collected >= state.total_requested
+        """수집 완료 여부 확인 - 통합 메서드 활용"""
+        # 🆕 통합된 완료 조건 체크 활용
+        completion_info = state.get_completion_check_info()
 
-        # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스) - ChunkInfo 기반 개선
-        end_time_reached = False
+        # 완료 조건 확인
+        count_reached = completion_info['count_info']['count_reached']
+        time_reached = completion_info['time_info']['time_reached']
+        upbit_data_end = completion_info['upbit_info']['reached_data_end']
 
-        # 🆕 개선된 ChunkInfo 기반 시간 확인 (모든 request_type 지원)
-        if state.completed_chunks:
-            try:
-                # 마지막 청크의 유효 끝 시간 사용 (COMPLETE_OVERLAP도 지원!)
-                last_effective_time = state.get_last_effective_time_datetime()
-                aligned_end = state.request_info.get_aligned_end_time()
-
-                if last_effective_time and aligned_end:
-                    # 유효 끝 시간이 aligned_end에 도달하거나 지나쳤는지 확인
-                    end_time_reached = last_effective_time <= aligned_end
-
-                    if end_time_reached:
-                        time_source = state.get_last_time_source()
-                        request_type = state.request_info.get_request_type()
-                        logger.debug(f"End 시간 도달 (ChunkInfo, {request_type.value}): "
-                                     f"effective_end={last_effective_time}, aligned_end={aligned_end}, 출처={time_source}")
-
-            except Exception as e:
-                logger.warning(f"ChunkInfo 기반 End 시간 비교 실패: {e}")
-                end_time_reached = False
-
-        # ✅ 기존 last_candle_time 기반 로직 제거됨: ChunkInfo.get_effective_end_time()으로 대체
-
-        completion_reason = []
+        # 상세 로깅 (조건별)
+        completion_reasons = []
         if count_reached:
-            completion_reason.append("개수달성")
-        if end_time_reached:
-            completion_reason.append("End시간도달")
+            completion_reasons.append("개수달성")
+            logger.debug(f"개수 달성: {completion_info['count_info']['collected']}/{completion_info['count_info']['requested']}")
 
-        if completion_reason:
-            logger.debug(f"수집 완료 조건: {', '.join(completion_reason)}")
+        if time_reached:
+            completion_reasons.append("ChunkInfo시간도달")
+            request_type = state.request_info.get_request_type()
+            logger.debug(f"시간 도달 (ChunkInfo, {request_type.value}): "
+                        f"effective_end={completion_info['time_info']['last_processed']}, "
+                        f"target_end={completion_info['time_info']['target_end']}, "
+                        f"출처={completion_info['time_info']['time_source']}")
 
-        return count_reached or end_time_reached
+        if upbit_data_end:
+            completion_reasons.append("업비트데이터끝")
+            logger.debug("업비트 데이터 끝 도달")
+
+        # 통합 완료 판정
+        should_complete = count_reached or time_reached or upbit_data_end
+
+        if should_complete:
+            logger.debug(f"🎯 수집 완료: {', '.join(completion_reasons)}")
+
+            # 완료 상세 정보 출력 (DEBUG)
+            if logger.level <= 10:
+                import json
+                logger.debug(f"완료 조건 상세 정보:")
+                logger.debug(f"  {json.dumps(completion_info, indent=2, default=str)}")
+
+        return should_complete
 
     def _prepare_next_chunk(self, state: CollectionState, request_type: RequestType):
         """다음 청크 준비"""
