@@ -576,6 +576,11 @@ class ChunkInfo:
     # === 🆕 청크 처리 단계별 추적 필드들 ===
     overlap_status: Optional['OverlapStatus'] = None        # 겹침 분석 결과
 
+    # === 🆕 OverlapResult 통합 필드 (COMPLETE_OVERLAP 지원) ===
+    # DB 기존 데이터 정보 (OverlapResult에서 추출)
+    db_start: Optional[datetime] = None                     # DB 데이터 시작점
+    db_end: Optional[datetime] = None                       # DB 데이터 종료점 ⭐ 핵심!
+
     # 요청 단계 (오버랩 분석 결과)
     api_request_count: Optional[int] = None                 # 요청할 API 호출 개수 (부분 겹침 시)
     api_request_start: Optional[datetime] = None            # API 요청 시작점 (부분 겹침 시)
@@ -650,8 +655,27 @@ class ChunkInfo:
     # === 🆕 Overlap 최적화 메서드들 ===
 
     def set_overlap_info(self, overlap_result: 'OverlapResult', api_count: Optional[int] = None) -> None:
-        """겹침 분석 결과를 ChunkInfo에 설정 (요청 단계 정보)"""
+        """
+        겹침 분석 결과를 ChunkInfo에 완전 통합
+
+        OverlapResult의 모든 정보를 ChunkInfo로 이전하여
+        COMPLETE_OVERLAP에서도 완전한 시간 정보 확보
+
+        Args:
+            overlap_result: OverlapAnalyzer 결과
+            api_count: API 요청 개수 (선택적, 자동 계산 가능)
+        """
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        logger = create_component_logger("ChunkInfo")
+
+        # 겹침 상태 설정
         self.overlap_status = overlap_result.status
+
+        # 🆕 DB 기존 데이터 정보 추출 (COMPLETE_OVERLAP 해결!)
+        self.db_start = getattr(overlap_result, 'db_start', None)
+        self.db_end = getattr(overlap_result, 'db_end', None)  # ⭐ 핵심!
+
+        # API 요청 정보 설정 (기존 필드 사용)
         self.api_request_start = overlap_result.api_start
         self.api_request_end = overlap_result.api_end
 
@@ -664,6 +688,14 @@ class ChunkInfo:
             self.api_request_count = TimeUtils.calculate_expected_count(
                 overlap_result.api_start, overlap_result.api_end, self.timeframe
             )
+
+        # 🔍 통합 검증 로깅
+        logger.debug(f"OverlapResult 통합 완료: {self.chunk_id}")
+        logger.debug(f"  overlap_status: {self.overlap_status}")
+        logger.debug(f"  db_range: {self.db_start} ~ {self.db_end}")
+        logger.debug(f"  api_request_range: {self.api_request_start} ~ {self.api_request_end}")
+        logger.debug(f"  effective_end: {self.get_effective_end_time()}")
+        logger.debug(f"  time_source: {self.get_time_source()}")
 
     def has_overlap_info(self) -> bool:
         """겹침 분석 정보 보유 여부 확인"""
@@ -752,6 +784,113 @@ class ChunkInfo:
             self.final_candle_start = None
             self.final_candle_end = None
 
+    # === 🎯 핵심 메서드: 완전한 시간 정보 제공 ===
+
+    def get_effective_end_time(self) -> Optional[datetime]:
+        """
+        청크가 실제로 다룬 데이터의 끝 시간 (우선순위 기반)
+
+        COMPLETE_OVERLAP 상황에서도 db_end로 완전한 정보 제공!
+
+        우선순위:
+        1. final_candle_end: 빈 캔들 처리 후 최종 시간
+        2. db_end: DB 기존 데이터 끝 (🎯 COMPLETE_OVERLAP 해결!)
+        3. api_response_end: API 응답 마지막 시간
+        4. end: 계획된 청크 끝점
+
+        Returns:
+            Optional[datetime]: 유효한 끝 시간, 없으면 None
+        """
+        # 1순위: 빈 캔들 처리 후 최종 시간
+        if self.final_candle_end:
+            return self.final_candle_end
+
+        # 2순위: DB 기존 데이터 끝 (🎯 COMPLETE_OVERLAP 해결!)
+        elif self.db_end:
+            return self.db_end
+
+        # 3순위: API 응답 마지막 시간
+        elif self.api_response_end:
+            return self.api_response_end
+
+        # 4순위: 계획된 청크 끝점
+        elif self.end:
+            return self.end
+
+        return None
+
+    def get_time_source(self) -> str:
+        """시간 정보 출처 반환 (디버깅용)"""
+        if self.final_candle_end:
+            return "final_processing"
+        elif self.db_end:
+            return "db_overlap"  # 🎯 COMPLETE_OVERLAP 식별!
+        elif self.api_response_end:
+            return "api_response"
+        elif self.end:
+            return "planned"
+        return "none"
+
+    def has_complete_time_info(self) -> bool:
+        """완전한 시간 정보 보유 여부"""
+        return self.get_effective_end_time() is not None
+
+    def get_processing_status(self) -> dict:
+        """전체 처리 단계 상태 요약"""
+        return {
+            'chunk_id': self.chunk_id,
+            'status': self.status,
+            'has_plan': self.end is not None,
+            'has_overlap_info': self.overlap_status is not None,
+            'has_api_response': self.api_response_count is not None,
+            'has_final_processing': self.final_candle_end is not None,
+            'effective_end_time': self.get_effective_end_time(),
+            'time_source': self.get_time_source(),
+            'overlap_status': self.overlap_status.value if self.overlap_status else None,
+            'db_range': {
+                'start': self.db_start,
+                'end': self.db_end
+            } if self.db_start or self.db_end else None
+        }
+
+    def _get_available_times(self) -> dict:
+        """사용 가능한 모든 시간 정보 반환 (디버깅용)"""
+        return {
+            'planned_end': self.end,
+            'db_end': self.db_end,
+            'api_response_end': self.api_response_end,
+            'final_candle_end': self.final_candle_end
+        }
+
+    def handle_complete_overlap_time_info(self, overlap_result: 'OverlapResult') -> None:
+        """
+        COMPLETE_OVERLAP 상황에서 완전한 시간 정보 확보
+
+        기존: API 호출도 빈캔들 처리도 없어서 시간 정보 완전 손실
+        개선: OverlapResult.db_end 활용으로 완전한 시간 정보 확보
+        """
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        logger = create_component_logger("ChunkInfo")
+
+        # OverlapResult 정보 설정
+        self.set_overlap_info(overlap_result)
+
+        # COMPLETE_OVERLAP 전용 처리
+        if self.overlap_status and self.overlap_status.value == 'complete_overlap':
+            if self.db_end:
+                logger.debug(f"COMPLETE_OVERLAP 시간 정보 확보: {self.chunk_id}")
+                logger.debug(f"  db_end: {self.db_end}")
+                logger.debug(f"  effective_end: {self.get_effective_end_time()}")
+                logger.debug(f"  time_source: {self.get_time_source()}")
+            else:
+                logger.warning(f"COMPLETE_OVERLAP이지만 db_end 없음: {self.chunk_id}")
+
+        # 완전성 검증
+        if not self.has_complete_time_info():
+            logger.warning(f"청크 시간 정보 불완전: {self.chunk_id}")
+            logger.warning(f"  overlap_status: {self.overlap_status}")
+            logger.warning(f"  available_times: {self._get_available_times()}")
+
     def get_processing_summary(self) -> str:
         """
         전체 처리 과정 요약 정보 반환 (디버깅용)
@@ -763,9 +902,11 @@ class ChunkInfo:
         lines.append(f"🔍 청크 처리 요약: {self.chunk_id}")
         lines.append(f"├─ 상태: {self.status}")
 
-        # 겹침 분석 결과
+        # 겹침 분석 결과 (개선된 정보)
         if self.overlap_status:
             lines.append(f"├─ 겹침 분석: {self.overlap_status.value}")
+            if self.db_start or self.db_end:
+                lines.append(f"│  └─ DB 범위: {self.db_start} ~ {self.db_end}")
 
         # 요청 단계
         lines.append("├─ 📋 요청 단계:")
@@ -787,15 +928,25 @@ class ChunkInfo:
             lines.append("│  └─ 미처리")
 
         # 최종 처리 단계
-        lines.append("└─ 🎯 최종 결과:")
+        lines.append("├─ 🎯 최종 결과:")
         if self.final_candle_count is not None:
-            lines.append(f"   ├─ 최종 개수: {self.final_candle_count}개")
+            lines.append(f"│  ├─ 최종 개수: {self.final_candle_count}개")
             if self.final_candle_start and self.final_candle_end:
-                lines.append(f"   └─ 최종 범위: {self.final_candle_start} ~ {self.final_candle_end}")
+                lines.append(f"│  └─ 최종 범위: {self.final_candle_start} ~ {self.final_candle_end}")
         else:
-            lines.append("   └─ 미처리")
+            lines.append("│  └─ 미처리")
 
-        # 변화 과정 요약
+        # 🆕 통합된 시간 정보
+        lines.append("└─ ⭐ 통합 시간 정보:")
+        effective_time = self.get_effective_end_time()
+        time_source = self.get_time_source()
+        if effective_time:
+            lines.append(f"   ├─ 유효 끝시간: {effective_time}")
+            lines.append(f"   └─ 정보 출처: {time_source}")
+        else:
+            lines.append("   └─ 시간 정보 없음")
+
+        # 변화 과정 요약 (개선된 버전)
         if (self.api_request_count is not None
                 and self.api_response_count is not None
                 and self.final_candle_count is not None):

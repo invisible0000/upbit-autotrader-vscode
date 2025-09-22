@@ -205,7 +205,7 @@ class CollectionState:
     total_collected: int = 0
     completed_chunks: List[ChunkInfo] = field(default_factory=list)
     current_chunk: Optional[ChunkInfo] = None
-    last_candle_time: Optional[str] = None
+    last_candle_time: Optional[str] = None  # ⚠️ Deprecated: get_last_effective_time() 사용 권장
     estimated_total_chunks: int = 0
     estimated_completion_time: Optional[datetime] = None
     start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -221,6 +221,33 @@ class CollectionState:
 
     # 업비트 데이터 끝 도달 플래그
     reached_upbit_data_end: bool = False
+
+    # === 🆕 ChunkInfo 기반 계산 속성 (정보 중복 제거) ===
+
+    def get_last_effective_time(self) -> Optional[str]:
+        """마지막 완료 청크의 유효 끝 시간 (ChunkInfo 기반)"""
+        if self.completed_chunks:
+            last_chunk = self.completed_chunks[-1]
+            effective_time = last_chunk.get_effective_end_time()
+            if effective_time:
+                return TimeUtils.format_datetime_utc(effective_time)
+        return None
+
+    def get_last_effective_time_datetime(self) -> Optional[datetime]:
+        """마지막 완료 청크의 유효 끝 시간 (datetime 형태)"""
+        if self.completed_chunks:
+            return self.completed_chunks[-1].get_effective_end_time()
+        return None
+
+    def get_last_time_source(self) -> str:
+        """마지막 시간 정보의 출처 (디버깅용)"""
+        if self.completed_chunks:
+            return self.completed_chunks[-1].get_time_source()
+        return "none"
+
+    def has_complete_time_info(self) -> bool:
+        """모든 완료 청크가 완전한 시간 정보를 보유하는지 확인"""
+        return all(chunk.has_complete_time_info() for chunk in self.completed_chunks)
 
 
 @dataclass
@@ -568,16 +595,11 @@ class CandleDataProvider:
             # 실제 저장 개수와 무관하게 청크가 담당한 범위 전체를 완료로 처리
             state.total_collected += completed_chunk.count
 
-            # 🔄 청크 끝 시간 기반 연속성 (빈 캔들과 무관한 논리적 연속성 보장)
-            if completed_chunk.end:
-                # 청크의 논리적 끝 시간을 다음 청크 연속성에 사용
-                chunk_end_time = TimeUtils.format_datetime_utc(completed_chunk.end)
-                state.last_candle_time = chunk_end_time
-                logger.debug(f"청크 끝 시간 기반 연속성: {chunk_end_time}")
-            elif last_candle_time:
-                # 폴백: 기존 last_candle_time 사용 (COUNT_ONLY 등)
-                state.last_candle_time = last_candle_time
-                logger.debug(f"폴백 연속성: {last_candle_time}")
+            # 🆕 ChunkInfo 기반 연속성: 더 이상 last_candle_time 설정 불필요
+            # 연속성은 _create_next_chunk_params에서 ChunkInfo.get_effective_end_time()로 처리
+            effective_time = completed_chunk.get_effective_end_time()
+            time_source = completed_chunk.get_time_source()
+            logger.debug(f"청크 완료 - 시간정보: {effective_time} (출처: {time_source})")
 
             # 진행률 업데이트
             self._update_remaining_time_estimates(state)
@@ -703,8 +725,8 @@ class CandleDataProvider:
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, final_candles
             )
-            # API 응답에서 마지막 캔들 시간 추출 (COUNT_ONLY/END_ONLY 케이스)
-            last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+            # ✅ ChunkInfo에서 시간 정보 자동 추출 (get_effective_end_time 활용)
+            last_candle_time = None  # ChunkInfo에서 처리됨
 
         return saved_count, last_candle_time
 
@@ -779,7 +801,7 @@ class CandleDataProvider:
             if calculated_chunk_end:
                 last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
-                last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+                last_candle_time = None  # ChunkInfo에서 처리됨
             return saved_count, last_candle_time
 
         elif status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]:
@@ -828,8 +850,8 @@ class CandleDataProvider:
                 if calculated_chunk_end:
                     last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
                 else:
-                    # 폴백: API 응답에서 추출
-                    last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
+                    # ✅ ChunkInfo에서 처리됨
+                    last_candle_time = None
                 return saved_count, last_candle_time
             # API 정보 없으면 계산된 값 사용
             last_candle_time = None
@@ -862,9 +884,8 @@ class CandleDataProvider:
             if calculated_chunk_end:
                 last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
-                last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
-
-        return saved_count, last_candle_time
+                last_candle_time = None  # ChunkInfo에서 처리됨
+            return saved_count, last_candle_time
 
     # =========================================================================
     # 계획 수립
@@ -1196,39 +1217,27 @@ class CandleDataProvider:
         # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스) - ChunkInfo 기반 개선
         end_time_reached = False
 
-        # 🆕 ChunkInfo 기반 End 시간 도달 확인 (final_candle_end vs aligned_end)
+        # 🆕 ChunkInfo 기반 End 시간 도달 확인 (get_effective_end_time 활용)
         if state.target_end and state.completed_chunks:
             try:
-                # 마지막 완료된 청크의 final_candle_end 사용
-                last_chunk = state.completed_chunks[-1]
+                # 마지막 청크의 유효 끝 시간 사용 (COMPLETE_OVERLAP도 지원!)
+                last_effective_time = state.get_last_effective_time_datetime()
                 aligned_end = state.request_info.get_aligned_end_time()
 
-                if last_chunk.final_candle_end and aligned_end:
-                    # final_candle_end가 aligned_end에 도달하거나 지나쳤는지 확인
-                    end_time_reached = last_chunk.final_candle_end <= aligned_end
+                if last_effective_time and aligned_end:
+                    # 유효 끝 시간이 aligned_end에 도달하거나 지나쳤는지 확인
+                    end_time_reached = last_effective_time <= aligned_end
 
                     if end_time_reached:
-                        logger.debug(f"End 시간 도달 (ChunkInfo): final_end={last_chunk.final_candle_end}, "
-                                     f"aligned_end={aligned_end}")
+                        time_source = state.get_last_time_source()
+                        logger.debug(f"End 시간 도달 (ChunkInfo): effective_end={last_effective_time}, "
+                                     f"aligned_end={aligned_end}, 출처={time_source}")
 
             except Exception as e:
                 logger.warning(f"ChunkInfo 기반 End 시간 비교 실패: {e}")
                 end_time_reached = False
 
-        # 🔄 기존 로직 (주석 처리된 원본)
-        # if state.target_end and state.last_candle_time:
-        #     try:
-        #         # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
-        #         last_time = datetime.fromisoformat(state.last_candle_time)
-        #         # 마지막 캔들 시간이 목표 종료 시간에 도달하거나 지나쳤는지 확인
-        #         end_time_reached = last_time <= state.target_end
-        #
-        #         if end_time_reached:
-        #             logger.debug(f"End 시간 도달: last_candle={last_time}, target_end={state.target_end}")
-        #
-        #     except Exception as e:
-        #         logger.warning(f"End 시간 비교 실패: {e}")
-        #         end_time_reached = False
+        # ✅ 기존 last_candle_time 기반 로직 제거됨: ChunkInfo.get_effective_end_time()으로 대체
 
         completion_reason = []
         if count_reached:
@@ -1272,20 +1281,19 @@ class CandleDataProvider:
             "count": chunk_size
         }
 
-        # 🔄 청크 끝 시간 + 1틱 방식 연속성 (빈 캔들과 무관한 논리적 연속성)
-        if state.last_candle_time:
+        # 🆕 ChunkInfo 기반 연속성 (모든 청크 타입에서 완전한 시간 정보 지원)
+        last_effective_time = state.get_last_effective_time_datetime()
+        if last_effective_time:
             try:
-                # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
-                last_chunk_end = datetime.fromisoformat(state.last_candle_time)
-
-                # 다음 청크 시작 = 이전 청크 끝 - 1틱 (연속성 보장)
-                next_chunk_start = TimeUtils.get_time_by_ticks(last_chunk_end, state.timeframe, -1)
+                # 다음 청크 시작 = 이전 청크 유효 끝시간 - 1틱 (연속성 보장)
+                next_chunk_start = TimeUtils.get_time_by_ticks(last_effective_time, state.timeframe, -1)
                 params["to"] = next_chunk_start
 
-                logger.debug(f"청크 연속성: {last_chunk_end} → {next_chunk_start}")
+                time_source = state.get_last_time_source()
+                logger.debug(f"ChunkInfo 연속성: {last_effective_time} (출처: {time_source}) → {next_chunk_start}")
 
             except Exception as e:
-                logger.warning(f"청크 연속성 계산 실패: {e}")
+                logger.warning(f"ChunkInfo 연속성 계산 실패: {e}")
 
         return params
 
@@ -1372,35 +1380,8 @@ class CandleDataProvider:
         logger.debug("빈 캔들 처리 조건 확인: 캔들 시간 파싱 실패 → 처리 안 함")
         return False
 
-    def _extract_last_candle_time_from_api_response(self, api_response: List[Dict[str, Any]]) -> Optional[str]:
-        """API 응답에서 마지막 캔들 시간 추출 (연속성용)
-
-        업비트 API는 최신 캔들부터 내림차순으로 반환하므로,
-        마지막 요소가 가장 오래된 캔들 (다음 청크 연속성의 기준점)
-
-        Args:
-            api_response: 업비트 캔들 API 응답 리스트
-
-        Returns:
-            Optional[str]: ISO 형식 UTC 시간 문자열 또는 None
-        """
-        if not api_response or len(api_response) == 0:
-            return None
-
-        try:
-            # 업비트 API는 내림차순 정렬이므로 마지막 요소가 가장 과거 캔들
-            last_candle = api_response[-1]
-            candle_time_utc = last_candle.get('candle_date_time_utc')
-
-            if candle_time_utc and isinstance(candle_time_utc, str):
-                # 🚀 UTC 통일: TimeUtils를 통한 표준 정규화 후 형식 변환
-                parsed_time = datetime.fromisoformat(candle_time_utc)
-                normalized_time = TimeUtils.normalize_datetime_to_utc(parsed_time)
-                return TimeUtils.format_datetime_utc(normalized_time)
-
-            logger.warning(f"API 응답에서 캔들 시간 추출 실패: {last_candle}")
-            return None
-
-        except Exception as e:
-            logger.warning(f"마지막 캔들 시간 추출 중 오류: {e}")
-            return None
+    # ✅ 제거됨: ChunkInfo.get_effective_end_time()으로 대체
+    # def _extract_last_candle_time_from_api_response(self, api_response: List[Dict[str, Any]]) -> Optional[str]:
+    #     """API 응답에서 마지막 캔들 시간 추출 - ChunkInfo로 대체됨"""
+    #     # ChunkInfo.set_final_candle_info() -> get_effective_end_time() 사용 권장
+    #     pass
