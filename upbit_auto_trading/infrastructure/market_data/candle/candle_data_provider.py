@@ -210,8 +210,6 @@ class CollectionState:
     start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     is_completed: bool = False
     error_message: Optional[str] = None
-    target_end: Optional[datetime] = None
-
     # 실시간 시간 추적 필드들
     last_update_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     avg_chunk_duration: float = 0.0
@@ -222,6 +220,11 @@ class CollectionState:
     reached_upbit_data_end: bool = False
 
     # === 🆕 ChunkInfo 기반 계산 속성 (정보 중복 제거) ===
+
+    @property
+    def target_end(self) -> Optional[datetime]:
+        """목표 종료 시간 (RequestInfo 위임) - 호환성 유지용"""
+        return self.request_info.get_aligned_end_time()
 
     def get_last_effective_time(self) -> Optional[str]:
         """마지막 완료 청크의 유효 끝 시간 (ChunkInfo 기반)"""
@@ -517,8 +520,7 @@ class CandleDataProvider:
             estimated_total_chunks=plan.estimated_chunks,
             estimated_completion_time=estimated_completion,
             remaining_chunks=plan.estimated_chunks,
-            estimated_remaining_seconds=plan.estimated_duration_seconds,
-            target_end=end
+            estimated_remaining_seconds=plan.estimated_duration_seconds
         )
 
         # 첫 번째 청크 생성
@@ -1216,8 +1218,8 @@ class CandleDataProvider:
         # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스) - ChunkInfo 기반 개선
         end_time_reached = False
 
-        # 🆕 ChunkInfo 기반 End 시간 도달 확인 (get_effective_end_time 활용)
-        if state.target_end and state.completed_chunks:
+        # 🆕 개선된 ChunkInfo 기반 시간 확인 (모든 request_type 지원)
+        if state.completed_chunks:
             try:
                 # 마지막 청크의 유효 끝 시간 사용 (COMPLETE_OVERLAP도 지원!)
                 last_effective_time = state.get_last_effective_time_datetime()
@@ -1229,8 +1231,9 @@ class CandleDataProvider:
 
                     if end_time_reached:
                         time_source = state.get_last_time_source()
-                        logger.debug(f"End 시간 도달 (ChunkInfo): effective_end={last_effective_time}, "
-                                     f"aligned_end={aligned_end}, 출처={time_source}")
+                        request_type = state.request_info.get_request_type()
+                        logger.debug(f"End 시간 도달 (ChunkInfo, {request_type.value}): "
+                                     f"effective_end={last_effective_time}, aligned_end={aligned_end}, 출처={time_source}")
 
             except Exception as e:
                 logger.warning(f"ChunkInfo 기반 End 시간 비교 실패: {e}")
