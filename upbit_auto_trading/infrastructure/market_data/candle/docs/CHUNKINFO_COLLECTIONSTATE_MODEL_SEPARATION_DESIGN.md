@@ -319,31 +319,24 @@ class CollectionState:
 ### **시간 정보 우선순위 전략**
 
 ```python
-class TimeInfoStrategy:
-    """시간 정보 선택 전략"""
+# ⏸️ TimeInfoStrategy 클래스 - 구현 보류
+# 이유: 효용성 불분명, 현재 get_effective_end_time()으로 충분함
+#
+# class TimeInfoStrategy:
+#     """시간 정보 선택 전략 (보류)"""
+#
+#     @staticmethod
+#     def get_effective_time(chunk: 'ChunkInfo', strategy: str = "comprehensive") -> Optional[datetime]:
+#         """전략별 시간 선택 (현재 ChunkInfo.get_effective_end_time()으로 대체됨)"""
+#         # 구현 내용 생략 - 필요시 추후 재검토
+#         pass
 
-    @staticmethod
-    def get_effective_time(chunk: 'ChunkInfo', strategy: str = "comprehensive") -> Optional[datetime]:
-        """전략별 시간 선택"""
-
-        if strategy == "comprehensive":
-            # 포괄적 전략: 모든 정보원 활용 (권장)
-            return (chunk.final_end or
-                    chunk.db_end or
-                    chunk.api_response_end or
-                    chunk.planned_end)
-
-        elif strategy == "actual_only":
-            # 실제 데이터만: API 응답과 최종 처리만
-            return chunk.final_end or chunk.api_response_end
-
-        elif strategy == "db_preferred":
-            # DB 우선: COMPLETE_OVERLAP 최적화
-            return (chunk.db_end or
-                    chunk.final_end or
-                    chunk.api_response_end)
-
-        return None
+# 💡 현재 사용 중인 대안:
+# ChunkInfo.get_effective_end_time() - 우선순위 기반 자동 선택 (권장)
+# 1순위: final_candle_end (최종 처리)
+# 2순위: db_end (DB 겹침)
+# 3순위: api_response_end (API 응답)
+# 4순위: end (계획된 끝점)
 ```
 
 ### **COMPLETE_OVERLAP 완전 지원**

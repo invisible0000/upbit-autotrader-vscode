@@ -657,8 +657,8 @@ class CandleDataProvider:
         logger.info(f"청크 처리 시작: {state.current_chunk.chunk_id} [{request_type.value}]")
 
         try:
-            # 성능 최적화된 청크 처리
-            saved_count, last_candle_time = await self._process_chunk_direct_storage(
+            # 성능 최적화된 청크 처리 (ChunkInfo 기반으로 last_candle_time 불필요)
+            saved_count, _ = await self._process_chunk_direct_storage(
                 state.current_chunk, state, is_first_chunk, request_type
             )
 
@@ -756,8 +756,8 @@ class CandleDataProvider:
             # 🟢 개선: ChunkInfo에 overlap 정보 저장 (통합 관리)
             chunk_info.set_overlap_info(overlap_result)
 
-            # 겹침 분석 결과에 따른 직접 저장
-            saved_count, last_candle_time = await self._handle_overlap_direct_storage(
+            # 겹침 분석 결과에 따른 직접 저장 (ChunkInfo 기반으로 last_candle_time 불필요)
+            saved_count, _ = await self._handle_overlap_direct_storage(
                 chunk_info, overlap_result, state, chunk_end, is_first_chunk,
                 safe_range_start, safe_range_end
             )
@@ -834,11 +834,10 @@ class CandleDataProvider:
         if status == OverlapStatus.COMPLETE_OVERLAP:
             # 완전 겹침: 저장할 것 없음 (이미 DB에 존재)
             logger.debug("완전 겹침 → 저장 생략")
-            # DB에 데이터 존재가 보장되므로 계산된 chunk_end 사용
-            last_candle_time = None
+            # 🔄 ChunkInfo에서 자동 처리: calculated_chunk_end를 final_candle_end로 설정
             if calculated_chunk_end:
-                last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
-            return 0, last_candle_time
+                chunk_info.final_candle_end = calculated_chunk_end
+            return 0, None  # ChunkInfo 기반 처리로 last_candle_time 불필요
 
         elif status == OverlapStatus.NO_OVERLAP:
             # 겹침 없음: API → 직접 저장
@@ -872,6 +871,9 @@ class CandleDataProvider:
             saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, final_candles
             )
+            # 🔄 ChunkInfo 자동 처리: calculated_chunk_end 설정
+            if calculated_chunk_end:
+                chunk_info.final_candle_end = calculated_chunk_end
             # 🔄 청크 끝 시간 우선 사용 (빈 캔들과 무관한 연속성 보장)
             last_candle_time = None
             if calculated_chunk_end:
