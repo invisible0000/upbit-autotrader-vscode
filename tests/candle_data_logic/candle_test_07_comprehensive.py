@@ -33,8 +33,9 @@ from tests.candle_data_logic.candle_db_generator import CandleDBGenerator
 # ================================================================
 TEST_CONFIG = {
     # 기본 설정 (table_name은 symbol + timeframe으로 자동 생성)
-    "symbol": "KRW-BTC",
-    "timeframe": "1m",
+    # "symbol": "KRW-BTC",
+    "symbol": "KRW-ELF",
+    "timeframe": "1s",
 
     # 수집설정(get_cadles 파라미터로 변환)
     # 시간대 표기 예시:

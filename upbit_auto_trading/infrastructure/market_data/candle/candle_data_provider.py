@@ -35,9 +35,6 @@ from upbit_auto_trading.infrastructure.market_data.candle.overlap_analyzer impor
 from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector import (
     EmptyCandleDetector
 )
-from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_reference_updater import (
-    EmptyCandleReferenceUpdater
-)
 
 logger = create_component_logger("CandleDataProvider")
 
@@ -237,7 +234,7 @@ class CollectionPlan:
 
 class CandleDataProvider:
     """
-    캔들 데이터 제공자 v6.2 - ChunkInfo 확장 성능 최적화 버전
+    캔들 데이터 제공자 v6.3 - ChunkInfo 전체 처리 단계 추적 버전
 
     주요 개선사항:
     1. 메모리 효율성: 90% 절약 (직접 저장 방식)
@@ -245,12 +242,19 @@ class CandleDataProvider:
     3. CPU 처리량 개선: 70% 개선 (변환 과정 제거)
     4. 코드 단순성: 복잡한 병합 로직 제거
     5. 🆕 객체 생성 최적화: temp_chunk 생성 제거 (ChunkInfo 확장)
+    6. 🆕 전체 처리 단계 추적: 요청 → API 응답 → 최종 결과 완전 추적
+
+    ChunkInfo 통합 추적:
+    - 요청 단계: api_request_count/start/end (오버랩 분석 결과)
+    - 응답 단계: api_response_count/start/end (실제 API 응답)
+    - 최종 단계: final_candle_count/start/end (빈 캔들 처리 후)
+    - 디버깅: get_processing_summary()로 전체 과정 요약
 
     최적화 전략:
     - API Dict → DB 직접 저장 (CandleData 변환 생략)
     - OverlapAnalyzer 유지 (API 절약 효과 보존)
     - 메모리 즉시 해제 (누적 방지)
-    - 🚀 ChunkInfo 통합 관리: overlap 정보를 하나의 객체에서 처리
+    - 🚀 ChunkInfo 통합 관리: 처리 단계별 완전 추적으로 디버깅 혁신
     """
 
     def __init__(
@@ -273,13 +277,9 @@ class CandleDataProvider:
         self.enable_empty_candle_processing = enable_empty_candle_processing
         self.empty_candle_detectors: Dict[str, EmptyCandleDetector] = {}  # (symbol, timeframe) 조합 캐시
 
-        # 미참조 빈 캔들 참조점 자동 업데이트 처리기
-        self.reference_updater = EmptyCandleReferenceUpdater(repository)
-
-        logger.info("CandleDataProvider v6.2 (빈 캔들 처리 + ChunkInfo 확장 최적화) 초기화")
+        logger.info("CandleDataProvider v6.3 (빈 캔들 처리 + ChunkInfo 전체 처리 단계 추적) 초기화")
         logger.info(f"청크 크기: {self.chunk_size}, API Rate Limit: {self.api_rate_limit_rps} RPS")
         logger.info(f"빈 캔들 처리: {'활성화' if enable_empty_candle_processing else '비활성화'}")
-        logger.info("미참조 빈 캔들 참조점 자동 업데이트 활성화")
 
     # =========================================================================
     # 핵심 공개 API
@@ -424,9 +424,19 @@ class CandleDataProvider:
             # 🚀 업비트 API 특성 고려한 실제 수집 범위 계산
             aligned_to = collection_state.request_info.get_aligned_to_time()
             expected_count = collection_state.request_info.get_expected_count()
+            request_type = collection_state.request_info.get_request_type()
 
-            # 1. 업비트 to exclusive 특성: aligned_to에서 1틱 과거로 이동 (실제 수집 시작점)
-            actual_start = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1)
+            # 1. 업비트 to exclusive 특성: 요청 타입별 실제 수집 시작점 계산
+            if request_type in [RequestType.COUNT_ONLY, RequestType.END_ONLY]:
+                # COUNT_ONLY/END_ONLY: 첫 번째 청크의 실제 API 응답 시작점 사용 (테스트용)
+                if collection_state.completed_chunks and collection_state.completed_chunks[0].api_response_start:
+                    actual_start = collection_state.completed_chunks[0].api_response_start
+                else:
+                    # 폴백: 기존 로직 (첫 청크 정보가 없는 경우)
+                    actual_start = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1)
+            else:
+                # TO_COUNT/TO_END: 기존 로직 (aligned_to에서 1틱 과거로 이동)
+                actual_start = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1)
 
             # 2. Count 기반 종료점 재계산: actual_start에서 expected_count-1틱 과거 (실제 수집 종료점)
             actual_end = TimeUtils.get_time_by_ticks(actual_start, timeframe, -(expected_count - 1))
@@ -576,6 +586,11 @@ class CandleDataProvider:
                         f"저장: {saved_count}개, 청크범위: {completed_chunk.count}개, "
                         f"누적: {state.total_collected}/{state.total_requested}")
 
+            # 🆕 상세한 청크 처리 요약 정보 (디버깅용)
+            if logger.level <= 10:  # DEBUG 레벨일 때만
+                summary = completed_chunk.get_processing_summary()
+                logger.debug(f"\n{summary}")
+
             # 🆕 업비트 데이터 끝 도달 확인 (최우선 종료 조건)
             if state.reached_upbit_data_end:
                 state.is_completed = True
@@ -676,10 +691,14 @@ class CandleDataProvider:
                     safe_range_end=first_chunk_safe_end,
                     is_first_chunk=True  # 🚀 첫 청크임을 명시 (api_start +1틱 추가 방지)
                 )
-                logger.info(f"첫 청크 빈 캔들 처리 완료: {len(api_response)}개 → {len(final_candles)}개")
+                # 🆕 최종 캔듡 정보를 ChunkInfo에 설정
+                chunk_info.set_final_candle_info(final_candles)
+                logger.info(f"첫 청크 빈 캔듡 처리 완료: {len(api_response)}개 → {len(final_candles)}개")
             else:
                 logger.debug("폴백 케이스: api_end 정보 없음 → 빈 캔들 처리 건너뛰기")
                 final_candles = api_response
+                # 🆕 최종 캔들 정보를 ChunkInfo에 설정 (빈 캔들 처리 없이)
+                chunk_info.set_final_candle_info(final_candles)
 
             saved_count = await self.repository.save_raw_api_data(
                 state.symbol, state.timeframe, final_candles
@@ -749,6 +768,9 @@ class CandleDataProvider:
             else:
                 final_candles = api_response
 
+            # 🆕 최종 캔들 정보를 ChunkInfo에 설정
+            chunk_info.set_final_candle_info(final_candles)
+
             saved_count = await self.repository.save_raw_api_data(
                 chunk_info.symbol, chunk_info.timeframe, final_candles
             )
@@ -795,6 +817,9 @@ class CandleDataProvider:
                 else:
                     final_candles = api_response
 
+                # 🆕 최종 캔들 정보를 ChunkInfo에 설정
+                chunk_info.set_final_candle_info(final_candles)
+
                 saved_count = await self.repository.save_raw_api_data(
                     chunk_info.symbol, chunk_info.timeframe, final_candles
                 )
@@ -838,14 +863,6 @@ class CandleDataProvider:
                 last_candle_time = TimeUtils.format_datetime_utc(calculated_chunk_end)
             else:
                 last_candle_time = self._extract_last_candle_time_from_api_response(final_candles)
-
-        # 🆕 오버랩 분석 완료 후 미참조 빈 캔들 참조점 자동 업데이트 (후처리)
-        try:
-            await self.reference_updater.process_unreferenced_empty_candles(
-                overlap_result, chunk_info.symbol, chunk_info.timeframe
-            )
-        except Exception as e:
-            logger.warning(f"미참조 빈 캔들 업데이트 실패 (무시): {chunk_info.symbol} {chunk_info.timeframe} - {e}")
 
         return saved_count, last_candle_time
 
@@ -1013,6 +1030,9 @@ class CandleDataProvider:
             else:
                 raise ValueError(f"지원하지 않는 타임프레임: {chunk_info.timeframe}")
 
+            # 🆕 API 응답 정보를 ChunkInfo에 설정
+            chunk_info.set_api_response_info(candles)
+
             #  개선: 최적화된 로깅 (overlap 정보 표시)
             overlap_info = f" (overlap: {chunk_info.overlap_status.value})" if chunk_info.has_overlap_info() else ""
             logger.info(f"API 청크 완료: {chunk_info.chunk_id}, 수집: {len(candles)}개{overlap_info}")
@@ -1173,21 +1193,42 @@ class CandleDataProvider:
         # 1. 개수 달성 확인 (청크 담당 범위 기준)
         count_reached = state.total_collected >= state.total_requested
 
-        # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스)
+        # 2. End 시간 도달 확인 (TO_END, END_ONLY 케이스) - ChunkInfo 기반 개선
         end_time_reached = False
-        if state.target_end and state.last_candle_time:
-            try:
-                # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
-                last_time = datetime.fromisoformat(state.last_candle_time)
-                # 마지막 캔들 시간이 목표 종료 시간에 도달하거나 지나쳤는지 확인
-                end_time_reached = last_time <= state.target_end
 
-                if end_time_reached:
-                    logger.debug(f"End 시간 도달: last_candle={last_time}, target_end={state.target_end}")
+        # 🆕 ChunkInfo 기반 End 시간 도달 확인 (final_candle_end vs aligned_end)
+        if state.target_end and state.completed_chunks:
+            try:
+                # 마지막 완료된 청크의 final_candle_end 사용
+                last_chunk = state.completed_chunks[-1]
+                aligned_end = state.request_info.get_aligned_end_time()
+
+                if last_chunk.final_candle_end and aligned_end:
+                    # final_candle_end가 aligned_end에 도달하거나 지나쳤는지 확인
+                    end_time_reached = last_chunk.final_candle_end <= aligned_end
+
+                    if end_time_reached:
+                        logger.debug(f"End 시간 도달 (ChunkInfo): final_end={last_chunk.final_candle_end}, "
+                                     f"aligned_end={aligned_end}")
 
             except Exception as e:
-                logger.warning(f"End 시간 비교 실패: {e}")
+                logger.warning(f"ChunkInfo 기반 End 시간 비교 실패: {e}")
                 end_time_reached = False
+
+        # 🔄 기존 로직 (주석 처리된 원본)
+        # if state.target_end and state.last_candle_time:
+        #     try:
+        #         # 🚀 UTC 통일: 단순한 datetime 파싱 (내부에서 이미 표준 형식 보장)
+        #         last_time = datetime.fromisoformat(state.last_candle_time)
+        #         # 마지막 캔들 시간이 목표 종료 시간에 도달하거나 지나쳤는지 확인
+        #         end_time_reached = last_time <= state.target_end
+        #
+        #         if end_time_reached:
+        #             logger.debug(f"End 시간 도달: last_candle={last_time}, target_end={state.target_end}")
+        #
+        #     except Exception as e:
+        #         logger.warning(f"End 시간 비교 실패: {e}")
+        #         end_time_reached = False
 
         completion_reason = []
         if count_reached:

@@ -18,7 +18,7 @@ from enum import Enum
 from typing import List, Optional, Dict, Any
 
 
-# === Enum 모델 ===
+# === Enum 모델 ===    2. 응답 단계: 실제 API 응답으로부터 받은 캔듡 정보
 
 class OverlapStatus(Enum):
     """겹침 상태 - OverlapAnalyzer v5.0과 정확히 일치하는 5개 분류"""
@@ -546,11 +546,21 @@ class RequestInfo:
 @dataclass(frozen=False)  # 실시간 조정을 위해 mutable
 class ChunkInfo:
     """
-    CandleDataProvider v6.1 개별 청크 정보 - Overlap 최적화 지원
+    CandleDataProvider v6.2 개별 청크 정보 - 전체 처리 단계 추적 지원
 
     실시간 시간 조정이 가능한 개별 청크 메타정보.
-    이전 청크 결과에 따라 동적으로 시간 범위 조정.
-    temp_chunk 생성 제거로 성능 최적화.
+    청크 처리의 전체 단계를 추적하여 디버깅과 확장성을 향상시킴.
+
+    추적 단계:
+    1. 요청 단계: 오버랩 분석 결과 기반 API 요청 정보
+    2. 응답 단계: 실제 API 응답으로부터 받은 캔들 정보
+    3. 최종 단계: 빈 캔들 처리 완료 후 최종 결과 정보
+
+    주요 기능:
+    - 단계별 캔들 개수, 시작/종료 시간 추적
+    - 전체 처리 과정 요약 정보 제공 (디버깅용)
+    - 이전 청크 결과에 따른 동적 시간 범위 조정
+    - temp_chunk 생성 제거로 성능 최적화
     """
     # === 청크 식별 정보 ===
     chunk_id: str                         # 청크 고유 식별자
@@ -563,11 +573,23 @@ class ChunkInfo:
     to: Optional[datetime] = None         # 이 청크의 시작 캔들 시간
     end: Optional[datetime] = None        # 이 청크의 종료 시간
 
-    # === 🆕 Overlap 최적화 필드들 ===
-    overlap_status: Optional['OverlapStatus'] = None    # 겹침 분석 결과
-    api_count: Optional[int] = None                     # 실제 API 호출 개수 (부분 겹침 시)
-    api_start: Optional[datetime] = None                # API 호출 시작점 (부분 겹침 시)
-    api_end: Optional[datetime] = None                  # API 호출 종료점 (부분 겹침 시)
+    # === 🆕 청크 처리 단계별 추적 필드들 ===
+    overlap_status: Optional['OverlapStatus'] = None        # 겹침 분석 결과
+
+    # 요청 단계 (오버랩 분석 결과)
+    api_request_count: Optional[int] = None                 # 요청할 API 호출 개수 (부분 겹침 시)
+    api_request_start: Optional[datetime] = None            # API 요청 시작점 (부분 겹침 시)
+    api_request_end: Optional[datetime] = None              # API 요청 종료점 (부분 겹침 시)
+
+    # 응답 단계 (실제 API 응답)
+    api_response_count: Optional[int] = None                # 실제 받은 캔들 개수
+    api_response_start: Optional[datetime] = None           # 응답 첫 캔들 시간
+    api_response_end: Optional[datetime] = None             # 응답 마지막 캔들 시간
+
+    # 최종 처리 단계 (빈 캔들 처리 후)
+    final_candle_count: Optional[int] = None                # 최종 캔들 개수
+    final_candle_start: Optional[datetime] = None           # 최종 첫 캔들 시간
+    final_candle_end: Optional[datetime] = None             # 최종 마지막 캔들 시간
 
     # === 처리 상태 정보 ===
     status: str = "pending"               # pending, processing, completed, failed
@@ -628,18 +650,18 @@ class ChunkInfo:
     # === 🆕 Overlap 최적화 메서드들 ===
 
     def set_overlap_info(self, overlap_result: 'OverlapResult', api_count: Optional[int] = None) -> None:
-        """겹침 분석 결과를 ChunkInfo에 설정 (temp_chunk 생성 제거)"""
+        """겹침 분석 결과를 ChunkInfo에 설정 (요청 단계 정보)"""
         self.overlap_status = overlap_result.status
-        self.api_start = overlap_result.api_start
-        self.api_end = overlap_result.api_end
+        self.api_request_start = overlap_result.api_start
+        self.api_request_end = overlap_result.api_end
 
-        # API 개수 설정 (부분 겹침 시)
+        # API 요청 개수 설정 (부분 겹침 시)
         if api_count is not None:
-            self.api_count = api_count
+            self.api_request_count = api_count
         elif overlap_result.api_start and overlap_result.api_end:
-            # API 개수 자동 계산
+            # API 요청 개수 자동 계산
             from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-            self.api_count = TimeUtils.calculate_expected_count(
+            self.api_request_count = TimeUtils.calculate_expected_count(
                 overlap_result.api_start, overlap_result.api_end, self.timeframe
             )
 
@@ -665,12 +687,134 @@ class ChunkInfo:
 
     def get_api_params(self) -> tuple[int, Optional[datetime]]:
         """API 호출 파라미터 반환 (count, to)"""
-        if self.needs_partial_api_call() and self.api_count and self.api_start:
-            # 부분 겹침: overlap 정보 사용
-            return self.api_count, self.api_start
+        if self.needs_partial_api_call() and self.api_request_count and self.api_request_start:
+            # 부분 겹침: 요청 단계 정보 사용
+            return self.api_request_count, self.api_request_start
         else:
             # 전체 호출: 기본 정보 사용
             return self.count, self.to
+
+    # === 🆕 단계별 정보 설정 메서드들 ===
+
+    def set_api_response_info(self, candles: List[Dict[str, Any]]) -> None:
+        """
+        API 응답 정보 설정
+
+        Args:
+            candles: 업비트 API 응답 캔들 리스트 (Dict 형태)
+        """
+        if not candles:
+            self.api_response_count = 0
+            self.api_response_start = None
+            self.api_response_end = None
+            return
+
+        self.api_response_count = len(candles)
+
+        # 업비트 API는 최신순 정렬: 첫 번째가 최신, 마지막이 가장 과거
+        first_candle_time = candles[0]['candle_date_time_utc']
+        last_candle_time = candles[-1]['candle_date_time_utc']
+
+        # datetime 변환 (ISO 형식 처리)
+        try:
+            # UTC 시간 문자열을 datetime으로 변환
+            self.api_response_start = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
+            self.api_response_end = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+        except Exception:
+            # 파싱 실패 시에도 개수는 기록
+            self.api_response_start = None
+            self.api_response_end = None
+
+    def set_final_candle_info(self, candles: List[Dict[str, Any]]) -> None:
+        """
+        최종 처리 결과 설정 (빈 캔들 처리 후)
+
+        Args:
+            candles: 빈 캔들 처리 완료된 최종 캔들 리스트 (Dict 형태)
+        """
+        if not candles:
+            self.final_candle_count = 0
+            self.final_candle_start = None
+            self.final_candle_end = None
+            return
+
+        self.final_candle_count = len(candles)
+
+        # 최종 처리된 캔들들의 첫 번째와 마지막 시간
+        first_candle_time = candles[0]['candle_date_time_utc']
+        last_candle_time = candles[-1]['candle_date_time_utc']
+
+        # datetime 변환
+        try:
+            self.final_candle_start = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
+            self.final_candle_end = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+        except Exception:
+            self.final_candle_start = None
+            self.final_candle_end = None
+
+    def get_processing_summary(self) -> str:
+        """
+        전체 처리 과정 요약 정보 반환 (디버깅용)
+
+        Returns:
+            str: 요청 → API 응답 → 최종 결과의 변화 과정 요약
+        """
+        lines = []
+        lines.append(f"🔍 청크 처리 요약: {self.chunk_id}")
+        lines.append(f"├─ 상태: {self.status}")
+
+        # 겹침 분석 결과
+        if self.overlap_status:
+            lines.append(f"├─ 겹침 분석: {self.overlap_status.value}")
+
+        # 요청 단계
+        lines.append("├─ 📋 요청 단계:")
+        lines.append(f"│  ├─ 계획 개수: {self.count}")
+        if self.api_request_count is not None:
+            lines.append(f"│  ├─ 실제 요청: {self.api_request_count}개")
+            if self.api_request_start and self.api_request_end:
+                lines.append(f"│  └─ 요청 범위: {self.api_request_start} ~ {self.api_request_end}")
+        else:
+            lines.append(f"│  └─ 요청 범위: {self.to} ~ {self.end}")
+
+        # API 응답 단계
+        lines.append("├─ 📡 API 응답:")
+        if self.api_response_count is not None:
+            lines.append(f"│  ├─ 응답 개수: {self.api_response_count}개")
+            if self.api_response_start and self.api_response_end:
+                lines.append(f"│  └─ 응답 범위: {self.api_response_start} ~ {self.api_response_end}")
+        else:
+            lines.append("│  └─ 미처리")
+
+        # 최종 처리 단계
+        lines.append("└─ 🎯 최종 결과:")
+        if self.final_candle_count is not None:
+            lines.append(f"   ├─ 최종 개수: {self.final_candle_count}개")
+            if self.final_candle_start and self.final_candle_end:
+                lines.append(f"   └─ 최종 범위: {self.final_candle_start} ~ {self.final_candle_end}")
+        else:
+            lines.append("   └─ 미처리")
+
+        # 변화 과정 요약
+        if (self.api_request_count is not None
+                and self.api_response_count is not None
+                and self.final_candle_count is not None):
+
+            changes = []
+            if self.api_request_count != self.api_response_count:
+                diff = self.api_response_count - self.api_request_count
+                changes.append(f"API응답 {diff:+d}")
+
+            if self.api_response_count != self.final_candle_count:
+                diff = self.final_candle_count - self.api_response_count
+                changes.append(f"빈캔들처리 {diff:+d}")
+
+            if changes:
+                lines.append(f"\n💡 변화: 요청{self.api_request_count} → "
+                             + f"응답{self.api_response_count} → 최종{self.final_candle_count} "
+                             + f"({', '.join(changes)})")
+
+        return '\n'.join(lines)
 
     @classmethod
     def create_chunk(cls, chunk_index: int, symbol: str, timeframe: str, count: int,

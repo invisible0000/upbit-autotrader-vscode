@@ -264,7 +264,7 @@ class EmptyCandleDetector:
         # gap_end까지 포함하여 생성 (>= 조건 유지)
         while current_time >= gap_info.gap_end:
             time_points.append(current_time)
-            logger.debug(f"  ➕ 빈 캔들 시간점 추가: {current_time}")
+            # logger.debug(f"  ➕ 빈 캔들 시간점 추가: {current_time}")
             current_time = TimeUtils.get_time_by_ticks(current_time, self.timeframe, -1)
 
         first_point = time_points[0] if time_points else 'None'
