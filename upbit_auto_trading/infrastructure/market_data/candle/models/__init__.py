@@ -2,7 +2,7 @@
 📝 Candle Data Models Package
 캔들 데이터 관련 모델들의 통합 패키지
 
-Created: 2025-09-22
+Created: 2025-09-23 (Refactored)
 Purpose: 모든 데이터 구조와 DTO 클래스들을 효율적으로 import할 수 있는 중앙화된 접점
 
 구조:
@@ -10,6 +10,7 @@ Purpose: 모든 데이터 구조와 DTO 클래스들을 효율적으로 import�
 - candle_request_models: 요청/응답 관련 모델
 - candle_cache_models: 캐시 시스템 모델
 - candle_collection_models: 수집 프로세스 관리 모델
+- chunk_processor_models: ChunkProcessor 전용 모델
 """
 
 # === 핵심 모델 (가장 자주 사용) ===
@@ -30,7 +31,7 @@ from .candle_request_models import (
     OverlapRequest,
     OverlapResult,
     TimeChunk,
-    CollectionResult,
+    CollectionResult as ChunkCollectionResult,  # 개별 청크 수집 결과
     RequestInfo,
 )
 
@@ -44,23 +45,22 @@ from .candle_collection_models import (
 
 # === ChunkProcessor 모델 ===
 from .chunk_processor_models import (
-    ExecutionPlan,
-    OverlapAnalysis,
-    ValidationResult,
-    ApiResponse,
-    ProcessedData,
-    StorageResult,
-    ChunkResult,
-    ChunkResultStatus,
-    create_skip_result,
-    create_early_exit_result,
-    create_success_result,
-    create_error_result,
+    # 주요 모델들
+    CollectionProgress,
+    CollectionResult,  # 전체 수집 결과 (ChunkCollectionResult와 다름)
+    InternalCollectionState,
+    ProgressCallback,
+
+    # 팩토리 함수들
+    create_success_collection_result,
+    create_error_collection_result,
+    create_collection_progress,
 )
 
 # === 캐시 모델 (선택적 import) ===
 # 캐시 기능을 사용할 때만 명시적으로 import
 # from .candle_cache_models import CacheKey, CacheEntry, CacheStats
+
 
 # === 편의성 함수들 ===
 def create_success_response(candles, data_source: str, response_time_ms: float) -> CandleDataResponse:
@@ -73,6 +73,7 @@ def create_success_response(candles, data_source: str, response_time_ms: float) 
         response_time_ms=response_time_ms
     )
 
+
 def create_error_response(error_message: str, response_time_ms: float) -> CandleDataResponse:
     """에러 응답 생성 헬퍼"""
     return CandleDataResponse(
@@ -84,6 +85,7 @@ def create_error_response(error_message: str, response_time_ms: float) -> Candle
         error_message=error_message
     )
 
+
 # === 공개 API 정의 ===
 __all__ = [
     # 핵심 모델
@@ -91,15 +93,14 @@ __all__ = [
 
     # 요청/응답 모델
     'RequestType', 'CandleChunk', 'OverlapRequest', 'OverlapResult', 'TimeChunk',
-    'CollectionResult', 'RequestInfo',
+    'ChunkCollectionResult', 'RequestInfo',
 
     # 수집 프로세스 모델
     'CollectionState', 'CollectionPlan', 'ChunkInfo', 'ProcessingStats',
 
     # ChunkProcessor 모델
-    'ExecutionPlan', 'OverlapAnalysis', 'ValidationResult', 'ApiResponse',
-    'ProcessedData', 'StorageResult', 'ChunkResult', 'ChunkResultStatus',
-    'create_skip_result', 'create_early_exit_result', 'create_success_result', 'create_error_result',
+    'CollectionProgress', 'CollectionResult', 'InternalCollectionState', 'ProgressCallback',
+    'create_success_collection_result', 'create_error_collection_result', 'create_collection_progress',
 
     # 편의성 함수
     'create_success_response', 'create_error_response',
@@ -108,4 +109,4 @@ __all__ = [
 # === 버전 정보 ===
 __version__ = "2.0.0"
 __author__ = "Upbit AutoTrader"
-__description__ = "Candle data models with improved structure and separation of concerns"
+__description__ = "Candle data models with ChunkProcessor v2.0 integration"

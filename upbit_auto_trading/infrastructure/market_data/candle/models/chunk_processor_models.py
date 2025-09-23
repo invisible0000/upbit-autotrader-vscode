@@ -1,200 +1,330 @@
 """
-ChunkProcessor 전용 데이터 모델
+📋 ChunkProcessor v2.0 전용 데이터 모델
 
 Created: 2025-09-23
-Purpose: ChunkProcessor의 4단계 파이프라인에서 사용할 결과 객체들 정의
-Features: 각 Phase별 처리 결과를 구조화하여 타입 안전성과 디버깅 용이성 확보
+Purpose: ChunkProcessor v2.0의 Legacy 로직 보존과 독립적 사용을 위한 데이터 모델들
+Features: CollectionProgress (UI), CollectionResult (완료결과), InternalCollectionState (내부상태)
 Architecture: DDD Infrastructure 계층, Immutable 데이터 구조
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
-from enum import Enum
+from datetime import datetime, timezone, timedelta
+from typing import Callable, Optional, Dict, Any, List
+
+# 기존 모델들 import
+from .candle_collection_models import ChunkInfo
+from .candle_request_models import RequestInfo
 
 
-@dataclass
-class ExecutionPlan:
-    """청크 실행 계획
-
-    Phase 1에서 생성되어 전체 파이프라인의 실행 전략을 결정합니다.
-    겹침 분석 결과를 바탕으로 API 호출 최적화와 조기 종료 판단을 수행합니다.
+@dataclass(frozen=True)
+class CollectionProgress:
     """
-    strategy: str  # 'skip_complete_overlap', 'partial_fetch', 'full_fetch'
-    should_skip_api_call: bool
-    optimized_api_params: Dict[str, Any]
-    expected_data_range: Tuple[datetime, datetime]
-    overlap_optimization: bool = True
+    수집 진행 상황 (UI Progress Callback용)
 
-    def get_optimized_api_params(self) -> Dict[str, Any]:
-        """겹침 분석 기반 최적화된 API 파라미터 반환"""
-        return self.optimized_api_params.copy()
-
-
-@dataclass
-class OverlapAnalysis:
-    """겹침 분석 결과
-
-    OverlapAnalyzer의 결과를 구조화하여 ExecutionPlan 수립에 활용합니다.
+    실시간으로 UI에 진행 상황을 보고하기 위한 불변 데이터 구조.
+    Progress Callback에서 메모리 누수 없이 안전하게 사용할 수 있도록 설계.
     """
-    overlap_result: Any  # OverlapResult 객체 (순환 import 방지를 위해 Any 사용)
-    analysis_time: datetime
-    optimization_applied: bool
-    recommendations: List[str] = field(default_factory=list)
+    # 기본 정보
+    symbol: str
+    timeframe: str
+    request_id: str
+
+    # 진행 상황
+    current_chunk: int
+    total_chunks: int
+    collected_candles: int
+    requested_candles: int
+
+    # 시간 정보
+    elapsed_seconds: float
+    estimated_remaining_seconds: float
+    estimated_completion_time: datetime
+
+    # 상태
+    current_status: str  # "analyzing", "fetching", "processing", "storing"
+    last_chunk_info: Optional[str] = None  # "수집: 200개 (overlap: NO_OVERLAP)"
+
+    @property
+    def progress_percentage(self) -> float:
+        """진행률 퍼센트 (0.0 ~ 100.0)"""
+        if self.requested_candles <= 0:
+            return 0.0
+        return (self.collected_candles / self.requested_candles) * 100.0
+
+    def to_summary_string(self) -> str:
+        """요약 문자열 반환 (UI 표시용)"""
+        return (f"{self.symbol} {self.timeframe} | "
+                f"청크: {self.current_chunk}/{self.total_chunks} | "
+                f"캔들: {self.collected_candles:,}/{self.requested_candles:,} "
+                f"({self.progress_percentage:.1f}%) | "
+                f"상태: {self.current_status}")
 
 
-@dataclass
-class ValidationResult:
-    """데이터 검증 결과"""
-    is_valid: bool
-    has_critical_errors: bool
-    validation_messages: List[str] = field(default_factory=list)
-    validation_time: datetime = field(default_factory=lambda: datetime.now())
-
-
-@dataclass
-class ApiResponse:
-    """API 응답 래퍼
-
-    Phase 2에서 생성되어 API 호출 결과와 검증 정보를 포함합니다.
-    업비트 데이터 끝 도달 감지와 조기 종료 판단을 위한 정보를 제공합니다.
+@dataclass(frozen=True)
+class CollectionResult:
     """
-    raw_data: List[Dict[str, Any]]
-    validation_result: ValidationResult
-    has_upbit_data_end: bool
-    requires_early_exit: bool
-    response_metadata: Dict[str, Any] = field(default_factory=dict)
+    전체 수집 완료 결과
 
-
-@dataclass
-class ProcessedData:
-    """처리된 캔들 데이터
-
-    Phase 3에서 생성되어 빈 캔들 처리와 데이터 정규화 결과를 포함합니다.
-    """
-    candles: List[Dict[str, Any]]
-    gap_filled_count: int
-    processing_metadata: Dict[str, Any]
-    validation_passed: bool
-
-
-@dataclass
-class StorageResult:
-    """데이터 저장 결과
-
-    Phase 4에서 생성되어 Repository를 통한 데이터 저장 결과를 포함합니다.
-    """
-    saved_count: int
-    expected_count: int
-    storage_time: datetime
-    validation_passed: bool
-    metadata: Dict[str, Any]
-
-
-class ChunkResultStatus(Enum):
-    """청크 처리 결과 상태"""
-    SUCCESS = "success"
-    SKIPPED = "skipped"
-    EARLY_EXIT = "early_exit"
-    ERROR = "error"
-
-
-@dataclass
-class ChunkResult:
-    """청크 처리 최종 결과
-
-    전체 파이프라인 실행 결과를 포함하는 최상위 결과 객체입니다.
-    성공/실패 여부, 처리 성능, 메타데이터를 포함합니다.
+    ChunkProcessor v2.0의 execute_full_collection() 메서드 결과.
+    Legacy 호환성과 성능 메트릭을 포함한 완전한 수집 결과 정보.
     """
     success: bool
-    status: ChunkResultStatus
-    chunk_id: str
-    saved_count: int
-    processing_time_ms: float
-    phases_completed: List[str]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    collected_count: int
+    requested_count: int
+    processing_time_seconds: float
+
+    # 오류 정보
     error: Optional[Exception] = None
+    error_chunk_id: Optional[str] = None
+
+    # 메타데이터
+    chunks_processed: int = 0
+    api_calls_made: int = 0
+    overlap_optimizations: int = 0
+    empty_candles_filled: int = 0
+
+    # 수집 범위 정보 (CandleDataProvider DB 조회용)
+    collected_start_time: Optional[datetime] = None
+    collected_end_time: Optional[datetime] = None
+
+    # 추가 정보
+    completion_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def success_rate(self) -> float:
+        """성공률 (0.0 ~ 1.0)"""
+        if self.requested_count <= 0:
+            return 0.0
+        return self.collected_count / self.requested_count
+
+    @property
+    def collection_rate_per_second(self) -> float:
+        """초당 수집률"""
+        if self.processing_time_seconds <= 0:
+            return 0.0
+        return self.collected_count / self.processing_time_seconds
 
     def is_successful(self) -> bool:
-        """성공 여부 확인"""
-        return self.success and self.error is None and self.status == ChunkResultStatus.SUCCESS
+        """수집 성공 여부"""
+        return self.success and self.error is None
 
     def get_performance_summary(self) -> Dict[str, Any]:
-        """성능 요약 정보 반환"""
+        """성능 요약 정보"""
         return {
-            "processing_time_ms": self.processing_time_ms,
-            "phases_completed": len(self.phases_completed),
-            "saved_count": self.saved_count,
-            "status": self.status.value
+            "processing_time_seconds": self.processing_time_seconds,
+            "collection_rate_per_second": self.collection_rate_per_second,
+            "success_rate": self.success_rate,
+            "api_calls_made": self.api_calls_made,
+            "overlap_optimizations": self.overlap_optimizations,
+            "empty_candles_filled": self.empty_candles_filled,
+            "chunks_processed": self.chunks_processed
         }
+
+    def to_log_string(self) -> str:
+        """로그용 요약 문자열"""
+        if self.success:
+            return (f"수집 완료: {self.collected_count:,}/{self.requested_count:,}개 "
+                    f"({self.success_rate:.1%}) in {self.processing_time_seconds:.1f}s "
+                    f"[{self.chunks_processed}청크, API {self.api_calls_made}회]")
+        else:
+            return (f"수집 실패: {self.collected_count:,}/{self.requested_count:,}개 "
+                    f"처리 후 오류 - {self.error}")
+
+
+@dataclass
+class InternalCollectionState:
+    """
+    ChunkProcessor v2.0 내부 전용 상태
+
+    CandleDataProvider의 CollectionState와 분리된 독립적 상태 관리.
+    ChunkProcessor가 독립적으로 사용될 때의 내부 상태 추적.
+    """
+    # 기본 정보
+    request_info: RequestInfo
+    symbol: str
+    timeframe: str
+
+    # 수집 계획
+    total_requested: int
+    estimated_total_chunks: int
+
+    # 진행 상태
+    current_chunk: Optional[ChunkInfo] = None
+    completed_chunks: List[ChunkInfo] = field(default_factory=list)
+    total_collected: int = 0
+
+    # 시간 정보
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_update_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # 완료 상태
+    is_completed: bool = False
+    reached_upbit_data_end: bool = False
+
+    # 성능 메트릭
+    api_calls_made: int = 0
+    overlap_optimizations: int = 0
+    empty_candles_filled: int = 0
+
+    @property
+    def elapsed_seconds(self) -> float:
+        """경과 시간 (초)"""
+        return (datetime.now(timezone.utc) - self.start_time).total_seconds()
+
+    @property
+    def progress_percentage(self) -> float:
+        """진행률 퍼센트"""
+        if self.total_requested <= 0:
+            return 0.0
+        return (self.total_collected / self.total_requested) * 100.0
+
+    @property
+    def avg_chunk_duration(self) -> float:
+        """평균 청크 처리 시간 (초)"""
+        if not self.completed_chunks:
+            return 0.0
+        return self.elapsed_seconds / len(self.completed_chunks)
+
+    @property
+    def estimated_remaining_seconds(self) -> float:
+        """예상 남은 시간 (초)"""
+        remaining_chunks = self.estimated_total_chunks - len(self.completed_chunks)
+        if remaining_chunks <= 0 or self.avg_chunk_duration <= 0:
+            return 0.0
+        return remaining_chunks * self.avg_chunk_duration
+
+    @property
+    def estimated_completion_time(self) -> datetime:
+        """예상 완료 시간"""
+        return datetime.now(timezone.utc) + timedelta(seconds=self.estimated_remaining_seconds)
+
+    def add_completed_chunk(self, chunk_info: ChunkInfo, saved_count: int) -> None:
+        """완료된 청크 추가"""
+        self.completed_chunks.append(chunk_info)
+        self.total_collected += saved_count
+        self.last_update_time = datetime.now(timezone.utc)
+
+    def mark_api_call(self) -> None:
+        """API 호출 기록"""
+        self.api_calls_made += 1
+
+    def mark_overlap_optimization(self) -> None:
+        """겹침 최적화 기록"""
+        self.overlap_optimizations += 1
+
+    def mark_empty_candles_filled(self, count: int) -> None:
+        """빈 캔들 채우기 기록"""
+        self.empty_candles_filled += count
+
+    def get_last_effective_time_datetime(self) -> Optional[datetime]:
+        """마지막 유효 시간 (ChunkInfo 기반)"""
+        if not self.completed_chunks:
+            return None
+        return self.completed_chunks[-1].get_effective_end_time()
+
+    def should_complete(self) -> bool:
+        """완료 여부 판단 - 로깅 포함"""
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        logger = create_component_logger("InternalCollectionState")
+
+        # 요청 개수 달성
+        if self.total_collected >= self.total_requested:
+            logger.debug(f"🎯 수집 완료: 개수 달성 ({self.total_collected}/{self.total_requested})")
+            return True
+
+        # 업비트 데이터 끝 도달
+        if self.reached_upbit_data_end:
+            logger.debug("🎯 수집 완료: 업비트 데이터 끝 도달")
+            return True
+
+        # 시간 기반 완료 (end 조건)
+        if hasattr(self.request_info, 'end') and self.request_info.end:
+            last_time = self.get_last_effective_time_datetime()
+            if last_time and last_time <= self.request_info.end:
+                logger.debug(f"🎯 수집 완료: 시간 도달 ({last_time} <= {self.request_info.end})")
+                return True
+
+        return False
+
+    def get_last_time_source(self) -> str:
+        """마지막 시간 출처 반환"""
+        if not self.completed_chunks:
+            return "none"
+        return self.completed_chunks[-1].get_time_source()
+
+
+# Progress Callback 타입 정의
+ProgressCallback = Callable[[CollectionProgress], None]
 
 
 # 팩토리 함수들
 
-def create_skip_result(execution_plan: ExecutionPlan, chunk_id: str) -> ChunkResult:
-    """완전 겹침으로 인한 스킵 결과 생성"""
-    return ChunkResult(
+def create_success_collection_result(
+    collected_count: int,
+    requested_count: int,
+    processing_time_seconds: float,
+    chunks_processed: int = 0,
+    api_calls_made: int = 0,
+    overlap_optimizations: int = 0,
+    empty_candles_filled: int = 0,
+    collected_start_time: Optional[datetime] = None,
+    collected_end_time: Optional[datetime] = None,
+    metadata: Optional[Dict[str, Any]] = None
+) -> CollectionResult:
+    """성공적인 수집 결과 생성"""
+    return CollectionResult(
         success=True,
-        status=ChunkResultStatus.SKIPPED,
-        chunk_id=chunk_id,
-        saved_count=0,
-        processing_time_ms=0.0,
-        phases_completed=["preparation"],
-        metadata={
-            "skip_reason": "complete_overlap",
-            "strategy": execution_plan.strategy
-        }
+        collected_count=collected_count,
+        requested_count=requested_count,
+        processing_time_seconds=processing_time_seconds,
+        chunks_processed=chunks_processed,
+        api_calls_made=api_calls_made,
+        overlap_optimizations=overlap_optimizations,
+        empty_candles_filled=empty_candles_filled,
+        collected_start_time=collected_start_time,
+        collected_end_time=collected_end_time,
+        metadata=metadata or {}
     )
 
 
-def create_early_exit_result(api_response: ApiResponse, chunk_id: str,
-                             processing_time_ms: float) -> ChunkResult:
-    """업비트 데이터 끝 도달로 인한 조기 종료 결과 생성"""
-    return ChunkResult(
-        success=True,
-        status=ChunkResultStatus.EARLY_EXIT,
-        chunk_id=chunk_id,
-        saved_count=len(api_response.raw_data),
-        processing_time_ms=processing_time_ms,
-        phases_completed=["preparation", "api_fetch"],
-        metadata={
-            "early_exit_reason": "upbit_data_end",
-            "response_count": len(api_response.raw_data)
-        }
-    )
-
-
-def create_success_result(storage_result: StorageResult, chunk_id: str,
-                          processing_time_ms: float) -> ChunkResult:
-    """정상 처리 완료 결과 생성"""
-    return ChunkResult(
-        success=True,
-        status=ChunkResultStatus.SUCCESS,
-        chunk_id=chunk_id,
-        saved_count=storage_result.saved_count,
-        processing_time_ms=processing_time_ms,
-        phases_completed=["preparation", "api_fetch", "data_processing", "data_storage"],
-        metadata={
-            "storage_validation": storage_result.validation_passed,
-            "storage_metadata": storage_result.metadata
-        }
-    )
-
-
-def create_error_result(error: Exception, chunk_id: str,
-                        processing_time_ms: float = 0.0,
-                        phases_completed: List[str] = None) -> ChunkResult:
-    """오류 발생 결과 생성"""
-    return ChunkResult(
+def create_error_collection_result(
+    error: Exception,
+    collected_count: int = 0,
+    requested_count: int = 0,
+    processing_time_seconds: float = 0.0,
+    error_chunk_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None
+) -> CollectionResult:
+    """오류 발생 수집 결과 생성"""
+    return CollectionResult(
         success=False,
-        status=ChunkResultStatus.ERROR,
-        chunk_id=chunk_id,
-        saved_count=0,
-        processing_time_ms=processing_time_ms,
-        phases_completed=phases_completed or [],
+        collected_count=collected_count,
+        requested_count=requested_count,
+        processing_time_seconds=processing_time_seconds,
         error=error,
-        metadata={
-            "error_message": str(error),
-            "error_type": type(error).__name__
-        }
+        error_chunk_id=error_chunk_id,
+        metadata=metadata or {}
+    )
+
+
+def create_collection_progress(
+    state: InternalCollectionState,
+    current_status: str,
+    last_chunk_info: Optional[str] = None
+) -> CollectionProgress:
+    """내부 상태로부터 Progress 객체 생성"""
+    return CollectionProgress(
+        symbol=state.symbol,
+        timeframe=state.timeframe,
+        request_id=f"{state.symbol}_{state.timeframe}",
+        current_chunk=len(state.completed_chunks) + 1,
+        total_chunks=state.estimated_total_chunks,
+        collected_candles=state.total_collected,
+        requested_candles=state.total_requested,
+        elapsed_seconds=state.elapsed_seconds,
+        estimated_remaining_seconds=state.estimated_remaining_seconds,
+        estimated_completion_time=state.estimated_completion_time,
+        current_status=current_status,
+        last_chunk_info=last_chunk_info
     )
