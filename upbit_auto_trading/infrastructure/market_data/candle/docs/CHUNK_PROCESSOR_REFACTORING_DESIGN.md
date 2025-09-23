@@ -43,8 +43,7 @@ class CandleDataProvider:
 def mark_chunk_completed():
     # 1. 복잡한 조건 분기
     # 2. 중복 데이터 검증
-    # 3. 메모리에 중간 결과물 누적
-    # 4. 겹침 분석 후에도 불필요한 API 호출
+    # 3. 겹침 분석 후에도 불필요한 API 호출
 ```
 
 #### 4. 테스트 어려움
@@ -61,7 +60,7 @@ def mark_chunk_completed():
 #### 1. **Pipeline Pattern**: 명확한 4단계 처리 흐름
 #### 2. **Single Responsibility**: 각 메서드는 하나의 명확한 책임
 #### 3. **Early Exit**: 조기 종료로 불필요한 처리 방지
-#### 4. **Memory Efficiency**: 스트림 처리로 메모리 최적화
+#### 4. **Caching Optimization**: 계산 결과 캐싱으로 성능 향상
 
 ### 전체 구조
 
@@ -456,30 +455,7 @@ async def execute_chunk_pipeline(self, chunk_info, collection_state):
         return self._handle_early_exit(api_response, chunk_info)
 ```
 
-### 2. 메모리 스트리밍 처리
-
-```python
-async def _process_large_dataset(self, raw_data: List[Dict]) -> AsyncGenerator[Dict, None]:
-    """
-    🚀 대용량 데이터 스트림 처리
-    - 메모리에 모든 데이터를 올리지 않음
-    - 배치 단위로 처리하여 메모리 효율성 확보
-    """
-
-    BATCH_SIZE = 100  # 배치 크기
-
-    for i in range(0, len(raw_data), BATCH_SIZE):
-        batch = raw_data[i:i + BATCH_SIZE]
-
-        # 배치 처리
-        processed_batch = await self._process_candle_batch(batch)
-
-        # 즉시 yield하여 메모리 해제
-        for candle in processed_batch:
-            yield candle
-```
-
-### 3. 계산 결과 캐싱
+### 2. 계산 결과 캐싱
 
 ```python
 from functools import lru_cache
@@ -503,33 +479,7 @@ class ChunkProcessor:
         self._calculate_timeframe_metadata.cache_clear()
 ```
 
-### 4. 비동기 배치 처리
 
-```python
-import asyncio
-
-async def _parallel_validation(self, data_chunks: List[List[Dict]]) -> List[bool]:
-    """
-    🚀 병렬 데이터 검증
-    - 독립적인 검증 작업을 병렬 처리
-    - I/O 바운드 작업 효율성 극대화
-    """
-
-    # 병렬 검증 태스크 생성
-    validation_tasks = [
-        self._validate_chunk_data(chunk)
-        for chunk in data_chunks
-    ]
-
-    # 모든 검증을 병렬로 실행
-    results = await asyncio.gather(*validation_tasks, return_exceptions=True)
-
-    # 예외 처리
-    return [
-        result if not isinstance(result, Exception) else False
-        for result in results
-    ]
-```
 
 ---
 
@@ -907,9 +857,9 @@ class PerformanceAlertSystem:
 - **테스트 커버리지**: 70% → 90% (단위 테스트 용이성 확보)
 
 ### 성능 개선
-- **메모리 사용량**: 조기 종료 및 스트리밍으로 20% 절약
 - **API 효율성**: 겹침 분석 최적화로 15% 호출 감소
-- **처리 속도**: 병렬 처리 및 캐싱으로 10% 향상
+- **처리 속도**: 조기 종료 및 캐싱으로 10% 향상
+- **메모리 효율성**: 불필요한 중간 객체 생성 방지
 
 ### 개발 생산성 향상
 - **디버깅 용이성**: 단계별 로깅으로 문제 지점 빠른 파악
@@ -924,7 +874,7 @@ class PerformanceAlertSystem:
 
 1. **명확한 책임 분리**: CandleDataProvider는 조정자, ChunkProcessor는 실행자
 2. **직관적인 메서드명**: 기능과 동작이 명확히 표현되는 메서드명 적용
-3. **성능 최적화**: 조기 종료, 메모리 효율성, 캐싱을 통한 성능 향상
+3. **성능 최적화**: 조기 종료, 캐싱을 통한 성능 향상
 4. **기존 호환성 유지**: 현재 로직과 기능 구조를 그대로 보존
 5. **테스트 용이성**: 각 단계별 독립적인 단위 테스트 가능
 

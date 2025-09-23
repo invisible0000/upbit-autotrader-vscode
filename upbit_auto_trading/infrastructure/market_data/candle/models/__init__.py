@@ -42,6 +42,22 @@ from .candle_collection_models import (
     ProcessingStats,
 )
 
+# === ChunkProcessor 모델 ===
+from .chunk_processor_models import (
+    ExecutionPlan,
+    OverlapAnalysis,
+    ValidationResult,
+    ApiResponse,
+    ProcessedData,
+    StorageResult,
+    ChunkResult,
+    ChunkResultStatus,
+    create_skip_result,
+    create_early_exit_result,
+    create_success_result,
+    create_error_result,
+)
+
 # === 캐시 모델 (선택적 import) ===
 # 캐시 기능을 사용할 때만 명시적으로 import
 # from .candle_cache_models import CacheKey, CacheEntry, CacheStats
@@ -79,6 +95,11 @@ __all__ = [
 
     # 수집 프로세스 모델
     'CollectionState', 'CollectionPlan', 'ChunkInfo', 'ProcessingStats',
+
+    # ChunkProcessor 모델
+    'ExecutionPlan', 'OverlapAnalysis', 'ValidationResult', 'ApiResponse',
+    'ProcessedData', 'StorageResult', 'ChunkResult', 'ChunkResultStatus',
+    'create_skip_result', 'create_early_exit_result', 'create_success_result', 'create_error_result',
 
     # 편의성 함수
     'create_success_response', 'create_error_response',
