@@ -119,13 +119,12 @@ class CandleDataProvider:
             logger.info(f"종료: {end}")
 
         # ChunkProcessor의 독립적 수집 API에 완전 위임
-        collection_result = await self.chunk_processor.execute_full_collection(
+        collection_result = await self.chunk_processor.process_collection(
             symbol=symbol,
             timeframe=timeframe,
             count=count,
             to=to,
-            end=end,
-            dry_run=False  # 실제 저장
+            end=end
         )
 
         if not collection_result.success:

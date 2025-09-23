@@ -156,13 +156,16 @@ class CandleData:
             candle_date_time_utc=target_time.strftime('%Y-%m-%dT%H:%M:%S'),  # UTC 형식 (timezone 정보 없음)
             # candle_date_time_kst=cls._utc_to_kst_string(target_time),
             candle_date_time_kst=None,  # 빈 캔들에서는 None (용량 절약)
-            opening_price=0.0,      # 빈 캔들: 기본값 (실제값은 Dict에서 설정)
-            high_price=0.0,
-            low_price=0.0,
-            trade_price=0.0,
-            timestamp=timestamp_ms,  # 🚀 정확한 timestamp (SqliteCandleRepository 호환)
-            candle_acc_trade_price=0.0,   # 빈 캔들: 거래 없음
-            candle_acc_trade_volume=0.0,
+            opening_price=None,         # 빈 캔들: None으로 변경 (시간과 관련없는 데이터)
+            high_price=None,           # 빈 캔들: None으로 변경
+            low_price=None,            # 빈 캔들: None으로 변경
+            trade_price=None,          # 빈 캔들: None으로 변경
+            timestamp=timestamp_ms,    # 🚀 정확한 timestamp (SqliteCandleRepository 호환)
+            candle_acc_trade_price=None,   # 빈 캔들: None으로 변경 (거래 없음)
+            candle_acc_trade_volume=None,  # 빈 캔들: None으로 변경 (거래 없음)
+
+            # === 빈 캔들 처리 필드 ===
+            empty_copy_from_utc=reference_utc,  # 빈 캔들 식별용 (검증 우회)
 
             # === 편의성 필드 ===
             symbol=market,
