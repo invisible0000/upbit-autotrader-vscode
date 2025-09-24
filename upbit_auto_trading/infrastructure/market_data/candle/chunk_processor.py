@@ -150,7 +150,8 @@ class ChunkProcessor:
 
                 # API 요청 정보
                 "api_request_count": getattr(chunk_info, 'api_request_count', None),
-                "api_response_count": len(getattr(chunk_info, 'api_response_data', [])),
+                # "api_response_count": len(getattr(chunk_info, 'api_response_data', [])),
+                "api_response_count": getattr(chunk_info, 'api_response_count', None),
 
                 # 최종 캔들 정보
                 "final_candle_count": getattr(chunk_info, 'final_candle_count', None),
@@ -471,16 +472,19 @@ class ChunkProcessor:
         logger.debug(f"API 데이터 수집: {chunk.chunk_id}")
 
         api_count, api_to = chunk.get_api_params()
-        # if api_to is None:
-        #     raise ValueError(f"청크 {chunk.chunk_id}의 API 요청 종료 시간이 없습니다")
+        if api_to is None:
+            to_param = None
+            logger.debug(f"청크 {chunk.chunk_id}는 COUNT_ONLY 또는 END_ONLY → to 파라미터 없음")
 
-        try:
-            # Upbit to 파라미터는 항상 다음 틱을 가리키도록 조정
-            fetch_time = TimeUtils.get_time_by_ticks(api_to, chunk.timeframe, 1)
-            to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
-        except Exception as exc:
-            logger.error(f"to 파라미터 계산 실패: {chunk.chunk_id}, 오류: {exc}")
-            raise
+        else:
+            try:
+                # Upbit to exclusive 이므로 미래로 한 틱 보정
+                fetch_time = TimeUtils.get_time_by_ticks(api_to, chunk.timeframe, 1)
+                logger.debug(f"진출점 보정 {api_to} → {fetch_time}")
+                to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
+            except Exception as exc:
+                logger.error(f"to 파라미터 계산 실패: {chunk.chunk_id}, 오류: {exc}")
+                raise
 
         try:
             if chunk.timeframe == '1s':

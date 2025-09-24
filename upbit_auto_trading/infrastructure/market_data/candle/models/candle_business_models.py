@@ -23,6 +23,9 @@ from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
 from enum import Enum
 
+# TimeUtils import 추가 (lazy import 제거를 위해)
+from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
+
 
 # ============================================================================
 # 🏁 Enum 모델 - 비즈니스 로직 지원
@@ -84,9 +87,6 @@ class RequestInfo:
 
     def __post_init__(self):
         """요청 정보 검증 및 사전 계산"""
-        # TimeUtils를 지연 import하여 순환 import 방지
-        from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-
         # 기본 파라미터 검증
         if not self.symbol:
             raise ValueError("symbol은 필수입니다")
@@ -131,6 +131,8 @@ class RequestInfo:
         else:  # COUNT_ONLY, END_ONLY
             # 요청 시점 기준
             aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
+        object.__setattr__(self, 'aligned_to', aligned_to)
+
         # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
             # 사용자 제공 end 시간 기준
@@ -141,8 +143,6 @@ class RequestInfo:
             # aligned_to에서 count-1틱 뒤로 계산
             if self.count is None:
                 raise ValueError("COUNT_ONLY 또는 TO_COUNT 요청에서 count가 None일 수 없습니다")
-            aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
-            # aligned_to에서 count-1틱 뒤로 계산
             aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
         object.__setattr__(self, 'aligned_end', aligned_end)
 
@@ -334,11 +334,11 @@ class ChunkInfo:
             raise ValueError(f"잘못된 상태값: {self.chunk_status}")
 
     def adjust_times(self, new_to: Optional[datetime] = None, new_end: Optional[datetime] = None) -> None:
-        """실시간 시간 조정 (이전 청크 결과 반영)"""
+        """실시간 시간 조정 (이전 청크 결과 반영) - UTC 타임존 정규화 적용"""
         if new_to is not None:
-            self.to = new_to
+            self.to = TimeUtils.normalize_datetime_to_utc(new_to)
         if new_end is not None:
-            self.end = new_end
+            self.end = TimeUtils.normalize_datetime_to_utc(new_end)
 
     def mark_processing(self) -> None:
         """처리 중 상태로 변경"""
@@ -406,8 +406,6 @@ class ChunkInfo:
 
     def calculate_effective_candle_count(self) -> int:
         """겹침 상황을 반영한 실제 확보 캔들 수"""
-        from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-
         if self.chunk_index == 0 and not self.has_overlap_info():
             return self.final_candle_count or 0
 
@@ -453,20 +451,19 @@ class ChunkInfo:
         # 겹침 상태 설정
         self.overlap_status = overlap_result.status
 
-        # DB 기존 데이터 정보 추출 (COMPLETE_OVERLAP 해결!)
-        self.db_start = getattr(overlap_result, 'db_start', None)
-        self.db_end = getattr(overlap_result, 'db_end', None)  # 핵심!
+        # DB 기존 데이터 정보 추출 (COMPLETE_OVERLAP 해결!) - UTC 타임존 정규화
+        self.db_start = TimeUtils.normalize_datetime_to_utc(getattr(overlap_result, 'db_start', None))
+        self.db_end = TimeUtils.normalize_datetime_to_utc(getattr(overlap_result, 'db_end', None))  # 핵심!
 
-        # API 요청 정보 설정 (기존 필드 사용)
-        self.api_request_start = overlap_result.api_start
-        self.api_request_end = overlap_result.api_end
+        # API 요청 정보 설정 (기존 필드 사용) - UTC 타임존 정규화
+        self.api_request_start = TimeUtils.normalize_datetime_to_utc(overlap_result.api_start)
+        self.api_request_end = TimeUtils.normalize_datetime_to_utc(overlap_result.api_end)
 
         # API 요청 개수 설정 (부분 겹침 시)
         if api_count is not None:
             self.api_request_count = api_count
         elif overlap_result.api_start and overlap_result.api_end:
             # API 요청 개수 자동 계산
-            from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
             self.api_request_count = TimeUtils.calculate_expected_count(
                 overlap_result.api_start, overlap_result.api_end, self.timeframe
             )
@@ -527,11 +524,14 @@ class ChunkInfo:
         first_candle_time = candles[0]['candle_date_time_utc']
         last_candle_time = candles[-1]['candle_date_time_utc']
 
-        # datetime 변환 (ISO 형식 처리)
+        # datetime 변환 (ISO 형식 처리) - TimeUtils 정규화 활용
         try:
             # UTC 시간 문자열을 datetime으로 변환
-            self.api_response_start = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
-            self.api_response_end = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+            start_dt = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+            # UTC 정규화로 일관성 보장
+            self.api_response_start = TimeUtils.normalize_datetime_to_utc(start_dt)
+            self.api_response_end = TimeUtils.normalize_datetime_to_utc(end_dt)
         except Exception:
             # 파싱 실패 시에도 개수는 기록
             self.api_response_start = None
@@ -556,12 +556,13 @@ class ChunkInfo:
         first_candle_time = candles[0]['candle_date_time_utc']
         last_candle_time = candles[-1]['candle_date_time_utc']
 
-        # datetime 변환 (timezone-aware로 직접 생성)
+        # datetime 변환 (timezone-aware로 직접 생성) - TimeUtils 정규화 활용
         try:
             start_dt = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
-            self.final_candle_start = start_dt.replace(tzinfo=timezone.utc)
-            self.final_candle_end = end_dt.replace(tzinfo=timezone.utc)
+            # UTC 정규화로 일관성 보장
+            self.final_candle_start = TimeUtils.normalize_datetime_to_utc(start_dt)
+            self.final_candle_end = TimeUtils.normalize_datetime_to_utc(end_dt)
         except Exception:
             self.final_candle_start = None
             self.final_candle_end = None
@@ -569,7 +570,7 @@ class ChunkInfo:
     @classmethod
     def create_chunk(cls, chunk_index: int, symbol: str, timeframe: str, count: int,
                      to: Optional[datetime] = None, end: Optional[datetime] = None) -> 'ChunkInfo':
-        """새 청크 생성 헬퍼"""
+        """새 청크 생성 헬퍼 - UTC 타임존 정규화 적용"""
         chunk_id = f"{symbol}_{timeframe}_{chunk_index:03d}"
         return cls(
             chunk_id=chunk_id,
@@ -577,8 +578,8 @@ class ChunkInfo:
             symbol=symbol,
             timeframe=timeframe,
             count=count,
-            to=to,
-            end=end
+            to=TimeUtils.normalize_datetime_to_utc(to),
+            end=TimeUtils.normalize_datetime_to_utc(end)
         )
 
 
@@ -702,8 +703,6 @@ def create_collection_plan(
 
 def _create_first_chunk_params_by_type(request_info: RequestInfo, chunk_size: int) -> Dict[str, Any]:
     """요청 타입별 첫 번째 청크 파라미터 생성"""
-    from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-
     request_type = request_info.get_request_type()
     params: Dict[str, Any] = {"market": request_info.symbol}
 
@@ -715,7 +714,9 @@ def _create_first_chunk_params_by_type(request_info: RequestInfo, chunk_size: in
     elif request_type == RequestType.TO_COUNT:
         # to + count: 사전 계산된 정렬 시간 사용 (원시 count 사용)
         chunk_count = min(request_info.expected_count, chunk_size)
+        print(f"TO_COUNT 첫 청크 생성: count={chunk_count}, to={request_info.to}")  # debug
         aligned_to = request_info.get_aligned_to_time()
+        print("debug: 이 출력이 없으면 aligned_to 계산 실패")  # debug
 
         # 진입점 보정 (사용자 시간 → 내부 시간 변환)
         first_chunk_start_time = TimeUtils.get_time_by_ticks(aligned_to, request_info.timeframe, -1)
