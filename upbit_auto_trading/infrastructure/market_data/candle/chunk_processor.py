@@ -35,6 +35,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.market_data.candle.models.candle_business_models import (
     RequestInfo,
     CollectionPlan,
+    CollectionResult,
     ChunkInfo,
     OverlapRequest,
     OverlapResult,
@@ -59,21 +60,6 @@ from upbit_auto_trading.infrastructure.market_data.candle.empty_candle_detector 
     EmptyCandleDetector
 )
 from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
-
-# 단순화된 결과 모델
-from dataclasses import dataclass
-
-
-@dataclass
-class CollectionResult:
-    """단순화된 수집 결과 - 최종 결과만"""
-    success: bool
-    chunks: List[ChunkInfo]
-    collected_count: int
-    requested_count: int
-    processing_time_seconds: float
-    error: Optional[Exception] = None
-
 
 # 진행 상황 콜백 타입
 ProgressCallback = Callable[[int, int], None]  # (completed_chunks, total_chunks)
@@ -193,9 +179,7 @@ class ChunkProcessor:
         except Exception as e:
             logger.warning(f"ChunkInfo 디버그 로그 생성 실패: {e}")
 
-    # =========================================================================
     # 🚀 메인 API - 단순화된 청크 처리
-    # =========================================================================
 
     async def process_collection(
         self,
@@ -221,7 +205,7 @@ class ChunkProcessor:
             progress_callback: 진행 상황 콜백 함수 (completed_chunks, total_chunks)
 
         Returns:
-            CollectionResult: 수집 결과 및 모든 청크 정보
+            CollectionResult: 수집 결과 요약 정보
 
         Raises:
             ValueError: 잘못된 파라미터
@@ -277,16 +261,14 @@ class ChunkProcessor:
 
             # 4. 최종 결과 생성
             processing_time = time.time() - start_time
-            return self._create_success_result(chunks, request_info, processing_time)
+            logger.info(f"수집 완료: {len(chunks)}개 청크, 처리 시간 {processing_time:.2f}s")
+            return self._create_success_result(chunks, request_info)
 
         except Exception as e:
-            processing_time = time.time() - start_time
             logger.error(f"단순화된 캔들 수집 실패: {e}")
-            return self._create_error_result(e, chunks if 'chunks' in locals() else [], processing_time)
+            return self._create_error_result(e)
 
-    # =========================================================================
     # 🔗 CandleDataProvider 연동용 API (하위 호환성)
-    # =========================================================================
 
     async def process_single_chunk(self, chunk: ChunkInfo) -> ChunkInfo:
         """
@@ -312,9 +294,7 @@ class ChunkProcessor:
             chunk.mark_failed()
             raise
 
-    # =========================================================================
     # 🏗️ 핵심 처리 로직 - Legacy 로직 보존하되 단순화
-    # =========================================================================
 
     async def _process_single_chunk(self, chunk: ChunkInfo) -> None:
         """
@@ -386,7 +366,7 @@ class ChunkProcessor:
         InternalCollectionState 없이 List[ChunkInfo]만으로 연속성 관리.
         """
         # 청크 크기 계산 (남은 개수 고려)
-        collected_count = sum(c.final_candle_count or 0 for c in completed_chunks if c.is_completed())
+        collected_count = sum(c.calculate_effective_candle_count() for c in completed_chunks if c.is_completed())
         remaining_count = request_info.expected_count - collected_count
         chunk_count = min(remaining_count, self.chunk_size)
 
@@ -490,13 +470,20 @@ class ChunkProcessor:
         """
         logger.debug(f"API 데이터 수집: {chunk.chunk_id}")
 
-        # ChunkInfo에서 최적화된 API 파라미터 추출
         api_count, api_to = chunk.get_api_params()
+        # if api_to is None:
+        #     raise ValueError(f"청크 {chunk.chunk_id}의 API 요청 종료 시간이 없습니다")
 
         try:
-            # 타임프레임별 API 메서드 선택 (Legacy 로직 보존)
+            # Upbit to 파라미터는 항상 다음 틱을 가리키도록 조정
+            fetch_time = TimeUtils.get_time_by_ticks(api_to, chunk.timeframe, 1)
+            to_param = fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
+        except Exception as exc:
+            logger.error(f"to 파라미터 계산 실패: {chunk.chunk_id}, 오류: {exc}")
+            raise
+
+        try:
             if chunk.timeframe == '1s':
-                to_param = self._format_time_param_seconds(api_to)
                 candles = await self.upbit_client.get_candles_seconds(
                     market=chunk.symbol, count=api_count, to=to_param
                 )
@@ -506,31 +493,26 @@ class ChunkProcessor:
                 if unit not in [1, 3, 5, 10, 15, 30, 60, 240]:
                     raise ValueError(f"지원하지 않는 분봉 단위: {unit}")
 
-                to_param = self._format_time_param_minutes(api_to, chunk.timeframe)
                 candles = await self.upbit_client.get_candles_minutes(
                     unit=unit, market=chunk.symbol, count=api_count, to=to_param
                 )
 
             elif chunk.timeframe == '1d':
-                to_param = self._format_time_param_days(api_to, chunk.timeframe)
                 candles = await self.upbit_client.get_candles_days(
                     market=chunk.symbol, count=api_count, to=to_param
                 )
 
             elif chunk.timeframe == '1w':
-                to_param = self._format_time_param_weeks(api_to, chunk.timeframe)
                 candles = await self.upbit_client.get_candles_weeks(
                     market=chunk.symbol, count=api_count, to=to_param
                 )
 
             elif chunk.timeframe == '1M':
-                to_param = self._format_time_param_months(api_to, chunk.timeframe)
                 candles = await self.upbit_client.get_candles_months(
                     market=chunk.symbol, count=api_count, to=to_param
                 )
 
             elif chunk.timeframe == '1y':
-                to_param = self._format_time_param_years(api_to, chunk.timeframe)
                 candles = await self.upbit_client.get_candles_years(
                     market=chunk.symbol, count=api_count, to=to_param
                 )
@@ -538,9 +520,8 @@ class ChunkProcessor:
             else:
                 raise ValueError(f"지원하지 않는 타임프레임: {chunk.timeframe}")
 
-            # API 수집 완료 로깅
             overlap_info = f" (overlap: {chunk.overlap_status.value})" if chunk.overlap_status else ""
-            logger.info(f"API 수집 완료: {chunk.chunk_id}, {len(candles)}개{overlap_info}")
+            logger.info(f"API 수집 완료: {chunk.chunk_id}, {len(candles)}개{overlap_info}, to={to_param}")
 
             return candles
 
@@ -589,85 +570,61 @@ class ChunkProcessor:
             # 폴백: 원본 반환
             return api_candles
 
-    # =========================================================================
-    # 🛠️ 헬퍼 메서드들
-    # =========================================================================
-
-    def _format_time_param_seconds(self, api_to: Optional[datetime]) -> Optional[str]:
-        """초봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        timeframe_delta = TimeUtils.get_timeframe_delta("1s")
-        fetch_time = api_to + timeframe_delta
-        return fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
-
-    def _format_time_param_minutes(self, api_to: Optional[datetime], timeframe: str) -> Optional[str]:
-        """분봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        timeframe_delta = TimeUtils.get_timeframe_delta(timeframe)
-        fetch_time = api_to + timeframe_delta
-        return fetch_time.strftime("%Y-%m-%dT%H:%M:%S")
-
-    def _format_time_param_days(self, api_to: Optional[datetime], timeframe: str) -> Optional[str]:
-        """일봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        fetch_start_time = TimeUtils.get_time_by_ticks(api_to, timeframe, 1)
-        return fetch_start_time.strftime("%Y-%m-%d")
-
-    def _format_time_param_weeks(self, api_to: Optional[datetime], timeframe: str) -> Optional[str]:
-        """주봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        fetch_start_time = TimeUtils.get_time_by_ticks(api_to, timeframe, 1)
-        return fetch_start_time.strftime("%Y-%m-%d")
-
-    def _format_time_param_months(self, api_to: Optional[datetime], timeframe: str) -> Optional[str]:
-        """월봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        fetch_start_time = TimeUtils.get_time_by_ticks(api_to, timeframe, 1)
-        return fetch_start_time.strftime("%Y-%m")
-
-    def _format_time_param_years(self, api_to: Optional[datetime], timeframe: str) -> Optional[str]:
-        """연봉 API 시간 파라미터 포맷"""
-        if not api_to:
-            return None
-        fetch_start_time = TimeUtils.get_time_by_ticks(api_to, timeframe, 1)
-        return fetch_start_time.strftime("%Y")
-
     def _create_success_result(
         self,
         chunks: List[ChunkInfo],
-        request_info: RequestInfo,
-        processing_time: float
+        request_info: RequestInfo
     ) -> CollectionResult:
         """성공 결과 생성"""
-        collected_count = sum(c.final_candle_count or 0 for c in chunks if c.is_completed())
-
+        request_start, request_end = self._calculate_request_bounds(request_info, chunks)
         return CollectionResult(
             success=True,
-            chunks=chunks,
-            collected_count=collected_count,
-            requested_count=request_info.expected_count,
-            processing_time_seconds=processing_time
+            request_start_time=request_start,
+            request_end_time=request_end
         )
 
     def _create_error_result(
         self,
-        error: Exception,
-        chunks: List[ChunkInfo],
-        processing_time: float
+        error: Exception
     ) -> CollectionResult:
         """오류 결과 생성"""
-        collected_count = sum(c.final_candle_count or 0 for c in chunks if c.is_completed())
-
         return CollectionResult(
             success=False,
-            chunks=chunks,
-            collected_count=collected_count,
-            requested_count=0,
-            processing_time_seconds=processing_time,
+            request_start_time=None,
+            request_end_time=None,
             error=error
         )
+
+    def _calculate_request_bounds(
+        self,
+        request_info: RequestInfo,
+        chunks: List[ChunkInfo]
+    ) -> tuple[Optional[datetime], Optional[datetime]]:
+        """요청 타입에 따른 실제 수집 범위 계산"""
+        if not chunks:
+            return None, None
+
+        request_type = request_info.get_request_type()
+        timeframe = request_info.timeframe
+
+        if request_type in (RequestType.COUNT_ONLY, RequestType.END_ONLY):
+            first_chunk = chunks[0]
+            start_time = first_chunk.api_response_start
+            if start_time is None:
+                aligned_to = request_info.get_aligned_to_time()
+                if aligned_to:
+                    start_time = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1)
+            if start_time is None:
+                return None, None
+
+            expected = request_info.get_expected_count()
+            if expected <= 1:
+                end_time = start_time
+            else:
+                end_time = TimeUtils.get_time_by_ticks(start_time, timeframe, -(expected - 1))
+            return start_time, end_time
+
+        aligned_to = request_info.get_aligned_to_time()
+        start_time = TimeUtils.get_time_by_ticks(aligned_to, timeframe, -1) if aligned_to else None
+        end_time = request_info.get_aligned_end_time()
+        return start_time, end_time

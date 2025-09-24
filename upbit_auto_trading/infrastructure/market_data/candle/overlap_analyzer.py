@@ -17,7 +17,12 @@ from typing import Optional
 
 from upbit_auto_trading.domain.repositories.candle_repository_interface import CandleRepositoryInterface
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from .models import OverlapStatus, OverlapResult, OverlapRequest
+# from .models import OverlapStatus, OverlapResult, OverlapRequest
+from upbit_auto_trading.infrastructure.market_data.candle.models.candle_business_models import (
+    OverlapRequest,
+    OverlapResult,
+    OverlapStatus,
+)
 
 logger = create_component_logger("OverlapAnalyzer")
 
@@ -59,7 +64,7 @@ class OverlapAnalyzer:
             self._validate_request(request)
 
         logger.debug(f"겹침 분석 시작: {request.symbol} {request.timeframe} "
-                    f"{request.target_start} ~ {request.target_end} ({request.target_count}개) [업비트 내림차순]")
+                     f"{request.target_start} ~ {request.target_end} ({request.target_count}개) [업비트 내림차순]")
 
         # 1. 겹침 없음 확인 (LIMIT 1 쿼리)
         has_data = await self.repository.has_any_data_in_range(

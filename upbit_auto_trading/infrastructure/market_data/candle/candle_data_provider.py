@@ -128,28 +128,25 @@ class CandleDataProvider:
         )
 
         if not collection_result.success:
-            logger.error(f"캔들 수집 실패: {collection_result.error}")
-            raise collection_result.error
+            error = collection_result.error or RuntimeError("ChunkProcessor 수집이 실패했습니다")
+            logger.error(f"캔들 수집 실패: {error}")
+            raise error
 
-        # ChunkProcessor가 제공한 정확한 범위로 DB 조회
-        if collection_result.collected_start_time and collection_result.collected_end_time:
-            # ChunkProcessor가 계산한 정확한 범위 사용
+        # ChunkProcessor가 제공한 범위로 DB 조회
+        if collection_result.request_start_time and collection_result.request_end_time:
             final_result = await self.repository.get_candles_by_range(
                 symbol=symbol,
                 timeframe=timeframe,
-                start_time=collection_result.collected_start_time,  # 과거부터 (업비트 역순 특성)
-                end_time=collection_result.collected_end_time   # 최신까지
+                start_time=collection_result.request_start_time,
+                end_time=collection_result.request_end_time
             )
-            logger.debug(f"🎯 ChunkProcessor 범위로 DB 조회: "
-                        f"{collection_result.collected_end_time} ~ {collection_result.collected_start_time}")
+            logger.debug("🎯 ChunkProcessor 범위로 DB 조회:"
+                         f" {collection_result.request_start_time} → {collection_result.request_end_time}")
         else:
-            # 폴백: 빈 결과 (범위 정보가 없으면 조회 불가)
-            logger.warning("ChunkProcessor에서 수집 범위 정보를 제공하지 않음 - 빈 결과 반환")
+            logger.warning("ChunkProcessor에서 수집 범위 정보를 제공하지 않아 빈 결과를 반환합니다")
             final_result = []
 
-        logger.info(f"캔들 수집 완료: {len(final_result):,}개 수집 "
-                    f"(요청: {collection_result.requested_count:,}개, "
-                    f"실제: {collection_result.collected_count:,}개)")
+        logger.info(f"캔들 수집 완료: {len(final_result):,}개, 요청 범위 {collection_result.request_start_time} → {collection_result.request_end_time}")
 
         return final_result
 

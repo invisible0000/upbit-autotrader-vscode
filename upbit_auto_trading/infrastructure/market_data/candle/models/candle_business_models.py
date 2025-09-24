@@ -125,17 +125,23 @@ class RequestInfo:
         # 1. aligned_to 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.TO_COUNT, RequestType.TO_END]:
             # 사용자 제공 to 시간 기준
+            if self.to is None:
+                raise ValueError("TO_COUNT 또는 TO_END 요청에서 to 시간이 None일 수 없습니다")
             aligned_to = TimeUtils.align_to_candle_boundary(self.to, self.timeframe)
         else:  # COUNT_ONLY, END_ONLY
             # 요청 시점 기준
             aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
-        object.__setattr__(self, 'aligned_to', aligned_to)
-
         # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
             # 사용자 제공 end 시간 기준
+            if self.end is None:
+                raise ValueError("TO_END 또는 END_ONLY 요청에서 end 시간이 None일 수 없습니다")
             aligned_end = TimeUtils.align_to_candle_boundary(self.end, self.timeframe)
         else:  # COUNT_ONLY, TO_COUNT
+            # aligned_to에서 count-1틱 뒤로 계산
+            if self.count is None:
+                raise ValueError("COUNT_ONLY 또는 TO_COUNT 요청에서 count가 None일 수 없습니다")
+            aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
             # aligned_to에서 count-1틱 뒤로 계산
             aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
         object.__setattr__(self, 'aligned_end', aligned_end)
@@ -235,6 +241,19 @@ class CollectionPlan:
             raise ValueError(f"예상 청크 수는 1 이상이어야 합니다: {self.estimated_chunks}")
         if self.estimated_duration_seconds < 0:
             raise ValueError(f"예상 소요시간은 0 이상이어야 합니다: {self.estimated_duration_seconds}")
+
+
+# ============================================================================
+# 🎯 CollectionResult - 수집 결과 요약 (최소 필드)
+# ============================================================================
+
+@dataclass
+class CollectionResult:
+    """ChunkProcessor → CandleDataProvider 연동용 최소 결과 모델"""
+    success: bool
+    request_start_time: Optional[datetime]
+    request_end_time: Optional[datetime]
+    error: Optional[Exception] = None
 
 
 # ============================================================================
@@ -342,53 +361,78 @@ class ChunkInfo:
         return self.chunk_status == ChunkStatus.COMPLETED
 
     def get_effective_end_time(self) -> Optional[datetime]:
-        """
-        청크가 실제로 다룬 데이터의 끝 시간 (4단계 우선순위 기반)
+        """청크가 담당한 범위의 실제 종료 시각"""
+        status = self.overlap_status
 
-        COMPLETE_OVERLAP 상황에서도 db_end로 완전한 정보 제공!
+        if status == OverlapStatus.COMPLETE_OVERLAP:
+            return self.end or self.db_end or self.final_candle_end or self.api_response_end
 
-        우선순위:
-        1. final_candle_end: 빈 캔들 처리 후 최종 시간
-        2. db_end: DB 기존 데이터 끝 (COMPLETE_OVERLAP 해결!)
-        3. api_response_end: API 응답 마지막 시간
-        4. end: 계획된 청크 끝점
+        if status == OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS:
+            return self.db_end or self.final_candle_end or self.api_response_end or self.end
 
-        Returns:
-            Optional[datetime]: 유효한 끝 시간, 없으면 None
-        """
-        # 1순위: 빈 캔들 처리 후 최종 시간
+        if status in (OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_FRAGMENT):
+            return self.api_response_end or self.final_candle_end or self.end or self.db_end
+
+        if self.api_response_end:
+            return self.api_response_end
         if self.final_candle_end:
             return self.final_candle_end
-
-        # 2순위: DB 기존 데이터 끝 (COMPLETE_OVERLAP 해결!)
-        elif self.db_end:
-            return self.db_end
-
-        # 3순위: API 응답 마지막 시간
-        elif self.api_response_end:
-            return self.api_response_end
-
-        # 4순위: 계획된 청크 끝점
-        elif self.end:
+        if self.end:
             return self.end
-
-        return None
+        return self.db_end
 
     def get_time_source(self) -> str:
         """시간 정보 출처 반환 (디버깅용)"""
+        status = self.overlap_status
+        if status == OverlapStatus.COMPLETE_OVERLAP:
+            return "planned"
+        if status == OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS:
+            return "db_overlap"
+        if status in (OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_FRAGMENT):
+            return "api_response"
+        if self.api_response_end:
+            return "api_response"
         if self.final_candle_end:
             return "final_processing"
-        elif self.db_end:
-            return "db_overlap"  # COMPLETE_OVERLAP 식별!
-        elif self.api_response_end:
-            return "api_response"
-        elif self.end:
+        if self.end:
             return "planned"
+        if self.db_end:
+            return "db_overlap"
         return "none"
 
     def has_complete_time_info(self) -> bool:
         """완전한 시간 정보 보유 여부"""
         return self.get_effective_end_time() is not None
+
+    def calculate_effective_candle_count(self) -> int:
+        """겹침 상황을 반영한 실제 확보 캔들 수"""
+        from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
+
+        if self.chunk_index == 0 and not self.has_overlap_info():
+            return self.final_candle_count or 0
+
+        status = self.overlap_status
+
+        if status is None or status == OverlapStatus.NO_OVERLAP:
+            return self.final_candle_count or 0
+
+        if status == OverlapStatus.COMPLETE_OVERLAP:
+            return self.count
+
+        if status == OverlapStatus.PARTIAL_START:
+            if self.db_start and self.api_response_end:
+                return TimeUtils.calculate_expected_count(self.db_start, self.api_response_end, self.timeframe)
+            return self.final_candle_count or self.count
+
+        if status == OverlapStatus.PARTIAL_MIDDLE_FRAGMENT:
+            return self.final_candle_count or 0
+
+        if status == OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS:
+            if self.to and self.db_end:
+                return TimeUtils.calculate_expected_count(self.to, self.db_end, self.timeframe)
+            return self.count
+
+        return self.final_candle_count or 0
 
     # === Overlap 최적화 메서드들 ===
 
@@ -602,8 +646,11 @@ def should_complete_collection(request_info: RequestInfo, chunks: List[ChunkInfo
     if not chunks:
         return False
 
-    # 개수 기반 완료
-    completed_count = sum(chunk.final_candle_count or 0 for chunk in chunks if chunk.is_completed())
+    # 개수 기반 완료 (겹침을 반영한 효과적인 캔들 수)
+    completed_count = 0
+    for chunk in chunks:
+        if chunk.is_completed():
+            completed_count += chunk.calculate_effective_candle_count()
     if completed_count >= request_info.expected_count:
         return True
 
@@ -658,16 +705,16 @@ def _create_first_chunk_params_by_type(request_info: RequestInfo, chunk_size: in
     from upbit_auto_trading.infrastructure.market_data.candle.time_utils import TimeUtils
 
     request_type = request_info.get_request_type()
-    params = {"market": request_info.symbol}
+    params: Dict[str, Any] = {"market": request_info.symbol}
 
     if request_type == RequestType.COUNT_ONLY:
         # COUNT_ONLY: to 파라미터 없이 count만 사용 (원시 count 사용)
-        chunk_count = min(request_info.count, chunk_size)
+        chunk_count = min(request_info.expected_count, chunk_size)
         params["count"] = chunk_count
 
     elif request_type == RequestType.TO_COUNT:
         # to + count: 사전 계산된 정렬 시간 사용 (원시 count 사용)
-        chunk_count = min(request_info.count, chunk_size)
+        chunk_count = min(request_info.expected_count, chunk_size)
         aligned_to = request_info.get_aligned_to_time()
 
         # 진입점 보정 (사용자 시간 → 내부 시간 변환)
