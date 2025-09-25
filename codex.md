@@ -33,3 +33,8 @@
 - 사용자 요청과 상충되는 정책이 있을 경우, 충돌 사실을 알리고 확인을 구한다.
 
 위 지침은 Codex Agent가 모든 세션에서 우선적으로 참고해야 할 기본 규약이다.
+## 트러블슈팅 & 제안
+- PowerShell 스크립트로 파일을 작성할 때는 반드시 `-Encoding utf8`을 지정하고, Python 스크립트에서는 `encoding="utf-8", newline="\n"`을 명시합니다.
+- 줄바꿈 변환이 필요하면 저장 직전에만 `text.replace('\n', '\r\n')`을 호출하고, 그 전에 반드시 `text = text.replace('\r\n', '\n')`으로 정규화합니다.
+- 자동 치환 스크립트는 대량 `re.sub`보다 블록 기반 편집을 사용하고, 실행 직후 `python -m compileall` 및 `git diff --word-diff`로 공백 이상 여부를 확인합니다.
+- 예기치 않은 빈 줄이 보이면 `python - <<'PY'` + `repr(line)`을 활용해 바이트 단위로 공백/제어 문자를 점검합니다.

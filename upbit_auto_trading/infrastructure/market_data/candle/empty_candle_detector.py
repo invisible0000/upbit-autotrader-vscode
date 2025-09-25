@@ -83,6 +83,7 @@ class EmptyCandleDetector:
         api_candles: List[Dict[str, Any]],
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
+        handle_front_open_empty_candle: bool = False,  # TEST01: 앞이 열린 빈 캔들 처리 허용 여부
         is_first_chunk: bool = False  # 🚀 첫 청크 여부 (api_start +1틱 추가 제어)
     ) -> List[Dict[str, Any]]:
         """
@@ -112,7 +113,14 @@ class EmptyCandleDetector:
 
         # Gap 감지 (실제 is_first_chunk 값 전달)
         gaps = self._detect_gaps_in_datetime_list(
-            datetime_list, self.symbol, api_start, api_end, is_first_chunk=is_first_chunk
+            # datetime_list, self.symbol, api_start, api_end, is_first_chunk=is_first_chunk  # 원본 코드
+            datetime_list,
+            self.symbol,
+            api_start,
+            api_end,
+            handle_front_open_empty_candle=handle_front_open_empty_candle,  # TEST01: 앞이 열린 빈 캔들 처리 허용 여부
+            is_first_chunk=is_first_chunk
+
         )
 
         if not gaps:
@@ -139,6 +147,7 @@ class EmptyCandleDetector:
         market: str,
         api_start: Optional[datetime] = None,
         api_end: Optional[datetime] = None,
+        handle_front_open_empty_candle: bool = False,  # TEST01: 앞이 열린 빈 캔들 처리 허용 여부
         is_first_chunk: bool = False
     ) -> List[GapInfo]:
         """
@@ -167,7 +176,8 @@ class EmptyCandleDetector:
         sorted_datetimes = sorted(datetime_list, reverse=True)
 
         # 🚀 핵심 개선: 청크2부터 api_start +1틱 추가 (청크 경계 Gap 검출 해결)
-        if api_start and not is_first_chunk:
+        # if api_start and not is_first_chunk:  # 원본 코드
+        if api_start and (not is_first_chunk or handle_front_open_empty_candle):  # TEST01: 앞이 열린 빈 캔들 처리 허용 여부
             api_start_plus_one = TimeUtils.get_time_by_ticks(api_start, self.timeframe, 1)
             extended_datetimes = [api_start_plus_one] + sorted_datetimes
             logger.debug(f"🔧 청크2 이상: api_start +1틱 추가 {api_start} → {api_start_plus_one}")
@@ -197,7 +207,8 @@ class EmptyCandleDetector:
                     timeframe=self.timeframe
                 )
                 gaps.append(gap_info)
-                logger.debug(f"✅ Gap 등록 : {expected_current} ~ {current_time}, 참조: {current_time}")
+                # logger.debug(f"✅ Gap 등록 : {expected_current} ~ {current_time}, 참조: {current_time}")
+                logger.debug(f"✅ Gap 등록 : {expected_current} ~ {current_time}")
 
         return gaps
 
@@ -259,7 +270,7 @@ class EmptyCandleDetector:
         time_points = []
         current_time = gap_info.gap_start  # 실제 첫 번째 빈 캔들 시간
 
-        logger.debug(f"🕐 빈 캔들 시간점 생성 시작: {gap_info.gap_start} ~ {gap_info.gap_end}")
+        # logger.debug(f"🕐 빈 캔들 시간점 생성 시작: {gap_info.gap_start} ~ {gap_info.gap_end}")
 
         # gap_end까지 포함하여 생성 (>= 조건 유지)
         while current_time >= gap_info.gap_end:

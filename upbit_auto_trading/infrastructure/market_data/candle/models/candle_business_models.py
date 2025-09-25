@@ -61,15 +61,19 @@ class RequestInfo:
     청크 처리의 시작점이자 모든 요청 파라미터의 단일 소스.
     사전 계산을 통해 성능과 일관성을 보장하는 핵심 비즈니스 모델.
     """
+
     # 필수 파라미터
     symbol: str
     timeframe: str
+
     # 선택적 파라미터 (원시 입력)
     count: Optional[int] = None
     to: Optional[datetime] = None
     end: Optional[datetime] = None
+
     # 요청 시점 기록
     request_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
     # 사전 계산된 필드들 (성능 + 일관성 보장, 항상 존재)
     aligned_to: datetime = field(init=False)
     aligned_end: datetime = field(init=False)
@@ -77,62 +81,80 @@ class RequestInfo:
 
     def __post_init__(self):
         """요청 정보 검증 및 사전 계산"""
+
         # 기본 파라미터 검증
         if not self.symbol:
             raise ValueError("symbol은 필수입니다")
+
         if not self.timeframe:
             raise ValueError("timeframe은 필수입니다")
+
         # count 범위 검증
         if self.count is not None and self.count < 1:
             raise ValueError("count는 1 이상이어야 합니다")
+
         # 시간 순서 검증 (to > end 이어야 함)
         if self.to is not None and self.end is not None and self.to <= self.end:
             raise ValueError("to 시점은 end 시점보다 미래여야 합니다")
+
         # count와 end 동시 사용 방지
         if self.count is not None and self.end is not None:
             raise ValueError("count와 end는 동시에 사용할 수 없습니다")
+
         # 최소 파라미터 조합 확인
         has_count = self.count is not None
         has_to = self.to is not None
         has_end = self.end is not None
+
         valid_combinations = [
             has_count and not has_end,  # count만 또는 to + count
             has_to and has_end and not has_count,  # to + end
             has_end and not has_count and not has_to  # end만
         ]
+
         if not any(valid_combinations):
             raise ValueError("유효하지 않은 파라미터 조합입니다")
+
         # 사전 계산 영역 - 성능 + 일관성 보장 (모든 요청 타입에서 항상 계산)
         request_type = self._get_request_type_internal()
+
         # 1. aligned_to 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.TO_COUNT, RequestType.TO_END]:
             # 사용자 제공 to 시간 기준
             if self.to is None:
                 raise ValueError("TO_COUNT 또는 TO_END 요청에서 to 시간이 None일 수 없습니다")
             aligned_to = TimeUtils.align_to_candle_boundary(self.to, self.timeframe)
+
         else:  # COUNT_ONLY, END_ONLY
             # 요청 시점 기준
             aligned_to = TimeUtils.align_to_candle_boundary(self.request_at, self.timeframe)
+
         object.__setattr__(self, 'aligned_to', aligned_to)
+
         # 2. aligned_end 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.TO_END, RequestType.END_ONLY]:
             # 사용자 제공 end 시간 기준
             if self.end is None:
                 raise ValueError("TO_END 또는 END_ONLY 요청에서 end 시간이 None일 수 없습니다")
             aligned_end = TimeUtils.align_to_candle_boundary(self.end, self.timeframe)
+
         else:  # COUNT_ONLY, TO_COUNT
             # aligned_to에서 count-1틱 뒤로 계산
             if self.count is None:
                 raise ValueError("COUNT_ONLY 또는 TO_COUNT 요청에서 count가 None일 수 없습니다")
             aligned_end = TimeUtils.get_time_by_ticks(aligned_to, self.timeframe, -(self.count - 1))
+
         object.__setattr__(self, 'aligned_end', aligned_end)
+
         # 3. expected_count 계산 (모든 요청 타입에서 항상 존재)
         if request_type in [RequestType.COUNT_ONLY, RequestType.TO_COUNT]:
             # 사용자 제공 count
             expected_count = self.count
+
         else:  # TO_END, END_ONLY
             # 시간 차이로 계산
             expected_count = TimeUtils.calculate_expected_count(aligned_to, aligned_end, self.timeframe)
+
         object.__setattr__(self, 'expected_count', expected_count)
 
     def _get_request_type_internal(self) -> RequestType:
@@ -140,14 +162,19 @@ class RequestInfo:
         has_count = self.count is not None
         has_to = self.to is not None
         has_end = self.end is not None
+
         if has_count and not has_to and not has_end:
             return RequestType.COUNT_ONLY
+
         elif has_to and has_count and not has_end:
             return RequestType.TO_COUNT
+
         elif has_to and has_end and not has_count:
             return RequestType.TO_END
+
         elif has_end and not has_to and not has_count:
             return RequestType.END_ONLY
+
         else:
             raise ValueError(f"알 수 없는 요청 타입: count={has_count}, to={has_to}, end={has_end}")
 
@@ -222,8 +249,6 @@ class CollectionPlan:
 
 # ============================================================================
 # 🎯 CollectionResult - 수집 결과 요약 (최소 필드)
-
-
 # ============================================================================
 
 
@@ -238,8 +263,6 @@ class CollectionResult:
 
 # ============================================================================
 # 🎯 ChunkInfo - 개별 처리의 단일 소스
-
-
 # ============================================================================
 
 
@@ -264,35 +287,44 @@ class ChunkInfo:
     chunk_index: int                      # 청크 순서 (0부터 시작)
     symbol: str                           # 거래 심볼
     timeframe: str                        # 타임프레임
+
     # === 청크 파라미터 (실시간 조정 가능) ===
     count: int                            # 이 청크에서 요청할 캔들 개수
     to: Optional[datetime] = None         # 이 청크의 시작 캔들 시간
     end: Optional[datetime] = None        # 이 청크의 종료 시간
+
     # === 청크 처리 단계별 추적 필드들 ===
     overlap_status: Optional[OverlapStatus] = None           # 겹침 분석 결과
     chunk_status: ChunkStatus = ChunkStatus.PENDING          # 청크 처리 상태
+
     # === OverlapResult 통합 필드 (COMPLETE_OVERLAP 지원) ===
     # DB 기존 데이터 정보 (OverlapResult에서 추출)
     db_start: Optional[datetime] = None                     # DB 데이터 시작점
     db_end: Optional[datetime] = None                       # DB 데이터 종료점
+
     # 요청 단계 (오버랩 분석 결과)
     api_request_count: Optional[int] = None                 # 요청할 API 호출 개수 (부분 겹침 시)
     api_request_start: Optional[datetime] = None            # API 요청 시작점 (부분 겹침 시)
     api_request_end: Optional[datetime] = None              # API 요청 종료점 (부분 겹침 시)
+
     # API 호출 캐시 파라미터 (재사용)
     api_fetch_count: Optional[int] = None                      # 실제 API 호출에 사용할 count
     api_fetch_to: Optional[datetime] = None                    # 실제 API 호출에 사용할 to 값
+
     # 응답 단계 (실제 API 응답)
     api_response_count: Optional[int] = None                # 실제 받은 캔들 개수
     api_response_start: Optional[datetime] = None           # 응답 첫 캔들 시간
     api_response_end: Optional[datetime] = None             # 응답 마지막 캔들 시간
+
     # 최종 처리 단계 (빈 캔들 처리 후)
     final_candle_count: Optional[int] = None                # 최종 캔들 개수
     final_candle_start: Optional[datetime] = None           # 최종 첫 캔들 시간
     final_candle_end: Optional[datetime] = None             # 최종 마지막 캔들 시간
+
     # 계산된 캔들 수 캐시
     effective_candle_count: Optional[int] = None               # 중첩 반영 최종 캔들 수
     cumulative_candle_count: Optional[int] = None              # 이전 누적을 포함한 총합
+
     # === 처리 상태 정보 ===
     # status: str = "pending"  # 삭제: chunk_status로 대체
     created_at: Optional[datetime] = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -354,16 +386,22 @@ class ChunkInfo:
         status = self.overlap_status
         if status == OverlapStatus.COMPLETE_OVERLAP:
             return self.end or self.db_end or self.final_candle_end or self.api_response_end
+
         if status == OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS:
             return self.db_end or self.final_candle_end or self.api_response_end or self.end
+
         if status in (OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_FRAGMENT):
             return self.api_response_end or self.final_candle_end or self.end or self.db_end
+
         if self.api_response_end:
             return self.api_response_end
+
         if self.final_candle_end:
             return self.final_candle_end
+
         if self.end:
             return self.end
+
         return self.db_end
 
     def get_time_source(self) -> str:
@@ -397,23 +435,38 @@ class ChunkInfo:
 
     def _compute_effective_candle_count(self) -> int:
         """중첩 결과와 응답 데이터를 토대로 실효 수량 계산"""
+
+        # 첫 청크이고 겹침 분석을 안하였으면 final_candle_count 사용
+        # final_candle_count이 None이면 API응답이 없었으므로 0
         if self.chunk_index == 0 and not self.has_overlap_info():
             return self.final_candle_count or 0
+
         status = self.overlap_status
+
+        # 겹침 상태가 없거나 None이면 final_candle_count 사용
         if status is None or status == OverlapStatus.NO_OVERLAP:
             return self.final_candle_count or 0
+
+        # 완전 겹침이면 chunkinfo 범위를 db에서 조회하므로 chunk.count와 동일
         if status == OverlapStatus.COMPLETE_OVERLAP:
             return self.count
+
+        # 처음 겹침이면 처음은 db에 존재하므로 db_start ~ api_response_end
         if status == OverlapStatus.PARTIAL_START:
             if self.db_start and self.api_response_end:
                 return TimeUtils.calculate_expected_count(self.db_start, self.api_response_end, self.timeframe)
             return self.final_candle_count or self.count
+
         if status == OverlapStatus.PARTIAL_MIDDLE_FRAGMENT:
             return self.final_candle_count or 0
+
+        # 말단 겹침이면 처음은 API응답이고 끝은 db에 존재하므로 api_response_start ~ db_end
         if status == OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS:
             if self.to and self.db_end:
                 return TimeUtils.calculate_expected_count(self.to, self.db_end, self.timeframe)
             return self.count
+
+        # 안전망: 그 외에 final_candle_count이 있으면 그 값을 사용하고 없으면 0
         return self.final_candle_count or 0
 
     def update_cumulative_candle_count(self, previous_total: int) -> int:
@@ -428,13 +481,16 @@ class ChunkInfo:
         from upbit_auto_trading.infrastructure.logging import create_component_logger
 
         logger = create_component_logger("ChunkInfo")
+
         self.overlap_status = overlap_result.status
         self.db_start = TimeUtils.normalize_datetime_to_utc(getattr(overlap_result, 'db_start', None))
         self.db_end = TimeUtils.normalize_datetime_to_utc(getattr(overlap_result, 'db_end', None))
         self.api_request_start = TimeUtils.normalize_datetime_to_utc(overlap_result.api_start)
         self.api_request_end = TimeUtils.normalize_datetime_to_utc(overlap_result.api_end)
+
         if api_count is not None:
             self.api_request_count = api_count
+
         elif overlap_result.api_start and overlap_result.api_end:
             self.api_request_count = TimeUtils.calculate_expected_count(
                 overlap_result.api_start,
@@ -443,7 +499,9 @@ class ChunkInfo:
             )
         self.effective_candle_count = None
         self.cumulative_candle_count = None
+
         self._update_api_fetch_params_from_overlap()
+
         logger.debug(f"OverlapResult 반영 완료: {self.chunk_id}")
         logger.debug(f"  overlap_status: {self.overlap_status}")
         logger.debug(f"  db_range: {self.db_start} ~ {self.db_end}")
@@ -465,7 +523,10 @@ class ChunkInfo:
         """부분 API 호출 필요 여부 확인"""
         if not self.has_overlap_info():
             return False
-        return self.overlap_status in [OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS]
+        return self.overlap_status in [
+            OverlapStatus.PARTIAL_START,
+            OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS
+        ]
 
     def _update_api_fetch_params_from_overlap(self) -> None:
         """Overlap 상태에 따라 API 호출 파라미터 캐시를 동기화"""
@@ -473,11 +534,14 @@ class ChunkInfo:
             self.api_fetch_count = self.count
             self.api_fetch_to = self.to
             return
+
         status = self.overlap_status
+
         if status == OverlapStatus.COMPLETE_OVERLAP:
             self.api_fetch_count = 0
             self.api_fetch_to = None
             return
+
         if status in (OverlapStatus.PARTIAL_START, OverlapStatus.PARTIAL_MIDDLE_CONTINUOUS):
             fetch_count = self.api_request_count
             if fetch_count is None and self.api_request_start and self.api_request_end:
@@ -486,8 +550,10 @@ class ChunkInfo:
                     self.api_request_end,
                     self.timeframe
                 )
+
             self.api_fetch_count = fetch_count if fetch_count is not None else self.count
             self.api_fetch_to = self.api_request_start if self.api_request_start is not None else self.to
+
             return
         self.api_fetch_count = self.count
         self.api_fetch_to = self.to
@@ -496,15 +562,20 @@ class ChunkInfo:
         """API 호출 파라미터 반환 (count, to)"""
         if not self.has_overlap_info():
             return self.count, self.to
+
         if self.overlap_status == OverlapStatus.COMPLETE_OVERLAP:
             return 0, None
+
         self._update_api_fetch_params_from_overlap()
+
         fetch_count = (
             self.api_fetch_count
             if self.api_fetch_count is not None and self.api_fetch_count > 0
             else self.count
         )
+
         fetch_to = self.api_fetch_to if self.api_fetch_to is not None else self.to
+
         return fetch_count, fetch_to
     # === 단계별 정보 설정 메서드들 ===
 
@@ -517,9 +588,11 @@ class ChunkInfo:
             self.effective_candle_count = None
             self.cumulative_candle_count = None
             return
+
         self.api_response_count = len(candles)
         first_candle_time = candles[0]['candle_date_time_utc']
         last_candle_time = candles[-1]['candle_date_time_utc']
+
         try:
             start_dt = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
@@ -528,6 +601,7 @@ class ChunkInfo:
         except Exception:
             self.api_response_start = None
             self.api_response_end = None
+
         self.effective_candle_count = None
         self.cumulative_candle_count = None
 
@@ -540,9 +614,11 @@ class ChunkInfo:
             self.effective_candle_count = None
             self.cumulative_candle_count = None
             return
+
         self.final_candle_count = len(candles)
         first_candle_time = candles[0]['candle_date_time_utc']
         last_candle_time = candles[-1]['candle_date_time_utc']
+
         try:
             start_dt = datetime.fromisoformat(first_candle_time.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
@@ -551,6 +627,7 @@ class ChunkInfo:
         except Exception:
             self.final_candle_start = None
             self.final_candle_end = None
+
         self.effective_candle_count = None
         self.cumulative_candle_count = None
 
@@ -588,12 +665,15 @@ class OverlapRequest:
 class OverlapResult:
     """겹침 분석 결과 - OverlapAnalyzer v5.0 호환"""
     status: OverlapStatus
+
     # API 요청 범위 (필요시만)
     api_start: Optional[datetime] = None  # API 요청 시작점
     api_end: Optional[datetime] = None    # API 요청 종료점
+
     # DB 조회 범위 (필요시만)
     db_start: Optional[datetime] = None   # DB 조회 시작점
     db_end: Optional[datetime] = None     # DB 조회 종료점
+
     # 추가 정보
     partial_end: Optional[datetime] = None    # 연속 데이터의 끝점
     partial_start: Optional[datetime] = None  # 데이터 시작점 (중간 겹침용)
@@ -604,6 +684,7 @@ class OverlapResult:
         if self.status == OverlapStatus.COMPLETE_OVERLAP:
             if self.api_start is not None or self.api_end is not None:
                 raise ValueError("COMPLETE_OVERLAP에서는 API 요청이 없어야 합니다")
+
         # 겹침 없음: DB 조회 없음
         if self.status == OverlapStatus.NO_OVERLAP:
             if self.db_start is not None or self.db_end is not None:
@@ -617,7 +698,9 @@ def should_complete_collection(request_info: RequestInfo, chunks: List[ChunkInfo
     """수집 종료 여부를 판단"""
     if not chunks:
         return False
+
     completed_count = 0
+
     for chunk in reversed(chunks):
         if not chunk.is_completed():
             continue
@@ -625,8 +708,10 @@ def should_complete_collection(request_info: RequestInfo, chunks: List[ChunkInfo
             completed_count = chunk.cumulative_candle_count
             break
         completed_count += chunk.calculate_effective_candle_count()
+
     if completed_count >= request_info.expected_count:
         return True
+
     if request_info.end:
         last_chunk = chunks[-1]
         last_time = last_chunk.get_effective_end_time()
@@ -651,10 +736,13 @@ def create_collection_plan(
     """
     # RequestInfo의 사전 계산된 값들 활용
     total_count = request_info.get_expected_count()
+
     # 예상 청크 수 계산
     estimated_chunks = (total_count + chunk_size - 1) // chunk_size
+
     # 예상 완료 시간 계산
     estimated_duration_seconds = estimated_chunks / api_rate_limit_rps
+
     # 첫 번째 청크 파라미터 생성
     first_chunk_params = _create_first_chunk_params_by_type(request_info, chunk_size)
     return CollectionPlan(
@@ -669,28 +757,34 @@ def _create_first_chunk_params_by_type(request_info: RequestInfo, chunk_size: in
     """요청 타입별 첫 번째 청크 파라미터 생성"""
     request_type = request_info.get_request_type()
     params: Dict[str, Any] = {"market": request_info.symbol}
+
     if request_type == RequestType.COUNT_ONLY:
         # COUNT_ONLY: to 파라미터 없이 count만 사용 (원시 count 사용)
         chunk_count = min(request_info.expected_count, chunk_size)
         params["count"] = chunk_count
+
     elif request_type == RequestType.TO_COUNT:
         # to + count: 사전 계산된 정렬 시간 사용 (원시 count 사용)
         chunk_count = min(request_info.expected_count, chunk_size)
         print(f"TO_COUNT 첫 청크 생성: count={chunk_count}, to={request_info.to}")  # debug
         aligned_to = request_info.get_aligned_to_time()
         print("debug: 이 출력이 없으면 aligned_to 계산 실패")  # debug
+
         # 진입점 보정 (사용자 시간 → 내부 시간 변환)
         first_chunk_start_time = TimeUtils.get_time_by_ticks(aligned_to, request_info.timeframe, -1)
         params["count"] = chunk_count
         params["to"] = first_chunk_start_time
+
     elif request_type == RequestType.TO_END:
         # to + end: 사전 계산된 정렬 시간 사용 (계산된 expected_count 사용)
         aligned_to = request_info.get_aligned_to_time()
         chunk_count = min(request_info.get_expected_count(), chunk_size)
+
         # 진입점 보정 (사용자 시간 → 내부 시간 변환)
         first_chunk_start_time = TimeUtils.get_time_by_ticks(aligned_to, request_info.timeframe, -1)
         params["count"] = chunk_count
         params["to"] = first_chunk_start_time
+
     elif request_type == RequestType.END_ONLY:
         # END_ONLY: COUNT_ONLY처럼 to 없이 count만 사용 (계산된 expected_count 사용)
         chunk_count = min(request_info.get_expected_count(), chunk_size)

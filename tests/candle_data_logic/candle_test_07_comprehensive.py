@@ -35,7 +35,7 @@ TEST_CONFIG = {
     # 기본 설정 (table_name은 symbol + timeframe으로 자동 생성)
     # "symbol": "KRW-BTC",
     "symbol": "KRW-ELF",
-    "timeframe": "1m",
+    "timeframe": "1s",
 
     # 수집설정(get_cadles 파라미터로 변환)
     # 시간대 표기 예시:
@@ -44,8 +44,13 @@ TEST_CONFIG = {
     # "start_time": "2025-09-22 21:11:00 +09:00",  # UTC 오프셋 표기
     # "start_time": "2025-09-22 12:11:00",         # 시간대 없음 (UTC 기본)
 
-    "start_time": "",  # UTC 오프셋 형식 테스트 (UTC 02:00)
-    "end_time": "",                        # to_count 패턴
+    # "start_time": "",
+    # "end_time": "",
+
+    "start_time": "2025-09-25 06:02:05",
+    # "start_time": "2025-09-25 06:02:00",  # UTC 오프셋 형식 테스트 (UTC 02:00)
+    "end_time": "2025-09-25 06:01:30",                        # to_count 패턴
+
     "count": 15,                           # 15개 수집
 
     # 청크사이즈 설정(CandleDataProvider에 전달, 작게 설정하여 여러 청크로 나누어 수집 테스트)
