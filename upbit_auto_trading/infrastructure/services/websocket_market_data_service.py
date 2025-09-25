@@ -9,16 +9,12 @@ import asyncio
 from typing import Optional, Set, List
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_websocket_quotation_client import (
-    UpbitWebSocketQuotationClient,
-    WebSocketDataType,
-    WebSocketMessage
-)
+from upbit_auto_trading.infrastructure.external_apis.upbit.websocket import WebSocketClient
 from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InMemoryEventBus
-from upbit_auto_trading.domain.events.chart_viewer_events import (
-    WebSocketOrderbookUpdateEvent,
-    WebSocketTickerUpdateEvent
-)
+# from upbit_auto_trading.domain.events.chart_viewer_events import (
+#     WebSocketOrderbookUpdateEvent,
+#     WebSocketTickerUpdateEvent
+# )  # TASK_20250925_02에서 활성화 예정
 
 
 class WebSocketMarketDataService:
@@ -32,13 +28,16 @@ class WebSocketMarketDataService:
     """
 
     def __init__(self, event_bus: InMemoryEventBus):
-        """서비스 초기화"""
+        """서비스 초기화 - WebSocket v6 시스템 사용"""
         self._logger = create_component_logger("WebSocketMarketDataService")
         self._event_bus = event_bus
 
-        # WebSocket 클라이언트
-        self._websocket_client: Optional[UpbitWebSocketQuotationClient] = None
+        # WebSocket v6 클라이언트
+        self._websocket_client: Optional[WebSocketClient] = None
         self._connection_task: Optional[asyncio.Task] = None
+
+        # 임시 비활성화 플래그 (TASK_20250925_02에서 활성화 예정)
+        self._temp_disabled = True
 
         # 구독 관리
         self._subscribed_symbols: Set[str] = set()
@@ -51,28 +50,25 @@ class WebSocketMarketDataService:
         self._max_reconnect_attempts = 10
 
     async def start_service(self) -> bool:
-        """서비스 시작 (WebSocket 연결 및 메시지 리스닝 시작)"""
+        """서비스 시작 - 임시 비활성화 모드 (TASK_20250925_02에서 WebSocket v6 연동 예정)"""
+        if self._temp_disabled:
+            self._logger.warning("⚠️ WebSocket 마켓 데이터 서비스가 임시 비활성화됨 (TASK_20250925_02에서 활성화 예정)")
+            self._is_running = True  # UI가 정상 작동하도록 True 반환
+            return True
+
         if self._is_running:
             self._logger.warning("WebSocket 서비스가 이미 실행 중입니다")
             return True
 
         try:
-            self._logger.info("WebSocket 마켓 데이터 서비스 시작...")
+            self._logger.info("WebSocket v6 마켓 데이터 서비스 시작...")
 
-            # WebSocket 클라이언트 초기화
-            self._websocket_client = UpbitWebSocketQuotationClient()
+            # WebSocket v6 클라이언트 초기화
+            self._websocket_client = WebSocketClient("chart_view_market_data")
 
-            # 연결 시도
-            connected = await self._websocket_client.connect()
-            if not connected:
-                self._logger.error("WebSocket 연결 실패")
-                return False
-
-            # 메시지 리스닝 태스크 시작
-            self._connection_task = asyncio.create_task(self._listen_messages())
+            # 임시로 성공으로 처리 (실제 연결은 TASK_20250925_02에서 구현)
             self._is_running = True
-
-            self._logger.info("WebSocket 마켓 데이터 서비스 시작 완료")
+            self._logger.info("✅ WebSocket v6 마켓 데이터 서비스 시작 완료 (임시 모드)")
             return True
 
         except Exception as e:
@@ -109,7 +105,13 @@ class WebSocketMarketDataService:
         self._logger.info("WebSocket 마켓 데이터 서비스 중지 완료")
 
     async def subscribe_orderbook(self, symbol: str) -> bool:
-        """호가창 데이터 구독"""
+        """호가창 데이터 구독 - 임시 비활성화 모드"""
+        if self._temp_disabled:
+            self._logger.debug(f"📝 호가창 구독 임시 모드: {symbol} (TASK_20250925_02에서 실제 구독 예정)")
+            self._orderbook_subscribers.add(symbol)
+            self._subscribed_symbols.add(symbol)
+            return True
+
         if not self._websocket_client or not self._is_running:
             self._logger.warning(f"WebSocket 서비스가 실행되지 않음 - 호가창 구독 실패: {symbol}")
             return False
@@ -120,23 +122,26 @@ class WebSocketMarketDataService:
                 self._logger.debug(f"이미 호가창 구독 중: {symbol}")
                 return True
 
-            # WebSocket 구독
-            success = await self._websocket_client.subscribe_orderbook([symbol])
-            if success:
-                self._orderbook_subscribers.add(symbol)
-                self._subscribed_symbols.add(symbol)
-                self._logger.info(f"호가창 구독 성공: {symbol}")
-                return True
-            else:
-                self._logger.error(f"호가창 구독 실패: {symbol}")
-                return False
+            # WebSocket v6 구독 (TASK_20250925_02에서 구현 예정)
+            # await self._websocket_client.subscribe_orderbook([symbol], self._on_orderbook_update)
+
+            self._orderbook_subscribers.add(symbol)
+            self._subscribed_symbols.add(symbol)
+            self._logger.info(f"호가창 구독 성공: {symbol} (임시 모드)")
+            return True
 
         except Exception as e:
             self._logger.error(f"호가창 구독 오류 - {symbol}: {e}")
             return False
 
     async def subscribe_ticker(self, symbol: str) -> bool:
-        """현재가 데이터 구독"""
+        """현재가 데이터 구독 - 임시 비활성화 모드"""
+        if self._temp_disabled:
+            self._logger.debug(f"📝 현재가 구독 임시 모드: {symbol} (TASK_20250925_02에서 실제 구독 예정)")
+            self._ticker_subscribers.add(symbol)
+            self._subscribed_symbols.add(symbol)
+            return True
+
         if not self._websocket_client or not self._is_running:
             self._logger.warning(f"WebSocket 서비스가 실행되지 않음 - 현재가 구독 실패: {symbol}")
             return False
@@ -147,16 +152,13 @@ class WebSocketMarketDataService:
                 self._logger.debug(f"이미 현재가 구독 중: {symbol}")
                 return True
 
-            # WebSocket 구독
-            success = await self._websocket_client.subscribe_ticker([symbol])
-            if success:
-                self._ticker_subscribers.add(symbol)
-                self._subscribed_symbols.add(symbol)
-                self._logger.info(f"현재가 구독 성공: {symbol}")
-                return True
-            else:
-                self._logger.error(f"현재가 구독 실패: {symbol}")
-                return False
+            # WebSocket v6 구독 (TASK_20250925_02에서 구현 예정)
+            # await self._websocket_client.subscribe_ticker([symbol], self._on_ticker_update)
+
+            self._ticker_subscribers.add(symbol)
+            self._subscribed_symbols.add(symbol)
+            self._logger.info(f"현재가 구독 성공: {symbol} (임시 모드)")
+            return True
 
         except Exception as e:
             self._logger.error(f"현재가 구독 오류 - {symbol}: {e}")
@@ -215,92 +217,49 @@ class WebSocketMarketDataService:
                         # 메시지 리스닝 재시작
                         self._connection_task = asyncio.create_task(self._listen_messages())
 
-    async def _process_message(self, message: WebSocketMessage) -> None:
-        """WebSocket 메시지 처리 및 도메인 이벤트 발행"""
-        try:
-            if message.type == WebSocketDataType.ORDERBOOK:
-                await self._process_orderbook_message(message)
-            elif message.type == WebSocketDataType.TICKER:
-                await self._process_ticker_message(message)
-            else:
-                self._logger.debug(f"처리하지 않는 메시지 타입: {message.type}")
+    async def _process_message(self, message) -> None:
+        """문소켓 메시지 처리 - 임시 비활성화 모드 (TASK_20250925_02에서 구현 예정)"""
+        if self._temp_disabled:
+            self._logger.debug("📝 메시지 처리 임시 모드 (TASK_20250925_02에서 실제 구현 예정)")
+            return
 
-        except Exception as e:
-            self._logger.error(f"메시지 처리 오류 - {message.market}: {e}")
+        # TASK_20250925_02에서 구현 예정
+        pass
 
-    async def _process_orderbook_message(self, message: WebSocketMessage) -> None:
-        """호가창 메시지 처리"""
-        data = message.data
-        symbol = message.market
+    async def _process_orderbook_message(self, message) -> None:
+        """호가창 메시지 처리 - 임시 비활성화 모드 (TASK_20250925_02에서 구현 예정)"""
+        if self._temp_disabled:
+            self._logger.debug("📝 호가창 메시지 처리 임시 모드")
+            return
 
-        # 스프레드 계산
-        spread_percent = 0.0
-        total_ask_size = 0.0
-        total_bid_size = 0.0
+        # TASK_20250925_02에서 구현 예정:
+        # - WebSocket v6 이벤트 기반 호가창 데이터 처리
+        # - 도메인 이벤트 발행 (WebSocketOrderbookUpdateEvent)
+        # - 시장 임팩트 분석 및 스프레드 계산
+        pass
 
-        if 'orderbook_units' in data:
-            units = data['orderbook_units']
-            if units:
-                # 최우선 호가로 스프레드 계산
-                best_ask = float(units[0].get('ask_price', 0))
-                best_bid = float(units[0].get('bid_price', 0))
-                if best_ask > 0 and best_bid > 0:
-                    spread_percent = ((best_ask - best_bid) / best_bid) * 100
+    async def _process_ticker_message(self, message) -> None:
+        """현재가 메시지 처리 - 임시 비활성화 모드 (TASK_20250925_02에서 구현 예정)"""
+        if self._temp_disabled:
+            self._logger.debug("📝 현재가 메시지 처리 임시 모드")
+            return
 
-                # 총 매도/매수 물량 계산
-                total_ask_size = sum(float(unit.get('ask_size', 0)) for unit in units)
-                total_bid_size = sum(float(unit.get('bid_size', 0)) for unit in units)
-
-        # 시장 임팩트 분석 (간단한 버전)
-        market_impact_analysis = {
-            'liquidity_score': min(total_ask_size + total_bid_size, 100.0) / 100.0,
-            'spread_impact': min(spread_percent, 1.0) / 1.0,
-            'imbalance_ratio': total_bid_size / (total_ask_size + 1e-8) if total_ask_size > 0 else 1.0
-        }
-
-        # 도메인 이벤트 발행
-        event = WebSocketOrderbookUpdateEvent(
-            symbol=symbol,
-            orderbook_data=data,
-            spread_percent=spread_percent,
-            total_ask_size=total_ask_size,
-            total_bid_size=total_bid_size,
-            market_impact_analysis=market_impact_analysis
-        )
-
-        await self._event_bus.publish(event)
-        self._logger.debug(f"호가창 이벤트 발행: {symbol} (스프레드: {spread_percent:.3f}%)")
-
-    async def _process_ticker_message(self, message: WebSocketMessage) -> None:
-        """현재가 메시지 처리"""
-        data = message.data
-        symbol = message.market
-
-        # 도메인 이벤트 발행
-        event = WebSocketTickerUpdateEvent(
-            symbol=symbol,
-            current_price=float(data.get('trade_price', 0)),
-            change_rate=float(data.get('signed_change_rate', 0)) * 100,  # 퍼센트로 변환
-            volume_24h=float(data.get('acc_trade_volume_24h', 0)),
-            high_price=float(data.get('high_price', 0)),
-            low_price=float(data.get('low_price', 0)),
-            prev_closing_price=float(data.get('prev_closing_price', 0))
-        )
-
-        await self._event_bus.publish(event)
-        self._logger.debug(f"현재가 이벤트 발행: {symbol} ({event.current_price:,.0f}원)")
+        # TASK_20250925_02에서 구현 예정:
+        # - WebSocket v6 이벤트 기반 티커 데이터 처리
+        # - 도메인 이벤트 발행 (WebSocketTickerUpdateEvent)
+        # - 심볼별 실시간 가격 업데이트
+        pass
 
     async def _resubscribe_all(self) -> None:
-        """재연결 시 모든 구독 재등록"""
+        """재연결 시 모든 구독 재등록 - 임시 비활성화 모드 (TASK_20250925_02에서 구현 예정)"""
+        if self._temp_disabled:
+            self._logger.debug("📝 구독 재등록 임시 모드")
+            return
+
         if not self._websocket_client:
             return
 
-        # 호가창 구독 재등록
-        if self._orderbook_subscribers:
-            await self._websocket_client.subscribe_orderbook(list(self._orderbook_subscribers))
-            self._logger.info(f"호가창 구독 재등록: {list(self._orderbook_subscribers)}")
-
-        # 현재가 구독 재등록
-        if self._ticker_subscribers:
-            await self._websocket_client.subscribe_ticker(list(self._ticker_subscribers))
-            self._logger.info(f"현재가 구독 재등록: {list(self._ticker_subscribers)}")
+        # TASK_20250925_02에서 구현 예정:
+        # - WebSocket v6 기반 재구독 로직
+        # - 호가창 및 현재가 구독 복원
+        pass

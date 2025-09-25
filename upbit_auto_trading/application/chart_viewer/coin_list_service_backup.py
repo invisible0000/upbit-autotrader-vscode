@@ -9,7 +9,10 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
-import random
+from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.core.smart_data_provider import (
+    SmartDataProvider
+)
+from upbit_auto_trading.infrastructure.market_data_backbone.smart_data_provider.models.priority import Priority
 
 
 @dataclass(frozen=True)
@@ -40,42 +43,49 @@ class CoinListService:
     """
 
     def __init__(self):
-        """서비스 초기화 - 임시 샘플 데이터 모드"""
+        """서비스 초기화"""
         self._logger = create_component_logger("CoinListService")
+        self._smart_data_provider = SmartDataProvider()
 
         # 캐시 데이터
         self._markets_cache: List[Dict[str, Any]] = []
         self._tickers_cache: Dict[str, Dict[str, Any]] = {}
         self._last_update: Optional[str] = None
 
-        # 임시 모드 플래그
-        self._temp_mode = True
-
-        self._logger.info("🪙 코인 리스트 서비스 초기화 완료 (⚠️ 임시 샘플 데이터 모드)")
-        self._logger.warning("⏳ WebSocket 연동 전까지 샘플 데이터를 사용합니다. (TASK_20250925_02에서 실시간 데이터로 전환 예정)")
+        self._logger.info("🪙 코인 리스트 서비스 초기화 완료 (Smart Data Provider 연동)")
 
     async def get_markets_data(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
-        """마켓 데이터 조회 - 임시 샘플 데이터 제공"""
+        """마켓 데이터 조회 (캐싱) - Smart Data Provider 사용"""
         if force_refresh or not self._markets_cache:
             try:
-                self._logger.debug("📝 임시 샘플 마켓 데이터 생성 중...")
+                self._logger.debug("Smart Data Provider를 통한 마켓 데이터 조회 중...")
 
-                # 샘플 마켓 데이터 생성
-                self._markets_cache = self._create_sample_markets_data()
-
-                self._logger.info(
-                    f"✅ 임시 마켓 데이터 생성 완료: {len(self._markets_cache)}개 "
-                    f"(⚠️ 샘플 데이터 - TASK_20250925_02에서 실시간으로 전환 예정)"
+                # Smart Data Provider를 통해 마켓 데이터 조회
+                response = await self._smart_data_provider.get_markets(
+                    is_details=True,
+                    priority=Priority.NORMAL
                 )
 
+                if response.success and response.data:
+                    self._markets_cache = response.data
+                    source = response.metadata.source if response.metadata else "unknown"
+                    response_time = response.metadata.response_time_ms if response.metadata else 0
+                    self._logger.info(
+                        f"✅ 마켓 데이터 조회 완료: {len(self._markets_cache)}개 "
+                        f"(소스: {source}, 응답시간: {response_time:.1f}ms)"
+                    )
+                else:
+                    self._logger.error(f"❌ 마켓 데이터 조회 실패: {response.error}")
+                    raise RuntimeError(response.error)
+
             except Exception as e:
-                self._logger.error(f"❌ 샘플 마켓 데이터 생성 실패: {e}")
+                self._logger.error(f"❌ 마켓 데이터 조회 실패: {e}")
                 raise
 
         return self._markets_cache
 
     async def get_tickers_data(self, markets: List[str], force_refresh: bool = False) -> Dict[str, Dict[str, Any]]:
-        """현재가 데이터 조회 - 임시 샘플 데이터 제공"""
+        """현재가 데이터 조회 (캐싱) - Smart Data Provider 사용 - 배치 최적화"""
         # 캐시되지 않은 마켓만 조회
         uncached_markets = []
         if force_refresh:
@@ -86,16 +96,33 @@ class CoinListService:
 
         if uncached_markets:
             try:
-                self._logger.debug(f"📝 임시 샘플 현재가 데이터 생성 중: {len(uncached_markets)}개")
+                self._logger.debug(f"Smart Data Provider를 통한 현재가 데이터 조회 중: {len(uncached_markets)}개")
 
-                # 샘플 티커 데이터 생성
-                for market in uncached_markets:
-                    self._tickers_cache[market] = self._create_sample_ticker_data(market)
+                # Smart Data Provider를 통해 모든 심볼을 한번에 조회
+                # 마켓과 티커는 분할 처리가 필요 없음 (캔들과 달리)
+                response = await self._smart_data_provider.get_tickers(
+                    symbols=uncached_markets,
+                    priority=Priority.HIGH
+                )
 
-                self._logger.info(f"✅ 임시 티커 데이터 생성 완료: {len(self._tickers_cache)}개 (⚠️ 샘플 데이터)")
+                if response.success and response.data:
+                    # 응답 데이터를 캐시에 저장
+                    if isinstance(response.data, dict):
+                        for symbol, ticker_data in response.data.items():
+                            if ticker_data:
+                                self._tickers_cache[symbol] = ticker_data
+                    elif isinstance(response.data, list):
+                        for ticker_data in response.data:
+                            if ticker_data and 'market' in ticker_data:
+                                symbol = ticker_data['market']
+                                self._tickers_cache[symbol] = ticker_data
+
+                    self._logger.info(f"✅ Smart Data Provider 티커 조회 완료: {len(self._tickers_cache)}개")
+                else:
+                    self._logger.error(f"❌ Smart Data Provider 티커 조회 실패: {response.error}")
 
             except Exception as e:
-                self._logger.error(f"❌ 샘플 현재가 데이터 생성 실패: {e}")
+                self._logger.error(f"❌ 현재가 데이터 조회 실패: {e}")
                 import traceback
                 self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
                 raise
@@ -349,82 +376,3 @@ class CoinListService:
             "tickers_count": len(self._tickers_cache),
             "last_update": self._last_update
         }
-
-    def _create_sample_markets_data(self) -> List[Dict[str, Any]]:
-        """샘플 마켓 데이터 생성 - 주요 코인들"""
-        sample_markets = [
-            # KRW 마켓 주요 코인들
-            {"market": "KRW-BTC", "korean_name": "비트코인", "english_name": "Bitcoin", "market_warning": "NONE"},
-            {"market": "KRW-ETH", "korean_name": "이더리움", "english_name": "Ethereum", "market_warning": "NONE"},
-            {"market": "KRW-XRP", "korean_name": "리플", "english_name": "XRP", "market_warning": "NONE"},
-            {"market": "KRW-ADA", "korean_name": "에이다", "english_name": "Cardano", "market_warning": "NONE"},
-            {"market": "KRW-AVAX", "korean_name": "아발란체", "english_name": "Avalanche", "market_warning": "NONE"},
-            {"market": "KRW-DOT", "korean_name": "폴카닷", "english_name": "Polkadot", "market_warning": "NONE"},
-            {"market": "KRW-MATIC", "korean_name": "폴리곤", "english_name": "Polygon", "market_warning": "NONE"},
-            {"market": "KRW-SOL", "korean_name": "솔라나", "english_name": "Solana", "market_warning": "NONE"},
-            # BTC 마켓 주요 코인들
-            {"market": "BTC-ETH", "korean_name": "이더리움", "english_name": "Ethereum", "market_warning": "NONE"},
-            {"market": "BTC-XRP", "korean_name": "리플", "english_name": "XRP", "market_warning": "NONE"},
-            {"market": "BTC-ADA", "korean_name": "에이다", "english_name": "Cardano", "market_warning": "NONE"},
-            # USDT 마켓 주요 코인들
-            {"market": "USDT-BTC", "korean_name": "비트코인", "english_name": "Bitcoin", "market_warning": "NONE"},
-            {"market": "USDT-ETH", "korean_name": "이더리움", "english_name": "Ethereum", "market_warning": "NONE"},
-        ]
-
-        self._logger.debug(f"📝 샘플 마켓 데이터 생성: {len(sample_markets)}개")
-        return sample_markets
-
-    def _create_sample_ticker_data(self, market: str) -> Dict[str, Any]:
-        """샘플 티커 데이터 생성 - 마켓별 가격 정보"""
-        # 마켓 유형별 기본 가격 설정
-        base_prices = {
-            "KRW-BTC": 52000000,    # 5200만원
-            "KRW-ETH": 3500000,     # 350만원
-            "KRW-XRP": 620,        # 620원
-            "KRW-ADA": 450,        # 450원
-            "KRW-AVAX": 32000,     # 3.2만원
-            "KRW-DOT": 8500,       # 8500원
-            "KRW-MATIC": 750,      # 750원
-            "KRW-SOL": 145000,     # 14.5만원
-            "BTC-ETH": 0.067,      # BTC 대비 ETH 비율
-            "BTC-XRP": 0.0000118,  # BTC 대비 XRP 비율
-            "BTC-ADA": 0.0000086,  # BTC 대비 ADA 비율
-            "USDT-BTC": 50800,     # USDT 대비 BTC 가격
-            "USDT-ETH": 3420,      # USDT 대비 ETH 가격
-        }
-
-        # 기본 가격 설정 (없으면 1000 기본값)
-        base_price = base_prices.get(market, 1000)
-
-        # 무작위 변동 적용 (-5% ~ +5%)
-        price_variation = random.uniform(-0.05, 0.05)
-        current_price = base_price * (1 + price_variation)
-
-        # 변화율 및 변화금액 계산
-        change_rate = abs(price_variation)
-        change_price = abs(current_price - base_price)
-        change_status = "RISE" if price_variation > 0 else "FALL" if price_variation < 0 else "EVEN"
-
-        # 거래대금 (무작위)
-        volume_base = {
-            "KRW-BTC": 50000000000,  # 500억
-            "KRW-ETH": 30000000000,  # 300억
-            "KRW-XRP": 20000000000,  # 200억
-        }
-        acc_trade_price = volume_base.get(market, 1000000000) * random.uniform(0.5, 2.0)
-
-        ticker_data = {
-            "market": market,
-            "trade_price": current_price,
-            "change_rate": change_rate,
-            "change_price": change_price,
-            "change": change_status,
-            "acc_trade_price_24h": acc_trade_price,
-            "opening_price": base_price,
-            "high_price": current_price * 1.02,
-            "low_price": current_price * 0.98,
-            "prev_closing_price": base_price,
-            "timestamp": 1695000000000,  # 샘플 타임스탬프
-        }
-
-        return ticker_data
