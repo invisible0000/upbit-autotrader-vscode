@@ -317,10 +317,8 @@ class ChunkInfo:
     # === 처리 상태 정보 ===
     # status: str = "pending"  # 삭제: chunk_status로 대체
     created_at: Optional[datetime] = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    # === 연결 정보 ===
-    previous_chunk_id: Optional[str] = None   # 이전 청크 ID
-    next_chunk_id: Optional[str] = None       # 다음 청크 ID
+    processing_started_at: Optional[datetime] = None  # 처리 시작 시점
+    completed_at: Optional[datetime] = None           # 처리 완료 시점
 
     def __post_init__(self):
         """청크 정보 검증 및 기본값 설정"""
@@ -341,16 +339,27 @@ class ChunkInfo:
             self.end = TimeUtils.normalize_datetime_to_utc(new_end)
 
     def mark_processing(self) -> None:
-        """처리 중 상태로 변경"""
+        """처리 중 상태로 변경 및 시작 시간 기록"""
         self.chunk_status = ChunkStatus.PROCESSING
+        self.processing_started_at = datetime.now(timezone.utc)
 
     def mark_completed(self) -> None:
-        """완료 상태로 변경"""
+        """완료 상태로 변경 및 완료 시간 기록"""
         self.chunk_status = ChunkStatus.COMPLETED
+        self.completed_at = datetime.now(timezone.utc)
 
     def mark_failed(self) -> None:
-        """실패 상태로 변경"""
+        """실패 상태로 변경 및 완료 시간 기록 (실패도 완료의 한 형태)"""
         self.chunk_status = ChunkStatus.FAILED
+        self.completed_at = datetime.now(timezone.utc)
+
+    def get_processing_duration(self) -> Optional[float]:
+        """처리 시간을 초 단위로 반환 (시작~완료 또는 현재 시점)"""
+        if not self.processing_started_at:
+            return None
+
+        end_time = self.completed_at or datetime.now(timezone.utc)
+        return (end_time - self.processing_started_at).total_seconds()
 
     def is_pending(self) -> bool:
         """대기 중 상태 확인"""

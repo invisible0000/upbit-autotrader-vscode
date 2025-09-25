@@ -125,10 +125,9 @@ class ChunkProcessor:
     def _log_chunk_info_debug(
         self,
         chunk_info: ChunkInfo,
-        status: str = "unknown",
-        processing_time_ms: Optional[float] = None
+        status: str = "unknown"
     ) -> None:
-        """ChunkInfo 상태를 JSON 형식으로 디버그 출력 - 연속 추적용"""
+        """ChunkInfo 상태를 JSON 형식으로 디버그 출력 - 시간 추적 기능 포함"""
         if not chunk_info:
             return
 
@@ -148,7 +147,6 @@ class ChunkProcessor:
 
                 # API 요청 정보
                 "api_request_count": getattr(chunk_info, 'api_request_count', None),
-                # "api_response_count": len(getattr(chunk_info, 'api_response_data', [])),
                 "api_response_count": getattr(chunk_info, 'api_response_count', None),
 
                 # 최종 캔들 정보
@@ -169,8 +167,20 @@ class ChunkProcessor:
                 # 겹침 상태
                 "overlap_status": chunk_info.overlap_status.value if chunk_info.overlap_status else None,
 
-                # 처리 시간
-                "processing_time_ms": processing_time_ms
+                # 🆕 시간 추적 정보 (개선된 시간 추적 기능)
+                "created_at": chunk_info.created_at.isoformat() if chunk_info.created_at else None,
+                "processing_started_at": (
+                    chunk_info.processing_started_at.isoformat()
+                    if chunk_info.processing_started_at else None
+                ),
+                "completed_at": chunk_info.completed_at.isoformat() if chunk_info.completed_at else None,
+                "processing_duration_seconds": chunk_info.get_processing_duration(),
+
+                # 처리 시간 (밀리초 단위 편의 필드)
+                "processing_time_ms": (
+                    chunk_info.get_processing_duration() * 1000
+                    if chunk_info.get_processing_duration() else None
+                )
             }
 
             logger.debug(f"🔍 ChunkInfo: {json.dumps(debug_data, ensure_ascii=False)}")
