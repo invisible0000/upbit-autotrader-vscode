@@ -1,65 +1,45 @@
 """
 📝 Candle Data Models Package
-캔들 데이터 관련 모델들의 통합 패키지
+캔들 데이터 관련 모델들의 통합 패키지 - 정리된 버전
 
-Created: 2025-09-23 (Refactored)
-Purpose: 모든 데이터 구조와 DTO 클래스들을 효율적으로 import할 수 있는 중앙화된 접점
+Created: 2025-09-25 (Restructured)
+Purpose: candle_data_models와 candle_business_models의 명확한 분리
 
-구조:
-- candle_core_models: 핵심 도메인 모델 (CandleData, Enum 등)
-- candle_request_models: 요청/응답 관련 모델
-- candle_cache_models: 캐시 시스템 모델
-- candle_collection_models: 수집 프로세스 관리 모델
-- chunk_processor_models: ChunkProcessor 전용 모델
+현재 구조:
+- candle_data_models: 순수 데이터 모델 (CandleData, CandleDataResponse)
+- candle_business_models: 비즈니스 로직 모델 (RequestInfo, ChunkInfo, CollectionResult, Enum 등)
 """
 
-# === 핵심 모델 (가장 자주 사용) ===
-from .candle_core_models import (
-    # Enum 타입
-    OverlapStatus,
-    ChunkStatus,
-
+# === 순수 데이터 모델 (candle_data_models.py) ===
+from .candle_data_models import (
     # 핵심 데이터 모델
     CandleData,
     CandleDataResponse,
 )
 
-# === 요청/응답 모델 ===
-from .candle_request_models import (
+# === 비즈니스 로직 모델 (candle_business_models.py) ===
+from .candle_business_models import (
+    # Enum 타입 (소스의 원천)
+    OverlapStatus,
+    ChunkStatus,
     RequestType,
-    CandleChunk,
+
+    # 핵심 비즈니스 모델
+    RequestInfo,
+    CollectionPlan,
+    CollectionResult,
+    ChunkInfo,
     OverlapRequest,
     OverlapResult,
-    TimeChunk,
-    CollectionResult as ChunkCollectionResult,  # 개별 청크 수집 결과
-    RequestInfo,
+
+    # 헬퍼 함수들
+    should_complete_collection,
+    create_collection_plan,
 )
 
-# === 수집 프로세스 모델 ===
-from .candle_collection_models import (
-    CollectionState,
-    CollectionPlan,
-    ChunkInfo,
-    ProcessingStats,
-)
-
-# === ChunkProcessor 모델 ===
-from .chunk_processor_models import (
-    # 주요 모델들
-    CollectionProgress,
-    CollectionResult,  # 전체 수집 결과 (ChunkCollectionResult와 다름)
-    InternalCollectionState,
-    ProgressCallback,
-
-    # 팩토리 함수들
-    create_success_collection_result,
-    create_error_collection_result,
-    create_collection_progress,
-)
-
-# === 캐시 모델 (선택적 import) ===
-# 캐시 기능을 사용할 때만 명시적으로 import
-# from .candle_cache_models import CacheKey, CacheEntry, CacheStats
+# === Legacy 호환을 위한 별칭 정의 ===
+# CandleDataProvider에서 사용하는 모델들에 대한 별칭
+CollectionState = dict  # Legacy 호환: 딕셔너리로 간주
 
 
 # === 편의성 함수들 ===
@@ -88,25 +68,27 @@ def create_error_response(error_message: str, response_time_ms: float) -> Candle
 
 # === 공개 API 정의 ===
 __all__ = [
-    # 핵심 모델
-    'OverlapStatus', 'ChunkStatus', 'CandleData', 'CandleDataResponse',
+    # 순수 데이터 모델
+    'CandleData', 'CandleDataResponse',
 
-    # 요청/응답 모델
-    'RequestType', 'CandleChunk', 'OverlapRequest', 'OverlapResult', 'TimeChunk',
-    'ChunkCollectionResult', 'RequestInfo',
+    # Enum 타입 (소스의 원천)
+    'OverlapStatus', 'ChunkStatus', 'RequestType',
 
-    # 수집 프로세스 모델
-    'CollectionState', 'CollectionPlan', 'ChunkInfo', 'ProcessingStats',
+    # 비즈니스 로직 모델
+    'RequestInfo', 'CollectionPlan', 'CollectionResult', 'ChunkInfo',
+    'OverlapRequest', 'OverlapResult',
 
-    # ChunkProcessor 모델
-    'CollectionProgress', 'CollectionResult', 'InternalCollectionState', 'ProgressCallback',
-    'create_success_collection_result', 'create_error_collection_result', 'create_collection_progress',
+    # 헬퍼 함수들
+    'should_complete_collection', 'create_collection_plan',
+
+    # Legacy 호환
+    'CollectionState',
 
     # 편의성 함수
     'create_success_response', 'create_error_response',
 ]
 
 # === 버전 정보 ===
-__version__ = "2.0.0"
+__version__ = "3.1.0"
 __author__ = "Upbit AutoTrader"
-__description__ = "Candle data models with ChunkProcessor v2.0 integration"
+__description__ = "Restructured candle data models with clear separation of concerns"

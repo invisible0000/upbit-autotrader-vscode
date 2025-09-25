@@ -44,7 +44,7 @@ TEST_CONFIG = {
     # "start_time": "2025-09-22 21:11:00 +09:00",  # UTC 오프셋 표기
     # "start_time": "2025-09-22 12:11:00",         # 시간대 없음 (UTC 기본)
 
-    "start_time": "2025-09-24 12:11:00",  # UTC 오프셋 형식 테스트 (UTC 02:00)
+    "start_time": "",  # UTC 오프셋 형식 테스트 (UTC 02:00)
     "end_time": "",                        # to_count 패턴
     "count": 15,                           # 15개 수집
 

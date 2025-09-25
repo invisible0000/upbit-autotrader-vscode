@@ -1,34 +1,14 @@
 """
-📝 Candle Core Models
-캔들 데이터 핵심 모델 - 가장 자주 사용되는 기본 도메인 모델들
+📝 Candle Data Models
+캔들 데이터 핵심 도메인 모델 - 순수 데이터 구조체만 관리
 
-Created: 2025-09-22
-Purpose: 핵심 캔들 데이터 구조와 기본 Enum 정의
+Created: 2025-09-25 (Renamed from candle_core_models.py)
+Purpose: 캔들 데이터 구조 및 응답 모델만 담당 (Enum은 candle_business_models.py에서 관리)
 """
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from typing import List, Optional
-
-
-# === Enum 모델 ===
-
-class OverlapStatus(Enum):
-    """겹침 상태 - OverlapAnalyzer v5.0과 정확히 일치하는 5개 분류"""
-    NO_OVERLAP = "no_overlap"                        # 1. 겹침 없음
-    COMPLETE_OVERLAP = "complete_overlap"            # 2.1. 완전 겹침
-    PARTIAL_START = "partial_start"                  # 2.2.1. 시작 겹침
-    PARTIAL_MIDDLE_FRAGMENT = "partial_middle_fragment"    # 2.2.2.1. 중간 겹침 (파편)
-    PARTIAL_MIDDLE_CONTINUOUS = "partial_middle_continuous"  # 2.2.2.2. 중간 겹침 (말단)
-
-
-class ChunkStatus(Enum):
-    """청크 처리 상태 - CandleDataProvider v4.0 호환"""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 # === 핵심 도메인 모델 ===
@@ -79,9 +59,13 @@ class CandleData:
                 raise ValueError("모든 가격은 0보다 커야 합니다")
             if self.candle_acc_trade_volume is not None and self.candle_acc_trade_volume < 0:
                 raise ValueError("거래량은 0 이상이어야 합니다")
-            if self.high_price < max(self.opening_price, self.trade_price, self.low_price):
+            # 고가 검증 (None이 아닌 값들과 비교)
+            other_prices = [p for p in [self.opening_price, self.trade_price, self.low_price] if p is not None]
+            if self.high_price and other_prices and self.high_price < max(other_prices):
                 raise ValueError("고가는 시가/종가/저가보다 높아야 합니다")
-            if self.low_price > min(self.opening_price, self.trade_price, self.high_price):
+            # 저가 검증 (None이 아닌 값들과 비교)
+            other_prices = [p for p in [self.opening_price, self.trade_price, self.high_price] if p is not None]
+            if self.low_price and other_prices and self.low_price > min(other_prices):
                 raise ValueError("저가는 시가/종가/고가보다 낮아야 합니다")
         # ============================================
         # 🔍 END VALIDATION ZONE

@@ -25,7 +25,7 @@ Architecture: RequestInfo + List[ChunkInfo] = 완전한 비즈니스 로직
 
 import time
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any, Callable, List
 
 # Infrastructure 로깅
@@ -39,8 +39,6 @@ from upbit_auto_trading.infrastructure.market_data.candle.models.candle_business
     ChunkInfo,
     OverlapRequest,
     OverlapResult,
-    OverlapStatus,
-    ChunkStatus,
     RequestType,
     should_complete_collection,
     create_collection_plan
