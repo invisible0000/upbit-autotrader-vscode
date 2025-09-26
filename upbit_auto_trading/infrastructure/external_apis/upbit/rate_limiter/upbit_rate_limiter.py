@@ -43,7 +43,7 @@ class UnifiedUpbitRateLimiter:
         # 🆕 웹소켓 복합 제한용 분단위 TAT
         self.group_tats_minute: Dict[UpbitRateLimitGroup, float] = {}  # Theoretical Arrival Time (분단위)
 
-        # � 순수 GCRA: Fixed Window 제거, TAT만으로 모든 제어
+        # 🆕 순수 GCRA: Fixed Window 제거, TAT만으로 모든 제어
 
         # Lock-Free 대기열 (aiohttp 패턴)
         self.waiters: Dict[UpbitRateLimitGroup, collections.OrderedDict[str, WaiterInfo]] = {}

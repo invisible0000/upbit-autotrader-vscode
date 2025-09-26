@@ -3,12 +3,11 @@
 
 WebSocket과 REST API를 통합하여 호가창 데이터를 제공합니다.
 - WebSocket 우선 정책 (QAsync 기반)
-- REST API 백업
+- REST API 백업 (DDD Infrastructure 준수)
 - 실시간 데이터 통합
 """
 
 import asyncio
-import requests
 from typing import Optional, Dict, Any
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -18,6 +17,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InMemoryEventBus
 from upbit_auto_trading.infrastructure.services.websocket_market_data_service import WebSocketMarketDataService
 from upbit_auto_trading.application.use_cases.chart_viewer_websocket_use_case import ChartViewerWebSocketUseCase
+from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client import UpbitPublicClient
 
 
 class OrderbookDataService(QObject):
@@ -39,12 +39,17 @@ class OrderbookDataService(QObject):
         self._websocket_initialized = False
         self._websocket_connected = False
 
+        # REST API 클라이언트 (DDD Infrastructure Layer)
+        self._rest_client: Optional[UpbitPublicClient] = None
+        self._rest_client_ready = False
+
         # 현재 상태
         self._current_symbol = "KRW-BTC"
         self._current_market = "KRW"
 
         # 지연 초기화 (PyQt6 환경에서 안전)
         self._initialize_websocket_delayed()
+        self._initialize_rest_client_delayed()
 
     def _initialize_websocket_delayed(self) -> None:
         """WebSocket 지연 초기화"""
@@ -60,6 +65,15 @@ class OrderbookDataService(QObject):
             self._logger.info("✅ OrderbookDataService WebSocket 초기화 완료")
         except Exception as e:
             self._logger.error(f"WebSocket 초기화 실패: {e}")
+
+    def _initialize_rest_client_delayed(self) -> None:
+        """REST 클라이언트 지연 초기화 - DDD Infrastructure Layer 준수"""
+        try:
+            self._rest_client = UpbitPublicClient()
+            self._rest_client_ready = True
+            self._logger.info("✅ OrderbookDataService REST 클라이언트 초기화 완료")
+        except Exception as e:
+            self._logger.error(f"❌ REST 클라이언트 초기화 실패: {e}")
 
     @asyncSlot(str)
     async def subscribe_symbol(self, symbol: str) -> bool:
@@ -118,22 +132,21 @@ class OrderbookDataService(QObject):
             self._logger.error(f"❌ WebSocket 구독 해제 오류 - {symbol}: {e}")
             self.unsubscription_completed.emit(symbol)
 
-    def load_rest_orderbook(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """REST API로 호가 데이터 로드"""
+    async def load_rest_orderbook(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """DDD Infrastructure Layer를 통한 호가 데이터 로드"""
+        if not self._rest_client_ready or not self._rest_client:
+            self._logger.warning(f"⚠️ REST 클라이언트 준비되지 않음: {symbol}")
+            return None
+
         try:
-            url = "https://api.upbit.com/v1/orderbook"
-            params = {"markets": symbol}
+            # DDD Infrastructure Layer 준수: UpbitPublicClient 사용
+            orderbooks_data = await self._rest_client.get_orderbooks([symbol])
 
-            response = requests.get(url, params=params, timeout=5)
-            if response.status_code != 200:
-                self._logger.error(f"API 응답 오류: {response.status_code}")
+            if not orderbooks_data:
+                self._logger.warning(f"⚠️ 호가 데이터 없음: {symbol}")
                 return None
 
-            data = response.json()
-            if not data:
-                return None
-
-            orderbook = data[0]
+            orderbook = orderbooks_data[0]
             asks = []
             bids = []
 
@@ -171,17 +184,14 @@ class OrderbookDataService(QObject):
                 "bids": bids,
                 "timestamp": orderbook.get("timestamp", datetime.now().isoformat()),
                 "market": symbol.split("-")[0],
-                "source": "rest_api"
+                "source": "infrastructure_layer"  # DDD 준수 표시
             }
 
-            self._logger.info(f"✅ REST 호가 데이터 로드: {symbol} (매도 {len(asks)}개, 매수 {len(bids)}개)")
+            self._logger.info(f"✅ DDD Infrastructure 호가 데이터 로드: {symbol} (매도 {len(asks)}개, 매수 {len(bids)}개)")
             return result
 
-        except requests.exceptions.RequestException as e:
-            self._logger.error(f"❌ 호가 API 호출 실패: {symbol} - {str(e)}")
-            return None
         except Exception as e:
-            self._logger.error(f"❌ 호가 데이터 처리 실패: {symbol} - {str(e)}")
+            self._logger.error(f"❌ DDD Infrastructure 호가 데이터 로드 실패: {symbol} - {str(e)}")
             return None
 
     def get_connection_status(self) -> Dict[str, Any]:
@@ -189,6 +199,7 @@ class OrderbookDataService(QObject):
         return {
             "websocket_initialized": self._websocket_initialized,
             "websocket_connected": self._websocket_connected,
+            "rest_client_ready": self._rest_client_ready,
             "current_symbol": self._current_symbol,
             "current_market": self._current_market
         }

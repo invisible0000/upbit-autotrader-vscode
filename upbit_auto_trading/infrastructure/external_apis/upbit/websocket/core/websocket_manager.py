@@ -43,12 +43,14 @@ from upbit_auto_trading.infrastructure.external_apis.upbit.rate_limiter import (
 # WebSocket Rate Limiter 전역 인스턴스
 _websocket_rate_limiter: Optional[UnifiedUpbitRateLimiter] = None
 
+
 async def get_websocket_rate_limiter() -> UnifiedUpbitRateLimiter:
     """WebSocket 전용 Rate Limiter 인스턴스 가져오기"""
     global _websocket_rate_limiter
     if _websocket_rate_limiter is None:
         _websocket_rate_limiter = await get_unified_rate_limiter()
     return _websocket_rate_limiter
+
 
 async def gate_websocket(action: str, max_wait: float = 15.0):
     """WebSocket 전용 Rate Limiting Gate"""

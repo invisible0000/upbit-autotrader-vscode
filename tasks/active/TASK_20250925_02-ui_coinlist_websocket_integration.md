@@ -34,7 +34,7 @@
 
 ## ⚙️ 작업 계획
 ### Phase 1: WebSocket 기반 데이터 레이어 구축
-- [ ] REST API 클라이언트로 마켓 목록 조회 구현
+- [ ] 기존 `UpbitPublicClient.get_markets()` 통합하여 마켓 목록 조회
 - [ ] WebSocketClient 통합 및 초기화 로직 구현
 - [ ] 마켓별 심볼 필터링 및 배치 구독 메서드 구현
 - [ ] 실시간 티커 데이터 수신 콜백 메서드 구현
@@ -58,9 +58,10 @@
 - [ ] 장시간 운영 안정성 테스트
 
 ## 🛠️ 개발할 도구
-- `websocket_coin_service.py`: WebSocket 기반 새로운 CoinListService 구현
-- `upbit_rest_client.py`: 마켓 목록 조회용 REST API 클라이언트
-- `data_throttler.py`: UI 업데이트 쓰로틀링 유틸리티
+- ✅ **기존 활용**: `UpbitPublicClient.get_markets()` - 마켓 목록 조회 (DDD Infrastructure Layer)
+- ✅ **기존 활용**: `WebSocketClient.subscribe_ticker()` - 실시간 티커 구독 (WebSocket v6)
+- 🆕 `data_throttler.py`: UI 업데이트 쓰로틀링 유틸리티 (60fps 제한)
+- 🆕 CoinListService 내부 WebSocket 통합 로직
 
 ## 🎯 성공 기준
 - ✅ 코인리스트에서 실시간 가격 변동 확인 (1초 이내 업데이트)

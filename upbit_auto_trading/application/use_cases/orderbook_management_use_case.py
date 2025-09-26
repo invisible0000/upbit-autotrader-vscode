@@ -77,8 +77,8 @@ class OrderbookManagementUseCase(QObject):
             # 새 심볼 설정
             self._current_symbol = symbol
 
-            # 즉시 REST 데이터 로드 (논블로킹)
-            rest_data = self._data_service.load_rest_orderbook(symbol)
+            # 즉시 REST 데이터 로드 (비동기)
+            rest_data = await self._data_service.load_rest_orderbook(symbol)
             if rest_data and self._update_callback:
                 self._update_callback(rest_data)
 
@@ -118,9 +118,9 @@ class OrderbookManagementUseCase(QObject):
             # @asyncSlot 데코레이터가 있는 메서드는 자동으로 QAsync 이벤트 루프에서 처리됨
             _ = self.change_symbol(symbol)  # 의도적으로 결과 무시
 
-    def load_current_data(self) -> Optional[Dict[str, Any]]:
-        """현재 심볼의 데이터 로드 (REST)"""
-        data = self._data_service.load_rest_orderbook(self._current_symbol)
+    async def load_current_data(self) -> Optional[Dict[str, Any]]:
+        """현재 심볼의 데이터 로드 (REST) - 비동기"""
+        data = await self._data_service.load_rest_orderbook(self._current_symbol)
         if data and self._update_callback:
             self._update_callback(data)
         return data

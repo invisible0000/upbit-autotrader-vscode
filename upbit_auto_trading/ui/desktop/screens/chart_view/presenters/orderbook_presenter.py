@@ -78,9 +78,21 @@ class OrderbookPresenter(QObject):
         return await self.change_symbol(symbol)
 
     def refresh_data(self) -> None:
-        """데이터 수동 갱신"""
+        """데이터 수동 갱신 - QAsync 비동기 처리"""
         try:
-            self._use_case.load_current_data()
+            # QAsync를 통한 비동기 호출 (Fire-and-Forget 패턴)
+            import asyncio
+
+            async def _async_refresh():
+                try:
+                    await self._use_case.load_current_data()
+                except Exception as e:
+                    self._logger.error(f"비동기 데이터 갱신 오류: {e}")
+                    self.error_occurred.emit(f"데이터 갱신 오류: {str(e)}")
+
+            # 비동기 태스크 생성 (UI 블로킹 방지)
+            asyncio.create_task(_async_refresh())
+
         except Exception as e:
             self._logger.error(f"데이터 갱신 오류: {e}")
             self.error_occurred.emit(f"데이터 갱신 오류: {str(e)}")
@@ -151,7 +163,16 @@ class OrderbookPresenter(QObject):
                 # WebSocket 미연결 - 전체 갱신
                 self._logger.debug("🔄 REST 전체 갱신")
 
-            self._use_case.load_current_data()
+            # QAsync를 통한 비동기 호출
+            import asyncio
+
+            async def _async_backup_refresh():
+                try:
+                    await self._use_case.load_current_data()
+                except Exception as e:
+                    self._logger.error(f"비동기 백업 갱신 오류: {e}")
+
+            asyncio.create_task(_async_backup_refresh())
 
         except Exception as e:
             self._logger.error(f"백업 갱신 오류: {e}")
