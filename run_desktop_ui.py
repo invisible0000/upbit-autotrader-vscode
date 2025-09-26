@@ -331,18 +331,20 @@ async def main_async() -> int:
 
 def main() -> int:
     """메인 진입점"""
-    # 전역 예외 핸들러 설정
-    setup_exception_handler()
-
-    logger.info("🎯 업비트 자동매매 시스템 시작 (QAsync AppKernel 기반)")
-
     if not QASYNC_AVAILABLE:
-        logger.error("❌ QAsync가 설치되지 않았습니다.")
+        print("❌ QAsync가 설치되지 않았습니다.")
         return 1
 
     try:
-        # QAsync 이벤트 루프 생성 및 실행
+        # ✨ 핵심: QApplication을 가장 먼저 생성하여 DPI 설정 선점
+        # 다른 모든 초기화보다 앞서서 Qt가 DPI 제어하도록 함
         app = qasync.QApplication(sys.argv)
+
+        # QApplication 생성 후에 나머지 초기화 진행
+        setup_exception_handler()
+        logger.info("🎯 업비트 자동매매 시스템 시작 (QAsync AppKernel 기반)")
+
+        # QAsync 이벤트 루프 생성
         loop = qasync.QEventLoop(app)
 
         with loop:

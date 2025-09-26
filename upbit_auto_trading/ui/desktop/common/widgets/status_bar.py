@@ -12,9 +12,7 @@ from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.monitoring.simple_failure_monitor import (
     get_api_statistics, is_api_healthy
 )
-from upbit_auto_trading.infrastructure.services.websocket_status_service import (
-    websocket_status_service
-)
+# websocket_status_service는 지연 로딩으로 처리
 
 
 class StatusBar(QStatusBar):
@@ -282,6 +280,10 @@ class StatusBar(QStatusBar):
     def _check_websocket_status(self):
         """웹소켓 상태 체크 - 가볍게 구현"""
         try:
+            # 웹소켓 상태 서비스 지연 로딩
+            from upbit_auto_trading.infrastructure.services.websocket_status_service import get_websocket_status_service
+            websocket_status_service = get_websocket_status_service()
+
             # 웹소켓 상태 서비스에서 전체 상태 조회
             connected = websocket_status_service.get_overall_status()
 
@@ -318,6 +320,10 @@ class StatusBar(QStatusBar):
             return
 
         try:
+            # 웹소켓 상태 서비스 지연 로딩
+            from upbit_auto_trading.infrastructure.services.websocket_status_service import get_websocket_status_service
+            websocket_status_service = get_websocket_status_service()
+
             summary = websocket_status_service.get_status_summary()
             tooltip_text = (
                 f"📡 웹소켓 상태 (읽기 전용):\n"

@@ -185,5 +185,20 @@ class WebSocketStatusService:
         self.logger.info("웹소켓 상태 서비스 초기화됨")
 
 
-# 전역 인스턴스 (Singleton 패턴)
-websocket_status_service = WebSocketStatusService()
+# 전역 인스턴스 (Singleton 패턴) - 지연 로드
+_websocket_status_service_instance = None
+
+
+def get_websocket_status_service():
+    """지연 로드된 WebSocket Status Service 인스턴스 반환"""
+    global _websocket_status_service_instance
+    if _websocket_status_service_instance is None:
+        _websocket_status_service_instance = WebSocketStatusService()
+    return _websocket_status_service_instance
+
+
+# 하위 호환성을 위한 별칭 (기존 코드가 동작하도록)
+# 주의: 이 별칭은 지연 로딩을 위해 함수로 변경됨
+def websocket_status_service():
+    """하위 호환성을 위한 함수 형태 별칭"""
+    return get_websocket_status_service()
