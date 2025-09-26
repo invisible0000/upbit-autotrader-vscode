@@ -1,11 +1,25 @@
 """
-Event-Driven 로그 뷰어 위젯
-기존 Thread-Safe 패턴을 Event-Driven Architecture로 전환
+Event-Driven 로그 뷰어 위젯 - QAsync 통합 버전
+격리 이벤트 루프 패턴을 QAsync 통합 패턴으로 전환
 """
 
 import asyncio
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+
+# QAsync 통합 imports
+try:
+    from qasync import asyncSlot
+    QASYNC_AVAILABLE = True
+except ImportError:
+    QASYNC_AVAILABLE = False
+
+    def asyncSlot(*args):
+        def decorator(func):
+            return func
+        return decorator
+
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTextEdit, QComboBox, QLineEdit, QLabel, QCheckBox,
@@ -21,6 +35,7 @@ from upbit_auto_trading.infrastructure.events.logging_events import (
 from upbit_auto_trading.infrastructure.events.event_system_initializer import EventSystemInitializer
 from upbit_auto_trading.infrastructure.events.bus.event_bus_interface import IEventBus
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
+
 
 class EventDrivenLogViewerWidget(QWidget):
     """Event-Driven Architecture 기반 로그 뷰어 위젯"""
@@ -192,15 +207,16 @@ class EventDrivenLogViewerWidget(QWidget):
 
     def _setup_event_system(self):
         """Event System 비동기 초기화"""
-        # QTimer를 사용해 다음 이벤트 루프에서 초기화
-        QTimer.singleShot(0, self._async_setup_event_system)
+        # QAsync 환경에서 비동기 초기화
+        QTimer.singleShot(0, self._trigger_async_setup)
 
-    def _async_setup_event_system(self):
-        """비동기 Event System 설정"""
+    @asyncSlot()
+    async def _trigger_async_setup(self):
+        """QAsync 통합 Event System 설정"""
         try:
-            # Event System 초기화
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            if not QASYNC_AVAILABLE:
+                self.logger.error("QAsync가 설치되지 않았습니다")
+                return
 
             # 간단한 Event System 생성 (비동기 초기화 없음)
             self.event_bus, self.domain_publisher = EventSystemInitializer.create_simple_event_system(
@@ -210,10 +226,10 @@ class EventDrivenLogViewerWidget(QWidget):
             # 이벤트 구독 설정
             self._subscribe_to_events()
 
-            # Event Bus 시작 (비동기)
-            loop.run_until_complete(self.event_bus.start())
+            # 🎯 핵심 변경: 격리 루프 대신 직접 await
+            await self.event_bus.start()
 
-            self.logger.info("Event System 초기화 및 시작 완료")
+            self.logger.info("Event System 초기화 및 시작 완료 (QAsync 모드)")
 
         except Exception as e:
             self.logger.error(f"Event System 초기화 실패: {e}")

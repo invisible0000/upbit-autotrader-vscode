@@ -47,6 +47,11 @@ import re
 from typing import List, Dict, Any, Optional, Union, Tuple
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.runtime import (
+    LoopGuard,
+    ensure_main_loop,
+    get_loop_guard
+)
 from .rate_limiter import (
     UnifiedUpbitRateLimiter,
     get_unified_rate_limiter,
@@ -124,7 +129,9 @@ class UpbitPublicClient:
 
     def __init__(self,
                  enable_gzip: bool = True,
-                 rate_limiter: Optional[UnifiedUpbitRateLimiter] = None):
+                 rate_limiter: Optional[UnifiedUpbitRateLimiter] = None,
+                 loop: Optional[asyncio.AbstractEventLoop] = None,
+                 loop_guard: Optional[LoopGuard] = None):
         """
         업비트 공개 API 클라이언트 초기화
 
@@ -140,6 +147,11 @@ class UpbitPublicClient:
         """
         # Infrastructure 로깅 초기화
         self._logger = create_component_logger("UpbitPublicClient")
+
+        # 루프 인식 및 LoopGuard 설정
+        self._loop = loop  # 명시적 루프 저장 (None은 나중에 추론)
+        self._loop_guard = loop_guard or get_loop_guard()
+        self._initialized = False
 
         # Rate Limiter 설정 - 새로운 통합 Rate Limiter 사용
         self._rate_limiter = rate_limiter  # None이면 나중에 전역 인스턴스 사용
@@ -173,6 +185,7 @@ class UpbitPublicClient:
                 f"total_requests={self._stats['total_requests']})")
 
     async def __aenter__(self):
+        await self._ensure_initialized()  # 루프 인식 및 LoopGuard 검증
         await self._ensure_session()
         return self
 
@@ -182,6 +195,20 @@ class UpbitPublicClient:
     # ================================================================
     # 세션 및 리소스 관리
     # ================================================================
+
+    async def _ensure_initialized(self) -> None:
+        """지연 초기화로 루프 바인딩 문제 해결"""
+        if not self._initialized:
+            # LoopGuard 검증
+            if self._loop_guard:
+                self._loop_guard.ensure_main_loop(where="UpbitPublicClient._ensure_initialized")
+
+            # 루프 확정
+            if self._loop is None:
+                self._loop = asyncio.get_running_loop()
+                self._logger.debug(f"🔄 이벤트 루프 인식: {type(self._loop).__name__}@{id(self._loop)}")
+
+            self._initialized = True
 
     async def _ensure_session(self) -> None:
         """HTTP 세션 확보 - 연결 풀링, 타임아웃 및 gzip 압축 최적화"""
@@ -208,10 +235,12 @@ class UpbitPublicClient:
             if self._enable_gzip:
                 headers['Accept-Encoding'] = 'gzip, deflate'
 
+            # 루프 확정 후 리소스 생성 (QAsync 환경에서 안전)
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
-                headers=headers
+                headers=headers,
+                loop=self._loop  # 명시적 루프 바인딩
             )
             self._logger.debug(f"🌐 HTTP 세션 초기화 완료 (gzip: {self._enable_gzip})")
 
@@ -285,6 +314,7 @@ class UpbitPublicClient:
         Raises:
             Exception: API 오류 또는 네트워크 오류
         """
+        await self._ensure_initialized()  # 루프 인식 및 LoopGuard 검증
         await self._ensure_session()
 
         if not self._session:

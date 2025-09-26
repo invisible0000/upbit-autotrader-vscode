@@ -1,0 +1,97 @@
+# QAsync 아키텍처 컴플라이언스 Pre-commit Hook
+# 목적: 개발자가 커밋하기 전에 금지 패턴을 차단하여 회귀 방지
+
+repos:
+  - repo: local
+    hooks:
+      - id: qasync-compliance-check
+        name: QAsync Architecture Compliance Check
+        entry: powershell
+        args:
+          - -ExecutionPolicy
+          - Bypass
+          - -Command
+          - |
+            Write-Host "🔍 QAsync 아키텍처 컴플라이언스 검사..." -ForegroundColor Yellow
+
+            # 금지 패턴 검사
+            $violations = Get-ChildItem upbit_auto_trading -Recurse -Include *.py | Select-String -Pattern "new_event_loop\(|run_until_complete\(|asyncio\.run\(|set_event_loop\(None\)|QApplication\.exec\(\)"
+
+            if ($violations) {
+                Write-Host "🚨 금지된 이벤트 루프 패턴이 발견되었습니다!" -ForegroundColor Red
+                foreach ($violation in $violations) {
+                    Write-Host "  ❌ $($violation.Filename):$($violation.LineNumber)" -ForegroundColor Red
+                }
+                Write-Host "💡 docs/big_issues/issue_01_20250926/QAsync_REFACTORING_WORK_GUIDE.md를 참조하세요." -ForegroundColor Green
+                exit 1
+            } else {
+                Write-Host "✅ QAsync 컴플라이언스 통과!" -ForegroundColor Green
+            }
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+      - id: qasync-pattern-recommendation
+        name: QAsync Pattern Recommendation
+        entry: powershell
+        args:
+          - -ExecutionPolicy
+          - Bypass
+          - -Command
+          - |
+            # 변경된 파일에서 비동기 패턴 확인
+            $changedFiles = git diff --cached --name-only --diff-filter=ACMR | Where-Object { $_ -match "\.py$" -and $_ -match "upbit_auto_trading" }
+
+            if ($changedFiles) {
+                $hasAsyncCode = $false
+                foreach ($file in $changedFiles) {
+                    if (Test-Path $file) {
+                        $content = Get-Content $file -Raw
+                        if ($content -match "async def|await |asyncio\.|threading\.") {
+                            $hasAsyncCode = $true
+                            break
+                        }
+                    }
+                }
+
+                if ($hasAsyncCode) {
+                    $hasQasync = $changedFiles | ForEach-Object {
+                        if (Test-Path $_) { Get-Content $_ -Raw }
+                    } | Where-Object { $_ -match "@asyncSlot|qasync\." }
+
+                    if (-not $hasQasync) {
+                        Write-Host "💡 비동기 코드가 감지되었습니다. QAsync 패턴 사용을 고려하세요:" -ForegroundColor Yellow
+                        Write-Host "  - @asyncSlot 데코레이터 사용" -ForegroundColor Cyan
+                        Write-Host "  - TaskManager를 통한 태스크 관리" -ForegroundColor Cyan
+                        Write-Host "  - qasync.QApplication 사용" -ForegroundColor Cyan
+                    }
+                }
+            }
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: end-of-file-fixer
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+
+  - repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+      - id: black
+        args: [--line-length=100]
+        exclude: ^(legacy/|temp/|examples/)
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=100]
+        exclude: ^(legacy/|temp/|examples/)

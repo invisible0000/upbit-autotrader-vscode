@@ -1,0 +1,175 @@
+# QAsync 통합 아키텍처 검증 워크플로우
+# 목적: 이벤트 루프 충돌을 유발하는 금지 패턴 검사로 회귀 방지
+
+name: QAsync Architecture Compliance Check
+
+on:
+  push:
+    branches: [ main, develop, feature/qasync-* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  qasync-compliance:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PowerShell
+      shell: pwsh
+      run: |
+        Write-Host "QAsync 아키텍처 컴플라이언스 검사 시작..." -ForegroundColor Green
+
+    - name: Check for prohibited event loop patterns
+      shell: pwsh
+      run: |
+        Write-Host "🔍 금지된 이벤트 루프 패턴 검사 중..." -ForegroundColor Yellow
+
+        # 금지 패턴 리스트
+        $prohibitedPatterns = @(
+          "new_event_loop\(",
+          "run_until_complete\(",
+          "asyncio\.run\(",
+          "set_event_loop\(None\)",
+          "QApplication\.exec\(\)"
+        )
+
+        $violations = @()
+        $totalFiles = 0
+
+        # upbit_auto_trading 디렉토리에서 Python 파일 검사
+        $pythonFiles = Get-ChildItem upbit_auto_trading -Recurse -Include *.py -ErrorAction SilentlyContinue
+
+        if (-not $pythonFiles) {
+            Write-Host "⚠️ Python 파일을 찾을 수 없습니다. 디렉토리 구조를 확인하세요." -ForegroundColor Yellow
+            exit 0
+        }
+
+        foreach ($pattern in $prohibitedPatterns) {
+            Write-Host "  패턴 검사: $pattern" -ForegroundColor Cyan
+
+            $matches = $pythonFiles | Select-String -Pattern $pattern
+
+            foreach ($match in $matches) {
+                $violation = @{
+                    File = $match.Filename
+                    Line = $match.LineNumber
+                    Pattern = $pattern
+                    Content = $match.Line.Trim()
+                }
+                $violations += $violation
+
+                Write-Host "    ❌ $($match.Filename):$($match.LineNumber) - $pattern" -ForegroundColor Red
+            }
+        }
+
+        # 결과 요약
+        Write-Host "`n📊 검사 결과 요약:" -ForegroundColor Green
+        Write-Host "  - 검사된 파일: $($pythonFiles.Count)개" -ForegroundColor White
+        Write-Host "  - 발견된 위반: $($violations.Count)개" -ForegroundColor White
+
+        if ($violations.Count -gt 0) {
+            Write-Host "`n🚨 QAsync 아키텍처 위반 사항이 발견되었습니다!" -ForegroundColor Red
+            Write-Host "다음 패턴들은 다중 이벤트 루프 충돌을 유발할 수 있습니다:" -ForegroundColor Red
+
+            # 파일별 위반 사항 그룹화
+            $violationsByFile = $violations | Group-Object File
+
+            foreach ($fileGroup in $violationsByFile) {
+                Write-Host "`n📁 $($fileGroup.Name):" -ForegroundColor Yellow
+                foreach ($violation in $fileGroup.Group) {
+                    Write-Host "  Line $($violation.Line): $($violation.Pattern)" -ForegroundColor Red
+                    Write-Host "    $($violation.Content)" -ForegroundColor Gray
+                }
+            }
+
+            Write-Host "`n💡 해결 방법:" -ForegroundColor Green
+            Write-Host "  1. docs/big_issues/issue_01_20250926/QAsync_REFACTORING_WORK_GUIDE.md 참조" -ForegroundColor White
+            Write-Host "  2. @asyncSlot 데코레이터와 qasync 패턴 사용" -ForegroundColor White
+            Write-Host "  3. TaskManager를 통한 태스크 생명주기 관리" -ForegroundColor White
+
+            # CI 빌드 실패
+            exit 1
+        } else {
+            Write-Host "✅ QAsync 아키텍처 컴플라이언스 통과!" -ForegroundColor Green
+        }
+
+    - name: Check for recommended qasync patterns
+      shell: pwsh
+      run: |
+        Write-Host "`n🔍 권장 QAsync 패턴 사용 현황 확인..." -ForegroundColor Yellow
+
+        $recommendedPatterns = @(
+          "@asyncSlot",
+          "qasync\.",
+          "TaskManager",
+          "loop_guard"
+        )
+
+        $pythonFiles = Get-ChildItem upbit_auto_trading -Recurse -Include *.py -ErrorAction SilentlyContinue
+        $patternUsage = @{}
+
+        foreach ($pattern in $recommendedPatterns) {
+            $matches = $pythonFiles | Select-String -Pattern $pattern
+            $patternUsage[$pattern] = $matches.Count
+
+            if ($matches.Count -gt 0) {
+                Write-Host "✅ $pattern 패턴: $($matches.Count)개 파일에서 사용됨" -ForegroundColor Green
+            } else {
+                Write-Host "⚠️ $pattern 패턴: 사용되지 않음" -ForegroundColor Yellow
+            }
+        }
+
+        Write-Host "`n📈 QAsync 마이그레이션 진행률:" -ForegroundColor Green
+        $asyncSlotUsage = $patternUsage["@asyncSlot"]
+        $qasyncUsage = $patternUsage["qasync\."]
+
+        if ($asyncSlotUsage -gt 0 -or $qasyncUsage -gt 0) {
+            Write-Host "  QAsync 패턴 도입이 시작되었습니다." -ForegroundColor Green
+        } else {
+            Write-Host "  QAsync 패턴 도입이 필요합니다." -ForegroundColor Yellow
+        }
+
+  dependency-check:
+    runs-on: windows-latest
+    needs: qasync-compliance
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Check qasync dependency
+      shell: pwsh
+      run: |
+        Write-Host "📦 QAsync 의존성 확인 중..." -ForegroundColor Yellow
+
+        # requirements.txt 확인
+        if (Test-Path "requirements.txt") {
+            $requirements = Get-Content "requirements.txt"
+            $hasQasync = $requirements | Where-Object { $_ -match "qasync" }
+
+            if ($hasQasync) {
+                Write-Host "✅ qasync 의존성이 requirements.txt에 있습니다." -ForegroundColor Green
+                Write-Host "  $hasQasync" -ForegroundColor Gray
+            } else {
+                Write-Host "⚠️ qasync 의존성이 requirements.txt에 없습니다." -ForegroundColor Yellow
+                Write-Host "  QAsync 마이그레이션을 위해 qasync>=0.24.1을 추가하세요." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "⚠️ requirements.txt 파일을 찾을 수 없습니다." -ForegroundColor Yellow
+        }
+
+        # pyproject.toml 확인 (선택적)
+        if (Test-Path "pyproject.toml") {
+            $pyproject = Get-Content "pyproject.toml" -Raw
+            if ($pyproject -match "qasync") {
+                Write-Host "✅ qasync 의존성이 pyproject.toml에도 있습니다." -ForegroundColor Green
+            }
+        }

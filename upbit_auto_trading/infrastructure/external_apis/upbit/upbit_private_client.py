@@ -48,6 +48,10 @@ from typing import List, Dict, Any, Optional, Literal
 from decimal import Decimal
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.runtime import (
+    LoopGuard,
+    get_loop_guard
+)
 from .upbit_auth import UpbitAuthenticator
 from .rate_limiter import (
     UnifiedUpbitRateLimiter,
@@ -119,7 +123,9 @@ class UpbitPrivateClient:
                  access_key: Optional[str] = None,
                  secret_key: Optional[str] = None,
                  dry_run: bool = True,
-                 rate_limiter: Optional[UnifiedUpbitRateLimiter] = None):
+                 rate_limiter: Optional[UnifiedUpbitRateLimiter] = None,
+                 loop: Optional[asyncio.AbstractEventLoop] = None,
+                 loop_guard: Optional[LoopGuard] = None):
         """
         업비트 프라이빗 API 클라이언트 초기화
 
@@ -138,6 +144,11 @@ class UpbitPrivateClient:
         """
         # Infrastructure 로깅 초기화
         self._logger = create_component_logger("UpbitPrivateClient")
+
+        # 루프 인식 및 LoopGuard 설정
+        self._loop = loop  # 명시적 루프 저장 (None은 나중에 추론)
+        self._loop_guard = loop_guard or get_loop_guard()
+        self._initialized = False
 
         # 인증 관리자 초기화
         self._auth = UpbitAuthenticator(access_key, secret_key)
@@ -177,6 +188,7 @@ class UpbitPrivateClient:
                 f"dry_run={self._dry_run_config.enabled})")
 
     async def __aenter__(self):
+        await self._ensure_initialized()  # 루프 인식 및 LoopGuard 검증
         await self._ensure_session()
         return self
 
@@ -187,8 +199,24 @@ class UpbitPrivateClient:
     # 세션 및 리소스 관리
     # ================================================================
 
+    async def _ensure_initialized(self) -> None:
+        """지연 초기화로 루프 바인딩 문제 해결"""
+        if not self._initialized:
+            # LoopGuard 검증
+            if self._loop_guard:
+                self._loop_guard.ensure_main_loop(where="UpbitPrivateClient._ensure_initialized")
+
+            # 루프 확정
+            if self._loop is None:
+                self._loop = asyncio.get_running_loop()
+                self._logger.debug(f"🔄 이벤트 루프 인식: {type(self._loop).__name__}@{id(self._loop)}")
+
+            self._initialized = True
+
     async def _ensure_session(self) -> None:
         """HTTP 세션 확보 - 연결 풀링 및 타임아웃 최적화"""
+        await self._ensure_initialized()  # 루프 인식 우선 수행
+
         if not self._session or self._session.closed:
             connector = aiohttp.TCPConnector(
                 limit=100,           # 전체 연결 제한
@@ -201,13 +229,15 @@ class UpbitPrivateClient:
                 connect=10,    # 연결 타임아웃
                 sock_read=20   # 소켓 읽기 타임아웃
             )
+            # 루프 확정 후 리소스 생성 (QAsync 환경에서 안전)
             self._session = aiohttp.ClientSession(
                 connector=connector,
                 timeout=timeout,
                 headers={
                     'Accept': 'application/json',
                     'User-Agent': 'upbit-autotrader-vscode/1.0'
-                }
+                },
+                loop=self._loop  # 명시적 루프 바인딩
             )
             self._logger.debug("🌐 HTTP 세션 초기화 완료")
 
@@ -329,6 +359,7 @@ class UpbitPrivateClient:
         if is_order_request and self._dry_run_config.enabled:
             return await self._handle_dry_run_request(method, endpoint, params, data)
 
+        await self._ensure_initialized()  # 루프 인식 및 LoopGuard 검증
         await self._ensure_session()
 
         if not self._session:
