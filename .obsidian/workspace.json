@@ -20,8 +20,23 @@
               "icon": "lucide-file",
               "title": "QAsync_REFACTORING_WORK_GUIDE"
             }
+          },
+          {
+            "id": "85aabfded0c3bf2f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/need_dependency_injection/의존성 주입(DI) 심층 검토 보고서.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "의존성 주입(DI) 심층 검토 보고서"
+            }
           }
-        ]
+        ],
+        "currentTab": 1
       },
       {
         "id": "27cf04792e665568",
@@ -33,12 +48,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/big_issues/QAsync_통합_이벤트_기반_구조/참조/이벤트 루프 아키텍처 충돌 이슈 보고서.md",
+                "file": "docs/need_dependency_injection/의존성 주입(Dependency Injection, DI)에 대한 심층 검토.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "이벤트 루프 아키텍처 충돌 이슈 보고서"
+              "title": "의존성 주입(Dependency Injection, DI)에 대한 심층 검토"
             }
           }
         ]
@@ -187,8 +202,25 @@
       "obsidian-excalidraw-plugin:New drawing": false
     }
   },
-  "active": "50433380517a233d",
+  "active": "85aabfded0c3bf2f",
   "lastOpenFiles": [
+    "tasks/active/README_TASK_20250928_01.md",
+    "tasks/archived/TASK_20250927_01-di_system_completion_replaced.md",
+    "tasks/active/TASK_20250928_01-clean_di_architecture_rebuild.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/참조/이벤트 루프 아키텍처 충돌 이슈 보고서.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/참조/QAsync_리펙토링작업_조언.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/참조/qasync 이벤트 버스 기반 개발 방법론.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/참조/qasync 이벤트 버스 개발 가이드.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/참조",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/QASYNC_INTEGRATION_SCOPE_AUDIT_20250926.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/QAsync 통합 아키텍처 전환 작업 계획.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/QAsync 통합 아키텍처 전환 작업 계획 (파일 레벨).md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/QAsync 기반 단일 이벤트 루프로 통합.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조/EVENT_LOOP_ARCHITECTURE_CRISIS_20250926.md",
+    "docs/big_issues/issue_01_20250926/QAsync_통합_이벤트_기반_구조",
+    "docs/need_dependency_injection/의존성 주입(Dependency Injection, DI)에 대한 심층 검토.md",
+    "docs/need_dependency_injection/의존성 주입(DI) 심층 검토 보고서.md",
+    "docs/big_issues/QAsync_통합_이벤트_기반_구조/참조/이벤트 루프 아키텍처 충돌 이슈 보고서.md",
     "data/market_data.sqlite3-shm",
     "data/market_data.sqlite3-wal",
     "data/strategies.sqlite3-shm",
@@ -197,7 +229,6 @@
     "data/settings.sqlite3-wal",
     "temp",
     "backups",
-    "logs/session_20250928_133801_PID11296.log",
     "legacy/system_backbone/STAT_현재시스템현황.md",
     "legacy/system_backbone/STAT_핵심백본5개.md",
     "legacy/system_backbone/STAT_신경혈관시스템.md",
@@ -209,22 +240,6 @@
     "legacy/system_backbone/EXPL_캐시시스템설계안.md",
     "legacy/system_backbone/EXPL_MDMS스크리너시나리오01.md",
     "legacy/system_backbone/EXPL_MDMS매매전략시나리오02.md",
-    "legacy/system_backbone",
-    "docs/Spec-Driven Development/README.md",
-    "docs/Spec-Driven Development/OVERLAP_ANALYZER_SDD_APPLICATION_GUIDE.md",
-    "docs/Spec-Driven Development/GITHUB_SPEC_KIT_ANALYSIS_GUIDE.md",
-    "docs/Spec-Driven Development",
-    "docs/development_methodologies/OVERLAP_ANALYZER_SDD_APPLICATION_GUIDE.md",
-    "docs/development_methodologies/GITHUB_SPEC_KIT_ANALYSIS_GUIDE.md",
-    "legacy/templates/tasks-template.md",
-    "legacy/templates/plan-template.md",
-    "legacy/templates/copilot-prompts-guide.md",
-    "legacy/templates/agent-file-template.md",
-    "legacy/templates/copilot-feature-template.md",
-    "legacy/memory/constitution_update_checklist.md",
-    "legacy/memory/constitution.md",
-    "legacy/specs_from_spec_kit/003-candledataprovider-infrastructure/contracts/upbit_api_schema.md",
-    "legacy/specs_from_spec_kit/003-candledataprovider-infrastructure/contracts/overlap_analyzer_compatibility.md",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px@2x.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_512px.png",
     "venv/Lib/site-packages/pyqtgraph/icons/peegee/peegee_256px@2x.png",
