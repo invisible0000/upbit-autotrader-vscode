@@ -153,8 +153,8 @@ class QAsyncApplication:
                     ensure_main_loop(where="MainWindow 생성", component="MainApp")
 
                     if self.app_context:
-                        # 기존 방식 (ApplicationContext 사용)
-                        self.main_window = MainWindow(self.app_context)
+                        # @inject 패턴 사용 - Container에서 자동 주입
+                        self.main_window = self.app_context.container().main_window()
                     else:
                         # AppKernel만 사용하는 새로운 방식 (추후 구현)
                         logger.warning("ApplicationContext 없이 MainWindow 생성은 추후 구현됩니다.")

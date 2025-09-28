@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 import threading
 
+
 class DatabaseManager:
     """SQLite 데이터베이스 연결 관리"""
 
@@ -121,6 +122,7 @@ class DatabaseManager:
 
             self._connections.clear()
             self._logger.info("모든 활성 데이터베이스 연결이 정리되었습니다.")
+
 
 class DatabaseConnectionProvider:
     """데이터베이스 연결 제공자 (Singleton)"""

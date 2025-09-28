@@ -1,287 +1,369 @@
-from typing import Dict, Any, TypeVar, Type, Callable, Optional, List
-import inspect
-from enum import Enum
-import threading
-import logging
+"""
+DDD Architecture 기반 애플리케이션 DI 컨테이너
+Clean Architecture + dependency-injector 라이브러리 활용
+"""
 
-T = TypeVar('T')
+from dependency_injector import containers, providers
+from dependency_injector.wiring import Provide, inject
 
-class LifetimeScope(Enum):
-    """객체 생명주기 범위"""
-    TRANSIENT = "transient"    # 매번 새 인스턴스
-    SINGLETON = "singleton"    # 앱 전체에서 하나
-    SCOPED = "scoped"         # 스코프 내에서 하나
+from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-class ServiceRegistration:
-    """서비스 등록 정보"""
+logger = create_component_logger("DIContainer")
 
-    def __init__(self, service_type: Type, implementation: Any,
-                 lifetime: LifetimeScope = LifetimeScope.TRANSIENT,
-                 factory: Optional[Callable] = None):
-        self.service_type = service_type
-        self.implementation = implementation
-        self.lifetime = lifetime
-        self.factory = factory
-        self.instance: Optional[Any] = None
 
-class DIContainer:
-    """의존성 주입 컨테이너"""
+class ApplicationContainer(containers.DeclarativeContainer):
+    """
+    DDD 아키텍처 기반 애플리케이션 DI 컨테이너
 
-    def __init__(self, parent: Optional['DIContainer'] = None):
-        """
-        Args:
-            parent: 부모 컨테이너 (계층적 컨테이너 지원)
-        """
-        self._services: Dict[Type, ServiceRegistration] = {}
-        self._instances: Dict[Type, Any] = {}
-        self._parent = parent
-        self._lock = threading.RLock()
-        self._logger = logging.getLogger(__name__)
-        self._disposing = False
+    Clean Architecture 계층별 Provider 구성:
+    - Configuration: 환경별 설정 관리
+    - Infrastructure: DB, 로깅, 외부 API 클라이언트
+    - Domain: 도메인 서비스, 리포지토리 인터페이스
+    - Application: 애플리케이션 서비스, Use Case
+    - Presentation: UI 서비스, 테마 관리
+    """
 
-    def register_singleton(self, service_type: Type,
-                           implementation: Any = None) -> 'DIContainer':
-        """싱글톤으로 서비스 등록"""
-        return self._register(service_type, implementation, LifetimeScope.SINGLETON)
+    # =============================================================================
+    # Configuration Provider - 환경별 설정 관리
+    # =============================================================================
+    config = providers.Configuration()
 
-    def register_transient(self, service_type: Type,
-                           implementation: Any = None) -> 'DIContainer':
-        """일시적(매번 새 인스턴스)으로 서비스 등록"""
-        return self._register(service_type, implementation, LifetimeScope.TRANSIENT)
+    # =============================================================================
+    # Infrastructure Layer Providers
+    # =============================================================================
 
-    def register_scoped(self, service_type: Type,
-                        implementation: Any = None) -> 'DIContainer':
-        """스코프 내 싱글톤으로 서비스 등록"""
-        return self._register(service_type, implementation, LifetimeScope.SCOPED)
+    # Logging Service (가장 기본이 되는 서비스)
+    logging_service = providers.Factory(
+        "upbit_auto_trading.infrastructure.logging.create_component_logger",
+        name="DIContainer"
+    )
 
-    def register_factory(self, service_type: Type,
-                         factory: Callable[[], Any],
-                         lifetime: LifetimeScope = LifetimeScope.TRANSIENT) -> 'DIContainer':
-        """팩토리 함수로 서비스 등록"""
-        registration = ServiceRegistration(
-            service_type=service_type,
-            implementation=None,
-            lifetime=lifetime,
-            factory=factory
+    # Database Manager - 3-DB 분리 구조 지원
+    database_manager = providers.Singleton(
+        "upbit_auto_trading.infrastructure.services.database_connection_service.DatabaseConnectionService"
+    )
+
+    # Path Service - 설정 파일 및 DB 경로 관리
+    path_service = providers.Singleton(
+        "upbit_auto_trading.infrastructure.configuration.get_path_service"
+    )
+
+    # Config Loader - 설정 파일 로더
+    config_loader = providers.Singleton(
+        "upbit_auto_trading.infrastructure.config.loaders.config_loader.ConfigLoader"
+    )
+
+    # Settings Service - 애플리케이션 설정 관리
+    settings_service = providers.Factory(
+        "upbit_auto_trading.infrastructure.services.settings_service.SettingsService",
+        config_loader=config_loader
+    )
+
+    # =============================================================================
+    # Repository Providers - Infrastructure Layer 구현체
+    # =============================================================================
+
+    # Secure Keys Repository (SQLite 구현체) - ApiKeyService 의존성
+    secure_keys_repository = providers.Singleton(
+        "upbit_auto_trading.infrastructure.repositories.sqlite_secure_keys_repository.SqliteSecureKeysRepository",
+        db_manager=database_manager
+    )
+
+    # Strategy Repository (SQLite 구현체)
+    strategy_repository = providers.Singleton(
+        "upbit_auto_trading.infrastructure.repositories.sqlite_strategy_repository.SqliteStrategyRepository",
+        db_manager=database_manager
+    )
+
+    # Trigger Repository (SQLite 구현체)
+    trigger_repository = providers.Singleton(
+        "upbit_auto_trading.infrastructure.repositories.sqlite_trigger_repository.SqliteTriggerRepository",
+        db_manager=database_manager
+    )
+
+    # Settings Repository (SQLite 구현체) - 향후 구현 예정
+    settings_repository = providers.Singleton(
+        # 향후 구현: "upbit_auto_trading.infrastructure.repositories.sqlite_settings_repository.SqliteSettingsRepository",
+        # database_manager=database_manager,
+        lambda: logger.debug("SettingsRepository Provider - 향후 구현 예정")
+    )
+
+    # =============================================================================
+    # External API Providers - Infrastructure Layer
+    # =============================================================================
+
+    # API Key Service - 보안 키 관리 (SecureKeysRepository 의존성 주입)
+    api_key_service = providers.Factory(
+        "upbit_auto_trading.infrastructure.services.api_key_service.ApiKeyService",
+        secure_keys_repository=secure_keys_repository
+    )
+
+    # Upbit Public Client
+    upbit_public_client = providers.Singleton(
+        # 향후 구현: "upbit_auto_trading.infrastructure.external_apis.upbit.upbit_public_client.UpbitPublicClient",
+        lambda: logger.debug("UpbitPublicClient Provider - 향후 구현 예정")
+    )
+
+    # Upbit Private Client
+    upbit_private_client = providers.Factory(
+        # 향후 구현: "upbit_auto_trading.infrastructure.external_apis.upbit.upbit_private_client.UpbitPrivateClient",
+        # api_key_service=api_key_service,
+        lambda: logger.debug("UpbitPrivateClient Provider - 향후 구현 예정")
+    )
+
+    # =============================================================================
+    # Domain Layer Providers - 도메인 서비스
+    # =============================================================================
+
+    # Strategy Compatibility Service
+    strategy_compatibility_service = providers.Factory(
+        "upbit_auto_trading.domain.services.strategy_compatibility_service.StrategyCompatibilityService",
+        settings_repository=settings_repository
+    )
+
+    # Domain Event Publisher
+    domain_event_publisher = providers.Singleton(
+        "upbit_auto_trading.domain.events.domain_event_publisher.DomainEventPublisher"
+    )
+
+    # =============================================================================
+    # Application Layer Providers - Use Case 및 애플리케이션 서비스
+    # =============================================================================
+
+    # Trigger Application Service
+    trigger_application_service = providers.Factory(
+        "upbit_auto_trading.application.services.trigger_application_service.TriggerApplicationService",
+        trigger_repository=trigger_repository,
+        strategy_repository=strategy_repository,
+        settings_repository=settings_repository,
+        compatibility_service=strategy_compatibility_service
+    )
+
+    # Chart Data Service
+    chart_data_service = providers.Factory(
+        # 향후 구현: "upbit_auto_trading.application.services.chart_data_service.ChartDataService",
+        # upbit_public_client=upbit_public_client,
+        lambda: logger.debug("ChartDataService Provider - 향후 구현 예정")
+    )
+
+    # Websocket Application Service
+    websocket_application_service = providers.Factory(
+        # 향후 구현: "upbit_auto_trading.application.services.websocket_application_service.WebsocketApplicationService",
+        # upbit_public_client=upbit_public_client,
+        lambda: logger.debug("WebsocketApplicationService Provider - 향후 구현 예정")
+    )
+
+    # =============================================================================
+    # UI Layer Providers - Presentation Layer 서비스
+    # =============================================================================
+
+    # Style Manager - 전역 스타일 관리 (Theme Service보다 먼저 정의)
+    style_manager = providers.Singleton(
+        "upbit_auto_trading.ui.desktop.common.styles.style_manager.StyleManager"
+    )
+
+    # Theme Service - UI 테마 관리
+    theme_service = providers.Factory(
+        "upbit_auto_trading.infrastructure.services.theme_service.ThemeService",
+        settings_service=settings_service,
+        style_manager=style_manager
+    )
+
+    # Navigation Bar Service - 네비게이션 관리
+    navigation_service = providers.Factory(
+        "upbit_auto_trading.ui.desktop.common.widgets.navigation_bar.NavigationBar"
+    )
+
+    # Status Bar Service - 상태 바 관리
+    status_bar_service = providers.Factory(
+        "upbit_auto_trading.ui.desktop.common.widgets.status_bar.StatusBar",
+        database_health_service=providers.Factory(
+            "upbit_auto_trading.application.services.database_health_service.DatabaseHealthService"
         )
+    )
 
-        with self._lock:
-            self._services[service_type] = registration
+    # Main Window - 메인 애플리케이션 윈도우
+    main_window = providers.Factory(
+        "upbit_auto_trading.ui.desktop.main_window.MainWindow"
+    )
 
-        return self
 
-    def register_instance(self, service_type: Type, instance: Any) -> 'DIContainer':
-        """기존 인스턴스로 서비스 등록 (싱글톤)"""
-        registration = ServiceRegistration(
-            service_type=service_type,
-            implementation=instance,
-            lifetime=LifetimeScope.SINGLETON
-        )
-        registration.instance = instance
+# =============================================================================
+# Container 유틸리티 함수들
+# =============================================================================
 
-        with self._lock:
-            self._services[service_type] = registration
-            self._instances[service_type] = instance
+def create_application_container() -> ApplicationContainer:
+    """
+    ApplicationContainer 인스턴스 생성 및 기본 설정 로드
 
-        return self
+    Returns:
+        ApplicationContainer: 새로 생성된 컨테이너 인스턴스
+    """
+    container = ApplicationContainer()
 
-    def _register(self, service_type: Type, implementation: Any,
-                  lifetime: LifetimeScope) -> 'DIContainer':
-        """내부 등록 메서드"""
-        if implementation is None:
-            implementation = service_type
+    # 기본 설정 로드 (환경변수 PYTHONUTF8=1로 UTF-8 보장)
+    try:
+        container.config.from_yaml("config/config.yaml")
+        logger.info("✅ ApplicationContainer 생성 완료 (config.yaml 로드)")
+    except Exception as e:
+        logger.warning(f"⚠️ config.yaml 로드 실패, 기본 설정 사용: {e}")
+        # 기본 설정으로 폴백
+        container.config.from_dict({
+            "database": {
+                "fallback_settings_db": "data/settings.sqlite3",
+                "fallback_strategies_db": "data/strategies.sqlite3",
+                "fallback_market_data_db": "data/market_data.sqlite3"
+            },
+            "logging": {
+                "level": "INFO",
+                "console_enabled": True
+            },
+            "app_name": "Upbit Auto Trading",
+            "app_version": "1.0.0"
+        })
+        logger.info("✅ ApplicationContainer 생성 완료 (기본 설정 사용)")
 
-        registration = ServiceRegistration(
-            service_type=service_type,
-            implementation=implementation,
-            lifetime=lifetime
-        )
+    return container
 
-        with self._lock:
-            self._services[service_type] = registration
 
-        return self
+def wire_container_modules(container: ApplicationContainer) -> None:
+    """
+    Container에 애플리케이션 모듈들을 연결 (Wiring)
 
-    def resolve(self, service_type: Type) -> Any:
-        """서비스 해결"""
-        if self._disposing:
-            raise RuntimeError("컨테이너가 해제된 상태입니다")
+    @inject 데코레이터를 사용하는 모든 모듈을 여기에 등록해야 함
 
-        with self._lock:
-            # 현재 컨테이너에서 찾기
-            if service_type in self._services:
-                return self._create_instance(service_type)
+    Args:
+        container: 연결할 ApplicationContainer 인스턴스
+    """
+    try:
+        # wiring할 모듈들 목록
+        wiring_modules = [
+            # UI Layer
+            "upbit_auto_trading.ui.desktop.main_window",
+            # "upbit_auto_trading.ui.desktop.screens",
 
-            # 부모 컨테이너에서 서비스 등록 정보만 찾기 (SCOPED는 현재 스코프에서 인스턴스 생성)
-            if self._parent and service_type in self._parent._services:
-                parent_registration = self._parent._services[service_type]
+            # Presentation Layer
+            # "upbit_auto_trading.presentation.presenters",
 
-                # SCOPED 서비스는 현재 스코프에서 새로 생성
-                if parent_registration.lifetime == LifetimeScope.SCOPED:
-                    # 부모 등록 정보를 복사하여 현재 컨테이너에서 관리
-                    self._services[service_type] = ServiceRegistration(
-                        service_type=parent_registration.service_type,
-                        implementation=parent_registration.implementation,
-                        lifetime=parent_registration.lifetime,
-                        factory=parent_registration.factory
-                    )
-                    return self._create_instance(service_type)
-                else:
-                    # SINGLETON, TRANSIENT는 부모에게 위임
-                    return self._parent.resolve(service_type)
+            # Application Layer
+            # "upbit_auto_trading.application.services",
+        ]
 
-            raise ServiceNotRegisteredError(f"서비스가 등록되지 않았습니다: {service_type}")
+        # @inject 데코레이터 활성화를 위한 wiring
+        container.wire(modules=wiring_modules)
 
-    def try_resolve(self, service_type: Type) -> Optional[Any]:
-        """서비스 해결 시도 (실패 시 None 반환)"""
-        try:
-            return self.resolve(service_type)
-        except ServiceNotRegisteredError:
-            return None
+        logger.info(f"✅ Container wiring 완료: {len(wiring_modules)}개 모듈")
 
-    def _create_instance(self, service_type: Type) -> Any:
-        """인스턴스 생성"""
-        registration = self._services[service_type]
+    except Exception as e:
+        logger.error(f"❌ Container wiring 실패: {e}")
+        raise
 
-        # 싱글톤 인스턴스 확인
-        if registration.lifetime == LifetimeScope.SINGLETON:
-            if registration.instance is not None:
-                return registration.instance
 
-            if service_type in self._instances:
-                return self._instances[service_type]
+def validate_container_registration(container: ApplicationContainer) -> bool:
+    """
+    Container의 모든 Provider가 정상적으로 등록되었는지 검증
 
-        # 스코프 인스턴스 확인
-        elif registration.lifetime == LifetimeScope.SCOPED:
-            if service_type in self._instances:
-                return self._instances[service_type]
+    Args:
+        container: 검증할 ApplicationContainer 인스턴스
 
-        # 새 인스턴스 생성
-        if registration.factory:
-            instance = registration.factory()
-        else:
-            # implementation이 클래스인지 확인
-            if inspect.isclass(registration.implementation):
-                instance = self._create_instance_with_injection(registration.implementation)
-            elif callable(registration.implementation):
-                # callable이지만 클래스가 아닌 경우 (함수 등)
-                instance = registration.implementation()
-            else:
-                # callable이 아니면 그대로 반환 (예: 문자열, 숫자 등)
-                instance = registration.implementation
+    Returns:
+        bool: 모든 Provider가 정상 등록된 경우 True
+    """
+    try:
+        # 핵심 Provider들의 등록 상태 확인
+        core_providers = [
+            "config",
+            "logging_service",
+            "database_manager",
+            "path_service"
+        ]
 
-        # 인스턴스 캐싱
-        if registration.lifetime == LifetimeScope.SINGLETON:
-            registration.instance = instance
-            self._instances[service_type] = instance
-        elif registration.lifetime == LifetimeScope.SCOPED:
-            self._instances[service_type] = instance
+        for provider_name in core_providers:
+            if not hasattr(container, provider_name):
+                logger.error(f"❌ 핵심 Provider 누락: {provider_name}")
+                return False
 
-        return instance
+        logger.info("✅ Container 등록 검증 완료")
+        return True
 
-    def _create_instance_with_injection(self, implementation_type: Type) -> Any:
-        """의존성 주입을 통한 인스턴스 생성"""
-        try:
-            # 생성자 시그니처 분석
-            init_signature = inspect.signature(implementation_type.__init__)
-
-            # 생성자 매개변수 해결
-            kwargs = {}
-            for param_name, param in init_signature.parameters.items():
-                if param_name == 'self':
-                    continue
-
-                # 타입 힌트가 있는 경우
-                if param.annotation != inspect.Parameter.empty:
-                    try:
-                        kwargs[param_name] = self.resolve(param.annotation)
-                    except ServiceNotRegisteredError:
-                        # 기본값이 있으면 사용
-                        if param.default != inspect.Parameter.empty:
-                            kwargs[param_name] = param.default
-                        else:
-                            raise DependencyResolutionError(
-                                f"{implementation_type} 생성자의 매개변수 '{param_name}' "
-                                f"(타입: {param.annotation})을 해결할 수 없습니다"
-                            )
-
-                # 기본값 사용
-                elif param.default != inspect.Parameter.empty:
-                    kwargs[param_name] = param.default
-
-            return implementation_type(**kwargs)
-
-        except Exception as e:
-            self._logger.error(f"인스턴스 생성 실패 {implementation_type}: {e}")
-            raise DependencyResolutionError(f"인스턴스 생성 실패: {e}") from e
-
-    def is_registered(self, service_type: Type) -> bool:
-        """서비스 등록 여부 확인"""
-        if service_type in self._services:
-            return True
-        if self._parent:
-            return self._parent.is_registered(service_type)
+    except Exception as e:
+        logger.error(f"❌ Container 등록 검증 실패: {e}")
         return False
 
-    def create_scope(self) -> 'DIContainer':
-        """새 스코프 생성"""
-        return DIContainer(parent=self)
 
-    def get_registrations(self) -> List[ServiceRegistration]:
-        """등록된 서비스 목록 조회"""
-        with self._lock:
-            return list(self._services.values())
+# =============================================================================
+# 전역 Container 관리 (선택적 사용)
+# =============================================================================
 
-    def dispose(self) -> None:
-        """컨테이너 해제"""
-        with self._lock:
-            self._disposing = True
+_global_container: ApplicationContainer = None
 
-            # IDisposable 인터페이스를 구현한 인스턴스들 해제
-            for instance in self._instances.values():
-                if hasattr(instance, 'dispose'):
-                    try:
-                        instance.dispose()
-                    except Exception as e:
-                        self._logger.warning(f"인스턴스 해제 실패: {e}")
 
-            self._instances.clear()
-            self._services.clear()
+def get_global_container() -> ApplicationContainer:
+    """
+    전역 ApplicationContainer 조회
 
-    def __enter__(self):
-        """컨텍스트 매니저 진입"""
-        return self
+    싱글톤 패턴으로 전역 컨테이너 관리
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """컨텍스트 매니저 종료"""
-        self.dispose()
-
-class ServiceNotRegisteredError(Exception):
-    """서비스가 등록되지 않은 경우 발생하는 예외"""
-    pass
-
-class DependencyResolutionError(Exception):
-    """의존성 해결 실패 시 발생하는 예외"""
-    pass
-
-# 전역 컨테이너 (선택적 사용)
-_global_container: Optional[DIContainer] = None
-
-def get_global_container() -> DIContainer:
-    """전역 컨테이너 조회"""
+    Returns:
+        ApplicationContainer: 전역 컨테이너 인스턴스
+    """
     global _global_container
     if _global_container is None:
-        _global_container = DIContainer()
+        _global_container = create_application_container()
+        logger.info("🌍 전역 ApplicationContainer 초기화 완료")
     return _global_container
 
-def set_global_container(container: DIContainer) -> None:
-    """전역 컨테이너 설정"""
+
+def set_global_container(container: ApplicationContainer) -> None:
+    """
+    전역 ApplicationContainer 설정
+
+    Args:
+        container: 설정할 ApplicationContainer 인스턴스
+    """
     global _global_container
     _global_container = container
+    logger.info("🌍 전역 ApplicationContainer 변경 완료")
+
 
 def reset_global_container() -> None:
-    """전역 컨테이너 재설정"""
+    """
+    전역 ApplicationContainer 초기화
+    """
     global _global_container
-    if _global_container:
-        _global_container.dispose()
     _global_container = None
+    logger.info("🌍 전역 ApplicationContainer 초기화 완료")
+
+
+# =============================================================================
+# Legacy DIContainer 호환성 (임시)
+# =============================================================================
+
+# 기존 코드와의 하위 호환성을 위한 임시 Wrapper
+# 향후 모든 코드가 @inject 패턴으로 마이그레이션 되면 제거 예정
+
+class LegacyDIContainerWrapper:
+    """
+    기존 DIContainer와의 호환성을 위한 임시 Wrapper
+
+    Warning: 이 클래스는 마이그레이션 기간 동안만 사용하며,
+             향후 모든 코드가 @inject 패턴으로 변경되면 제거됩니다.
+    """
+
+    def __init__(self, modern_container: ApplicationContainer):
+        self._container = modern_container
+
+    def resolve(self, service_type):
+        """기존 resolve() 호출을 새 Container로 위임"""
+        logger.warning(f"⚠️ Legacy resolve() 호출 감지: {service_type}. @inject 패턴으로 마이그레이션을 권장합니다.")
+
+        # 기본적인 타입 매핑 (향후 확장)
+        type_mapping = {
+            # 예시: "ILoggingService": self._container.logging_service,
+        }
+
+        provider = type_mapping.get(str(service_type))
+        if provider:
+            return provider()
+        else:
+            raise ValueError(f"Legacy 호환성 매핑이 없습니다: {service_type}")

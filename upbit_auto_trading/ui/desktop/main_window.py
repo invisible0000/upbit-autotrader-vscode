@@ -2,12 +2,15 @@
 메인 윈도우 모듈
 """
 import traceback
-from typing import Dict
+from typing import Dict, Optional
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QStackedWidget, QLabel
 )
 from PyQt6.QtCore import Qt
+
+# Dependency Injection
+from dependency_injector.wiring import Provide, inject
 
 # Application Layer 서비스
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
@@ -115,16 +118,34 @@ class MainWindow(QMainWindow):
     애플리케이션의 메인 윈도우입니다.
     """
 
-    def __init__(self, di_container=None):
-        """초기화
+    @inject
+    def __init__(
+        self,
+        settings_service=Provide["settings_service"],
+        theme_service=Provide["theme_service"],
+        style_manager=Provide["style_manager"],
+        navigation_service=Provide["navigation_service"],
+        di_container=None
+    ):
+        """초기화 - @inject 패턴으로 서비스 주입
 
         Args:
-            di_container: DI Container (옵션). None이면 기존 방식으로 동작
+            settings_service: 설정 서비스
+            theme_service: 테마 서비스
+            style_manager: 스타일 매니저
+            navigation_service: 네비게이션 서비스
+            di_container: DI Container (레거시 호환성)
         """
         super().__init__()
 
-        # DI Container 저장
+        # DI Container 저장 (레거시 호환성)
         self.di_container = di_container
+
+        # 주입받은 서비스들 저장
+        self.settings_service = settings_service
+        self.theme_service = theme_service
+        self.style_manager = style_manager
+        self.nav_bar = navigation_service
 
         # IL 스마트 로깅 초기화 (먼저 초기화)
         self.logger = None
@@ -151,52 +172,31 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_warning(f"⚠️ MVP 시스템 초기화 실패: {e}")
 
-        # SettingsService 주입 (DI Container 기반 또는 기존 방식)
-        self._log_info("🔧 SettingsService 주입 시작...")
-        self.settings_service = None
-        if self.di_container:
-            self._log_info("🔧 DI Container 존재 확인 완료")
-            try:
-                from upbit_auto_trading.infrastructure.services.settings_service import ISettingsService
-                self._log_info("🔧 ISettingsService import 성공")
-
-                # DI Container에 등록되어 있는지 확인
-                is_registered = self.di_container.is_registered(ISettingsService)
-                self._log_info(f"🔧 ISettingsService 등록 상태: {is_registered}")
-
-                # DI Container 자체 확인
-                container_type = type(self.di_container).__name__
-                self._log_info(f"🔧 DI Container 타입: {container_type}")
-
-                # resolve 시도 전 로그
-                self._log_info("🔧 SettingsService resolve 시도 중...")
-                self.settings_service = self.di_container.resolve(ISettingsService)
-
-                if self.settings_service is not None:
-                    self._log_info(f"✅ SettingsService DI 주입 성공: {type(self.settings_service).__name__}")
-                else:
-                    self._log_error("❌ SettingsService resolve 결과가 None")
-
-            except Exception as e:
-                self._log_error(f"❌ SettingsService DI 주입 실패: {e}")
-                self._log_error(f"❌ Exception 타입: {type(e).__name__}")
-                # 예외 스택 트레이스 로그
-                self._log_debug(f"📊 SettingsService 주입 실패 상세: {traceback.format_exc()}")
+        # 서비스 주입 검증 및 초기화
+        if self.settings_service:
+            self._log_info(f"✅ SettingsService 주입 성공: {type(self.settings_service).__name__}")
         else:
-            self._log_warning("⚠️ DI Container가 None - SettingsService 주입 불가")
+            self._log_warning("⚠️ SettingsService가 주입되지 않음")
 
-        # ThemeService 주입 (Infrastructure Layer 기반)
-        self.theme_service = None
-        if self.di_container:
+        if self.theme_service:
+            self._log_info("✅ ThemeService 주입 성공")
+            # 테마 변경 시그널 연결
             try:
-                from upbit_auto_trading.infrastructure.services.theme_service import IThemeService
-                self.theme_service = self.di_container.resolve(IThemeService)
-                self._log_info("✅ ThemeService DI 주입 성공")
-                # 테마 변경 시그널 연결
                 self.theme_service.connect_theme_changed(self._on_theme_changed_from_service)
-
             except Exception as e:
-                self._log_warning(f"⚠️ ThemeService DI 주입 실패, 기존 방식 사용: {e}")
+                self._log_warning(f"⚠️ 테마 변경 시그널 연결 실패: {e}")
+        else:
+            self._log_warning("⚠️ ThemeService가 주입되지 않음")
+
+        if self.style_manager:
+            self._log_info("✅ StyleManager 주입 성공")
+        else:
+            self._log_warning("⚠️ StyleManager가 주입되지 않음")
+
+        if self.nav_bar:
+            self._log_info("✅ NavigationBar 주입 성공")
+        else:
+            self._log_warning("⚠️ NavigationBar가 주입되지 않음")
 
         # DatabaseHealthService 초기화 (최소 구현)
         self.db_health_service = None
@@ -224,20 +224,6 @@ class MainWindow(QMainWindow):
         self._log_info("✅ WindowStateService 초기화 완료")
 
         # MenuService 초기화 (DDD/MVP 패턴)
-        # 스타일 매니저 초기화 (UI 설정 전에 필요)
-        if self.di_container:
-            # DI Container에서 StyleManager 주입
-            try:
-                self.style_manager = self.di_container.resolve(StyleManager)
-                self._log_info("✅ StyleManager DI 주입 성공")
-            except Exception as e:
-                self._log_warning(f"⚠️ StyleManager DI 주입 실패, 기존 방식 사용: {e}")
-                self.style_manager = StyleManager()
-        else:
-            # 기존 방식 (호환성 유지)
-            self.style_manager = StyleManager()
-            self._log_debug("StyleManager 기존 방식으로 생성 (DI Container 없음)")
-
         self.menu_service = MenuService()
         self._log_info("✅ MenuService 초기화 완료")
 
@@ -297,20 +283,14 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # 네비게이션 바 설정 (DI Container 기반 또는 기존 방식)
-        if self.di_container:
-            try:
-                self.nav_bar = self.di_container.resolve(NavigationBar)
-                self._log_info("✅ NavigationBar DI 주입 성공")
-
-            except Exception as e:
-                self._log_warning(f"⚠️ NavigationBar DI 주입 실패, 기존 방식 사용: {e}")
-
-                self.nav_bar = NavigationBar()
+        # 네비게이션 바 시그널 연결
+        if self.nav_bar:
+            self.nav_bar.screen_changed.connect(self._change_screen)
         else:
+            # 폴백: 기존 방식으로 NavigationBar 생성
             self.nav_bar = NavigationBar()
-            self._log_debug("NavigationBar 기존 방식으로 생성 (DI Container 없음)")
-        self.nav_bar.screen_changed.connect(self._change_screen)
+            self.nav_bar.screen_changed.connect(self._change_screen)
+            self._log_warning("⚠️ NavigationBar 폴백 생성 (DI 주입 실패)")
 
         # 콘텐츠 영역 설정
         content_widget = QWidget()
@@ -331,17 +311,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(content_widget)
 
         # 상태 바 설정 - 자율적 상태바로 간소화
-        if self.di_container:
-            try:
-                self.status_bar = self.di_container.resolve(StatusBar)
-                self._log_info("StatusBar DI 주입 성공")
-            except Exception as e:
-                self._log_warning(f"StatusBar DI 주입 실패, 기존 방식 사용: {e}")
-                db_service = getattr(self, 'db_health_service', None)
-                self.status_bar = StatusBar(database_health_service=db_service)
-        else:
-            db_service = getattr(self, 'db_health_service', None)
-            self.status_bar = StatusBar(database_health_service=db_service)
+        db_service = getattr(self, 'db_health_service', None)
+        self.status_bar = StatusBar(database_health_service=db_service)
         self.setStatusBar(self.status_bar)
         self._log_info("✅ 자율적 StatusBar 초기화 완료")
 

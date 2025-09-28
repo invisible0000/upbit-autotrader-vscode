@@ -31,6 +31,7 @@ from typing import Optional, List, Dict, Any
 from upbit_auto_trading.domain.repositories.secure_keys_repository import SecureKeysRepository
 from upbit_auto_trading.infrastructure.database.database_manager import DatabaseManager
 
+
 class SqliteSecureKeysRepository(SecureKeysRepository):
     """SQLite 기반 보안 키 Repository 구현"""
 

@@ -12,11 +12,13 @@
 ## 🎯 핵심 원칙
 
 ### 1. **설정 파일 기반 아키텍처**
+
 - 모든 설정은 `config/` 폴더의 YAML 파일로 관리
 - 실시간 변경 가능, 파일 감시 지원
 - 명확한 구조와 타입 안전성 확보
 
 ### 2. **단계적 통합 전략**
+
 ```
 Phase 1: 개별 설정 파일 (현재) ✅
 ├── config/logging_config.yaml      # 로깅 설정
@@ -36,6 +38,7 @@ Phase 3: DB 통합 (장기)
 ```
 
 ### 3. **안정성 우선 개발**
+
 - 명확히 동작하는 기능만 유지
 - 불완전한 기능은 제거하고 나중에 재구현
 - 각 단계에서 이전 버전 호환성 유지
@@ -43,6 +46,7 @@ Phase 3: DB 통합 (장기)
 ## 🔧 표준 설정 패턴
 
 ### **기본 구조**
+
 ```yaml
 # config/{feature}_config.yaml
 {feature_name}:
@@ -67,6 +71,7 @@ runtime:
 ```
 
 ### **구현 클래스 패턴**
+
 ```python
 class FeatureConfigManager:
     def __init__(self, config_file: str = "config/feature_config.yaml"):
@@ -87,6 +92,7 @@ class FeatureConfigManager:
 ## ✅ 로깅 시스템 - 완성된 표준 사례
 
 ### **설정 파일 구조**
+
 ```yaml
 # config/logging_config.yaml
 logging:
@@ -110,12 +116,14 @@ runtime:
 ```
 
 ### **주요 기능**
+
 - ✅ **console_output: auto** - 프로파일에 따라 자동 결정
 - ✅ **component_focus** - 특정 컴포넌트만 콘솔 출력
 - ✅ **실시간 변경** - 파일 수정 시 즉시 적용
 - ✅ **파일 감시** - 설정 파일 변경 자동 감지
 
 ### **권장 사용법**
+
 ```yaml
 # 일반 개발
 console_output: "auto"
@@ -133,6 +141,7 @@ level: "WARNING"
 ## 🚀 다른 기능 적용 가이드
 
 ### **매매 설정 예시**
+
 ```yaml
 # config/trading_config.yaml
 trading:
@@ -157,6 +166,7 @@ runtime:
 ```
 
 ### **UI 설정 예시**
+
 ```yaml
 # config/ui_config.yaml
 ui:
@@ -182,6 +192,7 @@ runtime:
 ## 📋 구현 체크리스트
 
 ### **새 기능 설정 시스템 구현**
+
 - [ ] config/{feature}_config.yaml 파일 생성
 - [ ] {Feature}ConfigManager 클래스 구현
 - [ ] 실시간 변경 핸들러 구현
@@ -190,6 +201,7 @@ runtime:
 - [ ] 테스트 코드 작성
 
 ### **통합 준비**
+
 - [ ] 표준 패턴 준수 확인
 - [ ] 설정 구조 문서화
 - [ ] 하위 호환성 고려
@@ -198,6 +210,7 @@ runtime:
 ## 🔍 최종 목표 아키텍처
 
 ### **DB 통합 설계 (Phase 3)**
+
 ```sql
 -- 설정 테이블
 CREATE TABLE settings (
@@ -232,6 +245,7 @@ CREATE TABLE setting_history (
 ## 💡 개발 가이드라인
 
 ### **DO (권장사항)**
+
 - ✅ 표준 YAML 구조 사용
 - ✅ 실시간 변경 지원 구현
 - ✅ 명확한 기본값 제공
@@ -239,6 +253,7 @@ CREATE TABLE setting_history (
 - ✅ 설정 검증 로직 구현
 
 ### **DON'T (금지사항)**
+
 - ❌ 하드코딩된 설정값 사용
 - ❌ 환경변수에 의존
 - ❌ 복잡한 중첩 구조
@@ -256,6 +271,7 @@ CREATE TABLE setting_history (
 ## 📞 문의 및 기여
 
 이 설정 관리 시스템에 대한 질문이나 개선 제안이 있으시면:
+
 1. 로깅 시스템의 구현 사례를 먼저 참고
 2. 표준 패턴을 준수하여 구현
 3. 테스트 코드와 함께 제출
