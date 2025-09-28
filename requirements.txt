@@ -78,3 +78,4 @@ yarl==1.20.1
 
 # Development Installation (current project)
 -e git+https://github.com/invisible0000/upbit-autotrader-vscode.git@8b066f766f2e8ddee22a849cc60817e9642c7741#egg=upbit_auto_trading
+dependency-injector==4.41.0

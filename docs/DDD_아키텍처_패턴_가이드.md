@@ -26,6 +26,7 @@
 ## 🏗️ DDD 4계층 + Clean Architecture (핵심 다이어그램)
 
 ### 의존성 방향과 책임 분리
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                 🎨 Presentation Layer                        │
@@ -46,6 +47,7 @@
 ```
 
 ### 핵심 원칙
+
 - **의존성 방향**: Presentation → Application → Domain ← Infrastructure
 - **Domain 순수성**: 외부 시스템을 모르는 핵심 비즈니스 로직
 - **Infrastructure 격리**: 모든 외부 의존성을 Infrastructure에서 처리
@@ -108,6 +110,7 @@ class SqliteStrategyRepository(StrategyRepository):
 ## ⚡ CQRS + Event-Driven 조합
 
 ### Command와 Query 분리
+
 ```python
 # Command Side: 쓰기 전용
 class StrategyCommandService:
@@ -125,6 +128,7 @@ class StrategyQueryService:
 **효과**: 읽기 40%, 쓰기 25% 성능 향상
 
 ### Event-Driven 실시간 업데이트
+
 ```python
 class EventDrivenLogViewer(QWidget):
     def __init__(self):
@@ -160,6 +164,7 @@ upbit_auto_trading/
 ## 🔄 패턴 조합의 시너지 효과
 
 ### 🎯 MVP + Factory + Event-Driven
+
 ```python
 # 1. Factory로 Presenter 생성
 presenter = MVPContainer.create_settings_presenter()
@@ -174,6 +179,7 @@ view = SettingsView(presenter)  # Passive View
 **시너지**: UI 변경 → 비즈니스 로직 영향 제로, 테스트 격리 완벽
 
 ### 🏗️ Repository + DI + CQRS
+
 ```python
 container = RepositoryContainer()
 read_repo = container.get_strategy_query_repo()
@@ -203,6 +209,7 @@ command_service = StrategyCommandService(write_repo)
 ## 🎯 핵심 학습과 실무 인사이트
 
 ### 1. **패턴은 생태계를 이룬다**
+
 ```python
 @dataclass(frozen=True)  # DTO Pattern
 class StrategyDto:
@@ -213,6 +220,7 @@ class StrategyDto:
 ```
 
 ### 2. **하이브리드가 더 효과적**
+
 ```python
 class PathServiceFactory:  # Factory + Singleton + DI Container
     _instances = {}  # Singleton 역할
@@ -223,6 +231,7 @@ class PathServiceFactory:  # Factory + Singleton + DI Container
 ```
 
 ### 3. **테스트 용이성 = 아키텍처 품질**
+
 ```python
 def test_strategy_creation():
     # Mock Repository 주입 (DI Container)
@@ -240,11 +249,13 @@ def test_strategy_creation():
 ## 🚀 다음 단계 (단기 3개월)
 
 ### 우선순위 개선 항목
+
 1. **CQRS 완전 구현**: 모든 Aggregate에 읽기/쓰기 분리
 2. **Event Store 도입**: 이벤트 기반 데이터 일관성
 3. **Performance Monitoring**: Decorator Pattern으로 지표 수집
 
 ### 예상 효과
+
 - **성능**: 추가 20% 향상 예상
 - **개발 속도**: 추가 15% 향상 예상
 - **운영 안정성**: 99.9% 가용성 목표
@@ -254,11 +265,13 @@ def test_strategy_creation():
 ## 🔗 관련 문서
 
 ### 필수 참조
+
 - **[ARCHITECTURE_GUIDE.md]**: 상세 아키텍처 구조
 - **[LLM_DOCUMENTATION_GUIDELINES.md]**: 문서 작성 표준
 - **[DEVELOPMENT_GUIDE.md]**: 실무 개발 가이드
 
 ### 패턴별 상세
+
 - **[Factory_Pattern_실구현.md]**: PathServiceFactory 상세
 - **[MVP_Pattern_실무가이드.md]**: 20+ Presenter 사례
 - **[Repository_3DB_아키텍처.md]**: 3-DB 설계 상세
@@ -268,12 +281,14 @@ def test_strategy_creation():
 ## 🎉 성과 요약
 
 ### 정량적 검증
+
 - ✅ **성능**: 메모리 35% 절약, UI 60% 응답성 향상
 - ✅ **생산성**: 테스트 85% 커버리지, 개발 40% 가속
 - ✅ **안정성**: 99.7% 가용성, 데이터 무결성 100%
 - ✅ **품질**: 버그 60% 감소, 순환 의존성 0개
 
 ### 정성적 가치
+
 - 🎨 **명확성**: "새 개발자도 쉽게 이해하는 구조"
 - 🔧 **유지보수성**: "변경 영향 범위를 쉽게 예측 가능"
 - 🚀 **확장성**: "새 기능이 기존 코드를 깨뜨리지 않음"

@@ -7,6 +7,7 @@
 > **적용범위**: Domain Layer, Infrastructure Layer, Application Layer
 
 ## 📋 목차
+
 - [1. 핵심 Domain Entity 용어](#1-핵심-domain-entity-용어)
 - [2. Value Object 용어](#2-value-object-용어)
 - [3. Repository 관련 용어](#3-repository-관련-용어)
@@ -21,6 +22,7 @@
 ## 1. 핵심 Domain Entity 용어
 
 ### 📈 Strategy (전략)
+
 | **도메인 용어** | **코드명** | **DB 테이블** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Strategy | `Strategy` | `strategies` | 매매 전략의 기본 단위 (Aggregate Root) |
@@ -32,6 +34,7 @@
 | Strategy Status | `is_active` | `strategies.is_active` | 전략 활성화 상태 (Boolean) |
 
 ### 🎯 Trigger (트리거/조건)
+
 | **도메인 용어** | **코드명** | **DB 테이블** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Trigger | `Trigger` | `strategy_conditions` | 매매 조건/트리거 (Entity) |
@@ -43,6 +46,7 @@
 | Variable Parameters | `variable_params` | `strategy_conditions.variable_params` | 트레이딩 변수 파라미터 (JSON) |
 
 ### 📊 Trading Variable (매매 변수)
+
 | **도메인 용어** | **코드명** | **DB 테이블** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Trading Variable | `TradingVariable` | `tv_trading_variables` | 기술적 지표/매매 변수 (Value Object) |
@@ -54,6 +58,7 @@
 | Comparison Group | `comparison_group` | `tv_trading_variables.comparison_group` | 호환성 그룹 (price_comparable, percentage_comparable) |
 
 ### ⚙️ Settings (설정)
+
 | **도메인 용어** | **코드명** | **UI 컴포넌트** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | API Settings | `ApiSettings` | `ApiSettingsView` | API 키 및 연결 설정 |
@@ -63,6 +68,7 @@
 | Environment Settings | `EnvironmentSettings` | `EnvironmentSettingsView` | 환경변수 및 로깅 설정 (구현 완료) |
 
 ### 🔧 Environment & Logging Configuration
+
 | **도메인 용어** | **환경변수** | **config YAML 키** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Console Output | `UPBIT_CONSOLE_OUTPUT` | `console_enabled` | 콘솔 로그 출력 여부 |
@@ -76,6 +82,7 @@
 | Briefing Update Interval | `UPBIT_BRIEFING_UPDATE_INTERVAL` | `briefing_update_interval` | 브리핑 업데이트 간격 (초) |
 
 ### 📁 Configuration Profile Management
+
 | **도메인 용어** | **클래스명** | **파일 패턴** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Config Profile | `ConfigProfile` | `config.{profile}.yaml` | 환경별 설정 프로파일 |
@@ -89,6 +96,7 @@
 ## 2. Value Object 용어
 
 ### 🔑 Identifier Objects
+
 | **도메인 용어** | **클래스명** | **타입** | **예시값** | **비즈니스 규칙** |
 |:-------------|:----------|:--------|:-----------|:-------------|
 | Strategy ID | `StrategyId` | `str` | `"basic_7_rule_strategy"` | 3-50자, 영문시작, 영숫자_- 허용 |
@@ -96,6 +104,7 @@
 | Variable ID | `VariableId` | `str` | `"SMA"`, `"RSI"`, `"MACD"` | 대문자 기술적 지표명 |
 
 ### 📏 Parameter Objects
+
 | **도메인 용어** | **클래스명** | **타입** | **설명** |
 |:-------------|:----------|:--------|:----------|
 | Strategy Config | `StrategyConfig` | `dataclass` | 진입/관리 전략 설정 조합 |
@@ -111,6 +120,7 @@
 ## 3. Repository 관련 용어
 
 ### 🏗️ Repository Pattern
+
 | **도메인 용어** | **클래스명** | **역할** | **구현체** |
 |:-------------|:----------|:--------|:----------|
 | Strategy Repository | `StrategyRepository` | Strategy 저장소 인터페이스 | `SqliteStrategyRepository` |
@@ -121,12 +131,14 @@
 | Repository Factory | `RepositoryFactory` | Repository 생성 팩토리 | Repository 인스턴스 생성 |
 
 ### 🗃️ Database Management
+
 | **도메인 용어** | **클래스명** | **역할** | **설명** |
 |:-------------|:----------|:--------|:----------|
 | Database Manager | `DatabaseManager` | 멀티 DB 연결 관리 | 3-DB 아키텍처 연결 풀링 |
 | Repository Container | `RepositoryContainer` | DI 컨테이너 | Repository 의존성 주입 |
 
 ### ⚡ Domain Services
+
 | **도메인 용어** | **클래스명** | **역할** | **설명** |
 |:-------------|:----------|:--------|:----------|
 | Strategy Compatibility Service | `StrategyCompatibilityService` | 전략 호환성 검증 | 전략 조합 유효성 검사 |
@@ -135,6 +147,7 @@
 | Business Logic Adapter | `BusinessLogicAdapter` | 비즈니스 로직 어댑터 | 기존 로직과 Domain 연결 |
 
 ### 🏗️ Infrastructure Services
+
 | **도메인 용어** | **클래스명** | **역할** | **설명** |
 |:-------------|:----------|:--------|:----------|
 | Component Logger | `create_component_logger()` | 로깅 시스템 | Infrastructure 표준 로깅 (print 문 대체) |
@@ -146,6 +159,7 @@
 ## 4. 데이터베이스 매핑 용어
 
 ### 🎯 Core Tables (strategies.sqlite3)
+
 | **도메인 개념** | **테이블명** | **주요 컬럼** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Strategy | `strategies` | `id`, `strategy_name`, `description` | 전략 메인 테이블 |
@@ -154,6 +168,7 @@
 | Execution History | `execution_history` | `id`, `strategy_id`, `executed_at` | 실행 기록 |
 
 ### 📊 Settings Tables (settings.sqlite3)
+
 | **도메인 개념** | **테이블명** | **주요 컬럼** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | Trading Variable | `tv_trading_variables` | `variable_id`, `display_name_ko` | 매매 변수 정의 |
@@ -162,6 +177,7 @@
 | App Settings | `cfg_app_settings` | `key`, `value` | 앱 전역 설정 |
 
 ### 💹 Market Data Tables (market_data.sqlite3)
+
 | **도메인 개념** | **테이블명** | **주요 컬럼** | **설명** |
 |:-------------|:----------|:------------|:--------|
 | OHLCV Data | `ohlcv_data` | `symbol`, `timestamp`, `open`, `high`, `low`, `close`, `volume` | 기본 시장 데이터 |
@@ -174,6 +190,7 @@
 ## 5. 엔티티별 속성 매핑
 
 ### 📈 Strategy Entity 매핑
+
 | **Domain Property** | **DB Column** | **타입** | **제약조건** |
 |:------------------|:-------------|:--------|:----------|
 | `strategy_id.value` | `strategies.id` | `INTEGER PRIMARY KEY` | NOT NULL |
@@ -186,6 +203,7 @@
 | `updated_at` | `strategies.updated_at` | `TIMESTAMP` | DEFAULT CURRENT_TIMESTAMP |
 
 ### 🎯 Trigger Entity 매핑
+
 | **Domain Property** | **DB Column** | **타입** | **제약조건** |
 |:------------------|:-------------|:--------|:----------|
 | `trigger_id.value` | `strategy_conditions.id` | `INTEGER PRIMARY KEY` | NOT NULL |
@@ -200,6 +218,7 @@
 | `weight` | `strategy_conditions.execution_order` | `INTEGER` | DEFAULT 1 |
 
 ### 📊 Trading Variable Entity 매핑
+
 | **Domain Property** | **DB Column** | **타입** | **제약조건** |
 |:------------------|:-------------|:--------|:----------|
 | `variable_id` | `tv_trading_variables.variable_id` | `TEXT PRIMARY KEY` | NOT NULL |
@@ -215,6 +234,7 @@
 ## 6. 네이밍 컨벤션
 
 ### 🏷️ 클래스 및 파일명
+
 | **유형** | **패턴** | **예시** | **설명** |
 |:-------|:---------|:--------|:--------|
 | Domain Entity | `PascalCase` | `Strategy`, `Trigger` | 도메인 엔티티 |
@@ -228,6 +248,7 @@
 | Mock 클래스 | `Mock + PascalCase` | `MockStrategy`, `MockTrigger` | 테스트/개발용 Mock |
 
 ### 🗂️ 메서드명 및 변수명
+
 | **유형** | **패턴** | **예시** | **설명** |
 |:-------|:---------|:--------|:--------|
 | Entity Method | `snake_case` | `get_all_triggers()`, `add_trigger()` | 엔티티 메서드 |
@@ -237,6 +258,7 @@
 | Property | `snake_case` | `strategy_id`, `trigger_name`, `created_at` | 속성명 |
 
 ### 📊 데이터베이스 컨벤션
+
 | **유형** | **패턴** | **예시** | **설명** |
 |:-------|:---------|:--------|:--------|
 | 테이블명 | `snake_case` | `strategies`, `strategy_conditions` | 테이블명 (복수형) |
@@ -250,6 +272,7 @@
 ## 7. Domain Events 및 예외 처리
 
 ### ⚡ Domain Events
+
 | **이벤트명** | **클래스명** | **발생 시점** | **설명** |
 |:-----------|:----------|:-----------|:--------|
 | Strategy Created | `StrategyCreated` | 전략 생성 완료 | 새 전략이 성공적으로 생성됨 |
@@ -260,6 +283,7 @@
 | Trigger Evaluated | `TriggerEvaluated` | 트리거 평가 완료 | 트리거 조건 평가가 완료됨 |
 
 ### 🚨 Domain Exceptions
+
 | **예외명** | **클래스명** | **발생 조건** | **설명** |
 |:---------|:----------|:-----------|:--------|
 | Invalid Strategy ID | `InvalidStrategyIdError` | 전략 ID 규칙 위반 | 3-50자, 영문시작 규칙 위반 |
@@ -273,6 +297,7 @@
 ## 8. Infrastructure Layer 매핑
 
 ### 🗄️ Database Mapper 패턴
+
 | **매퍼 클래스** | **매핑 대상** | **주요 메서드** | **설명** |
 |:-------------|:-----------|:-------------|:--------|
 | StrategyMapper | Strategy ↔ strategies 테이블 | `to_entity()`, `to_database_record()` | 전략 엔티티 매핑 |
@@ -282,6 +307,7 @@
 | MockTrigger | Trigger Mock 구현 | 속성 접근 | Domain Layer 구현 전 임시 Mock |
 
 ### 🔧 Infrastructure Services
+
 | **서비스명** | **클래스명** | **역할** | **설명** |
 |:-----------|:----------|:--------|:--------|
 | Connection Pool | `DatabaseManager` | 멀티 DB 연결 관리 | SQLite WAL 모드, 트랜잭션 관리 |
@@ -289,6 +315,7 @@
 | Transaction Manager | `DatabaseManager.transaction()` | 트랜잭션 관리 | Context Manager 패턴 |
 
 ### 🎭 Presentation Layer (MVP Pattern)
+
 | **용어** | **클래스명** | **역할** | **설명** |
 |:--------|:----------|:--------|:--------|
 | Settings MVP | `*SettingsView` | MVP 패턴 View | Settings 화면 MVP 적용 (완성) |
@@ -304,6 +331,7 @@
 ## 🔄 용어 변환 매핑표
 
 ### Database ↔ Domain 매핑
+
 | **DB 테이블** | **DB 컬럼** | **Domain Entity** | **Domain Property** |
 |:------------|:-----------|:----------------|:------------------|
 | `strategies` | `id` | `Strategy` | `strategy_id.value` |
@@ -322,6 +350,7 @@
 | `tv_trading_variables` | `comparison_group` | `TradingVariable` | `comparison_group` |
 
 ### UI ↔ Domain 매핑
+
 | **UI 용어** | **Domain 용어** | **설명** | **비고** |
 |:----------|:-------------|:--------|:--------|
 | "전략" | `Strategy` | 매매 전략 | Aggregate Root |
@@ -340,6 +369,7 @@
 ## 🎯 사용 지침
 
 ### ✅ DO (권장사항)
+
 - **일관된 용어 사용**: 같은 개념은 항상 같은 용어로 표현
 - **명확한 구분**: Entity, Value Object, Service 구분 명확히
 - **표준 네이밍**: 팀 컨벤션 준수 (PascalCase Entity, snake_case method)
@@ -351,6 +381,7 @@
 - **직접 import**: 호환성 alias 금지, 명시적 import 사용
 
 ### ❌ DON'T (금지사항)
+
 - **혼용 금지**: `Strategy` ↔ `전략` ↔ `strategy` 혼용
 - **축약 금지**: `Stg`, `Trig` 등 축약어 사용
 - **중복 정의**: 같은 개념에 다른 클래스명 부여

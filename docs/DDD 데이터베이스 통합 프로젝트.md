@@ -15,9 +15,11 @@
 ## 🎯 프로젝트 핵심 비전
 
 ### 개발 철학: "Clean Architecture as a Way of Life"
+
 이 프로젝트는 단순한 기능 구현을 넘어서, **Clean Architecture의 철학을 실제 코드로 구현하는 여정**이었습니다. DDD(Domain-Driven Design)를 통해 복잡한 금융 거래 시스템을 우아하게 모델링하고, 각 계층의 책임을 명확히 분리하여 유지보수성과 확장성을 극대화했습니다.
 
 ### 기술적 도전과제
+
 ```
 🔥 핵심 도전: 실시간 거래 중단 없이 데이터베이스 설정을 동적으로 변경하는 시스템
 ⚡ 복잡성: 3개 독립 데이터베이스 (settings, strategies, market_data) 통합 관리
@@ -31,6 +33,7 @@
 ### 1. 🏗️ Clean Architecture + DDD 패턴
 
 #### **계층별 책임 분리의 예술**
+
 ```
 Presentation Layer (UI)     ← 사용자 인터페이스, Passive View
      ↓ (의존성)
@@ -42,6 +45,7 @@ Infrastructure Layer (I/O)  ← 외부 시스템, Repository 구현
 ```
 
 **핵심 아키텍처 원칙:**
+
 - **의존성 방향**: `Presentation → Application → Domain ← Infrastructure`
 - **Domain Isolation**: Domain Layer는 다른 계층에 의존하지 않음
 - **Interface Segregation**: 각 계층 간 인터페이스로 결합도 최소화
@@ -49,6 +53,7 @@ Infrastructure Layer (I/O)  ← 외부 시스템, Repository 구현
 ### 2. 🚀 Test-Driven Development (TDD)
 
 #### **실패 → 성공 → 리팩토링 사이클**
+
 ```python
 # 1단계: 실패하는 테스트 작성
 def test_create_database_profile():
@@ -68,6 +73,7 @@ async def create_profile(self, profile_data: DatabaseProfileCreateDto):
 ```
 
 **TDD 성과:**
+
 - ✅ **7/7 테스트 통과**: 모든 Use Case가 검증된 상태
 - ✅ **조기 버그 발견**: DTO 매핑 오류를 개발 중 즉시 발견
 - ✅ **안전한 리팩토링**: 테스트가 보장하는 기능 무결성
@@ -75,6 +81,7 @@ async def create_profile(self, profile_data: DatabaseProfileCreateDto):
 ### 3. 🎭 Repository Pattern + Dependency Injection
 
 #### **데이터 접근 계층의 우아한 추상화**
+
 ```python
 # 인터페이스 정의 (Domain Layer)
 class IDatabaseConfigRepository(ABC):
@@ -94,6 +101,7 @@ class DatabaseProfileManagementUseCase:
 ```
 
 **Repository Pattern 장점:**
+
 - 🔄 **유연한 데이터 소스**: SQLite → PostgreSQL 전환 시 Use Case 코드 변경 없음
 - 🧪 **테스트 용이성**: Mock Repository로 단위 테스트 가능
 - 🛡️ **의존성 역전**: Domain이 Infrastructure에 의존하지 않음
@@ -101,6 +109,7 @@ class DatabaseProfileManagementUseCase:
 ### 4. 📦 DTO Pattern + 계층 간 데이터 매핑
 
 #### **타입 안전한 데이터 전송의 정석**
+
 ```python
 @dataclass
 class DatabaseProfileDto:
@@ -120,6 +129,7 @@ class DatabaseProfileDto:
 ```
 
 **DTO Pattern 핵심 가치:**
+
 - 🎯 **명확한 계약**: 각 계층 간 데이터 형식 명시
 - 🔒 **타입 안전성**: Python Type Hints로 컴파일 타임 검증
 - 🧹 **관심사 분리**: UI 표현용 데이터 ≠ 비즈니스 로직용 데이터
@@ -127,6 +137,7 @@ class DatabaseProfileDto:
 ### 5. 🚦 Coordinator Pattern + Safe Operations
 
 #### **복잡한 거래 상태에서의 안전한 작업 조정**
+
 ```python
 class TradingDatabaseCoordinator:
     async def coordinate_safe_operation(
@@ -153,6 +164,7 @@ class TradingDatabaseCoordinator:
 ```
 
 **Coordinator Pattern 철학:**
+
 - 🎪 **오케스트레이션**: 여러 Use Case의 복잡한 상호작용 조정
 - ⚖️ **트레이드오프 관리**: 성능 vs 안전성의 균형점 찾기
 - 🛡️ **상태 기반 결정**: 실시간 거래 상태에 따른 동적 작업 제어
@@ -164,6 +176,7 @@ class TradingDatabaseCoordinator:
 ### Phase별 개발 전략
 
 #### **Phase 1: Domain Layer (순수 비즈니스 로직)**
+
 ```
 🎯 목표: 외부 의존성 없는 핵심 비즈니스 규칙 구현
 🛠️ 방법론: Entity-First Design, Value Object 활용
@@ -171,6 +184,7 @@ class TradingDatabaseCoordinator:
 ```
 
 #### **Phase 2: Application Layer (현재 완료)**
+
 ```
 🎯 목표: Use Case 중심의 비즈니스 플로우 구현
 🛠️ 방법론: TDD + DTO Pattern + Dependency Injection
@@ -178,6 +192,7 @@ class TradingDatabaseCoordinator:
 ```
 
 #### **Phase 3: Infrastructure Layer (진행 중)**
+
 ```
 🎯 목표: 외부 시스템과의 연동, Repository 구현
 🛠️ 방법론: Adapter Pattern + 설정 기반 환경 분리
@@ -185,6 +200,7 @@ class TradingDatabaseCoordinator:
 ```
 
 #### **Phase 4: Presentation Layer (계획)**
+
 ```
 🎯 목표: MVP Pattern 기반 UI 구현
 🛠️ 방법론: Passive View + Observer Pattern
@@ -194,6 +210,7 @@ class TradingDatabaseCoordinator:
 ### 🔄 반복적 개선 사이클
 
 #### **Fail Fast, Learn Faster 철학**
+
 ```mermaid
 graph LR
     A[문제 발견] --> B[가설 수립]
@@ -207,6 +224,7 @@ graph LR
 ```
 
 **실제 적용 사례:**
+
 1. **DTO 매핑 오류 발견**: `profile_id.value` → `profile_id` 수정
 2. **타입 힌트 문제**: `List[str] | None` → `Optional[List[str]]` 수정
 3. **테스트 결과**: 즉시 피드백으로 빠른 수정 가능
@@ -218,6 +236,7 @@ graph LR
 ### 1. 🧩 "추상화는 복잡성을 숨기는 게 아니라 명확하게 드러내는 것"
 
 **Before (레거시 접근법):**
+
 ```python
 # 모든 것이 한 곳에 뭉쳐있는 방식
 def change_database_config(new_path, backup_old=True):
@@ -226,6 +245,7 @@ def change_database_config(new_path, backup_old=True):
 ```
 
 **After (DDD 접근법):**
+
 ```python
 # 각 책임이 명확히 분리된 방식
 use_case = DatabaseProfileManagementUseCase(repository)
@@ -239,6 +259,7 @@ result = await coordinator.coordinate_safe_operation(...)
 ### 2. 🎯 "타입은 문서이자 컴파일러이자 설계 도구"
 
 **Python Type Hints의 철학적 활용:**
+
 ```python
 # 단순한 타입 표시가 아닌, 의도의 명시
 async def restore_backup(
@@ -252,6 +273,7 @@ async def restore_backup(
 ### 3. 🚀 "테스트는 사후 검증이 아니라 설계 도구"
 
 **TDD를 통한 설계 개선:**
+
 ```python
 # 테스트 작성 중 발견한 설계 문제
 def test_create_profile_with_invalid_data():
@@ -268,16 +290,19 @@ def test_create_profile_with_invalid_data():
 ## 🔮 미래 발전 방향
 
 ### 1. 📈 성능 최적화 로드맵
+
 - **Database Connection Pooling**: 다중 데이터베이스 연결 최적화
 - **Caching Strategy**: Redis 기반 설정 캐싱 시스템
 - **Async/Await 최적화**: 병렬 처리로 응답 속도 개선
 
 ### 2. 🛡️ 보안 강화 계획
+
 - **암호화된 설정 저장**: 민감한 API 키 보호
 - **접근 권한 관리**: Role-based Access Control 도입
 - **감사 로그**: 모든 설정 변경 이력 추적
 
 ### 3. 🌐 확장성 고려사항
+
 - **Multi-tenant Architecture**: 여러 사용자 지원
 - **Cloud Integration**: AWS/Azure 클라우드 데이터베이스 지원
 - **Microservices Ready**: 서비스 분리 가능한 구조 유지
@@ -289,6 +314,7 @@ def test_create_profile_with_invalid_data():
 ### 🎯 DDD 적용 시 핵심 원칙
 
 #### **1. Domain First 사고법**
+
 ```
 ❌ "데이터베이스 스키마부터 설계하자"
 ✅ "비즈니스 규칙을 먼저 이해하고 모델링하자"
@@ -298,6 +324,7 @@ def test_create_profile_with_invalid_data():
 ```
 
 #### **2. 의존성 방향 엄수**
+
 ```python
 # ✅ 올바른 의존성 방향
 class DatabaseProfileManagementUseCase:
@@ -311,6 +338,7 @@ class DatabaseProfile:
 ```
 
 #### **3. 점진적 복잡성 증가**
+
 ```
 1단계: 가장 간단한 케이스부터 (Happy Path)
 2단계: 예외 상황 추가 (Error Handling)
@@ -321,6 +349,7 @@ class DatabaseProfile:
 ### 🚀 TDD 실무 적용 팁
 
 #### **효과적인 테스트 작성 전략**
+
 ```python
 # 1. 테스트 이름으로 의도 명확히 표현
 def test_create_profile_should_fail_when_name_is_empty():
@@ -345,6 +374,7 @@ def test_backup_creation():
 ### 💡 코드 품질 관리 노하우
 
 #### **리팩토링 안전장치**
+
 ```python
 # 1. 타입 힌트로 계약 명시
 async def update_profile(
@@ -366,18 +396,21 @@ async def update_profile(
 ## 🎉 프로젝트 성과 요약
 
 ### 정량적 성과
+
 - ✅ **테스트 커버리지**: 7/7 통과 (100%)
 - ✅ **계층 분리**: 4-Layer Architecture 완벽 구현
 - ✅ **타입 안전성**: 100% Type Hints 적용
 - ✅ **의존성 관리**: Zero Circular Dependency
 
 ### 정성적 성과
+
 - 🎨 **코드 가독성**: 각 클래스와 메서드의 역할이 명확
 - 🔧 **유지보수성**: 변경 시 영향 범위가 제한적
 - 🚀 **확장성**: 새로운 기능 추가가 용이한 구조
 - 🛡️ **안정성**: 실시간 거래 중에도 안전한 설정 변경
 
 ### 개발자 경험 향상
+
 - 💡 **직관적 API**: Use Case 메서드명만 봐도 기능 파악 가능
 - 🐛 **빠른 디버깅**: 계층별 책임 분리로 문제 원인 추적 용이
 - 📖 **자기 문서화**: 코드 자체가 비즈니스 로직을 설명
@@ -387,16 +420,19 @@ async def update_profile(
 ## 🔗 관련 문서 참조
 
 ### 핵심 아키텍처 문서
+
 - **COMPONENT_ARCHITECTURE.md**: DDD 컴포넌트 구조 상세
 - **ERROR_HANDLING_POLICY.md**: 에러 처리 정책
 - **DB_SCHEMA.md**: 데이터베이스 스키마 설계
 
 ### 개발 가이드라인
+
 - **DEV_CHECKLIST.md**: 개발 검증 체크리스트
 - **STYLE_GUIDE.md**: 코딩 스타일 가이드
 - **PYTEST_IMPLEMENTATION_COMPLETION.md**: 테스트 구현 완료 보고서
 
 ### 프로젝트 전체 맥락
+
 - **PROJECT_SPECIFICATIONS.md**: 프로젝트 전체 명세
 - **ARCHITECTURE_OVERVIEW.md**: 시스템 아키텍처 개요
 
