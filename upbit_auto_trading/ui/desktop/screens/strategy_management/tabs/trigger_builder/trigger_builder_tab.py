@@ -1,8 +1,21 @@
 """
-트리거 빌더 탭 - MVP 패턴 연결
+트리거 빌더 탭 - MVP 패턴 연결 (QAsync 통합)
 """
 
+import asyncio
 from PyQt6.QtWidgets import QWidget
+
+# QAsync 통합 import
+try:
+    from qasync import asyncSlot
+    QASYNC_AVAILABLE = True
+except ImportError:
+    QASYNC_AVAILABLE = False
+
+    def asyncSlot(*args):
+        def decorator(func):
+            return func
+        return decorator
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.repositories.repository_container import RepositoryContainer
@@ -74,7 +87,7 @@ class TriggerBuilderTab(QWidget):
             layout.addWidget(self._view)
 
             # 즉시 초기화 실행
-            self._run_async(self.initialize())
+            self._schedule_async(self.initialize())
 
             self._logger.info("트리거 빌더 탭 MVP 패턴 설정 완료")
 
@@ -87,17 +100,17 @@ class TriggerBuilderTab(QWidget):
         try:
             # 변수 선택 시그널 연결
             self._view.variable_selected.connect(
-                lambda name: self._run_async(self._presenter.handle_variable_selected(name))
+                lambda name: self._schedule_async(self._presenter.handle_variable_selected(name))
             )
 
             # 외부 변수 선택 시그널 연결
             self._view.external_variable_selected.connect(
-                lambda name: self._run_async(self._presenter.handle_external_variable_selected(name))
+                lambda name: self._schedule_async(self._presenter.handle_external_variable_selected(name))
             )
 
             # 검색 요청 시그널 연결
             self._view.search_requested.connect(
-                lambda term, category: self._run_async(
+                lambda term, category: self._schedule_async(
                     self._presenter.handle_search_variables(term, category)
                 )
             )
@@ -112,7 +125,7 @@ class TriggerBuilderTab(QWidget):
 
             # 호환성 검토 시그널 연결
             self._view.compatibility_check_requested.connect(
-                lambda main_id, external_id: self._run_async(
+                lambda main_id, external_id: self._schedule_async(
                     self._presenter.handle_compatibility_check(main_id, external_id)
                 )
             )
@@ -123,21 +136,35 @@ class TriggerBuilderTab(QWidget):
             self._logger.error(f"시그널 연결 실패: {e}")
             raise
 
-    def _run_async(self, coroutine):
-        """비동기 메서드를 동기적으로 실행"""
-        import asyncio
+    def _schedule_async(self, coroutine):
+        """
+        QAsync 환경에서 비동기 메서드 스케줄링
+
+        ❌ 이전: 동기/비동기 분기 + run_until_complete/asyncio.run
+        ✅ 현재: QAsync 환경 가정 + create_task 스케줄링
+        """
         try:
-            # 이벤트 루프가 이미 실행 중인지 확인
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 이미 실행 중인 경우 태스크로 예약
-                asyncio.create_task(coroutine)
-            else:
-                # 실행 중이 아닌 경우 새로 실행
-                loop.run_until_complete(coroutine)
-        except RuntimeError:
-            # 이벤트 루프가 없는 경우 새로 생성
-            asyncio.run(coroutine)
+            if not QASYNC_AVAILABLE:
+                self._logger.error("QAsync가 설치되지 않았습니다")
+                return
+
+            # QAsync 환경에서는 항상 실행 중인 루프 가정
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(coroutine)
+
+            # 에러 핸들링을 위한 콜백 등록
+            def task_done_callback(finished_task):
+                if finished_task.exception():
+                    exc = finished_task.exception()
+                    self._logger.error(f"비동기 작업 실패: {exc}")
+                else:
+                    self._logger.debug("비동기 작업 완료")
+
+            task.add_done_callback(task_done_callback)
+            return task
+
+        except RuntimeError as e:
+            self._logger.error(f"QAsync 환경이 아닙니다: {e}")
         except Exception as e:
             self._logger.error(f"비동기 실행 실패: {e}")
 

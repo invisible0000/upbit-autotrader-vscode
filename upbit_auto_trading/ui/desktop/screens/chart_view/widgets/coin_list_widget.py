@@ -1,26 +1,56 @@
 """
-코인 리스트 위젯 - 완전 재설계 버전
+코인 리스트 위젯 - QAsync 통합 버전
 
-문제점:
-1. _coin_list가 None이 되는 이슈
-2. UI 중복 생성 문제
-3. 재생성 로직의 복잡성
+QAsync 아키텍처 변경사항:
+1. 격리 이벤트 루프 완전 제거 (new_event_loop, run_until_complete 금지)
+2. @asyncSlot 패턴으로 UI-비동기 브리지 통일
+3. AppKernel TaskManager 통합으로 태스크 생명주기 관리
+4. LoopGuard 통합으로 루프 위반 실시간 감지
 
-해결책:
-1. 지연 초기화 (Lazy Initialization) 패턴
-2. 프로퍼티 기반 안전한 접근
-3. 단순하고 명확한 구조
+목적:
+- 단일 QAsync 이벤트 루프에서 모든 비동기 작업 처리
+- Thread-5 격리 루프 문제 완전 해결
+- Infrastructure Layer와 완벽 호환성 확보
 """
 
 from typing import Optional, List, Set
+import asyncio
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QComboBox,
     QLineEdit, QPushButton, QListWidget, QListWidgetItem, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor
+
+# QAsync 통합 imports
+try:
+    from qasync import asyncSlot
+    QASYNC_AVAILABLE = True
+except ImportError:
+    QASYNC_AVAILABLE = False
+    # 폴백 데코레이터 (QAsync 없는 환경용)
+
+    def asyncSlot(*args):
+        def decorator(func):
+            return func
+        return decorator
+
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.application.chart_viewer.coin_list_service import CoinListService, CoinInfo
+
+# AppKernel 통합
+try:
+    from upbit_auto_trading.infrastructure.runtime.app_kernel import get_kernel
+    KERNEL_AVAILABLE = True
+except ImportError:
+    KERNEL_AVAILABLE = False
+
+# LoopGuard 통합
+try:
+    from upbit_auto_trading.infrastructure.runtime.loop_guard import get_loop_guard
+    LOOP_GUARD_AVAILABLE = True
+except ImportError:
+    LOOP_GUARD_AVAILABLE = False
 
 
 class CoinListWidget(QWidget):
@@ -35,6 +65,18 @@ class CoinListWidget(QWidget):
         super().__init__(parent)
         self._logger = create_component_logger("CoinListWidget")
 
+        # QAsync 환경 검증
+        if not QASYNC_AVAILABLE:
+            self._logger.error("❌ QAsync가 설치되지 않았습니다. pip install qasync")
+            raise RuntimeError("QAsync 필수 의존성 누락")
+
+        # LoopGuard 등록
+        if LOOP_GUARD_AVAILABLE:
+            self._loop_guard = get_loop_guard()
+            self._loop_guard.register_component("CoinListWidget", "코인 리스트 UI 위젯")
+        else:
+            self._loop_guard = None
+
         # 상태 변수
         self._current_market = "KRW"
         self._search_filter = ""
@@ -42,6 +84,10 @@ class CoinListWidget(QWidget):
         self._favorites: Set[str] = set()  # 즐겨찾기 심볼들
         self._sort_mode = "name"  # "name", "change", "volume"
         self._is_initialized = False
+
+        # 비동기 작업 상태 관리
+        self._loading_task: Optional[asyncio.Task] = None
+        self._refresh_task: Optional[asyncio.Task] = None
 
         # UI 컴포넌트 - None으로 시작
         self._market_combo: Optional[QComboBox] = None
@@ -51,7 +97,7 @@ class CoinListWidget(QWidget):
         self._sort_change_radio: Optional[QRadioButton] = None
         self._sort_volume_radio: Optional[QRadioButton] = None
         self._sort_button_group: Optional[QButtonGroup] = None
-        self._list_widget: Optional[QListWidget] = None  # 이름 변경으로 충돌 방지
+        self._list_widget: Optional[QListWidget] = None
 
         # 서비스
         self._coin_service = CoinListService()
@@ -62,10 +108,10 @@ class CoinListWidget(QWidget):
         # 즐겨찾기 로드
         self._load_favorites()
 
-        # 데이터 로드
+        # 데이터 로드 스케줄링
         self._schedule_data_loading()
 
-        self._logger.info("✅ 코인 리스트 위젯 초기화 완료")
+        self._logger.info("✅ 코인 리스트 위젯 초기화 완료 (QAsync 모드)")
 
     def _ensure_initialization(self) -> None:
         """확실한 초기화 보장"""
@@ -73,6 +119,10 @@ class CoinListWidget(QWidget):
             return
 
         try:
+            # LoopGuard 검증
+            if self._loop_guard:
+                self._loop_guard.ensure_main_loop(where="CoinListWidget._ensure_initialization")
+
             self._create_ui_components()
             self._setup_layout()
             self._connect_signals()
@@ -170,7 +220,7 @@ class CoinListWidget(QWidget):
             self._clear_button.clicked.connect(self._clear_search)
 
         if self._refresh_button is not None:
-            self._refresh_button.clicked.connect(self._refresh_data)
+            self._refresh_button.clicked.connect(self._on_refresh_clicked)
 
         # 정렬 라디오 버튼 시그널 연결
         if self._sort_button_group is not None:
@@ -200,8 +250,8 @@ class CoinListWidget(QWidget):
         # 즉시 샘플 데이터 표시
         self._load_sample_data()
 
-        # 1초 후 실제 데이터 로드
-        QTimer.singleShot(1000, self._load_real_data)
+        # 1초 후 실제 데이터 로드 (QAsync 방식)
+        QTimer.singleShot(1000, self._start_real_data_loading)
 
     def _load_sample_data(self) -> None:
         """샘플 데이터 로드"""
@@ -220,57 +270,79 @@ class CoinListWidget(QWidget):
         self._update_ui()
         self._logger.info("✅ 샘플 데이터 로드 완료")
 
-    def _load_real_data(self) -> None:
-        """실제 데이터 로드 - 완전히 격리된 async 처리"""
-        import asyncio
-        import threading
+    def _start_real_data_loading(self) -> None:
+        """실제 데이터 로드 시작 (QTimer 콜백에서 호출)"""
+        # 현재 로딩 태스크 취소
+        if self._loading_task and not self._loading_task.done():
+            self._loading_task.cancel()
 
-        def load_data_isolated():
-            """완전히 격리된 스레드에서 데이터 로드"""
+        # QTimer를 사용하여 비동기 메서드 지연 호출
+        QTimer.singleShot(0, self._trigger_load_async)
+
+    @asyncSlot()
+    async def _trigger_load_async(self) -> None:
+        """데이터 로드 트리거 (QTimer에서 호출)"""
+        # 현재 로딩 태스크 취소
+        if self._loading_task and not self._loading_task.done():
+            self._loading_task.cancel()
+
+        # 새로운 로딩 태스크 시작 (TaskManager 사용)
+        if KERNEL_AVAILABLE:
             try:
-                # 완전히 새로운 이벤트 루프 생성 (기존 루프와 격리)
-                new_loop = asyncio.new_event_loop()
-
-                # 현재 스레드의 이벤트 루프를 새로 생성한 것으로 설정
-                asyncio.set_event_loop(new_loop)
-
-                try:
-                    self._logger.info(f"🔄 {self._current_market} 실제 데이터 로드 시작...")
-
-                    # 비동기 작업 실행
-                    coins = new_loop.run_until_complete(
-                        self._coin_service.get_coins_by_market(self._current_market, self._search_filter)
-                    )
-
-                    self._logger.info(f"📊 데이터 로드 완료: {len(coins) if coins else 0}개")
-
-                    if coins:
-                        self._coin_data = coins
-                        # 메인 UI 스레드에서 업데이트 (안전한 크로스 스레드 호출)
-                        QTimer.singleShot(0, self._update_ui_after_load)
-                        self._logger.info(f"✅ {self._current_market} 실제 데이터 로드 완료: {len(coins)}개")
-                    else:
-                        self._logger.warning(f"⚠️ {self._current_market} 마켓에 데이터가 없습니다")
-                        self._coin_data = []
-                        QTimer.singleShot(0, self._update_ui_after_load)
-
-                finally:
-                    # 이벤트 루프 완전히 정리
-                    new_loop.close()
-                    # 현재 스레드의 이벤트 루프 해제
-                    asyncio.set_event_loop(None)
-
+                kernel = get_kernel()
+                self._loading_task = kernel.create_task(
+                    self._load_real_data_async(),
+                    name="coin_list_initial_load",
+                    component="CoinListWidget"
+                )
             except Exception as e:
-                self._logger.error(f"❌ 실제 데이터 로드 실패: {e}")
-                import traceback
-                self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
-                # 에러 발생 시 빈 데이터로 업데이트
+                self._logger.warning(f"AppKernel 사용 불가: {e}. 직접 태스크 생성")
+                self._loading_task = asyncio.create_task(self._load_real_data_async())
+        else:
+            self._loading_task = asyncio.create_task(self._load_real_data_async())
+
+    async def _load_real_data_async(self) -> None:
+        """
+        실제 데이터 로드 - QAsync 통합 패턴
+
+        ❌ 이전: threading + new_event_loop + run_until_complete
+        ✅ 현재: @asyncSlot + await + TaskManager
+        """
+        try:
+            # LoopGuard 검증
+            if self._loop_guard:
+                self._loop_guard.ensure_main_loop(where="CoinListWidget._load_real_data_async")
+
+            self._logger.info(f"🔄 {self._current_market} 실제 데이터 로드 시작... (QAsync 모드)")
+
+            # 🎯 핵심 변경: 격리 루프 대신 직접 await
+            coins = await self._coin_service.get_coins_by_market(
+                self._current_market,
+                self._search_filter
+            )
+
+            self._logger.info(f"📊 데이터 로드 완료: {len(coins) if coins else 0}개")
+
+            if coins:
+                self._coin_data = coins
+                # 🎯 UI 업데이트를 메인 스레드에서 안전하게 처리
+                QTimer.singleShot(0, self._update_ui_after_load)
+                self._logger.info(f"✅ {self._current_market} 실제 데이터 로드 완료: {len(coins)}개")
+            else:
+                self._logger.warning(f"⚠️ {self._current_market} 마켓에 데이터가 없습니다")
                 self._coin_data = []
                 QTimer.singleShot(0, self._update_ui_after_load)
 
-        # 완전히 새로운 데몬 스레드에서 실행 (UI 스레드와 격리)
-        thread = threading.Thread(target=load_data_isolated, daemon=True)
-        thread.start()
+        except asyncio.CancelledError:
+            self._logger.info("데이터 로드 작업이 취소되었습니다")
+            raise
+        except Exception as e:
+            self._logger.error(f"❌ 실제 데이터 로드 실패: {e}")
+            import traceback
+            self._logger.error(f"스택 트레이스: {traceback.format_exc()}")
+            # 에러 발생 시 빈 데이터로 업데이트
+            self._coin_data = []
+            QTimer.singleShot(0, self._update_ui_after_load)
 
     def _update_ui_after_load(self) -> None:
         """데이터 로드 후 UI 업데이트"""
@@ -393,7 +465,7 @@ class CoinListWidget(QWidget):
         if market != self._current_market:
             self._current_market = market
             self.market_changed.emit(market)
-            self._load_real_data()
+            self._start_real_data_loading()  # QAsync 방식으로 로드
             self._logger.info(f"📊 마켓 변경: {market}")
 
     def _on_search_changed(self, text: str) -> None:
@@ -408,39 +480,63 @@ class CoinListWidget(QWidget):
         self._search_filter = ""
         self._update_ui()
 
-    def _refresh_data(self) -> None:
-        """새로고침 버튼 클릭 처리 - 현재 마켓 데이터 새로고침"""
+    def _on_refresh_clicked(self) -> None:
+        """새로고침 버튼 클릭 처리 (동기 슬롯)"""
+        # 현재 새로고침 태스크 취소
+        if self._refresh_task and not self._refresh_task.done():
+            self._refresh_task.cancel()
+
+        # QTimer를 사용하여 비동기 메서드 지연 호출
+        QTimer.singleShot(0, self._trigger_refresh_async)
+
+    @asyncSlot()
+    async def _trigger_refresh_async(self) -> None:
+        """새로고침 트리거 (QTimer에서 호출)"""
+        # 현재 새로고침 태스크 취소
+        if self._refresh_task and not self._refresh_task.done():
+            self._refresh_task.cancel()
+
+        # 새로운 새로고침 태스크 시작
+        if KERNEL_AVAILABLE:
+            try:
+                kernel = get_kernel()
+                self._refresh_task = kernel.create_task(
+                    self._refresh_data_async(),
+                    name="coin_list_refresh",
+                    component="CoinListWidget"
+                )
+            except Exception as e:
+                self._logger.warning(f"AppKernel 사용 불가: {e}. 직접 태스크 생성")
+                self._refresh_task = asyncio.create_task(self._refresh_data_async())
+        else:
+            self._refresh_task = asyncio.create_task(self._refresh_data_async())
+
+    async def _refresh_data_async(self) -> None:
+        """
+        새로고침 처리 - QAsync 통합 패턴
+
+        ❌ 이전: threading + new_event_loop + run_until_complete
+        ✅ 현재: @asyncSlot + await + TaskManager
+        """
         try:
+            # LoopGuard 검증
+            if self._loop_guard:
+                self._loop_guard.ensure_main_loop(where="CoinListWidget._refresh_data_async")
+
             self._logger.info(f"🔄 {self._current_market} 마켓 데이터 새로고침 시작")
 
-            # 서비스의 캐시 강제 새로고침
             if self._coin_service:
-                import asyncio
-                import threading
-
-                def refresh_isolated():
-                    """격리된 스레드에서 캐시 새로고침"""
-                    try:
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-
-                        try:
-                            # 서비스 캐시 강제 새로고침
-                            new_loop.run_until_complete(self._coin_service.refresh_data())
-                            # 현재 마켓 데이터 다시 로드
-                            self._load_real_data()
-                        finally:
-                            new_loop.close()
-                            asyncio.set_event_loop(None)
-                    except Exception as e:
-                        self._logger.error(f"❌ 새로고침 실패: {e}")
-
-                thread = threading.Thread(target=refresh_isolated, daemon=True)
-                thread.start()
+                # 🎯 핵심 변경: 격리 루프 대신 직접 await
+                await self._coin_service.refresh_data()
+                # 현재 마켓 데이터 다시 로드
+                await self._load_real_data_async()
             else:
                 # 서비스가 없으면 단순 재로드
-                self._load_real_data()
+                await self._load_real_data_async()
 
+        except asyncio.CancelledError:
+            self._logger.info("새로고침 작업이 취소되었습니다")
+            raise
         except Exception as e:
             self._logger.error(f"❌ 데이터 새로고침 실패: {e}")
 
@@ -449,27 +545,14 @@ class CoinListWidget(QWidget):
         try:
             if button == self._sort_name_radio:
                 self._sort_mode = "name"
-                self._logger.debug("정렬 모드: 이름순")
             elif button == self._sort_change_radio:
                 self._sort_mode = "change"
-                self._logger.debug("정렬 모드: 변화율순")
             elif button == self._sort_volume_radio:
                 self._sort_mode = "volume"
-                self._logger.debug("정렬 모드: 거래량순")
 
-            # 현재 표시된 데이터 다시 업데이트 (정렬 적용)
-            self._apply_current_sort()
-
-        except Exception as e:
-            self._logger.error(f"정렬 변경 처리 중 오류: {e}")
-
-    def _apply_current_sort(self) -> None:
-        """현재 정렬 모드를 적용하여 리스트 업데이트"""
-        try:
-            # 현재 선택된 마켓과 검색어로 다시 업데이트
             self._update_ui()
         except Exception as e:
-            self._logger.error(f"정렬 적용 중 오류: {e}")
+            self._logger.error(f"정렬 변경 처리 중 오류: {e}")
 
     def _sort_coin_data(self, coin_data: List[CoinInfo]) -> List[CoinInfo]:
         """코인 데이터를 현재 정렬 모드에 따라 정렬"""
@@ -557,13 +640,14 @@ class CoinListWidget(QWidget):
         self._favorites = {"KRW-BTC", "KRW-ETH"}
         self._logger.debug(f"📖 즐겨찾기 로드: {len(self._favorites)}개")
 
+    # 외부 API 메서드들
     def get_current_market(self) -> str:
         """현재 마켓 반환"""
         return self._current_market
 
     def refresh_data(self) -> None:
-        """데이터 새로고침 (외부 호출용)"""
-        self._refresh_data()
+        """외부 호출용 새로고침"""
+        self._on_refresh_clicked()
 
     def get_selected_symbol(self) -> Optional[str]:
         """선택된 심볼 반환"""
@@ -574,3 +658,22 @@ class CoinListWidget(QWidget):
         except Exception:
             pass
         return None
+
+    async def cleanup(self) -> None:
+        """위젯 정리 (종료 시 호출)"""
+        try:
+            # 진행 중인 태스크 취소
+            if self._loading_task and not self._loading_task.done():
+                self._loading_task.cancel()
+
+            if self._refresh_task and not self._refresh_task.done():
+                self._refresh_task.cancel()
+
+            # LoopGuard 해제
+            if self._loop_guard:
+                self._loop_guard.unregister_component("CoinListWidget")
+
+            self._logger.info("🧹 CoinListWidget 정리 완료")
+
+        except Exception as e:
+            self._logger.error(f"❌ CoinListWidget 정리 실패: {e}")

@@ -108,6 +108,7 @@ personal_config.yaml
 trading_history/
 portfolio_data/
 personal_strategies/
+.obsidian/
 
 # 협업 DB 관리 시스템 (사용자별 커스터마이징 포함)
 # data_info/
