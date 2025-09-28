@@ -182,10 +182,36 @@ class ApplicationContainer(containers.DeclarativeContainer):
         )
     )
 
-    # Main Window - 메인 애플리케이션 윈도우
-    main_window = providers.Factory(
-        "upbit_auto_trading.ui.desktop.main_window.MainWindow"
+    # Application Services - MVP 패턴으로 Presenter에 위임
+    screen_manager_service = providers.Factory(
+        "upbit_auto_trading.application.services.screen_manager_service.ScreenManagerService"
     )
+
+    window_state_service = providers.Factory(
+        "upbit_auto_trading.application.services.window_state_service.WindowStateService"
+    )
+
+    menu_service = providers.Factory(
+        "upbit_auto_trading.application.services.menu_service.MenuService"
+    )
+
+    # MainWindowPresenter - MVP 패턴 적용 (모든 필요한 서비스 주입)
+    main_window_presenter = providers.Factory(
+        "upbit_auto_trading.ui.desktop.presenters.main_window_presenter.MainWindowPresenter",
+        services=providers.Dict(
+            theme_service=theme_service,
+            database_health_service=providers.Factory(
+                "upbit_auto_trading.application.services.database_health_service.DatabaseHealthService"
+            ),
+            navigation_bar=navigation_service,
+            api_key_service=api_key_service,
+            screen_manager_service=screen_manager_service,
+            window_state_service=window_state_service,
+            menu_service=menu_service
+        )
+    )
+
+    # Main Window는 직접 인스턴스화 (순환 import 방지)
 
 
 # =============================================================================
@@ -242,8 +268,8 @@ def wire_container_modules(container: ApplicationContainer) -> None:
             "upbit_auto_trading.ui.desktop.main_window",
             # "upbit_auto_trading.ui.desktop.screens",
 
-            # Presentation Layer
-            # "upbit_auto_trading.presentation.presenters",
+            # Presentation Layer - API 설정 프레젠터
+            "upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter",
 
             # Application Layer
             # "upbit_auto_trading.application.services",

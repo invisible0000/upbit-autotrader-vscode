@@ -43,9 +43,13 @@ class MainWindowPresenter(QObject):
     UI 이벤트를 비즈니스 로직으로 변환하고, 서비스 결과를 UI에 반영합니다.
     """
 
-    # 시그널 정의
+    # 시그널 정의 - MVP 패턴 강화
     theme_update_requested = pyqtSignal(str)  # UI에 테마 업데이트 요청
     status_update_requested = pyqtSignal(str, str)  # 상태 바 업데이트 요청
+    screen_change_requested = pyqtSignal(str)  # 화면 전환 요청
+    window_title_update_requested = pyqtSignal(str)  # 창 제목 업데이트 요청
+    navigation_update_requested = pyqtSignal()  # 네비게이션 바 업데이트 요청
+    error_message_requested = pyqtSignal(str, str)  # 에러 메시지 표시 요청 (제목, 내용)
 
     def __init__(self, services: Dict[str, Any]) -> None:
         """
@@ -68,6 +72,11 @@ class MainWindowPresenter(QObject):
         self.database_health_service = services.get('database_health_service')
         self.navigation_bar = services.get('navigation_bar')
         self.status_bar = services.get('status_bar')
+
+        # Application Service들 추가 (MVP 패턴으로 이동)
+        self.screen_manager_service = services.get('screen_manager_service')
+        self.window_state_service = services.get('window_state_service')
+        self.menu_service = services.get('menu_service')
 
         self.logger.info("✅ MainWindowPresenter 초기화 완료")
 
@@ -186,3 +195,84 @@ class MainWindowPresenter(QObject):
 
         except Exception as e:
             self.logger.error(f"❌ 초기화 후 설정 처리 실패: {e}")
+
+    def handle_screen_initialization(self, stack_widget, screen_widgets):
+        """화면 초기화 처리 - MVP 패턴으로 이동"""
+        try:
+            if self.screen_manager_service:
+                self.screen_manager_service.initialize_screens(stack_widget, screen_widgets)
+                self.logger.info("✅ ScreenManagerService를 통한 화면 초기화 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ ScreenManagerService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 화면 초기화 실패: {e}")
+            return False
+
+    def handle_screen_change(self, screen_name, stack_widget, screen_widgets, dependencies):
+        """화면 전환 처리 - MVP 패턴으로 이동"""
+        try:
+            if self.screen_manager_service:
+                success = self.screen_manager_service.change_screen(
+                    screen_name, stack_widget, screen_widgets, dependencies
+                )
+                if success:
+                    self.logger.info(f"✅ 화면 전환 성공: {screen_name}")
+                    # UI 업데이트 시그널 발송
+                    self.navigation_update_requested.emit()
+                    self.window_title_update_requested.emit(f"업비트 자동매매 - {screen_name}")
+                else:
+                    self.logger.warning(f"⚠️ 화면 전환 실패: {screen_name}")
+                    self.error_message_requested.emit("화면 전환 실패", f"{screen_name} 화면으로 전환할 수 없습니다.")
+                return success
+            else:
+                self.logger.warning("⚠️ ScreenManagerService를 사용할 수 없음")
+                self.error_message_requested.emit("서비스 오류", "화면 관리 서비스를 사용할 수 없습니다.")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 화면 전환 처리 실패: {e}")
+            self.error_message_requested.emit("시스템 오류", f"화면 전환 중 오류가 발생했습니다: {e}")
+            return False
+
+    def handle_window_state_load(self, window, settings_service):
+        """창 상태 로드 처리 - MVP 패턴으로 이동"""
+        try:
+            if self.window_state_service:
+                self.window_state_service.load_window_state(window, settings_service)
+                self.logger.info("✅ 창 상태 로드 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ WindowStateService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 창 상태 로드 실패: {e}")
+            return False
+
+    def handle_window_state_save(self, window, settings_service):
+        """창 상태 저장 처리 - MVP 패턴으로 이동"""
+        try:
+            if self.window_state_service:
+                self.window_state_service.save_window_state(window, settings_service)
+                self.logger.info("✅ 창 상태 저장 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ WindowStateService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 창 상태 저장 실패: {e}")
+            return False
+
+    def handle_menu_setup(self, window, dependencies):
+        """메뉴 설정 처리 - MVP 패턴으로 이동"""
+        try:
+            if self.menu_service:
+                self.menu_service.setup_menu_bar(window, dependencies)
+                self.logger.info("✅ 메뉴 설정 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ MenuService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 메뉴 설정 실패: {e}")
+            return False

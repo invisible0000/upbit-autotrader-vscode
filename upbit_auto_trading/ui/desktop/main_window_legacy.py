@@ -12,13 +12,19 @@ from PyQt6.QtCore import Qt
 # Dependency Injection
 from dependency_injector.wiring import Provide, inject
 
-# Application Layer 서비스 - MVP 패턴으로 Presenter에서 처리
+# Application Layer 서비스
+from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
+from upbit_auto_trading.application.services.screen_manager_service import ScreenManagerService
+from upbit_auto_trading.application.services.window_state_service import WindowStateService
+from upbit_auto_trading.application.services.menu_service import MenuService
 
-# Presenter Layer - DI Container를 통해 주입받음
+# Presenter Layer
+from upbit_auto_trading.ui.desktop.presenters.main_window_presenter import MainWindowPresenter
 
 # 공통 위젯 임포트
 from upbit_auto_trading.ui.desktop.common.widgets.status_bar import StatusBar
 from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
+from upbit_auto_trading.ui.desktop.common.styles.style_manager import StyleManager
 
 # 화면 임포트 (임시로 더미 클래스 사용)
 
@@ -113,14 +119,14 @@ class MainWindow(QMainWindow):
     """
 
     @inject
+    @inject
     def __init__(
         self,
         settings_service=Provide["settings_service"],
         theme_service=Provide["theme_service"],
         style_manager=Provide["style_manager"],
         navigation_service=Provide["navigation_service"],
-        api_key_service=Provide["api_key_service"],
-        main_window_presenter=Provide["main_window_presenter"]
+        api_key_service=Provide["api_key_service"]
     ):
         """초기화 - @inject 패턴으로 서비스 주입
 
@@ -133,52 +139,60 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
 
-        # 주입받은 서비스들 저장
+        # 주입받은 API 키 서비스 저장
         self.api_key_service = api_key_service
+
+        # 주입받은 서비스들 저장
         self.settings_service = settings_service
         self.theme_service = theme_service
         self.style_manager = style_manager
         self.nav_bar = navigation_service
-        self.presenter = main_window_presenter
 
-        # IL 스마트 로깅 초기화 (먼저 초기화) - Fail-Fast 패턴
+        # IL 스마트 로깅 초기화 (먼저 초기화)
+        self.logger = None
         try:
             from upbit_auto_trading.infrastructure.logging import create_component_logger
             self.logger = create_component_logger("MainWindow")
             self.logger.info("🎯 MainWindow IL 스마트 로깅 초기화 완료")
         except Exception as e:
-            # 로깅은 핵심 Infrastructure이므로 실패시 명시적 에러 발생
-            raise RuntimeError(f"MainWindow 필수 로깅 시스템 초기화 실패: {e}") from e
+            # 폴백: print로 출력하되 로거는 None 유지
+            print(f"⚠️ IL 스마트 로깅 초기화 실패, print 폴백: {e}")
 
         # 서비스 주입 검증 및 초기화 (@inject 패턴 사용)
-        # 핵심 서비스 주입 검증 - Fail-Fast 패턴
-        if not self.settings_service:
-            raise RuntimeError("SettingsService 주입 실패: MainWindow 핵심 의존성")
-        self._log_info(f"✅ SettingsService 주입 성공: {type(self.settings_service).__name__}")
+        if self.settings_service:
+            self._log_info(f"✅ SettingsService 주입 성공: {type(self.settings_service).__name__}")
+        else:
+            self._log_warning("⚠️ SettingsService가 주입되지 않음")
 
         if self.theme_service:
             self._log_info("✅ ThemeService 주입 성공")
             # 테마 변경 시그널 연결
             try:
                 self.theme_service.connect_theme_changed(self._on_theme_changed_from_service)
-                self._log_info("✅ 테마 변경 시그널 연결 성공")
             except Exception as e:
-                self._log_error(f"❌ 테마 시그널 연결 실패: {e} (테마 자동 전환 비활성화)")
+                self._log_warning(f"⚠️ 테마 변경 시그널 연결 실패: {e}")
         else:
             self._log_warning("⚠️ ThemeService가 주입되지 않음")
 
-        # StyleManager 주입 검증 - Fail-Fast 패턴
-        if not self.style_manager:
-            raise RuntimeError("StyleManager 주입 실패: UI 스타일링 필수 의존성")
-        self._log_info("✅ StyleManager 주입 성공")
+        if self.style_manager:
+            self._log_info("✅ StyleManager 주입 성공")
+        else:
+            self._log_warning("⚠️ StyleManager가 주입되지 않음")
 
-        # NavigationBar 주입 검증 (대체 가능)
         if self.nav_bar:
             self._log_info("✅ NavigationBar 주입 성공")
         else:
-            self._log_warning("⚠️ NavigationBar 주입 실패 - 폴백 생성 예정")
+            self._log_warning("⚠️ NavigationBar가 주입되지 않음")
 
-        # DatabaseHealthService는 Presenter에서 처리
+        # DatabaseHealthService 초기화 (최소 구현)
+        self.db_health_service = None
+        try:
+            # DatabaseHealthService 생성 (최소 구현)
+            self.db_health_service = DatabaseHealthService()
+            self._log_info("✅ DatabaseHealthService 초기화 완료 (최소 구현)")
+
+        except Exception as e:
+            self._log_warning(f"⚠️ DatabaseHealthService 초기화 실패: {e}")
 
         # 화면 캐시 (지연 로딩용)
         self._screen_cache = {}
@@ -187,14 +201,23 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("업비트 자동매매 시스템")
         self.setMinimumSize(1280, 720)  # 요구사항 문서의 최소 해상도 요구사항 적용
 
-        # Application Service들은 Presenter를 통해 처리 (MVP 패턴)
+        # ScreenManagerService 초기화 (DDD/MVP 패턴)
+        self.screen_manager = ScreenManagerService()
+        self._log_info("✅ ScreenManagerService 초기화 완료")
 
-        # MainWindowPresenter 연결 - MVP 패턴 핵심
-        if not self.presenter:
-            raise RuntimeError("MainWindowPresenter 주입 실패: MVP 패턴 핵심 의존성")
+        # WindowStateService 초기화 (DDD/MVP 패턴)
+        self.window_state_service = WindowStateService()
+        self._log_info("✅ WindowStateService 초기화 완료")
 
+        # MenuService 초기화 (DDD/MVP 패턴)
+        self.menu_service = MenuService()
+        self._log_info("✅ MenuService 초기화 완료")
+
+        # MainWindowPresenter 초기화 (DDD/MVP 패턴)
+        presenter_services = self._get_presenter_dependencies()
+        self.presenter = MainWindowPresenter(presenter_services)
         self._setup_presenter_connections()
-        self._log_info("✅ MVP 패턴 Presenter 연결 완료")
+        self._log_info("✅ MainWindowPresenter 초기화 완료")
 
         # UI 설정
         self._setup_ui()
@@ -273,58 +296,50 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.nav_bar)
         main_layout.addWidget(content_widget)
 
-        # 상태 바 설정 - 기본 StatusBar만 설정
-        self.status_bar = StatusBar()
+        # 상태 바 설정 - 자율적 상태바로 간소화
+        db_service = getattr(self, 'db_health_service', None)
+        self.status_bar = StatusBar(database_health_service=db_service)
         self.setStatusBar(self.status_bar)
-        self._log_info("✅ StatusBar 기본 설정 완료")
+        self._log_info("✅ 자율적 StatusBar 초기화 완료")
 
-        # 메뉴 바 설정 (Presenter를 통한 MVP 패턴)
+        # 메뉴 바 설정 (MenuService 사용)
         menu_dependencies = self._get_menu_dependencies()
-        self.presenter.handle_menu_setup(self, menu_dependencies)
+        self.menu_service.setup_menu_bar(self, menu_dependencies)
 
-        # 저장된 창 상태 로드 (Presenter를 통한 MVP 패턴)
-        self.presenter.handle_window_state_load(self, self.settings_service)
+        # 저장된 창 상태 로드 (WindowStateService 사용)
+        self.window_state_service.load_window_state(self, self.settings_service)
 
     def _initialize_websocket_async(self):
-        """WebSocket v6 Application Service 비동기 초기화 - QAsync TaskManager 사용"""
+        """WebSocket v6 Application Service 비동기 초기화"""
+        import asyncio
+
+        # QTimer를 사용해서 이벤트 루프가 준비된 후 WebSocket 초기화
         from PyQt6.QtCore import QTimer
 
         def start_websocket_init():
-            """WebSocket 초기화를 비동기적으로 시작 - AppKernel TaskManager 활용"""
+            """WebSocket 초기화를 비동기적으로 시작"""
             try:
-                # AppKernel에서 TaskManager 가져오기
-                from upbit_auto_trading.infrastructure.runtime.app_kernel import get_kernel
-                kernel = get_kernel()
-
-                if kernel:
-                    # TaskManager를 통한 안전한 태스크 생성
-                    kernel.create_task(
-                        self._perform_websocket_initialization(),
-                        name="websocket_initialization",
-                        component="MainWindow"
-                    )
-                    self._log_info("🔄 TaskManager를 통한 WebSocket v6 초기화 태스크 생성 완료")
-                else:
-                    self._log_warning("⚠️ AppKernel을 사용할 수 없음 - WebSocket 초기화 연기")
+                # 현재 이벤트 루프 확인
+                try:
+                    asyncio.get_running_loop()
+                    # 비동기 초기화 태스크 생성
+                    asyncio.create_task(self._perform_websocket_initialization())
+                    self._log_info("🔄 WebSocket v6 초기화 태스크 생성 완료")
+                except RuntimeError:
+                    self._log_warning("⚠️ 이벤트 루프가 실행되지 않음 - WebSocket 초기화 연기")
                     # 100ms 후 재시도
                     QTimer.singleShot(100, start_websocket_init)
 
             except Exception as e:
-                self._log_error(f"❌ TaskManager WebSocket 초기화 태스크 생성 실패: {e}")
-                # 폴백: 100ms 후 재시도
-                QTimer.singleShot(100, start_websocket_init)
+                self._log_error(f"❌ WebSocket 초기화 태스크 생성 실패: {e}")
 
         # 100ms 후에 WebSocket 초기화 시작 (UI 로드 완료 후)
         QTimer.singleShot(100, start_websocket_init)
 
     async def _perform_websocket_initialization(self):
-        """실제 WebSocket 초기화 수행 - LoopGuard 적용"""
-        # LoopGuard로 이벤트 루프 안전성 확보
-        from upbit_auto_trading.infrastructure.runtime.loop_guard import ensure_main_loop
-        ensure_main_loop(where="MainWindow._perform_websocket_initialization", component="MainWindow")
-
+        """실제 WebSocket 초기화 수행"""
         try:
-            self._log_info("🚀 WebSocket v6 Application Service 초기화 시작 (LoopGuard 적용)")
+            self._log_info("🚀 WebSocket v6 Application Service 초기화 시작")
 
             from upbit_auto_trading.application.services.websocket_application_service import (
                 get_websocket_service,
@@ -361,23 +376,25 @@ class MainWindow(QMainWindow):
             self._log_info("✅ WebSocket v6 Application Service 초기화 완료")
 
         except Exception as e:
-            self._log_error(f"❌ WebSocket v6 초기화 실패: {e.__class__.__name__}: {e}")
-            self._log_warning("⚠️ WebSocket 없이 계속 진행 (실시간 데이터 수신 불가)")
-            # WebSocket은 선택적 기능이므로 실패해도 애플리케이션 계속 실행
+            self._log_error(f"❌ WebSocket v6 Application Service 초기화 실패: {e}")
+            # WebSocket 실패는 치명적이지 않으므로 계속 진행
+            self._log_warning("⚠️ WebSocket v6 없이 계속 진행합니다")
 
     # Legacy 창 상태 로드 메서드가 제거되었습니다. WindowStateService에서 처리됩니다.
 
     # Legacy 메뉴 바 설정 메서드가 제거되었습니다. MenuService에서 처리됩니다.
 
     def _add_screens(self):
-        """화면 추가 (Presenter를 통한 MVP 패턴)"""
-        success = self.presenter.handle_screen_initialization(self.stack_widget, self._screen_widgets)
-        if not success:
-            # 폴백: 대시보드 화면만 간단히 추가
+        """화면 추가 (ScreenManagerService 사용)"""
+        try:
+            self.screen_manager.initialize_screens(self.stack_widget, self._screen_widgets)
+            self._log_info("ScreenManagerService를 통한 화면 초기화 완료")
+        except Exception as e:
+            self._log_error(f"ScreenManagerService 화면 초기화 실패: {e}")
+            # 대시보드 화면만 간단히 추가
             dashboard_screen = DashboardScreen()
             self.stack_widget.addWidget(dashboard_screen)
             self._screen_widgets = {'대시보드': dashboard_screen}
-            self._log_warning("⚠️ 폴백으로 대시보드 화면만 추가")
 
     def _add_placeholder_screens(self, screens):
         """임시 화면 추가"""
@@ -394,13 +411,24 @@ class MainWindow(QMainWindow):
             self.stack_widget.addWidget(placeholder)
 
     def _change_screen(self, screen_name):
-        """화면 전환 (Presenter를 통한 MVP 패턴)"""
-        dependencies = self._prepare_screen_dependencies()
-        success = self.presenter.handle_screen_change(
-            screen_name, self.stack_widget, self._screen_widgets, dependencies
-        )
-        if not success:
-            self._log_warning(f"⚠️ 화면 전환 실패: {screen_name}")
+        """화면 전환 (ScreenManagerService 사용)"""
+        try:
+            # 의존성 준비
+            dependencies = self._prepare_screen_dependencies()
+
+            # ScreenManagerService를 통한 화면 전환
+            success = self.screen_manager.change_screen(
+                screen_name,
+                self.stack_widget,
+                self._screen_widgets,
+                dependencies
+            )
+
+            if not success:
+                self._log_warning(f"ScreenManagerService 화면 전환 실패: {screen_name}")
+
+        except Exception as e:
+            self._log_error(f"ScreenManagerService 화면 전환 중 오류: {e}")
 
     def _prepare_screen_dependencies(self):
         """화면 의존성 준비 (@inject 패턴 사용으로 mvp_container 제거됨)"""
@@ -418,25 +446,30 @@ class MainWindow(QMainWindow):
         return {
             'change_screen_callback': self._change_screen,
             'toggle_theme_callback': self._toggle_theme_via_service,
+            'window_state_service': self.window_state_service,
             'theme_service': self.theme_service,
             'style_manager': self.style_manager,
             'nav_bar': self.nav_bar
         }
 
+    def _get_presenter_dependencies(self):
+        """MainWindowPresenter에 필요한 의존성 반환"""
+        return {
+            'theme_service': self.theme_service,
+            'database_health_service': self.db_health_service,
+            'navigation_bar': self.nav_bar if hasattr(self, 'nav_bar') else None
+        }
+
     def _setup_presenter_connections(self):
-        """MainWindowPresenter와 UI 간 시그널-슬롯 연결 - MVP 패턴 강화"""
+        """MainWindowPresenter와 UI 간 시그널-슬롯 연결"""
         if hasattr(self, 'presenter'):
-            # 기존 시그널 연결
+            # 테마 업데이트 요청 시그널 연결
             self.presenter.theme_update_requested.connect(self._on_theme_update_requested)
+
+            # 상태 업데이트 요청 시그널 연결
             self.presenter.status_update_requested.connect(self._on_status_update_requested)
 
-            # 새로운 시그널 연결
-            self.presenter.screen_change_requested.connect(self._on_screen_change_requested)
-            self.presenter.window_title_update_requested.connect(self.setWindowTitle)
-            self.presenter.navigation_update_requested.connect(self._on_navigation_update_requested)
-            self.presenter.error_message_requested.connect(self._on_error_message_requested)
-
-            self._log_debug("✅ MainWindowPresenter 시그널-슬롯 연결 완료 (MVP 패턴 강화)")
+            self._log_debug("✅ MainWindowPresenter 시그널-슬롯 연결 완료")
 
     def _on_theme_update_requested(self, theme_name: str):
         """Presenter에서 테마 업데이트 요청 시 처리"""
@@ -451,45 +484,10 @@ class MainWindow(QMainWindow):
         """Presenter에서 상태 업데이트 요청 시 처리"""
         try:
             self._log_debug(f"Presenter로부터 상태 업데이트 요청: {status_type} = {status_value}")
-            # StatusBar가 있으면 업데이트
-            if hasattr(self, 'status_bar') and self.status_bar:
-                # StatusBar의 메서드가 있으면 호출 (구현에 따라)
-                pass  # 실제 StatusBar 업데이트 로직은 StatusBar 구현에 따라 결정
             self._log_debug(f"✅ Presenter 상태 업데이트 완료: {status_type}")
 
         except Exception as e:
             self._log_error(f"❌ Presenter 상태 업데이트 실패: {e}")
-
-    def _on_screen_change_requested(self, screen_name: str):
-        """Presenter에서 화면 전환 요청 시 처리 - View는 단순 실행만"""
-        try:
-            self._change_screen(screen_name)
-            self._log_debug(f"✅ 화면 전환 요청 처리 완료: {screen_name}")
-        except Exception as e:
-            self._log_error(f"❌ 화면 전환 요청 처리 실패: {e}")
-
-    def _on_navigation_update_requested(self):
-        """Presenter에서 네비게이션 업데이트 요청 시 처리"""
-        try:
-            if hasattr(self, 'nav_bar') and self.nav_bar:
-                self.nav_bar.update()
-                self.nav_bar.repaint()
-            self._log_debug("✅ 네비게이션 바 업데이트 완료")
-        except Exception as e:
-            self._log_error(f"❌ 네비게이션 바 업데이트 실패: {e}")
-
-    def _on_error_message_requested(self, title: str, message: str):
-        """Presenter에서 에러 메시지 표시 요청 시 처리"""
-        try:
-            from PyQt6.QtWidgets import QMessageBox
-            msg_box = QMessageBox(self)
-            msg_box.setWindowTitle(title)
-            msg_box.setText(message)
-            msg_box.setIcon(QMessageBox.Icon.Warning)
-            msg_box.exec()
-            self._log_debug(f"✅ 에러 메시지 표시 완료: {title}")
-        except Exception as e:
-            self._log_error(f"❌ 에러 메시지 표시 실패: {e}")
 
     def _toggle_theme_via_service(self):
         """MenuService를 통한 테마 전환"""
@@ -581,10 +579,11 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(100, self._update_all_widgets)
 
     def _save_settings(self):
-        """설정 저장 - Presenter를 통한 MVP 패턴"""
-        success = self.presenter.handle_window_state_save(self, self.settings_service)
-        if not success:
-            self._log_warning("⚠️ 창 상태 저장 실패")
+        """설정 저장 - WindowStateService로 위임"""
+        try:
+            self.window_state_service.save_window_state(self, self.settings_service)
+        except Exception as e:
+            self._log_error(f"설정 저장 실패: {e}")
 
     def closeEvent(self, a0):
         """
@@ -607,6 +606,7 @@ class MainWindow(QMainWindow):
             self._change_screen("backtest")
         except Exception as e:
             self._log_error(f"백테스팅 화면 전환 실패: {e}")
+            import traceback
             traceback.print_exc()
 
     # ======================================================================

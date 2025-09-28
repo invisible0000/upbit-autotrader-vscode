@@ -18,10 +18,14 @@ Phase 2 마이그레이션으로 생성됨:
 import gc
 from typing import TYPE_CHECKING, Tuple, Dict, Any
 
+from dependency_injector.wiring import Provide, inject
+
 from upbit_auto_trading.infrastructure.logging import create_component_logger
+from upbit_auto_trading.infrastructure.dependency_injection.container import ApplicationContainer
 
 if TYPE_CHECKING:
     from upbit_auto_trading.ui.desktop.screens.settings.api_settings.views.api_settings_view import ApiSettingsView
+    from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
 
 class ApiSettingsPresenter:
     """
@@ -30,7 +34,12 @@ class ApiSettingsPresenter:
     비즈니스 로직을 담당하며 View와 Domain Service 사이의 중계자 역할을 합니다.
     """
 
-    def __init__(self, view: "ApiSettingsView", api_key_service=None):
+    @inject
+    def __init__(
+        self,
+        view: "ApiSettingsView",
+        api_key_service: "ApiKeyService" = Provide[ApplicationContainer.api_key_service]
+    ):
         self.view = view
         self.logger = create_component_logger("ApiSettingsPresenter")
 

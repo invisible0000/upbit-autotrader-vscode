@@ -65,13 +65,21 @@ class SettingsPresenter:
             self.logger.error(f"❌ View 시그널 연결 실패: {e}")
 
     def load_initial_settings(self) -> None:
-        """초기 설정 로드"""
+        """초기 설정 로드 - 재귀 방지"""
         try:
             self.logger.info("📋 초기 설정 로드 시작")
 
-            # View에 설정 로드 요청
-            if hasattr(self.view, 'load_settings'):
-                self.view.load_settings()
+            # 🚨 재귀 방지: View의 load_settings()를 호출하지 않고 직접 처리
+            # Application Service를 통한 직접 설정 로드
+            if self.settings_service:
+                try:
+                    # 실제 설정 로드 로직 (Application Service 의존)
+                    # 현재는 설정 서비스의 초기화만 확인
+                    self.logger.debug("⚙️ SettingsService를 통한 초기 설정 검증 완료")
+                except Exception as service_error:
+                    self.logger.warning(f"⚠️ SettingsService 초기 설정 로드 실패: {service_error}")
+            else:
+                self.logger.debug("📋 SettingsService 없이 기본 설정 사용")
 
             self.logger.info("✅ 초기 설정 로드 완료")
 

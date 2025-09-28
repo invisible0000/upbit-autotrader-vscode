@@ -105,8 +105,8 @@ class WebSocketManager:
         # 🔧 Background Tasks Set (Weak Reference 방지 - 공식 Python 패턴)
         self._background_tasks: Set[asyncio.Task] = set()
 
-        # 🔧 Graceful Shutdown을 위한 Event 기반 중단 메커니즘
-        self._shutdown_event: asyncio.Event = asyncio.Event()
+        # 🔧 Graceful Shutdown을 위한 Event 기반 중단 메커니즘 (Lazy Initialization)
+        self._shutdown_event: Optional[asyncio.Event] = None
 
         # 연결 헬스체크를 위한 마지막 메시지 수신 시간 추적
         self._last_message_times: Dict[WebSocketType, Optional[float]] = {
@@ -614,20 +614,15 @@ class WebSocketManager:
                 try:
                     # 🔧 Event 기반 대기: 30초 또는 shutdown_event 중 먼저 발생하는 것
                     try:
-                        # 🛡️ Event Loop 바인딩 안전성 체크
-                        current_loop = asyncio.get_running_loop()
-                        if hasattr(self._shutdown_event, '_loop') and self._shutdown_event._loop != current_loop:
-                            self.logger.warning("⚠️ shutdown_event가 다른 이벤트 루프에 바인딩됨, 새로 생성")
-                            self._shutdown_event = asyncio.Event()
-
-                        await asyncio.wait_for(self._shutdown_event.wait(), timeout=30.0)
+                        # 🛡️ QAsync 루프 일관성 보장 (Lazy Initialization)
+                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=30.0)
                         # shutdown_event가 설정되면 즉시 종료
                         self.logger.info("🛑 Shutdown Event 감지 - 모니터링 루프 즉시 종료")
                         break
                     except RuntimeError as e:
                         if "bound to a different event loop" in str(e):
-                            self.logger.warning("🔧 Event Loop 바인딩 문제 해결: shutdown_event 재생성")
-                            self._shutdown_event = asyncio.Event()
+                            self.logger.warning("🔧 Event Loop 바인딩 문제 감지: shutdown_event 재초기화")
+                            self._shutdown_event = None  # 다음 접근 시 재생성
                             # 재생성 후 다시 시도하지 않고 타임아웃으로 처리
                             await asyncio.sleep(30.0)
                         else:
@@ -682,17 +677,14 @@ class WebSocketManager:
                     # 오류 시 Event 기반 대기 (10초 또는 shutdown_event)
                     try:
                         # 🛡️ Event Loop 바인딩 안전성 체크
-                        current_loop = asyncio.get_running_loop()
-                        if hasattr(self._shutdown_event, '_loop') and self._shutdown_event._loop != current_loop:
-                            self._shutdown_event = asyncio.Event()
-
-                        await asyncio.wait_for(self._shutdown_event.wait(), timeout=10.0)
+                        # 🛡️ QAsync 루프 일관성 보장 (Lazy Initialization)
+                        await asyncio.wait_for(self.shutdown_event.wait(), timeout=10.0)
                         self.logger.info("🛑 오류 처리 중 Shutdown Event 감지")
                         break
                     except RuntimeError as e:
                         if "bound to a different event loop" in str(e):
-                            self.logger.warning("🔧 Event Loop 바인딩 문제 해결: shutdown_event 재생성")
-                            self._shutdown_event = asyncio.Event()
+                            self.logger.warning("🔧 Event Loop 바인딩 문제 감지: shutdown_event 재초기화")
+                            self._shutdown_event = None  # 다음 접근 시 재생성
                             await asyncio.sleep(10.0)
                         else:
                             raise e

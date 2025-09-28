@@ -72,7 +72,7 @@ class LoggingService(ILoggingService):
         # Domain Events 로깅 핸들러 등록
         self._setup_domain_log_handler()
 
-        print("🔧 Infrastructure 로깅 시스템 - 설정 파일 기반으로 초기화 완료!")
+        print("[INIT] Infrastructure 로깅 시스템 - 설정 파일 기반으로 초기화 완료!")
         self._print_current_config()
 
     def _get_context_from_config(self, config: Dict[str, Any]) -> LogContext:
@@ -125,10 +125,10 @@ class LoggingService(ILoggingService):
                 print("🔧 Infrastructure 로깅 설정 실시간 적용:")
                 for change in changes:
                     print(f"  {change}")
-                print(f"✅ 로깅 설정 변경 적용 완료: {len(changes)}개 변경사항")
+                print(f"[OK] 로깅 설정 변경 적용 완료: {len(changes)}개 변경사항")
 
         except Exception as e:
-            print(f"❌ 설정 변경 적용 실패: {e}")
+            print(f"[ERROR] 설정 변경 적용 실패: {e}")
             import traceback
             traceback.print_exc()
 
@@ -165,7 +165,7 @@ class LoggingService(ILoggingService):
                 print(f"🔧 파일 로깅 레벨: {file_config.get('level', 'DEBUG')}")
 
         except Exception as e:
-            print(f"❌ 로깅 설정 즉시 반영 실패: {e}")
+            print(f"[ERROR] 로깅 설정 즉시 반영 실패: {e}")
 
     def _resolve_console_output_auto(self, console_setting: Any) -> bool:
         """콘솔 출력 오토 모드 해석
@@ -223,7 +223,7 @@ class LoggingService(ILoggingService):
                     del self._handlers['console']
 
         except Exception as e:
-            print(f"❌ 콘솔 핸들러 업데이트 실패: {e}")
+            print(f"[ERROR] 콘솔 핸들러 업데이트 실패: {e}")
 
     def _update_file_handlers(self, file_level: int) -> None:
         """파일 핸들러 레벨 즉시 업데이트"""
@@ -233,7 +233,7 @@ class LoggingService(ILoggingService):
                     if isinstance(handler, (logging.FileHandler, RotatingFileHandler)):
                         handler.setLevel(file_level)
         except Exception as e:
-            print(f"❌ 파일 핸들러 업데이트 실패: {e}")
+            print(f"[ERROR] 파일 핸들러 업데이트 실패: {e}")
 
     def _print_current_config(self) -> None:
         """현재 설정 상태 출력"""
@@ -264,7 +264,7 @@ class LoggingService(ILoggingService):
             print("============================================================")
 
         except Exception as e:
-            print(f"❌ 설정 상태 출력 실패: {e}")
+            print(f"[ERROR] 설정 상태 출력 실패: {e}")
 
     def _setup_domain_log_handler(self) -> None:
         """Domain Layer 로그 이벤트 핸들러 설정"""
@@ -322,7 +322,7 @@ class LoggingService(ILoggingService):
             self._write_session_header()
 
         except Exception as e:
-            print(f"❌ 로깅 서비스 초기화 실패: {e}")
+            print(f"[ERROR] 로깅 서비스 초기화 실패: {e}")
             # 최소한의 콘솔 로깅이라도 유지
             self._initialize_fallback_logging()
 
@@ -465,11 +465,11 @@ class LoggingService(ILoggingService):
                 session_handler.setLevel(file_level)
                 self._handlers['session'] = session_handler
 
-                print(f"✅ 파일 로깅 활성화:")
-                print(f"   📁 로그 폴더: {log_dir}")
-                print(f"   📄 메인 로그: {main_log_path} (최대: {max_size_mb}MB, 백업: {backup_count}개)")
-                print(f"   📄 세션 로그: {session_log_path}")
-                print(f"   📊 로그 레벨: {file_level_str}")
+                print(f"[OK] 파일 로깅 활성화:")
+                print(f"   [DIR] 로그 폴더: {log_dir}")
+                print(f"   [FILE] 메인 로그: {main_log_path} (최대: {max_size_mb}MB, 백업: {backup_count}개)")
+                print(f"   [FILE] 세션 로그: {session_log_path}")
+                print(f"   [INFO] 로그 레벨: {file_level_str}")
 
                 # 기존 백업 파일 정리 (프로그램 시작 시)
                 self._cleanup_old_backups(log_dir, backup_count)
@@ -485,13 +485,13 @@ class LoggingService(ILoggingService):
                 self._handlers['console'] = console_handler
 
                 auto_info = " (오토모드)" if console_output_setting == 'auto' else ""
-                print(f"✅ 콘솔 핸들러 활성화{auto_info} - 레벨: {console_handler.level}")
+                print(f"[OK] 콘솔 핸들러 활성화{auto_info} - 레벨: {console_handler.level}")
             else:
                 auto_info = " (오토모드)" if console_output_setting == 'auto' else ""
-                print(f"ℹ️ 콘솔 출력 비활성화{auto_info} (설정 파일 기준)")
+                print(f"[INFO] 콘솔 출력 비활성화{auto_info} (설정 파일 기준)")
 
         except Exception as e:
-            print(f"❌ 핸들러 초기화 실패: {e}")
+            print(f"[ERROR] 핸들러 초기화 실패: {e}")
             self._initialize_fallback_logging()
 
     def _cleanup_old_backups(self, log_dir: Path, max_backup_count: int) -> None:
@@ -532,7 +532,7 @@ class LoggingService(ILoggingService):
                     print(f"⚠️ 백업 파일 삭제 실패: {old_file.name} - {e}")
 
             if files_to_remove:
-                print(f"✅ 백업 파일 정리 완료: {len(files_to_remove)}개 파일 삭제")
+                print(f"[OK] 백업 파일 정리 완료: {len(files_to_remove)}개 파일 삭제")
 
         except Exception as e:
             print(f"⚠️ 백업 파일 정리 중 오류: {e}")
@@ -1010,7 +1010,7 @@ class LoggingService(ILoggingService):
             logger.info("🚀 로깅 서비스 종료 완료")
 
         except Exception as e:
-            print(f"❌ 서비스 종료 중 오류: {e}")
+            print(f"[ERROR] 서비스 종료 중 오류: {e}")
 
 # ==================== 전역 인스턴스 관리 ====================
 

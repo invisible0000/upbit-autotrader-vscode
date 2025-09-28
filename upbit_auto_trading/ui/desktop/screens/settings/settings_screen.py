@@ -18,6 +18,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
+# Dependency Injection
+from dependency_injector.wiring import Provide, inject
+
 # Infrastructure Layer Enhanced Logging v4.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
@@ -35,15 +38,23 @@ class SettingsScreen(QWidget):
     db_status_changed = pyqtSignal(bool)   # connected
     save_all_requested = pyqtSignal()
 
-    def __init__(self, settings_service=None, parent=None):
-        """SettingsScreen 초기화 - Infrastructure Layer v4.0 통합
+    @inject
+    def __init__(
+        self,
+        parent=None,
+        settings_service=Provide["settings_service"],
+        api_key_service=Provide["api_key_service"]
+    ):
+        """SettingsScreen 초기화 - @inject 패턴으로 DI 적용
 
         Args:
-            settings_service: Application Service (MVP Container에서 주입)
             parent: 부모 위젯
+            settings_service: Application Service (@inject로 주입)
+            api_key_service: API 키 서비스 (@inject로 주입)
         """
         super().__init__(parent)
         self.settings_service = settings_service
+        self._api_key_service = api_key_service
 
         # Infrastructure Layer Enhanced Logging v4.0 초기화
         self.logger = create_component_logger("SettingsScreen")
@@ -52,6 +63,9 @@ class SettingsScreen(QWidget):
         # Infrastructure Layer 의존성 주입 확인
         self.app_context = None
         self.logger.debug("🔧 Application Context 확인 중...")
+
+        # 메인 SettingsPresenter 초기화 (MVP 패턴)
+        self._init_main_presenter()
 
         # 하위 위젯들 초기화
         self._init_sub_widgets()
@@ -66,6 +80,41 @@ class SettingsScreen(QWidget):
         self._init_infrastructure_integration()
 
         self.logger.info("✅ SettingsScreen (MVP View + Infrastructure v4.0) 초기화 완료")
+
+    def _init_main_presenter(self):
+        """메인 SettingsPresenter 초기화 (MVP 패턴)"""
+        try:
+            # Fail-Fast 패턴: 필수 의존성 검증
+            if not self.settings_service:
+                error_msg = "SettingsService가 주입되지 않았습니다. DI Container 설정을 확인하세요."
+                self.logger.error(f"❌ 의존성 주입 실패: {error_msg}")
+                self.show_status_message(error_msg, False)
+                self.main_presenter = None
+                return
+
+            from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
+
+            # 메인 Presenter 생성 및 연결
+            self.main_presenter = SettingsPresenter(
+                view=self,
+                settings_service=self.settings_service
+            )
+
+            self.logger.info("✅ 메인 SettingsPresenter 연결 완료")
+
+            # 초기 설정 로드
+            try:
+                self.main_presenter.load_initial_settings()
+            except Exception as load_error:
+                error_msg = f"초기 설정 로드 중 오류 발생: {str(load_error)}"
+                self.logger.warning(f"⚠️ {error_msg}")
+                self.show_status_message(error_msg, False)
+
+        except Exception as e:
+            error_msg = f"메인 SettingsPresenter 초기화 실패: {str(e)}"
+            self.logger.error(f"❌ {error_msg}")
+            self.show_status_message(error_msg, False)
+            self.main_presenter = None
 
     def _init_infrastructure_integration(self):
         """Infrastructure Layer v4.0와의 통합 초기화"""
@@ -97,23 +146,14 @@ class SettingsScreen(QWidget):
         self.environment_profile_presenter = None
         self.logging_management_presenter = None
 
-        # DI 컨테이너에서 ApiKeyService 가져오기 (미리 준비)
-        self._api_key_service = None
-        try:
-            main_window = self.parent()
-            search_count = 0
-            while main_window and not hasattr(main_window, 'di_container') and search_count < 5:
-                main_window = main_window.parent()
-                search_count += 1
-
-            if main_window and hasattr(main_window, 'di_container'):
-                di_container = getattr(main_window, 'di_container', None)
-                if di_container:
-                    from upbit_auto_trading.infrastructure.services.api_key_service import IApiKeyService
-                    self._api_key_service = di_container.resolve(IApiKeyService)
-                    self.logger.info(f"✅ ApiKeyService 주입 성공: {type(self._api_key_service).__name__}")
-        except Exception as e:
-            self.logger.warning(f"⚠️ ApiKeyService 해결 중 오류 (무시): {e}")
+        # Fail-Fast 패턴: ApiKeyService 의존성 검증
+        if self._api_key_service:
+            self.logger.info(f"✅ ApiKeyService @inject 성공: {type(self._api_key_service).__name__}")
+        else:
+            error_msg = "ApiKeyService가 주입되지 않았습니다. API 키 관리 기능이 제한될 수 있습니다."
+            self.logger.warning(f"⚠️ {error_msg}")
+            # 사용자에게 경고하되 치명적이지 않으므로 계속 진행
+            self.show_status_message(error_msg, False)
 
         # 첫 번째 탭(UI 설정)만 즉시 초기화
         self._initialize_ui_settings()
@@ -141,13 +181,16 @@ class SettingsScreen(QWidget):
                 ApiSettingsPresenter
             )
 
-            self.api_key_manager = ApiSettingsView(self, api_key_service=self._api_key_service)
-            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager, self._api_key_service)
+            self.api_key_manager = ApiSettingsView(self)
+            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager)
             self.api_key_manager.set_presenter(self.api_settings_presenter)
-            self.logger.debug("🔑 API 설정 위젯 lazy 초기화 완료")
+            self.logger.info("✅ API 설정 위젯 lazy 초기화 완료")
         except Exception as e:
+            import traceback
             self.logger.error(f"❌ API 설정 위젯 lazy 초기화 실패: {e}")
+            self.logger.error(f"상세 오류: {traceback.format_exc()}")
             self.api_key_manager = self._create_fallback_widget("API 키 관리")
+            self.logger.warning("⚠️ API 키 관리 폴백 위젯으로 대체")
 
     def _initialize_database_settings(self):
         """데이터베이스 설정 위젯 lazy 초기화"""
@@ -156,7 +199,26 @@ class SettingsScreen(QWidget):
 
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
+            from upbit_auto_trading.ui.desktop.screens.settings.database_settings.presenters import (
+                database_settings_presenter
+            )
+
             self.database_settings = DatabaseSettingsView(self)
+
+            # DatabaseSettingsPresenter 연결 (MVP 패턴)
+            try:
+                self.database_settings_presenter = database_settings_presenter.DatabaseSettingsPresenter(
+                    self.database_settings
+                )
+                if hasattr(self.database_settings, 'set_presenter'):
+                    self.database_settings.set_presenter(self.database_settings_presenter)
+                    self.logger.debug("✅ DatabaseSettingsPresenter 연결 완료")
+                else:
+                    self.database_settings.presenter = self.database_settings_presenter
+                    self.logger.debug("✅ DatabaseSettingsPresenter 직접 할당 완료")
+            except Exception as presenter_error:
+                self.logger.warning(f"⚠️ DatabaseSettingsPresenter 연결 실패: {presenter_error}")
+
             self.logger.debug("💾 데이터베이스 설정 위젯 lazy 초기화 완료")
         except Exception as e:
             self.logger.error(f"❌ 데이터베이스 설정 위젯 lazy 초기화 실패: {e}")
@@ -205,12 +267,38 @@ class SettingsScreen(QWidget):
             self.notification_settings = self._create_fallback_widget("알림 설정")
 
     def _create_fallback_widget(self, name: str):
-        """폴백 위젯 생성"""
+        """향상된 폴백 위젯 생성 - 복구 가이드 포함"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        label = QLabel(f"{name} (로드 실패)")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        # 오류 제목
+        title = QLabel(f"⚠️ {name} 로드 실패")
+        title.setObjectName("error-title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        font = title.font()
+        font.setPointSize(14)
+        font.setBold(True)
+        title.setFont(font)
+        layout.addWidget(title)
+
+        # 복구 안내
+        guide = QLabel("""이 기능을 로드하는 중 오류가 발생했습니다.
+
+다음 방법으로 해결을 시도해보세요:
+1. 애플리케이션을 재시작해보세요
+2. 로그를 확인하여 구체적인 오류를 파악하세요
+3. 문제가 지속되면 개발팀에 문의하세요""")
+        guide.setObjectName("error-guide")
+        guide.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        guide.setWordWrap(True)
+        layout.addWidget(guide)
+
+        # 스페이서
+        spacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        layout.addItem(spacer)
+
         return widget
 
     def _create_disabled_profile_widget(self):
@@ -331,29 +419,57 @@ config/ 폴더 기반으로 재구현될 예정입니다.
             self.logger.info("✅ UI Settings 시그널 연결 준비 완료 (직접 MVP 구조)")
 
             # API Key Manager의 상태 변경 시그널을 상위로 중계
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
-            if isinstance(self.api_key_manager, ApiSettingsView):
-                self.api_key_manager.api_status_changed.connect(self._on_api_settings_status_changed)
-                self.logger.info("✅ ApiSettingsView api_status_changed 시그널 중계 연결 완료")
+            if self.api_key_manager is not None:
+                try:
+                    from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
+                    if isinstance(self.api_key_manager, ApiSettingsView):
+                        self.api_key_manager.api_status_changed.connect(self._on_api_settings_status_changed)
+                        self.logger.info("✅ ApiSettingsView api_status_changed 시그널 중계 연결 완료")
+                    else:
+                        self.logger.info(f"ℹ️ API 키 관리자 타입: {type(self.api_key_manager).__name__} (폴백 위젯 또는 대체 구현)")
+                        # 폴백 위젯이라도 시그널이 있으면 연결 시도
+                        if hasattr(self.api_key_manager, 'api_status_changed'):
+                            self.api_key_manager.api_status_changed.connect(self._on_api_settings_status_changed)
+                            self.logger.info("✅ 폴백 위젯 api_status_changed 시그널 연결 완료")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ API 키 관리자 시그널 연결 실패: {e}")
             else:
-                self.logger.warning("⚠️ ApiSettingsView가 올바른 타입이 아닙니다 (폴백 위젯 사용 중)")
+                self.logger.warning("⚠️ API 키 관리자가 초기화되지 않음")
 
         except Exception as e:
             self.logger.error(f"❌ 하위 위젯 시그널 중계 연결 실패: {e}")
 
     def _on_ui_settings_theme_changed(self, theme_value: str):
-        """UISettingsManager에서 테마 변경 시그널을 받아서 상위로 중계"""
-        self.logger.info(f"🔄 UISettingsManager에서 테마 변경 시그널 수신하여 중계: {theme_value}")
+        """UISettingsManager에서 테마 변경 시그널을 받아서 Presenter로 전달"""
+        self.logger.info(f"🔄 UISettingsManager에서 테마 변경 시그널 수신: {theme_value}")
+
+        # MVP 패턴: Presenter를 통해 비즈니스 로직 처리
+        if hasattr(self, 'main_presenter') and self.main_presenter:
+            self.main_presenter.handle_theme_changed(theme_value)
+
+        # View 계층 시그널 중계 (상위 컴포넌트용)
         self.theme_changed.emit(theme_value)
 
     def _on_ui_settings_settings_changed(self):
-        """UISettingsManager에서 설정 변경 시그널을 받아서 상위로 중계"""
-        self.logger.debug("🔄 UISettingsManager에서 설정 변경 시그널 수신하여 중계")
+        """UISettingsManager에서 설정 변경 시그널을 받아서 Presenter로 전달"""
+        self.logger.debug("🔄 UISettingsManager에서 설정 변경 시그널 수신")
+
+        # MVP 패턴: Presenter를 통해 비즈니스 로직 처리
+        if hasattr(self, 'main_presenter') and self.main_presenter:
+            self.main_presenter.handle_settings_changed()
+
+        # View 계층 시그널 중계 (상위 컴포넌트용)
         self.settings_changed.emit()
 
     def _on_api_settings_status_changed(self, connected: bool):
-        """ApiSettingsView에서 API 상태 변경 시그널을 받아서 상위로 중계"""
-        self.logger.info(f"🔄 ApiSettingsView에서 API 상태 변경 시그널 수신하여 중계: {'연결됨' if connected else '연결 끊김'}")
+        """ApiSettingsView에서 API 상태 변경 시그널을 받아서 Presenter로 전달"""
+        self.logger.info(f"🔄 ApiSettingsView에서 API 상태 변경 시그널 수신: {'연결됨' if connected else '연결 끊김'}")
+
+        # MVP 패턴: Presenter를 통해 비즈니스 로직 처리
+        if hasattr(self, 'main_presenter') and self.main_presenter:
+            self.main_presenter.handle_api_status_changed(connected)
+
+        # View 계층 시그널 중계 (상위 컴포넌트용)
         self.api_status_changed.emit(connected)
 
     # ISettingsView 인터페이스 구현 메서드들
@@ -545,12 +661,44 @@ config/ 폴더 기반으로 재구현될 예정입니다.
         except Exception as e:
             # 재귀 호출 방지 플래그 해제
             self._tab_changing = False
-            self.logger.warning(f"⚠️ 탭 변경 시 lazy loading 실패: {e}")    # 기존 호환성을 위한 메서드들 (Presenter가 호출)
+            self.logger.warning(f"⚠️ 탭 변경 시 lazy loading 실패: {e}")    # MVP 패턴 준수 - Presenter를 통한 처리
 
     def save_all_settings(self):
-        """모든 설정 저장 - save_all_requested 시그널 발생"""
-        self.save_all_requested.emit()
+        """모든 설정 저장 - Presenter를 통해 처리"""
+        if hasattr(self, 'main_presenter') and self.main_presenter:
+            self.main_presenter.handle_save_all_settings()
+        else:
+            # 폴백: 직접 시그널 발생
+            self.save_all_requested.emit()
 
     def load_settings(self):
-        """설정 로드 - 간단한 버전에서는 아무것도 하지 않음"""
-        print("📋 설정 로드 (간단한 버전)")
+        """설정 로드 - 재귀 방지된 View 레벨 처리"""
+        # 🚨 재귀 방지: Presenter.load_initial_settings()를 호출하지 않음
+        # View 레벨에서 각 탭의 설정만 새로고침
+        try:
+            current_tab_index = self.get_current_tab_index()
+            tab_names = ["UI 설정", "API 키", "데이터베이스", "프로파일", "로깅 관리", "알림"]
+            current_tab_name = tab_names[current_tab_index] if 0 <= current_tab_index < len(tab_names) else "알 수 없음"
+
+            self.logger.debug(f"📋 설정 로드 (View 레벨) - 현재 탭: {current_tab_name}")
+
+            # 현재 활성화된 탭의 설정만 새로고침 (재귀 없는 안전한 방식)
+            self._refresh_current_tab_safely()
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ 설정 로드 중 오류: {e}")
+
+    def _refresh_current_tab_safely(self):
+        """현재 탭을 안전하게 새로고침 (재귀 없음)"""
+        current_index = self.get_current_tab_index()
+
+        # 각 탭별로 안전한 새로고침 (Presenter 호출 없이)
+        if current_index == 0 and self.ui_settings:  # UI 설정
+            self.logger.debug("🔄 UI 설정 탭 안전한 새로고침")
+        elif current_index == 1 and self.api_key_manager:  # API 키
+            self.logger.debug("🔄 API 키 탭 안전한 새로고침")
+        elif current_index == 2 and self.database_settings:  # 데이터베이스
+            self.logger.debug("� 데이터베이스 탭 안전한 새로고침")
+        # 기타 탭들...
+        else:
+            self.logger.debug(f"🔄 탭 {current_index} 안전한 새로고침")

@@ -269,6 +269,7 @@ def test_strategy_creation():
 - **[ARCHITECTURE_GUIDE.md]**: 상세 아키텍처 구조
 - **[LLM_DOCUMENTATION_GUIDELINES.md]**: 문서 작성 표준
 - **[DEVELOPMENT_GUIDE.md]**: 실무 개발 가이드
+- **[QASYNC_THREAD_USAGE_GUIDE.md]**: QAsync 환경 스레드 사용 가이드
 
 ### 패턴별 상세
 

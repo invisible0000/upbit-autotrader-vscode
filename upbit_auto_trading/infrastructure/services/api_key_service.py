@@ -301,100 +301,57 @@ class ApiKeyService(IApiKeyService):
         Returns:
             Tuple[bool, str, Dict[str, Any]]: (success, message, account_info)
         """
-        client = None
-        loop = None
-
         try:
             from upbit_auto_trading.infrastructure.external_apis.upbit.upbit_private_client import UpbitPrivateClient
 
             self.logger.info("🔍 실제 업비트 API 연결 테스트 시작")
 
-            # UpbitPrivateClient 직접 사용 (4-client 구조)
-            client = UpbitPrivateClient(access_key=access_key, secret_key=secret_key)
+            # PyQt/QAsync 환경에서는 항상 스레드 기반 처리 사용 (이벤트 루프 위반 방지)
+            import asyncio
+            import threading
 
-            # PyQt 환경에서도 실제 API 호출 수행 (20,000원 테스트를 위해)
-            try:
-                # 현재 실행 중인 이벤트 루프가 있는지 확인
-                import asyncio
-                loop = asyncio.get_running_loop()
+            self.logger.info("🔍 PyQt 환경에서 실제 API 호출 시작")
 
-                # PyQt 환경에서도 실제 API 호출 수행
-                self.logger.info("🔍 PyQt 환경에서 실제 API 호출 시작")
+            # 새로운 스레드에서 비동기 작업 실행 (이벤트 루프 격리)
+            def run_async_in_thread():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    async def test_connection():
+                        # 스레드 전용 클라이언트 생성 (LoopGuard 비활성화)
+                        thread_client = UpbitPrivateClient(
+                            access_key=access_key,
+                            secret_key=secret_key,
+                            loop_guard=None  # 스레드에서는 LoopGuard 비활성화
+                        )
+                        # LoopGuard 상태 확인
+                        self.logger.debug(f"🔍 스레드 클라이언트 LoopGuard: {thread_client._loop_guard}")
+                        async with thread_client:
+                            return await thread_client.get_accounts()  # Dict 형식 사용
+                    return new_loop.run_until_complete(test_connection())
+                finally:
+                    new_loop.close()
 
-                # 새로운 스레드에서 비동기 작업 실행
-                def run_async_in_thread():
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        async def test_connection():
-                            async with client:
-                                return await client.get_accounts()  # Dict 형식 사용
-                        return new_loop.run_until_complete(test_connection())
-                    finally:
-                        new_loop.close()
+            # 스레드에서 실행 (PyQt 메인 스레드와 격리)
+            result_container = []
+            error_container = []
 
-                # 스레드에서 실행
-                import threading
-                result_container = []
-                error_container = []
+            def thread_worker():
+                try:
+                    result = run_async_in_thread()
+                    result_container.append(result)
+                except Exception as e:
+                    error_container.append(e)
 
-                def thread_worker():
-                    try:
-                        result = run_async_in_thread()
-                        result_container.append(result)
-                    except Exception as e:
-                        error_container.append(e)
+            thread = threading.Thread(target=thread_worker)
+            thread.start()
+            thread.join(timeout=10)  # 10초 타임아웃
 
-                thread = threading.Thread(target=thread_worker)
-                thread.start()
-                thread.join(timeout=10)  # 10초 타임아웃
+            if error_container:
+                raise error_container[0]
 
-                if error_container:
-                    raise error_container[0]
-
-                if result_container:
-                    accounts = result_container[0]
-                    # 계좌 정보 처리 (Dict 형식)
-                    account_info = {}
-                    total_krw = 0.0
-
-                    if isinstance(accounts, dict):
-                        # 새로운 Dict 형식 처리: {currency: account_data}
-                        for currency, account in accounts.items():
-                            balance = float(account.get('balance', 0))
-                            locked = float(account.get('locked', 0))
-
-                            if currency == 'KRW':
-                                total_krw = balance + locked
-
-                            account_info[currency] = {
-                                'balance': balance,
-                                'locked': locked,
-                                'total': balance + locked
-                            }
-
-                        self.logger.info(f"✅ API 연결 테스트 성공 - KRW 잔고: {total_krw:,.0f}원")
-                        return True, f"연결 성공\nKRW 잔고: {total_krw:,.0f}원", {
-                            'KRW': account_info.get('KRW', {'balance': 0, 'locked': 0, 'total': 0}),
-                            'accounts': account_info,
-                            'total_krw': total_krw,
-                            'currencies_count': len(account_info)
-                        }
-                    else:
-                        return False, "계좌 정보 형식 오류", {}
-                else:
-                    raise TimeoutError("API 호출 타임아웃")
-
-            except RuntimeError:
-                # 실행 중인 루프가 없는 경우 (비PyQt 환경)
-                import asyncio
-
-                async def test_connection():
-                    async with client:
-                        return await client.get_accounts()  # Dict 형식 사용
-
-                accounts = asyncio.run(test_connection())
-
+            if result_container:
+                accounts = result_container[0]
                 # 계좌 정보 처리 (Dict 형식)
                 account_info = {}
                 total_krw = 0.0
@@ -414,14 +371,17 @@ class ApiKeyService(IApiKeyService):
                             'total': balance + locked
                         }
 
-                    self.logger.info("✅ API 연결 테스트 성공")
-                    return True, "연결 성공", {
+                    self.logger.info(f"✅ API 연결 테스트 성공 - KRW 잔고: {total_krw:,.0f}원")
+                    return True, f"연결 성공\nKRW 잔고: {total_krw:,.0f}원", {
+                        'KRW': account_info.get('KRW', {'balance': 0, 'locked': 0, 'total': 0}),
                         'accounts': account_info,
                         'total_krw': total_krw,
                         'currencies_count': len(account_info)
                     }
                 else:
                     return False, "계좌 정보 형식 오류", {}
+            else:
+                return False, "API 호출 타임아웃", {}
 
         except Exception as e:
             mark_api_failure()  # API 실패 기록
@@ -430,13 +390,8 @@ class ApiKeyService(IApiKeyService):
             return False, error_msg, {}
 
         finally:
-            # 명시적 클라이언트 정리 (컨텍스트 매니저가 실패한 경우를 위한 백업)
-            if client:
-                try:
-                    if loop and not loop.is_closed():
-                        loop.run_until_complete(client.close())
-                except Exception as cleanup_error:
-                    self.logger.debug(f"클라이언트 정리 중 오류 (무시 가능): {cleanup_error}")
+            # 스레드 기반 처리에서는 별도 정리가 필요하지 않음 (각 스레드에서 자체 루프 정리)
+            pass
 
     def delete_api_keys(self) -> bool:
         """API 키 및 암호화 키 삭제

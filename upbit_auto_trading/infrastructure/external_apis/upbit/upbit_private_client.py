@@ -147,8 +147,19 @@ class UpbitPrivateClient:
 
         # 루프 인식 및 LoopGuard 설정
         self._loop = loop  # 명시적 루프 저장 (None은 나중에 추론)
-        self._loop_guard = loop_guard or get_loop_guard()
+        # 🔧 수정: loop_guard=None이면 LoopGuard 완전 비활성화 (스레드 환경 지원)
+        self._loop_guard = loop_guard  # None이면 그대로 None 사용
+        if self._loop_guard is None and loop_guard is None:
+            # 명시적으로 None이 전달된 경우 (스레드 환경)
+            self._logger.debug("🔍 LoopGuard 명시적 비활성화 (스레드 환경)")
+        elif self._loop_guard is None:
+            # loop_guard 파라미터가 누락된 경우만 전역 인스턴스 사용
+            self._loop_guard = get_loop_guard()
         self._initialized = False
+
+        # LoopGuard 상태 로깅 (디버깅용)
+        guard_type = type(self._loop_guard).__name__ if self._loop_guard else 'None(비활성화)'
+        self._logger.debug(f"🔍 LoopGuard 초기화: {guard_type}")
 
         # 인증 관리자 초기화
         self._auth = UpbitAuthenticator(access_key, secret_key)
@@ -202,7 +213,7 @@ class UpbitPrivateClient:
     async def _ensure_initialized(self) -> None:
         """지연 초기화로 루프 바인딩 문제 해결"""
         if not self._initialized:
-            # LoopGuard 검증
+            # LoopGuard 검증: loop_guard=None이면 건너뛰기 (스레드 환경)
             if self._loop_guard:
                 self._loop_guard.ensure_main_loop(where="UpbitPrivateClient._ensure_initialized")
 

@@ -151,6 +151,17 @@ class DatabaseHealthService:
         """
         return self._current_status
 
+    def check_overall_health(self) -> bool:
+        """
+        전체 DB 상태 확인 (StatusBar 호환성 메서드)
+
+        StatusBar에서 호출되는 메서드로, 현재 상태를 반환합니다.
+
+        Returns:
+            bool: 전체 DB 시스템이 정상이면 True, 문제가 있으면 False
+        """
+        return self.get_current_status()
+
     def get_detailed_status(self) -> Dict[str, Any]:
         """
         상세한 데이터베이스 상태 정보 반환

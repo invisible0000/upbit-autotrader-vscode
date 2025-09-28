@@ -312,8 +312,19 @@ class DatabaseConnectionService:
         return self._db_configs[db_name]['path']
 
     @contextmanager
-    def _create_test_connection(self, db_name: str):
-        """테스트용 임시 연결 생성"""
+    def get_connection(self, db_name: str):
+        """
+        데이터베이스 연결 생성 (Repository 호환)
+
+        Args:
+            db_name: 데이터베이스 이름 ('settings', 'strategies', 'market_data')
+
+        Yields:
+            sqlite3.Connection: 데이터베이스 연결
+        """
+        if db_name not in self._db_configs:
+            raise ValueError(f"알 수 없는 데이터베이스: {db_name}")
+
         config = self._db_configs[db_name]
 
         conn = sqlite3.connect(
@@ -332,6 +343,14 @@ class DatabaseConnectionService:
 
         finally:
             conn.close()
+
+    @contextmanager
+    def _create_test_connection(self, db_name: str):
+        """테스트용 임시 연결 생성 (내부 사용)"""
+        # get_connection과 동일한 구현을 재사용
+        with self.get_connection(db_name) as conn:
+            yield conn
+
 
 # 전역 인스턴스 (Singleton 패턴)
 database_connection_service = DatabaseConnectionService()
