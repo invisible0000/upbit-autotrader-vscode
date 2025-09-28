@@ -143,6 +143,10 @@ chart_cache/
 ehthumbs.db
 Thumbs.db
 
+# Obsidian 관련 (문서 보기 전용)
+.obsidian/
+*.obsidian/
+
 # 기타
 *.pid
 *.lock
