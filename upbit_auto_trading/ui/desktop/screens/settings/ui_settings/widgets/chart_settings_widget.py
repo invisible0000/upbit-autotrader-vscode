@@ -20,24 +20,24 @@ class ChartSettingsWidget(QWidget):
     # 시그널
     settings_changed = pyqtSignal()  # 설정 변경 시그널
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화
 
         Args:
             parent: 부모 위젯
+            logging_service: 로깅 서비스 (DI)
         """
         super().__init__(parent)
         self.setObjectName("widget-chart-settings")
 
-        # 로깅 설정
-        # Application Layer 로깅 서비스 사용 (임시 폴백)
-        try:
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            fallback_service = ApplicationLoggingService()
-            self.logger = fallback_service.get_component_logger("ChartSettingsWidget")
-        except Exception:
-            self.logger = None
-        self.logger.info("📊 차트 설정 위젯 초기화 시작")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ChartSettingsWidget")
+        else:
+            # DI 실패 시 명확한 오류 처리
+            raise ValueError("ChartSettingsWidget에 logging_service가 주입되지 않았습니다")
+
+        self.logger.info("� 차트 설정 위젯 초기화 시작")
 
         # 내부 상태
         self._is_loading = False

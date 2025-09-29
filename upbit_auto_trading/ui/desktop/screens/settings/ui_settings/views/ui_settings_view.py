@@ -36,19 +36,15 @@ class UISettingsView(QWidget):
         super().__init__(parent)
         self.setObjectName("widget-ui-settings-view")
 
-        # Application Layer 로깅 서비스 초기화
-        if logging_service is not None:
-            self.logger = logging_service
-            self.logger.info("🎨 UI 설정 View 초기화 시작")
+        # Application Layer 로깅 서비스 초기화 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("UISettingsView")
         else:
-            # 폴백: 임시 로거
-            try:
-                from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-                fallback_service = ApplicationLoggingService()
-                self.logger = fallback_service.get_component_logger("UISettingsView")
-                self.logger.info("🎨 UI 설정 View 초기화 시작 (폴백 로거)")
-            except Exception:
-                self.logger = None
+            # DI 실패 시 명확한 오류 처리
+            raise ValueError("UISettingsView에 logging_service가 주입되지 않았습니다")
+
+        self.logger.info("🎨 UI 설정 View 초기화 시작")
+        self._logging_service = logging_service  # 하위 위젯들에 전달용 저장
 
         # Presenter 참조
         self._presenter = None
@@ -76,10 +72,11 @@ class UISettingsView(QWidget):
         main_layout.setSpacing(15)
 
         # 각 설정 위젯들 생성
-        self.theme_widget = ThemeSelectorWidget()
-        self.window_widget = WindowSettingsWidget()
-        self.animation_widget = AnimationSettingsWidget()
-        self.chart_widget = ChartSettingsWidget()
+        # DI 패턴으로 하위 위젯들 생성 - logging_service 전달
+        self.theme_widget = ThemeSelectorWidget(logging_service=self._logging_service)
+        self.window_widget = WindowSettingsWidget(logging_service=self._logging_service)
+        self.animation_widget = AnimationSettingsWidget(logging_service=self._logging_service)
+        self.chart_widget = ChartSettingsWidget(logging_service=self._logging_service)
 
         # 위젯들을 레이아웃에 추가
         main_layout.addWidget(self.theme_widget)

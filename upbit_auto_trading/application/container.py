@@ -15,6 +15,20 @@ from upbit_auto_trading.application.notifications.notification_service import No
 from upbit_auto_trading.application.caching.cache_invalidation_service import CacheInvalidationService
 from upbit_auto_trading.domain.events.domain_event_publisher import get_domain_event_publisher
 
+# Settings 관련 Application Services
+from upbit_auto_trading.application.services.logging_application_service import (
+    ApplicationLoggingService,
+    create_application_logging_service
+)
+from upbit_auto_trading.application.services.settings_application_services import (
+    ComponentLifecycleService,
+    SettingsValidationService,
+    SettingsApplicationService,
+    create_component_lifecycle_service,
+    create_settings_validation_service,
+    create_settings_application_service
+)
+
 class ApplicationServiceContainer:
     """Application Service들의 의존성 주입 컨테이너
 
@@ -104,6 +118,88 @@ class ApplicationServiceContainer:
                 self.get_cache_invalidation_service()
             )
         return self._services["event_handler_registry"]
+
+    # =============================================================================
+    # Settings 관련 Application Services
+    # =============================================================================
+
+    def get_logging_service(self) -> ApplicationLoggingService:
+        """로깅 Application Service 조회
+
+        Returns:
+            ApplicationLoggingService: 로깅 관리 서비스
+        """
+        if "logging_service" not in self._services:
+            self._services["logging_service"] = create_application_logging_service()
+        return self._services["logging_service"]
+
+    def get_component_lifecycle_service(self) -> ComponentLifecycleService:
+        """컴포넌트 생명주기 관리 서비스 조회
+
+        Returns:
+            ComponentLifecycleService: 컴포넌트 생명주기 관리 서비스
+        """
+        if "component_lifecycle_service" not in self._services:
+            self._services["component_lifecycle_service"] = create_component_lifecycle_service(
+                self.get_logging_service()
+            )
+        return self._services["component_lifecycle_service"]
+
+    def get_settings_validation_service(self) -> SettingsValidationService:
+        """Settings 유효성 검증 서비스 조회
+
+        Returns:
+            SettingsValidationService: Settings 유효성 검증 서비스
+        """
+        if "settings_validation_service" not in self._services:
+            self._services["settings_validation_service"] = create_settings_validation_service(
+                self.get_logging_service()
+            )
+        return self._services["settings_validation_service"]
+
+    def get_settings_application_service(self) -> SettingsApplicationService:
+        """Settings 통합 Application Service 조회
+
+        Returns:
+            SettingsApplicationService: Settings 통합 관리 서비스
+        """
+        if "settings_application_service" not in self._services:
+            self._services["settings_application_service"] = create_settings_application_service(
+                self.get_logging_service(),
+                self.get_component_lifecycle_service(),
+                self.get_settings_validation_service()
+            )
+        return self._services["settings_application_service"]
+
+    def get_settings_view_factory(self) -> 'SettingsViewFactory':
+        """Settings View Factory 조회
+
+        Returns:
+            SettingsViewFactory: Settings 컴포넌트 생성 Factory
+        """
+        if "settings_view_factory" not in self._services:
+            from upbit_auto_trading.application.factories.settings_view_factory import (
+                create_settings_view_factory
+            )
+
+            # API 키 서비스는 필요한 경우에만 주입 (선택적)
+            api_key_service = None
+            try:
+                # Repository Container에서 API 키 서비스 조회 시도
+                if hasattr(self._repo_container, 'get_api_key_service'):
+                    api_key_service = self._repo_container.get_api_key_service()
+            except Exception:
+                # API 키 서비스 없어도 Factory는 동작 가능
+                pass
+
+            self._services["settings_view_factory"] = create_settings_view_factory(
+                settings_app_service=self.get_settings_application_service(),
+                logging_service=self.get_logging_service(),
+                lifecycle_service=self.get_component_lifecycle_service(),
+                validation_service=self.get_settings_validation_service(),
+                api_key_service=api_key_service
+            )
+        return self._services["settings_view_factory"]
 
     def initialize_event_integration(self) -> None:
         """이벤트 시스템 통합 초기화

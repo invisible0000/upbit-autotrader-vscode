@@ -73,9 +73,14 @@ class DatabaseSettingsPresenter:
     모든 데이터베이스 교체 작업을 통합 Use Case로 처리합니다.
     """
 
-    def __init__(self, view: "IDatabaseTabView"):
+    def __init__(self, view: "IDatabaseTabView", logging_service=None):
         self.view = view
-        self.logger = create_component_logger("DatabaseSettingsPresenter")
+
+        # DI 패턴으로 로깅 서비스 주입
+        if logging_service:
+            self.logger = logging_service.get_component_logger("DatabaseSettingsPresenter")
+        else:
+            raise ValueError("DatabaseSettingsPresenter에 logging_service가 주입되지 않았습니다")
 
         # Factory 패턴으로 Path Service 사용
         self.path_service = get_path_service()
