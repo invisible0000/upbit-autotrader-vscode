@@ -19,12 +19,15 @@ class AlertTypesWidget(QWidget):
 
     settings_changed = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-alert-types")
 
-        self.logger = create_component_logger("AlertTypesWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("AlertTypesWidget")
+        else:
+            raise ValueError("AlertTypesWidget에 logging_service가 주입되지 않았습니다")
         self.logger.debug("🚨 AlertTypesWidget 초기화")
 
         self._setup_ui()

@@ -28,7 +28,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from .profile_metadata import ProfileMetadata
 
-logger = create_component_logger("ProfileMetadataDialog")
+
 
 class ProfileMetadataDialog(QDialog):
     """
@@ -63,7 +63,7 @@ class ProfileMetadataDialog(QDialog):
         self._populate_form()
         self._apply_styles()
 
-        logger.info(f"📝 프로파일 메타데이터 다이얼로그 초기화: {profile_name}")
+        self.logger.info(f"📝 프로파일 메타데이터 다이얼로그 초기화: {profile_name}")
 
     def _setup_dialog(self):
         """다이얼로그 기본 설정"""
@@ -135,10 +135,10 @@ class ProfileMetadataDialog(QDialog):
             # === 태그 관리 그룹 ===
             self._setup_tags_group()
 
-            logger.debug("✅ 메타데이터 폼 구성 완료")
+            self.logger.debug("✅ 메타데이터 폼 구성 완료")
 
         except Exception as e:
-            logger.error(f"❌ 메타데이터 폼 구성 실패: {e}")
+            self.logger.error(f"❌ 메타데이터 폼 구성 실패: {e}")
             raise
 
     def _setup_tags_group(self):
@@ -198,7 +198,7 @@ class ProfileMetadataDialog(QDialog):
             self.content_layout.addWidget(tags_group)
 
         except Exception as e:
-            logger.error(f"❌ 태그 그룹 설정 실패: {e}")
+            self.logger.error(f"❌ 태그 그룹 설정 실패: {e}")
             raise
 
     def _setup_buttons(self):
@@ -225,7 +225,7 @@ class ProfileMetadataDialog(QDialog):
             self.layout().addLayout(button_layout)
 
         except Exception as e:
-            logger.error(f"❌ 버튼 설정 실패: {e}")
+            self.logger.error(f"❌ 버튼 설정 실패: {e}")
             raise
 
     def _populate_form(self):
@@ -243,10 +243,10 @@ class ProfileMetadataDialog(QDialog):
                 for tag in self.metadata.tags:
                     self._add_tag_to_list(tag)
 
-            logger.debug("✅ 폼 데이터 채우기 완료")
+            self.logger.debug("✅ 폼 데이터 채우기 완료")
 
         except Exception as e:
-            logger.error(f"❌ 폼 데이터 채우기 실패: {e}")
+            self.logger.error(f"❌ 폼 데이터 채우기 실패: {e}")
 
     def _add_tag(self):
         """새 태그 추가"""
@@ -271,10 +271,10 @@ class ProfileMetadataDialog(QDialog):
             self._add_tag_to_list(tag_text)
             self.tag_input.clear()
 
-            logger.debug(f"🏷️ 태그 추가: {tag_text}")
+            self.logger.debug(f"🏷️ 태그 추가: {tag_text}")
 
         except Exception as e:
-            logger.error(f"❌ 태그 추가 실패: {e}")
+            self.logger.error(f"❌ 태그 추가 실패: {e}")
 
     def _add_tag_to_list(self, tag_text: str):
         """태그를 목록에 추가"""
@@ -283,7 +283,7 @@ class ProfileMetadataDialog(QDialog):
             self.tags_list.addItem(item)
 
         except Exception as e:
-            logger.error(f"❌ 태그 목록 추가 실패: {e}")
+            self.logger.error(f"❌ 태그 목록 추가 실패: {e}")
 
     def _remove_tag(self):
         """선택된 태그 제거"""
@@ -292,10 +292,10 @@ class ProfileMetadataDialog(QDialog):
             if current_item:
                 tag_text = current_item.text()
                 self.tags_list.takeItem(self.tags_list.row(current_item))
-                logger.debug(f"🗑️ 태그 제거: {tag_text}")
+                self.logger.debug(f"🗑️ 태그 제거: {tag_text}")
 
         except Exception as e:
-            logger.error(f"❌ 태그 제거 실패: {e}")
+            self.logger.error(f"❌ 태그 제거 실패: {e}")
 
     def _clear_tags(self):
         """모든 태그 제거"""
@@ -307,10 +307,10 @@ class ProfileMetadataDialog(QDialog):
 
             if reply == QMessageBox.StandardButton.Yes:
                 self.tags_list.clear()
-                logger.debug("🗑️ 모든 태그 제거")
+                self.logger.debug("🗑️ 모든 태그 제거")
 
         except Exception as e:
-            logger.error(f"❌ 태그 전체 삭제 실패: {e}")
+            self.logger.error(f"❌ 태그 전체 삭제 실패: {e}")
 
     def _validate_metadata_input(self) -> tuple[bool, str]:
         """메타데이터 입력 유효성 검증"""
@@ -342,7 +342,7 @@ class ProfileMetadataDialog(QDialog):
             return True, "유효한 입력입니다."
 
         except Exception as e:
-            logger.error(f"❌ 입력 검증 실패: {e}")
+            self.logger.error(f"❌ 입력 검증 실패: {e}")
             return False, f"입력 검증 중 오류 발생: {e}"
 
     def _apply_metadata_to_profile(self, profile_name: str) -> bool:
@@ -376,11 +376,11 @@ class ProfileMetadataDialog(QDialog):
             # 시그널 발생
             self.metadata_applied.emit(profile_name, updated_metadata)
 
-            logger.info(f"✅ 메타데이터 적용 완료: {profile_name}")
+            self.logger.info(f"✅ 메타데이터 적용 완료: {profile_name}")
             return True
 
         except Exception as e:
-            logger.error(f"❌ 메타데이터 적용 실패: {e}")
+            self.logger.error(f"❌ 메타데이터 적용 실패: {e}")
             QMessageBox.critical(self, "적용 실패", f"메타데이터 적용 중 오류가 발생했습니다:\n{e}")
             return False
 
@@ -392,7 +392,7 @@ class ProfileMetadataDialog(QDialog):
                 self.accept()
 
         except Exception as e:
-            logger.error(f"❌ 메타데이터 적용 핸들러 실패: {e}")
+            self.logger.error(f"❌ 메타데이터 적용 핸들러 실패: {e}")
 
     def _check_if_custom_profile(self) -> bool:
         """커스텀 프로파일 여부 확인"""
@@ -401,7 +401,7 @@ class ProfileMetadataDialog(QDialog):
             return self.profile_name not in system_profiles
 
         except Exception as e:
-            logger.warning(f"⚠️ 커스텀 프로파일 확인 실패: {e}")
+            self.logger.warning(f"⚠️ 커스텀 프로파일 확인 실패: {e}")
             return False
 
     def _apply_styles(self):
@@ -466,4 +466,4 @@ class ProfileMetadataDialog(QDialog):
             """)
 
         except Exception as e:
-            logger.warning(f"⚠️ 스타일 적용 실패: {e}")
+            self.logger.warning(f"⚠️ 스타일 적용 실패: {e}")

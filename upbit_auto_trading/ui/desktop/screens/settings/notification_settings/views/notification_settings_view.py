@@ -27,13 +27,17 @@ class NotificationSettingsView(QWidget):
     # 외부 시그널
     settings_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-notification-settings")
 
-        # Infrastructure Layer Enhanced Logging v4.0
-        self.logger = create_component_logger("NotificationSettingsView")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("NotificationSettingsView")
+        else:
+            raise ValueError("NotificationSettingsView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("🔔 NotificationSettingsView 초기화 시작")
 
         # Presenter 생성 (MVP 패턴)

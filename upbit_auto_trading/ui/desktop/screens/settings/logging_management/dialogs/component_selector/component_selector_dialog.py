@@ -29,11 +29,14 @@ class ComponentSelectorDialog(QDialog):
 
     component_selected = pyqtSignal(str, str)  # (display_name, module_path)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
 
         # 로깅
-        self.logger = create_component_logger("ComponentSelectorDialog")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ComponentSelectorDialog")
+        else:
+            raise ValueError("ComponentSelectorDialog에 logging_service가 주입되지 않았습니다")
 
         # 다이얼로그 설정
         self.setWindowTitle("🧩 컴포넌트 선택기")

@@ -23,7 +23,7 @@ from PyQt6.QtGui import (
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.ui.desktop.common.theme_notifier import ThemeNotifier
-logger = create_component_logger("YamlSyntaxHighlighter")
+
 
 class YamlSyntaxHighlighter(QSyntaxHighlighter):
     """
@@ -48,7 +48,7 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         # 강조 규칙 설정
         self._setup_highlighting_rules()
 
-        logger.debug("YAML 구문 강조기 초기화 완료")
+        self.logger.debug("YAML 구문 강조기 초기화 완료")
 
     def _init_formats(self) -> None:
         """문자 포맷 객체들 초기화"""
@@ -115,7 +115,7 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
             self.separator_format.setForeground(QColor("#B8860B"))  # 다크 골든로드
             self.error_format.setUnderlineColor(QColor("#CC0000"))  # 빨간색
 
-        logger.debug(f"테마 색상 업데이트 완료 (다크: {is_dark})")
+        self.logger.debug(f"테마 색상 업데이트 완료 (다크: {is_dark})")
 
     def _setup_highlighting_rules(self) -> None:
         """고급 구문 강조 규칙 설정"""
@@ -170,7 +170,7 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         multiline_pattern = re.compile(r'[|>][-+]?\d*\s*$')
         self.highlighting_rules.append((multiline_pattern, self.separator_format))
 
-        logger.debug(f"고급 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙")
+        self.logger.debug(f"고급 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙")
 
     def highlightBlock(self, text):
         """
@@ -243,14 +243,14 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         if block.isValid():
             # 전체 라인에 오류 강조 적용
             self.setFormat(0, block.length(), self.error_format)
-            logger.debug(f"라인 {line_number}에 오류 강조 적용")
+            self.logger.debug(f"라인 {line_number}에 오류 강조 적용")
 
     def clear_error_highlights(self) -> None:
         """모든 오류 강조 제거"""
         if self.document():
             self.rehighlight()
             # 🔥 로깅 최적화: 과도한 DEBUG 메시지 제거
-            # logger.debug("모든 오류 강조 제거")  # 제거됨 - 너무 빈번하게 호출
+            # self.logger.debug("모든 오류 강조 제거")  # 제거됨 - 너무 빈번하게 호출
 
     def _on_theme_changed(self, is_dark: bool) -> None:
         """
@@ -259,7 +259,7 @@ class YamlSyntaxHighlighter(QSyntaxHighlighter):
         Args:
             is_dark: 다크 테마 여부
         """
-        logger.info(f"테마 변경 감지: {'다크' if is_dark else '라이트'} 테마")
+        self.logger.info(f"테마 변경 감지: {'다크' if is_dark else '라이트'} 테마")
         self._update_colors_for_theme()
         self.rehighlight()  # 전체 문서 다시 강조
 

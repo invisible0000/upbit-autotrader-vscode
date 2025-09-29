@@ -60,17 +60,13 @@ class SettingsScreen(QWidget):
         self._api_key_service = api_key_service
         self._mvp_container = mvp_container
 
-        # Application Layer 로깅 서비스 초기화 (Infrastructure 직접 접근 제거)
-        if logging_service is not None:
+        # 로깅 서비스 - DI 패턴 적용
+        if logging_service:
             self._logging_service = logging_service  # ApplicationLoggingService 저장
             self.logger = logging_service.get_component_logger("SettingsScreen")
             self.logger.info("🔧 SettingsScreen (MVP View + Application Layer 로깅) 초기화 시작")
         else:
-            # 폴백: 임시 로거 (개발 초기 단계에서만 사용, 기술 부채 아님)
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            self._logging_service = ApplicationLoggingService()
-            self.logger = self._logging_service.get_component_logger("SettingsScreen")
-            self.logger.warning("⚠️ logging_service가 None이어서 임시 로깅 서비스 생성")
+            raise ValueError("SettingsScreen에 logging_service가 주입되지 않았습니다")
 
         # Infrastructure Layer 의존성 주입 확인
         self.app_context = None

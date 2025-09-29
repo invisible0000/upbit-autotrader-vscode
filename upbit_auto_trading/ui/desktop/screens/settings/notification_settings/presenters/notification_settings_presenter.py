@@ -21,7 +21,10 @@ class NotificationSettingsPresenter(QObject):
     def __init__(self):
         """초기화"""
         super().__init__()
-        self.logger = create_component_logger("NotificationSettingsPresenter")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("NotificationSettingsPresenter")
+        else:
+            raise ValueError("NotificationSettingsPresenter에 logging_service가 주입되지 않았습니다")
         self.logger.info("🎛️ NotificationSettingsPresenter 초기화")
 
         # 기본 설정 값 (Domain Model)

@@ -33,12 +33,16 @@ class LoggingManagementView(QWidget):
     apply_settings_requested = pyqtSignal()  # 설정 적용 요청
     reset_settings_requested = pyqtSignal()  # 설정 리셋 요청
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("logging-management-view")
 
-        # Infrastructure 로깅
-        self.logger = create_component_logger("LoggingManagementView")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LoggingManagementView")
+        else:
+            raise ValueError("LoggingManagementView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("🎛️ 로깅 관리 뷰 초기화 시작")
 
         # MVP 패턴: Presenter 생성 및 연결

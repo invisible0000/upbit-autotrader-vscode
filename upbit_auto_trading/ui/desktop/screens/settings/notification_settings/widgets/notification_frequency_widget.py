@@ -19,12 +19,15 @@ class NotificationFrequencyWidget(QWidget):
 
     settings_changed = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-notification-frequency")
 
-        self.logger = create_component_logger("NotificationFrequencyWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("NotificationFrequencyWidget")
+        else:
+            raise ValueError("NotificationFrequencyWidget에 logging_service가 주입되지 않았습니다")
         self.logger.debug("⏰ NotificationFrequencyWidget 초기화")
 
         self._setup_ui()

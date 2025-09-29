@@ -12,17 +12,17 @@ from PyQt6.QtWidgets import QWidget
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정), get_logging_service
-# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정) # (
-    get_global_terminal_capturer,
-    start_global_terminal_capture,
-    stop_global_terminal_capture,
-)
-# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정) # (
-    get_live_log_buffer,
-    attach_live_log_handler,
-    detach_live_log_handler,
-)
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
+# from upbit_auto_trading.infrastructure.terminal_capture import (
+#     get_global_terminal_capturer,
+#     start_global_terminal_capture,
+#     stop_global_terminal_capture,
+# )
+# from upbit_auto_trading.infrastructure.logging import (
+#     get_live_log_buffer,
+#     attach_live_log_handler,
+#     detach_live_log_handler,
+# )
 
 
 class LoggingManagementPresenter(QObject):
@@ -34,11 +34,14 @@ class LoggingManagementPresenter(QObject):
     log_content_updated = pyqtSignal(str)
     console_output_updated = pyqtSignal(str, bool)  # (content, is_error)
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, parent: Optional[QObject] = None, logging_service=None):
         super().__init__(parent)
 
         # Infrastructure 로깅 시스템
-        self.logger = create_component_logger("LoggingManagementPresenter")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LoggingManagementPresenter")
+        else:
+            raise ValueError("LoggingManagementPresenter에 logging_service가 주입되지 않았습니다")
 
         # ✅ LoggingService의 config_manager 사용 (중요!)
         logging_service = get_logging_service()

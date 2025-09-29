@@ -74,7 +74,7 @@ class DatabaseInfoWorker(QObject):
     finished = pyqtSignal(object, object)  # info_dto, detailed_status
     error = pyqtSignal(str)
 
-    def __init__(self, path_service, get_detailed_status_func):
+    def __init__(self, path_service, get_detailed_status_func, logging_service=None):
         super().__init__()
         self.path_service = path_service
         self.get_detailed_status_func = get_detailed_status_func
@@ -116,9 +116,12 @@ class DatabaseSettingsPresenter:
     모든 데이터베이스 교체 작업을 통합 Use Case로 처리합니다.
     """
 
-    def __init__(self, view: "IDatabaseTabView"):
+    def __init__(self, view: "IDatabaseTabView", logging_service=None):
         self.view = view
-        self.logger = create_component_logger("DatabaseSettingsPresenter")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("DatabaseSettingsPresenter")
+        else:
+            raise ValueError("DatabaseSettingsPresenter에 logging_service가 주입되지 않았습니다")
 
         # DDD 도메인 서비스 초기화 (싱글톤 사용)
         self.path_service = get_path_service()  # 싱글톤이므로 Repository 자동 생성

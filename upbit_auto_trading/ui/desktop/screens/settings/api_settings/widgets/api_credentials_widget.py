@@ -38,14 +38,11 @@ class ApiCredentialsWidget(QWidget):
         super().__init__(parent)
         self.setObjectName("widget-api-credentials")
 
-        # Application Layer 로깅 서비스 초기화
-        if logging_service is not None:
-            self.logger = logging_service
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiCredentialsWidget")
         else:
-            # 폴백: 임시 로거
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            fallback_service = ApplicationLoggingService()
-            self.logger = fallback_service.get_component_logger("ApiCredentialsWidget")
+            raise ValueError("ApiCredentialsWidget에 logging_service가 주입되지 않았습니다")
 
         # 상태 관리
         self._is_editing_mode = False

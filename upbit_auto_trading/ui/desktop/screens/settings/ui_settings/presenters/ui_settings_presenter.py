@@ -19,7 +19,7 @@ class UISettingsPresenter(QObject):
     theme_changed = pyqtSignal(str)  # 테마 변경 알림
     settings_applied = pyqtSignal()  # 설정 적용 완료 알림
 
-    def __init__(self, settings_service=None):
+    def __init__(self, settings_service=None, logging_service=None):
         """초기화
 
         Args:
@@ -28,7 +28,10 @@ class UISettingsPresenter(QObject):
         super().__init__()
 
         # 로깅 설정
-        self.logger = create_component_logger("UISettingsPresenter")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("UISettingsPresenter")
+        else:
+            raise ValueError("UISettingsPresenter에 logging_service가 주입되지 않았습니다")
         self.logger.info("🎯 UI 설정 Presenter 초기화 시작")
 
         # 서비스 의존성

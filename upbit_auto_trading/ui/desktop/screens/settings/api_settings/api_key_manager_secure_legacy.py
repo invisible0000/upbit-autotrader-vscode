@@ -30,11 +30,14 @@ class ApiKeyManagerSecure(QWidget):
     settings_changed = pyqtSignal()
     api_status_changed = pyqtSignal(bool)
 
-    def __init__(self, parent=None, api_key_service=None):
+    def __init__(self, parent=None, api_key_service=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-api-key-manager-secure")
 
-        self.logger = create_component_logger("ApiKeyManagerSecure")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiKeyManagerSecure")
+        else:
+            raise ValueError("ApiKeyManagerSecure에 logging_service가 주입되지 않았습니다")
         self.logger.info("🔄 API 키 관리자 Phase 2 마이그레이션 초기화 시작")
 
         # ApiKeyService 저장 (Presenter에 전달용)

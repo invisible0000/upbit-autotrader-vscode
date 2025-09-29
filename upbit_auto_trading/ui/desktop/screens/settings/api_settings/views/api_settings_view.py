@@ -36,33 +36,21 @@ class ApiSettingsView(QWidget):
         super().__init__(parent)
         self.setObjectName("widget-api-settings-view")
 
-        # Application Layer 로깅 서비스 사용 (Infrastructure 직접 접근 제거)
+        # 로깅 설정 - DI 패턴 적용
         if logging_service:
-            # logging_service는 이미 ApplicationLoggingService.get_component_logger()로 생성된 개별 로거
-            self.logger = logging_service
+            self.logger = logging_service.get_component_logger("ApiSettingsView")
         else:
-            # 폴백: 임시 로거 생성
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            fallback_service = ApplicationLoggingService()
-            self.logger = fallback_service.get_component_logger("ApiSettingsView")
+            raise ValueError("ApiSettingsView에 logging_service가 주입되지 않았습니다")
 
         # Presenter는 외부에서 주입받도록 설계 (MVP 패턴)
         self.presenter = None
 
         # 위젯들 생성 (로깅 서비스 전달)
-        if self.logger:
-            # 각 위젯별로 별도의 로거 생성
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            service = ApplicationLoggingService()
-            credentials_logger = service.get_component_logger("ApiCredentialsWidget")
-            connection_logger = service.get_component_logger("ApiConnectionWidget")
-            permissions_logger = service.get_component_logger("ApiPermissionsWidget")
-        else:
-            credentials_logger = connection_logger = permissions_logger = None
+        # DI 패턴: 동일한 logging_service를 모든 위젯에 전달
 
-        self.credentials_widget = ApiCredentialsWidget(self, logging_service=credentials_logger)
-        self.connection_widget = ApiConnectionWidget(self, logging_service=connection_logger)
-        self.permissions_widget = ApiPermissionsWidget(self, logging_service=permissions_logger)
+        self.credentials_widget = ApiCredentialsWidget(self, logging_service=logging_service)
+        self.connection_widget = ApiConnectionWidget(self, logging_service=logging_service)
+        self.permissions_widget = ApiPermissionsWidget(self, logging_service=logging_service)
 
         self._setup_ui()
         self._connect_signals()

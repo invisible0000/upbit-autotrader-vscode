@@ -23,7 +23,7 @@ from PyQt6.QtGui import (
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.ui.desktop.common.theme_notifier import ThemeNotifier
 
-logger = create_component_logger("LogSyntaxHighlighter")
+
 
 
 class LogSyntaxHighlighter(QSyntaxHighlighter):
@@ -34,7 +34,7 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
     [TIMESTAMP] [LEVEL] [COMPONENT] MESSAGE
     """
 
-    def __init__(self, parent: Optional[QTextDocument] = None):
+    def __init__(self, parent: Optional[QTextDocument] = None, logging_service=None):
         super().__init__(parent)
 
         # 테마 변경 알림 시스템 연결

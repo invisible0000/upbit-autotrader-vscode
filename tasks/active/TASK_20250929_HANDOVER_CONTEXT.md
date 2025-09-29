@@ -15,17 +15,28 @@
    - 6개 전용 하위 Factory들
    - 캐싱 지원 Lazy Loading 시스템
 
-3. **UI Settings 완전 DI 적용**: 4개 위젯 + View 완료
-   - WindowSettingsWidget, ThemeSelectorWidget, ChartSettingsWidget, AnimationSettingsWidget
-   - UISettingsView (폴백 패턴 완전 제거)
+3. **모든 Settings 컴포넌트 DI 완전 적용**: 28건 완료 ✅
+   - Environment Profile: 8건 (environment_profile_view.py, profile_selector_section.py 등)
+   - Logging Management: 8건 (logging_management_view.py, console_viewer_widget.py 등)
+   - Notification Settings: 6건 (notification_settings_view.py, alert_types_widget.py 등)
+   - API Settings: 5건 (api_settings_view.py, api_credentials_widget.py 등)
+   - UI Settings: 이미 완료 (WindowSettingsWidget, ThemeSelectorWidget 등)
+   - Database Settings: 1건 (database_settings_presenter.py)
 
 4. **ApplicationContainer 완전 통합**: 모든 서비스와 Factory DI 바인딩
 
-### 📋 남은 작업 (고도화된 구조로 빠른 적용 가능)
+### � 새로 발견된 UI 통합 문제 (중요 - 즉시 해결 필요)
 
-1. **Infrastructure 직접 접근**: 29건 create_component_logger 남음
-2. **폴백 패턴**: 6건 ApplicationLoggingService() 남음
-3. **나머지 컴포넌트 DI 적용**: 이미 구축된 패턴으로 일괄 적용
+1. **Settings Screen과 DI 컴포넌트 간 통합 문제**:
+   - PresentationLoggerAdapter와 ApplicationLoggingService 인터페이스 불일치
+   - Settings Screen에서 컴포넌트 생성 시 올바른 logging_service 주입 실패
+   - Factory 패턴과 기존 lazy loading 로직 간 통합 부족
+
+2. **실제 UI 동작 오류들**:
+   - `'PresentationLoggerAdapter' object has no attribute 'get_component_logger'`
+   - `unexpected indent (logging_management_presenter.py, line 17)`
+   - `'NoneType' object has no attribute 'info'`
+   - `NotificationSettingsView에 logging_service가 주입되지 않았습니다`
 
 ## 🔄 기존 TASK들과의 관계
 
@@ -75,26 +86,36 @@
 2. **"전체 생태계 일관성"**: 일부분만 수정하지 않고 전체 아키텍처 구축
 3. **"Factory 패턴의 필요성"**: View 확장성과 테스트 용이성 향상
 
-## 🚀 다음 단계 작업 가이드
+## 🚀 다음 단계 작업 가이드 - UI 통합 완성
 
-### � **완성된 모범 사례 활용**
+### 🔭 **즉시 해결 필요한 문제들**
 
-나머지 23개 컴포넌튴들은 **이미 구축된 아키텍처**를 활용하여 빠르게 적용 가능:
+1. **PresentationLoggerAdapter 인터페이스 통일**:
+
+   ```python
+   # 현재 문제: PresentationLoggerAdapter에 get_component_logger 메서드 없음
+   # 해결: ApplicationLoggingService와 인터페이스 통일 또는 어댑터 개선
+   ```
+
+2. **Settings Screen lazy loading 로직 수정**:
+   - 컴포넌트 생성 시 올바른 logging_service 주입
+   - Factory 패턴 활용로 일관된 컴포넌트 생성
+
+3. **구문 오류 수정**:
+   - `logging_management_presenter.py` 인덴트 오류 수정
+   - Database Settings NoneType 오류 해결
+
+### 📋 **완성된 자산 활용 전략**
+
+✅ **이미 완성된 DI 패턴** (28건 모든 컴포넌트):
 
 ```python
-# 표준 DI 패턴 (이제 정형화됨)
 def __init__(self, parent=None, logging_service=None):
     if logging_service:
         self.logger = logging_service.get_component_logger("ComponentName")
     else:
         raise ValueError("ComponentName에 logging_service가 주입되지 않았습니다")
 ```
-
-### 📝 **일괄 적용 전략**
-
-1. **Factory 기반 컴포넌트 생성**: 기존 Factory 패턴 확장
-2. **대량 패턴 대체**: 이미 정의된 DI 패턴으로 일괄 변경
-3. **점진적 검증**: 컴포넌트별 단계적 적용 및 검증
 
 ### ✅ **확정된 핵심 원칙**
 
@@ -138,19 +159,26 @@ def __init__(self, parent=None, logging_service=None):
 
 **"연속성 있는 해결"**: ✅ 기존 성과 보존 + 발전적 해결 달성
 
-**"Settings Screen 모범 사례"**: ✅ DDD + MVP + DI 완벽한 리퍼런스 구현 완성
+**"Settings Screen 모범 사례"**: 🔄 DDD + MVP + DI 완벽한 리퍼런스 구현 (그러나 UI 통합 마무리 필요)
 
 ### 🚀 **다음 단계에서 활용할 자산**
 
-1. **정형화된 DI 패턴**: 전체 프로젝트에 적용 가능한 표준 패턴
+1. **완성된 28건 DI 패턴**: 전체 Settings 컴포넌트에 일관된 표준 패턴 적용 완료
 2. **Factory 생태계**: 6개 전용 Factory로 확장 및 재사용 가능
 3. **ApplicationLayer 서비스**: Settings 전용 4개 서비스로 비즈니스 로직 단순화
 4. **완전한 문서화**: 모든 컴포넌트가 아키텍처 원칙 준수 보장
 
+### 🔄 **즉시 해결 가능한 이유**
+
+- **아키텍처 기반 완성**: 모든 컴포넌트가 올바른 DI 패턴 적용됨
+- **문제 지점 명확**: Settings Screen의 lazy loading 로직만 수정하면 됨
+- **전체적 이해**: 기존 성과를 보존하면서 빠른 통합 가능
+
 ---
 
-**작성일**: 2025-09-29 업데이트
-**현재 상태**: 핵심 아키텍처 구조 완성 ✅
+**작성일**: 2025-09-29 업데이트 (28건 DI 완성 + UI 통합 문제 발견)
+**현재 상태**: 핵심 DI 아키텍처 완성 ✅, UI 통합 이슈 해결 필요 🔄
 **브랜치**: urgent/settings-complete-architecture-redesign
-**다음 작업**: 나머지 23개 컴포넌튴 일괄 적용 (표준 패턴 활용)
-**예상 소요시간**: 4-6시간 (기존 아키텍처 활용으로 단축)
+**다음 작업**: Settings Screen lazy loading 로직 수정 및 UI 통합 완성
+**예상 소요시간**: 2-3시간 (아키텍처 기반 이미 완성됨)
+**주요 오류**: PresentationLoggerAdapter 인터페이스 문제, 구문 오류 수정 필요

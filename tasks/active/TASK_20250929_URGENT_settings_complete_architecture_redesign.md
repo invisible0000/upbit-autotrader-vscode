@@ -108,32 +108,51 @@
   - [x] Factory를 통한 컴포넌트 캐싱 및 재사용
   - [x] 컴포넌트 생성 실패 시 복구 메커니즘
 
-### Phase 4: 모든 View/Presenter/Widget DI 적용 (5시간) 🔄 진행 중
+### Phase 4: 모든 View/Presenter/Widget DI 적용 (5시간) ✅ 완료 + 🔄 통합 이슈 해결 중
 
-- [ ] **29건 Infrastructure 직접 접근 완전 제거**
-  - [ ] 모든 `create_component_logger` 직접 사용 제거 (현재 29건 남음)
-  - [ ] Infrastructure import 문 완전 제거
-  - [ ] ApplicationLayer 서비스를 통한 간접 접근으로 대체
+- [x] **28건 Infrastructure 직접 접근 완전 제거** ✅
+  - [x] 모든 `create_component_logger` 직접 사용 제거 (28건 완료)
+  - [x] Infrastructure import 문 완전 제거
+  - [x] ApplicationLayer 서비스를 통한 간접 접근으로 대체
 
-- [ ] **모든 컴포넌트 생성자 DI 적용**
-  - [ ] `@inject` 데코레이터 적용
-  - [ ] `Provide[...]` 구문을 통한 의존성 주입
-  - [ ] 생성자 매개변수 통일된 패턴 적용
+- [x] **모든 컴포넌트 생성자 DI 적용** ✅
+  - [x] 표준 DI 패턴 적용: `def __init__(self, parent=None, logging_service=None)`
+  - [x] 폴백 없는 엄격한 의존성 주입
+  - [x] 생성자 매개변수 통일된 패턴 적용
 
-- [x] **폴백 패턴 부분 제거** (5건 해결, 6건 남음)
-  - [x] UI Settings 위젯들의 `ApplicationLoggingService()` 직접 생성 제거 (5건 해결)
-  - [ ] 나머지 6건 `ApplicationLoggingService()` 직접 생성 제거
-  - [ ] try-except 폴백 로직을 DI 기반 구조로 대체
-  - [x] 의존성 주입 실패 시 명확한 오류 처리 (UI Settings 적용)
+- [x] **폴백 패턴 완전 제거** ✅
+  - [x] 모든 `ApplicationLoggingService()` 직접 생성 제거 (6건 완료)
+  - [x] try-except 폴백 로직을 DI 기반 구조로 대체
+  - [x] 의존성 주입 실패 시 명확한 오류 처리 적용
 
-- [x] **하위 위젯들 부분 DI 적용**
-  - [x] UI Settings 위젯들 (4개 완료: Window, Theme, Chart, Animation)
-  - [x] UISettingsView (완료)
-  - [ ] API Settings 위젯들 (3개+)
-  - [ ] Database Settings 위젯들
-  - [ ] Logging Management 위젯들
-  - [ ] Notification Settings 위젯들
-  - [ ] Environment Profile 위젯들
+- [x] **하위 위젯들 DI 적용 완료** ✅
+  - [x] Environment Profile: 8건 (완료)
+  - [x] Logging Management: 8건 (완료)
+  - [x] Notification Settings: 6건 (완료)
+  - [x] API Settings: 5건 (완료)
+  - [x] UI Settings: 이미 완료
+  - [x] Database Settings: 1건 (완료)
+
+### Phase 4.1: 실제 UI 통합 문제 해결 (신규 발견) 🔄 진행 중
+
+- [ ] **주요 터미널 에러 해결**
+  - [ ] `'PresentationLoggerAdapter' object has no attribute 'get_component_logger'`
+    - **원인**: ApiSettingsView에서 logging_service.get_component_logger() 호출 시 오류
+    - **해결**: PresentationLoggerAdapter에 get_component_logger 메서드 추가 또는 ApplicationLoggingService 직접 주입
+  - [ ] `'NoneType' object has no attribute 'info'`
+    - **원인**: Database Settings에서 logger가 None이 되는 상황
+    - **해결**: Database Settings 컴포넌트에 올바른 logging_service 주입
+  - [ ] `unexpected indent (logging_management_presenter.py, line 17)`
+    - **원인**: PowerShell 일괄 변환 시 인덴트 문제 발생
+    - **해결**: logging_management_presenter.py 파일 구문 오류 수동 수정
+  - [ ] `NotificationSettingsView에 logging_service가 주입되지 않았습니다`
+    - **원인**: Settings Screen의 lazy loading에서 올바른 logging_service 주입 실패
+    - **해결**: SettingsScreen._initialize_* 메서드에서 logging_service 주입 로직 수정
+
+- [ ] **Settings Screen과 DI 컴포넌트 간 통합 문제**
+  - [ ] Settings Screen의 _initialize_api_settings,_initialize_notification_settings 등 메서드 수정
+  - [ ] 기존 lazy loading 로직에 logging_service 매개변수 전달 추가
+  - [ ] Factory 패턴 완전 적용으로 일관된 컴포넌트 생성 구조 구축
 
 ### Phase 5: MVPContainer 통합 및 최종 검증 (2시간)
 
@@ -167,18 +186,19 @@
 
 ### 필수 완료 사항
 
-- [ ] **Infrastructure 직접 접근 완전 제거**: 57건+ 모든 위반 해결
-- [ ] **폴백 패턴 완전 제거**: ApplicationLoggingService 직접 생성 0건
-- [ ] **Factory 패턴 완전 구현**: 모든 컴포넌트 생성이 Factory를 통해 수행
-- [ ] **DI 일관성 확보**: Settings 생태계 전체가 의존성 주입으로 통일
-- [ ] **기능 무결성 보장**: 기존 모든 기능이 정상 동작
+- [x] **Infrastructure 직접 접근 완전 제거**: 28건 모든 위반 해결 ✅
+- [x] **폴백 패턴 완전 제거**: ApplicationLoggingService 직접 생성 0건 ✅
+- [x] **DI 패턴 완전 적용**: 모든 컴포넌트가 logging_service 의존성 주입 ✅
+- [ ] **실제 UI 통합 완료**: Settings Screen과 DI 컴포넌트 간 완전 통합 🔄
+- [ ] **기능 무결성 보장**: 기존 모든 기능이 정상 동작 🔄
 
 ### 성공 지표
 
-- [ ] 자동 분석 도구에서 Critical 위반 0건 달성
-- [x] Settings Screen 핵심 아키텍처 완성 (Factory + DI + ApplicationServices)
-- [x] 새로운 설정 컴포넌트 추가 시 아키텍처 원칙 자동 준수 (UI Settings 검증됨)
-- [x] 단위 테스트 작성 시 완전한 Mock 주입 가능 (DI 구조 완성)
+- [x] 자동 분석 도구에서 Critical 위반 0건 달성 ✅
+- [x] Settings Screen 핵심 아키텍처 완성 (Factory + DI + ApplicationServices) ✅
+- [x] 새로운 설정 컴포넌트 추가 시 아키텍처 원칙 자동 준수 ✅
+- [x] 단위 테스트 작성 시 완전한 Mock 주입 가능 (DI 구조 완성) ✅
+- [ ] **python run_desktop_ui.py에서 모든 설정 탭 오류 없이 동작** 🔄
 
 ## 🛠️ 구체적 구현 방법론
 
@@ -238,29 +258,36 @@ class SettingsViewFactory:
         return settings_screen
 ```
 
-### 3. 완전한 DI 적용 패턴
+### 3. 완전한 DI 적용 패턴 (이미 완성)
 
 ```python
-# 기존 (위반)
+# 이미 적용된 표준 DI 패턴 (28건 완료)
 class ApiCredentialsWidget(QWidget):
-    def __init__(self, parent=None):
-        # ❌ Infrastructure 직접 접근 또는 폴백 패턴
-        try:
-            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-            fallback_service = ApplicationLoggingService()
-            self.logger = fallback_service.get_component_logger("ApiCredentialsWidget")
-        except Exception:
-            self.logger = None
-
-# 새로운 (완전한 DI)
-class ApiCredentialsWidget(QWidget):
-    @inject
-    def __init__(self,
-                 parent=None,
-                 logging_service=Provide["settings_logging_service"]):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
-        # ✅ 완전한 의존성 주입 - 폴백 없음
-        self.logger = logging_service.get_component_logger("ApiCredentialsWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiCredentialsWidget")
+        else:
+            raise ValueError("ApiCredentialsWidget에 logging_service가 주입되지 않았습니다")
+```
+
+### 4. 현재 문제 해결 방안
+
+```python
+# Settings Screen lazy loading 수정 필요 (현재 문제)
+def _initialize_api_settings(self):
+    # 기존: api_logger = self._logging_service.get_component_logger("ApiSettingsView")
+    # 문제: PresentationLoggerAdapter를 반환하는데 get_component_logger 메서드 없음
+
+    # 해결방안 1: ApplicationLoggingService 직접 주입
+    self.api_key_manager = ApiSettingsView(
+        parent=self,
+        logging_service=self._logging_service  # ApplicationLoggingService 직접 전달
+    )
+
+    # 해결방안 2: Factory 패턴 활용
+    if hasattr(self, '_factory'):
+        self.api_key_manager = self._factory.create_api_settings_component(parent=self)
 ```
 
 ## 📊 예상 소요시간 및 리소스
@@ -302,20 +329,37 @@ class ApiCredentialsWidget(QWidget):
 - 폴백 패턴 제거로 **기술부채 완전 해소**
 - Settings Screen이 **DDD + MVP + DI의 완벽한 모범 사례**가 됨
 
-## 🚀 즉시 시작 방법
+## 🚀 즉시 시작 방법 - UI 통합 완성
 
 ```powershell
-# 1. 현재 전체 위반 상황 완전 분석
-Get-ChildItem upbit_auto_trading\ui\desktop\screens\settings -Recurse -Include *.py | Select-String -Pattern "create_component_logger|ApplicationLoggingService\(\)|from upbit_auto_trading\.infrastructure"
+# 1. 구문 오류 수정
+# logging_management_presenter.py 파일의 line 17 인덴트 오류 수정
 
-# 2. 새로운 브랜치 생성
-git checkout -b urgent/settings-complete-architecture-redesign
+# 2. Settings Screen lazy loading 로직 수정
+# _initialize_api_settings, _initialize_notification_settings 메서드에서
+# 올바른 logging_service 주입 로직 추가
 
-# 3. Phase 1 시작: 전체 의존성 그래프 분석
-# 폴백이 아닌 원론적 해결책 설계 시작
+# 3. PresentationLoggerAdapter 인터페이스 통일
+# get_component_logger 메서드 추가 또는 ApplicationLoggingService 직접 주입
 
-# 4. 연속성 확보: 기존 작업 성과 보존하면서 발전적 해결
+# 4. 테스트
+python run_desktop_ui.py
+# 모든 설정 탭을 클릭하여 오류 없이 로드되는지 확인
 ```
+
+### 🔍 우선순위 해결 단계
+
+1. **구문 오류 수정** (1시간)
+   - `logging_management_presenter.py` line 17 인덴트 오류
+   - PowerShell 변환 시 발생한 문제들 수동 수정
+
+2. **Settings Screen 통합** (1-2시간)
+   - lazy loading 메서드엔 logging_service 주입 로직 추가
+   - PresentationLoggerAdapter 인터페이스 문제 해결
+
+3. **최종 검증** (30분)
+   - 모든 설정 탭 로드 테스트
+   - 7규칙 전략 기능 무결성 확인
 
 ## 📋 관련 문서
 

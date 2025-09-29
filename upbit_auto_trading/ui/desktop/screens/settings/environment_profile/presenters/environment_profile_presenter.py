@@ -27,7 +27,7 @@ from upbit_auto_trading.application.services.profile_edit_session_service import
 from upbit_auto_trading.application.services.profile_validation_service import ProfileValidationService
 from ..dialogs.profile_metadata import ProfileMetadata
 
-logger = create_component_logger("EnvironmentProfilePresenter")
+
 
 class EnvironmentProfilePresenter(QObject):
     """
@@ -79,13 +79,13 @@ class EnvironmentProfilePresenter(QObject):
         self._edit_session_service = None
         self._validation_service = None
 
-        logger.info("🎭 EnvironmentProfilePresenter 초기화 완료 (DDD 리팩토링 버전)")
-        logger.debug("🔄 지연 로딩 모드 - 실제 사용시 서비스 초기화")
+        self.logger.info("🎭 EnvironmentProfilePresenter 초기화 완료 (DDD 리팩토링 버전)")
+        self.logger.debug("🔄 지연 로딩 모드 - 실제 사용시 서비스 초기화")
 
     def _ensure_services_initialized(self):
         """서비스가 초기화되지 않았다면 초기화 (지연 로딩)"""
         if not self._is_initialized:
-            logger.info("🚀 환경 프로파일 서비스 지연 초기화 시작")
+            self.logger.info("🚀 환경 프로파일 서비스 지연 초기화 시작")
 
             # Application Services 초기화
             self._metadata_service = ProfileMetadataService()
@@ -93,11 +93,11 @@ class EnvironmentProfilePresenter(QObject):
             self._validation_service = ProfileValidationService()
 
             self._is_initialized = True
-            logger.info("✅ 환경 프로파일 서비스 지연 초기화 완료")
+            self.logger.info("✅ 환경 프로파일 서비스 지연 초기화 완료")
 
     def _initialize_data(self):
         """초기 데이터 로드 및 UI 초기화"""
-        logger.debug("🔧 초기 데이터 로드 시작")
+        self.logger.debug("🔧 초기 데이터 로드 시작")
 
         try:
             # 서비스 초기화 보장
@@ -109,10 +109,10 @@ class EnvironmentProfilePresenter(QObject):
             # 기본 환경 자동 선택 (development)
             self.load_profile('development')
 
-            logger.info("✅ 초기 데이터 로드 완료")
+            self.logger.info("✅ 초기 데이터 로드 완료")
 
         except Exception as e:
-            logger.error(f"❌ 초기 데이터 로드 실패: {e}")
+            self.logger.error(f"❌ 초기 데이터 로드 실패: {e}")
 
     # ===============================================================================
     # === 프로파일 선택 및 로드 (Task 3.1.1) ===
@@ -124,8 +124,8 @@ class EnvironmentProfilePresenter(QObject):
         ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
         향후 config/ 폴더 기반으로 재구현될 예정입니다.
         """
-        logger.warning(f"� 프로파일 로드 기능이 정지되었습니다: {profile_name}")
-        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        self.logger.warning(f"� 프로파일 로드 기능이 정지되었습니다: {profile_name}")
+        self.logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         error_msg = "프로파일 기능이 정지되었습니다. config/ 폴더 기반 설정을 사용하세요."
         self.error_occurred.emit(error_msg)
@@ -138,27 +138,27 @@ class EnvironmentProfilePresenter(QObject):
             # 0단계: 빈 값 검증
             if not profile_name or profile_name.strip() == "":
                 error_msg = "프로파일명이 비어있습니다"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
             # 1단계: 저장되지 않은 변경사항 확인 (기존 프로파일과 다른 경우만)
             if self._has_unsaved_changes and self._current_profile != profile_name:
                 self.unsaved_changes_detected.emit(self._current_profile)
-                logger.warning(f"⚠️ 저장되지 않은 변경사항 존재: {self._current_profile}")
+                self.logger.warning(f"⚠️ 저장되지 않은 변경사항 존재: {self._current_profile}")
                 return False
 
             # 2단계: 메타데이터 서비스로 프로파일 로드
             profile_data = self._metadata_service.load_profile_metadata(profile_name)
             if not profile_data:
-                logger.warning(f"⚠️ 메타데이터 로드 실패, 기본 데이터로 진행: {profile_name}")
+                self.logger.warning(f"⚠️ 메타데이터 로드 실패, 기본 데이터로 진행: {profile_name}")
                 # 기본 프로파일의 경우 메타데이터가 없을 수 있으므로 계속 진행
 
             # 🔥 3단계: 실제 YAML 파일 내용 로드 (가장 중요)
             yaml_content = self._load_yaml_file_content(profile_name)
             if not yaml_content:
                 error_msg = f"YAML 파일 로드 실패: {profile_name}"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
@@ -202,21 +202,21 @@ class EnvironmentProfilePresenter(QObject):
                 }
 
             # 🔥 6단계: 시그널 발송 순서 조정 및 강화
-            logger.info(f"🚀 프로파일 데이터 시그널 발송: {profile_name}")
+            self.logger.info(f"🚀 프로파일 데이터 시그널 발송: {profile_name}")
             self.profile_data_loaded.emit(profile_dict)
 
-            logger.info(f"🚀 YAML 내용 시그널 발송: {len(yaml_content)} 문자")
+            self.logger.info(f"🚀 YAML 내용 시그널 발송: {len(yaml_content)} 문자")
             self.yaml_content_loaded.emit(yaml_content)
 
-            logger.info(f"🚀 로드 완료 시그널 발송: {profile_name}")
+            self.logger.info(f"🚀 로드 완료 시그널 발송: {profile_name}")
             self.load_completed.emit(profile_name)
 
-            logger.info(f"✅ 프로파일 로드 완료: {profile_name} (YAML: {len(yaml_content)} 문자)")
+            self.logger.info(f"✅ 프로파일 로드 완료: {profile_name} (YAML: {len(yaml_content)} 문자)")
             return True
 
         except Exception as e:
             error_msg = f"프로파일 로드 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
@@ -229,24 +229,24 @@ class EnvironmentProfilePresenter(QObject):
             config_file = f"config.{profile_name}.yaml"
             config_path = Path("config") / config_file
 
-            logger.debug(f"📁 YAML 파일 로드 시도: {config_path}")
+            self.logger.debug(f"📁 YAML 파일 로드 시도: {config_path}")
 
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                logger.debug(f"✅ YAML 파일 로드 성공: {len(content)} 문자")
+                self.logger.debug(f"✅ YAML 파일 로드 성공: {len(content)} 문자")
                 return content
             else:
-                logger.warning(f"⚠️ YAML 파일 존재하지 않음: {config_path}")
+                self.logger.warning(f"⚠️ YAML 파일 존재하지 않음: {config_path}")
                 return f"# 프로파일 파일을 찾을 수 없습니다: {config_file}\n# 파일 경로: {config_path}"
 
         except Exception as e:
-            logger.error(f"❌ YAML 파일 로드 실패: {e}")
+            self.logger.error(f"❌ YAML 파일 로드 실패: {e}")
             return f"# YAML 파일 로드 오류: {str(e)}"
 
     def refresh_profile_list(self):
         """프로파일 목록 새로고침 (메타데이터는 지연 로딩)"""
-        logger.debug("🔄 프로파일 목록 새로고침")
+        self.logger.debug("🔄 프로파일 목록 새로고침")
 
         try:
             # 서비스 초기화 보장
@@ -276,15 +276,15 @@ class EnvironmentProfilePresenter(QObject):
                 }
 
             # View 업데이트 시그널 발송 (딕셔너리 형태로 - ProfileSelectorSection.load_profiles() 호환)
-            logger.info(f"🚀 profile_list_updated 시그널 발송: {len(profiles_data)}개 프로파일 (지연 로딩)")
-            logger.debug(f"📋 발송할 프로파일 목록: {list(profiles_data.keys())}")
+            self.logger.info(f"🚀 profile_list_updated 시그널 발송: {len(profiles_data)}개 프로파일 (지연 로딩)")
+            self.logger.debug(f"📋 발송할 프로파일 목록: {list(profiles_data.keys())}")
             self.profile_list_updated.emit(profiles_data)  # 딕셔너리 전체 발송
 
-            logger.debug(f"✅ 프로파일 목록 새로고침 완료: {len(profile_list)}개 (메타데이터 지연 로딩)")
+            self.logger.debug(f"✅ 프로파일 목록 새로고침 완료: {len(profile_list)}개 (메타데이터 지연 로딩)")
 
         except Exception as e:
             error_msg = f"프로파일 목록 새로고침 실패: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
 
     # ===============================================================================
@@ -297,8 +297,8 @@ class EnvironmentProfilePresenter(QObject):
         ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
         향후 config/ 폴더 기반으로 재구현될 예정입니다.
         """
-        logger.warning(f"🚫 편집 모드 기능이 정지되었습니다: {profile_name}")
-        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        self.logger.warning(f"🚫 편집 모드 기능이 정지되었습니다: {profile_name}")
+        self.logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         error_msg = "프로파일 편집 기능이 정지되었습니다."
         self.error_occurred.emit(error_msg)
@@ -317,7 +317,7 @@ class EnvironmentProfilePresenter(QObject):
 
             if not temp_file_path:
                 error_msg = f"편집 세션 시작 실패: {target_profile}"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
@@ -328,36 +328,36 @@ class EnvironmentProfilePresenter(QObject):
             # 3단계: View에 편집 세션 시작 알림
             self.edit_session_started.emit(temp_file_path)
 
-            logger.info(f"✅ 편집 모드 시작 완료: {temp_file_path}")
+            self.logger.info(f"✅ 편집 모드 시작 완료: {temp_file_path}")
             return True
 
         except Exception as e:
             error_msg = f"편집 모드 시작 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
     def exit_edit_mode(self, save_changes: bool = True) -> bool:
         """편집 모드 종료"""
-        logger.info(f"🚪 편집 모드 종료 (저장: {save_changes})")
+        self.logger.info(f"🚪 편집 모드 종료 (저장: {save_changes})")
 
         try:
             if save_changes and self._has_unsaved_changes:
                 # 변경사항 저장
                 if not self.save_current_profile():
-                    logger.warning("⚠️ 저장 실패로 편집 모드 유지")
+                    self.logger.warning("⚠️ 저장 실패로 편집 모드 유지")
                     return False
 
             # 편집 상태 초기화
             self._edit_mode = False
             self._has_unsaved_changes = False
 
-            logger.info("✅ 편집 모드 종료 완료")
+            self.logger.info("✅ 편집 모드 종료 완료")
             return True
 
         except Exception as e:
             error_msg = f"편집 모드 종료 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
@@ -366,7 +366,7 @@ class EnvironmentProfilePresenter(QObject):
         if self._edit_mode:
             self._has_unsaved_changes = True
             self.content_changed.emit(new_content)
-            logger.debug("📝 내용 변경 감지됨")
+            self.logger.debug("📝 내용 변경 감지됨")
 
     # ===============================================================================
     # === 환경 전환 처리 (Task 3.2) ===
@@ -374,13 +374,13 @@ class EnvironmentProfilePresenter(QObject):
 
     def switch_environment(self, new_profile_name: str) -> bool:
         """환경 전환 처리"""
-        logger.info(f"🔄 환경 전환 요청: {self._current_profile} → {new_profile_name}")
+        self.logger.info(f"🔄 환경 전환 요청: {self._current_profile} → {new_profile_name}")
 
         try:
             # 1단계: 현재 편집 중인지 확인
             if self._edit_mode and self._has_unsaved_changes:
                 self.unsaved_changes_detected.emit(self._current_profile)
-                logger.warning("⚠️ 편집 중인 내용이 있어 환경 전환 보류")
+                self.logger.warning("⚠️ 편집 중인 내용이 있어 환경 전환 보류")
                 return False
 
             # 2단계: 새 프로파일 로드
@@ -390,12 +390,12 @@ class EnvironmentProfilePresenter(QObject):
             # 3단계: 환경 전환 완료 시그널
             self.environment_switched.emit(new_profile_name)
 
-            logger.info(f"✅ 환경 전환 완료: {new_profile_name}")
+            self.logger.info(f"✅ 환경 전환 완료: {new_profile_name}")
             return True
 
         except Exception as e:
             error_msg = f"환경 전환 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
@@ -405,7 +405,7 @@ class EnvironmentProfilePresenter(QObject):
 
     def validate_current_content(self, yaml_content: str) -> bool:
         """현재 내용 검증"""
-        logger.debug("🔍 내용 검증 시작")
+        self.logger.debug("🔍 내용 검증 시작")
 
         try:
             # 검증 서비스로 YAML 구문 검증
@@ -413,17 +413,17 @@ class EnvironmentProfilePresenter(QObject):
 
             if validation_result.is_valid:
                 self.validation_result.emit(True, "검증 성공")
-                logger.debug("✅ 내용 검증 성공")
+                self.logger.debug("✅ 내용 검증 성공")
                 return True
             else:
                 error_msg = "; ".join(validation_result.errors)
                 self.validation_result.emit(False, error_msg)
-                logger.warning(f"⚠️ 내용 검증 실패: {error_msg}")
+                self.logger.warning(f"⚠️ 내용 검증 실패: {error_msg}")
                 return False
 
         except Exception as e:
             error_msg = f"내용 검증 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.validation_result.emit(False, error_msg)
             return False
 
@@ -433,8 +433,8 @@ class EnvironmentProfilePresenter(QObject):
         ⚠️ UNIFIED_CONFIGURATION_MANAGEMENT_GUIDE.md에 따라 프로파일 기능이 정지되었습니다.
         향후 config/ 폴더 기반으로 재구현될 예정입니다.
         """
-        logger.warning(f"� 프로파일 저장 기능이 정지되었습니다: {self._current_profile}")
-        logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        self.logger.warning(f"� 프로파일 저장 기능이 정지되었습니다: {self._current_profile}")
+        self.logger.info("ℹ️ 통합 설정 관리 가이드에 따라 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         error_msg = "프로파일 저장 기능이 정지되었습니다."
         self.error_occurred.emit(error_msg)
@@ -443,7 +443,7 @@ class EnvironmentProfilePresenter(QObject):
         try:
             if not self._current_profile:
                 error_msg = "저장할 프로파일이 선택되지 않음"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
@@ -453,17 +453,17 @@ class EnvironmentProfilePresenter(QObject):
             if success:
                 self._has_unsaved_changes = False
                 self.save_completed.emit(self._current_profile)
-                logger.info(f"✅ 프로파일 저장 완료: {self._current_profile}")
+                self.logger.info(f"✅ 프로파일 저장 완료: {self._current_profile}")
                 return True
             else:
                 error_msg = f"프로파일 저장 실패: {self._current_profile}"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
         except Exception as e:
             error_msg = f"프로파일 저장 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
@@ -473,7 +473,7 @@ class EnvironmentProfilePresenter(QObject):
 
     def show_metadata_dialog(self, profile_name: str) -> bool:
         """메타데이터 편집 다이얼로그 표시"""
-        logger.info(f"📋 메타데이터 다이얼로그 표시: {profile_name}")
+        self.logger.info(f"📋 메타데이터 다이얼로그 표시: {profile_name}")
 
         try:
             # 메타데이터 서비스로 다이얼로그 처리 위임
@@ -482,21 +482,21 @@ class EnvironmentProfilePresenter(QObject):
             if success:
                 # 프로파일 목록 새로고침 (메타데이터 변경 반영)
                 self.refresh_profile_list()
-                logger.info(f"✅ 메타데이터 다이얼로그 처리 완료: {profile_name}")
+                self.logger.info(f"✅ 메타데이터 다이얼로그 처리 완료: {profile_name}")
                 return True
             else:
-                logger.warning(f"⚠️ 메타데이터 다이얼로그 취소됨: {profile_name}")
+                self.logger.warning(f"⚠️ 메타데이터 다이얼로그 취소됨: {profile_name}")
                 return False
 
         except Exception as e:
             error_msg = f"메타데이터 다이얼로그 처리 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
     def update_profile_metadata(self, profile_name: str, metadata_dict: dict) -> bool:
         """프로파일 메타데이터 업데이트"""
-        logger.info(f"📝 메타데이터 업데이트: {profile_name}")
+        self.logger.info(f"📝 메타데이터 업데이트: {profile_name}")
 
         try:
             # 딕셔너리를 ProfileMetadata 객체로 변환
@@ -509,17 +509,17 @@ class EnvironmentProfilePresenter(QObject):
                 # 콤보박스 표시 업데이트
                 self._metadata_service.update_profile_combo_display(profile_name)
                 self.refresh_profile_list()
-                logger.info(f"✅ 메타데이터 업데이트 완료: {profile_name}")
+                self.logger.info(f"✅ 메타데이터 업데이트 완료: {profile_name}")
                 return True
             else:
                 error_msg = f"메타데이터 업데이트 실패: {profile_name}"
-                logger.error(f"❌ {error_msg}")
+                self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False
 
         except Exception as e:
             error_msg = f"메타데이터 업데이트 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
             return False
 
@@ -529,18 +529,18 @@ class EnvironmentProfilePresenter(QObject):
 
     def cleanup_temp_files(self):
         """임시 파일 정리"""
-        logger.info("🧹 임시 파일 정리 시작")
+        self.logger.info("🧹 임시 파일 정리 시작")
 
         try:
             if self._edit_session_service and hasattr(self._edit_session_service, 'cleanup_abandoned_temp_files'):
                 self._edit_session_service.cleanup_abandoned_temp_files()
-                logger.info("✅ 임시 파일 정리 완료")
+                self.logger.info("✅ 임시 파일 정리 완료")
             else:
-                logger.debug("📝 Edit Session Service가 초기화되지 않음 - 임시 파일 정리 건너뜀")
+                self.logger.debug("📝 Edit Session Service가 초기화되지 않음 - 임시 파일 정리 건너뜀")
 
         except Exception as e:
             error_msg = f"임시 파일 정리 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.warning_occurred.emit(error_msg)
 
     def get_current_state(self) -> Dict[str, Any]:
@@ -570,7 +570,7 @@ class EnvironmentProfilePresenter(QObject):
 
     def initialize(self):
         """Presenter 초기화"""
-        logger.info("🎬 Presenter 초기화")
+        self.logger.info("🎬 Presenter 초기화")
 
         try:
             # 1단계: 프로파일 목록 로드
@@ -583,16 +583,16 @@ class EnvironmentProfilePresenter(QObject):
             if not self._current_profile:
                 self.load_profile("development")
 
-            logger.info("✅ Presenter 초기화 완료")
+            self.logger.info("✅ Presenter 초기화 완료")
 
         except Exception as e:
             error_msg = f"Presenter 초기화 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             self.error_occurred.emit(error_msg)
 
     def shutdown(self):
         """Presenter 종료 처리"""
-        logger.info("🛑 Presenter 종료 처리")
+        self.logger.info("🛑 Presenter 종료 처리")
 
         try:
             # 1단계: 편집 모드 정리
@@ -607,11 +607,11 @@ class EnvironmentProfilePresenter(QObject):
             self._edit_mode = False
             self._has_unsaved_changes = False
 
-            logger.info("✅ Presenter 종료 처리 완료")
+            self.logger.info("✅ Presenter 종료 처리 완료")
 
         except Exception as e:
             error_msg = f"Presenter 종료 처리 중 예외 발생: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
 
     def __del__(self):
         """소멸자 - 정리 작업"""

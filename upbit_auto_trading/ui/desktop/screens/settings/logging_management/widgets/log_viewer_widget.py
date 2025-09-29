@@ -29,12 +29,15 @@ class LogViewerWidget(QWidget):
     save_logs = pyqtSignal()                    # 로그 저장
     auto_scroll_changed = pyqtSignal(bool)      # 자동 스크롤 토글
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("log-viewer-widget")
         # 로깅
-        self.logger = create_component_logger("LogViewerWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LogViewerWidget")
+        else:
+            raise ValueError("LogViewerWidget에 logging_service가 주입되지 않았습니다")
         self.logger.info("📄 로그 뷰어 위젯 초기화 시작")
 
         # 내부 상태

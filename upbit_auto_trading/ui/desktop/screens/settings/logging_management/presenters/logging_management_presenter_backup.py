@@ -27,12 +27,15 @@ from PyQt6.QtWidgets import QMessageBox
 class LoggingManagementPresenter(QObject):
     """실시간 로깅 관리 MVP Presenter - Config 파일 기반"""
 
-    def __init__(self, view=None):
+    def __init__(self, view=None, logging_service=None):
         super().__init__()
         self.view = view
 
         # Infrastructure 로깅
-        self.logger = create_component_logger("LoggingManagementPresenter")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LoggingManagementPresenter")
+        else:
+            raise ValueError("LoggingManagementPresenter에 logging_service가 주입되지 않았습니다")
         self.logger.info("🎛️ 로깅 관리 프레젠터 초기화 시작")
 
         # Config 관리자 초기화
