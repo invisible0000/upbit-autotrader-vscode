@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QFormLayout
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class ChartSettingsWidget(QWidget):
     """차트 설정 위젯"""

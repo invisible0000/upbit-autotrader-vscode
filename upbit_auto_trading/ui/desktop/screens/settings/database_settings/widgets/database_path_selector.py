@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 
 class DatabasePathSelector(QWidget):
     """
@@ -37,7 +37,8 @@ class DatabasePathSelector(QWidget):
     def __init__(self, database_type: str, display_name: str, parent=None):
         super().__init__(parent)
         self.setObjectName(f"widget-path-selector-{database_type}")
-        self._logger = create_component_logger("DatabasePathSelector")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self.database_type = database_type
         self.display_name = display_name
@@ -214,7 +215,8 @@ class DatabasePathSelectorGroup(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("widget-path-selector-group")
-        self._logger = create_component_logger("DatabasePathSelectorGroup")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self._selectors: Dict[str, DatabasePathSelector] = {}
         self._setup_ui()

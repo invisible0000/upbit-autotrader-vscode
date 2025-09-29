@@ -9,7 +9,7 @@ from typing import Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
 # Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class NotificationSettingsPresenter(QObject):
     """알림 설정 Presenter - MVP 패턴 Application Layer"""

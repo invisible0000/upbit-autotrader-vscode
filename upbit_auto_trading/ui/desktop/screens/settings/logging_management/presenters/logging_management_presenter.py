@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QWidget
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger, get_logging_service
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정), get_logging_service
 from upbit_auto_trading.infrastructure.logging.terminal.terminal_capturer import (
     get_global_terminal_capturer,
     start_global_terminal_capture,

@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QCheckBox, QGroupBox, QFormLayout
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class WindowSettingsWidget(QWidget):
     """창 설정 위젯"""

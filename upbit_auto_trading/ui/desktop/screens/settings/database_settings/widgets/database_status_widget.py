@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 
 class DatabaseStatusWidget(QWidget):
     """
@@ -37,7 +37,8 @@ class DatabaseStatusWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("widget-database-status")
-        self._logger = create_component_logger("DatabaseStatusWidget")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self._database_labels = {}
         self._status_data = {}
@@ -225,7 +226,8 @@ class DatabaseProgressWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("widget-database-progress")
-        self._logger = create_component_logger("DatabaseProgressWidget")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self._setup_ui()
         self.setVisible(False)  # 기본적으로 숨김

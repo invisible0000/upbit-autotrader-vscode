@@ -19,7 +19,7 @@ Refactored from: environment_profile_presenter.py (er-subTASK 01 Step 05)
 from typing import Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 # Application Services Import
 from upbit_auto_trading.application.services.profile_metadata_service import ProfileMetadataService

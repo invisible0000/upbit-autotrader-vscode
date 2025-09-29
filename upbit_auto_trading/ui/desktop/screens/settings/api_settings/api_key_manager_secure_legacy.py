@@ -12,7 +12,7 @@ Phase 2 마이그레이션으로 생성됨:
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from .presenters.api_settings_presenter import ApiSettingsPresenter
 from .views.api_settings_view import ApiSettingsView
 

@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, QTimer, QObject, Qt, QRect
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QTextDocument, QPainter, QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 logger = create_component_logger("YamlEditorSection")
 

@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QPushButton, QDialogButtonBox
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 try:
     from .component_data_scanner import ComponentDataScanner, get_real_component_data, get_real_component_data_hierarchical

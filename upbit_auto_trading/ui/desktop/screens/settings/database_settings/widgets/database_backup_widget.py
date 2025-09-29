@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 
 class DatabaseBackupWidget(QWidget):
     """
@@ -40,7 +40,8 @@ class DatabaseBackupWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("widget-database-backup")
-        self._logger = create_component_logger("DatabaseBackupWidget")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self._backup_data: List[Dict[str, Any]] = []
         self._selected_backup_id: Optional[str] = None

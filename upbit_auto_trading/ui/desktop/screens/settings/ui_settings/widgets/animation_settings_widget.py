@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QCheckBox, QGroupBox, QFormLayout
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class AnimationSettingsWidget(QWidget):
     """애니메이션 설정 위젯"""

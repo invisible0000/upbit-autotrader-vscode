@@ -22,7 +22,7 @@ from .widgets.log_viewer_widget import LogViewerWidget
 from .widgets.console_viewer_widget import ConsoleViewerWidget
 from .presenters.logging_management_presenter import LoggingManagementPresenter
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 
 class LoggingManagementView(QWidget):

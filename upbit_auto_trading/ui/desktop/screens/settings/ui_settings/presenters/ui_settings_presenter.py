@@ -10,7 +10,7 @@ UI 설정 Presenter
 from typing import Optional, Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class UISettingsPresenter(QObject):
     """UI 설정 Presenter - MVP 패턴"""

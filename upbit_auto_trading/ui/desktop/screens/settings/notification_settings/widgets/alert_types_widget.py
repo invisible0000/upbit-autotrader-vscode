@@ -12,7 +12,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QGroupBox, QLabel
 
 # Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class AlertTypesWidget(QWidget):
     """알림 유형 설정 위젯"""

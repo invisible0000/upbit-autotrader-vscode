@@ -44,8 +44,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
-from upbit_auto_trading.infrastructure.configuration import get_path_service
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정) # get_path_service
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import (
     DatabaseInfoDto, DatabaseStatusDto

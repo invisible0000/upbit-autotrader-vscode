@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 from ..presenters.database_settings_presenter import DatabaseSettingsPresenter
 from ..widgets.database_status_widget import DatabaseStatusWidget
 from ..widgets.database_backup_widget import DatabaseBackupWidget
@@ -37,7 +37,8 @@ class DatabaseSettingsView(QWidget):
         self.setObjectName("widget-database-settings")
 
         # 로깅 초기화
-        self.logger = create_component_logger("DatabaseSettingsView")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self.logger = None
         self.logger.info("📊 데이터베이스 설정 화면 (MVP) 초기화 시작")
 
         # UI 설정 (Presenter 생성 전에)

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Tuple, Dict, Any
 
 from dependency_injector.wiring import Provide, inject
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.infrastructure.dependency_injection.container import ApplicationContainer
 
 if TYPE_CHECKING:

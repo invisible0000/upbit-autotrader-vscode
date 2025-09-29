@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, QTimer
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 
 class DatabaseTaskProgressWidget(QWidget):
     """
@@ -29,7 +29,8 @@ class DatabaseTaskProgressWidget(QWidget):
         self.setObjectName("widget-database-task-progress")
 
         # 로깅 초기화
-        self.logger = create_component_logger("DatabaseTaskProgressWidget")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self.logger = None
 
         # 내부 상태
         self._current_task = ""

@@ -20,7 +20,7 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QTimer, QFileSystemWatcher
 from PyQt6.QtWidgets import QMessageBox
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
 
 

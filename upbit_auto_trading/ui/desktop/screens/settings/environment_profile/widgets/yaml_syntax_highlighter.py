@@ -21,7 +21,7 @@ from PyQt6.QtGui import (
     QFont, QColor
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.ui.desktop.common.theme_notifier import ThemeNotifier
 logger = create_component_logger("YamlSyntaxHighlighter")
 
