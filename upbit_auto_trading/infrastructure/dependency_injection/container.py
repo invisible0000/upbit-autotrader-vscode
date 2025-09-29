@@ -38,6 +38,11 @@ class ApplicationContainer(containers.DeclarativeContainer):
         name="DIContainer"
     )
 
+    # Application Layer Logging Service - Settings 컴포넌트용
+    application_logging_service = providers.Singleton(
+        "upbit_auto_trading.application.services.logging_application_service.create_application_logging_service"
+    )
+
     # Database Manager - 3-DB 분리 구조 지원
     database_manager = providers.Singleton(
         "upbit_auto_trading.infrastructure.services.database_connection_service.DatabaseConnectionService"

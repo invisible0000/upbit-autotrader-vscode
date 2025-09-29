@@ -174,13 +174,14 @@ class MVPContainer:
             logger.error(f"❌ Strategy Maker MVP 생성 실패: {e}")
             raise RuntimeError(f"Strategy Maker MVP 생성 중 오류 발생: {e}") from e
 
-    def create_settings_mvp(self, settings_service=None, parent=None):
+    def create_settings_mvp(self, settings_service=None, application_logging_service=None, parent=None):
         """설정 MVP 조합 생성
 
         Presenter와 View를 연결한 완전한 Settings MVP 구조를 반환합니다.
 
         Args:
             settings_service: 외부에서 주입된 SettingsService (옵션)
+            application_logging_service: Application Layer 로깅 서비스 (옵션)
             parent: 부모 위젯 (DI Container 접근을 위해 필요)
 
         Returns:
@@ -194,14 +195,27 @@ class MVPContainer:
             # 폴백: Infrastructure Layer에서 직접 생성
             try:
                 from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
-                from upbit_auto_trading.infrastructure.config.config_loader import ConfigLoader
+                from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
                 config_loader = ConfigLoader()
                 settings_service = SettingsService(config_loader)
             except Exception:
                 settings_service = None
 
-        # View 생성 (QWidget) - parent 파라미터 전달
-        settings_view = SettingsScreen(settings_service=settings_service, parent=parent)
+        # Application Logging Service 사용 (Infrastructure 직접 접근 위반 해결)
+        if application_logging_service is None:
+            # 폴백: Application Layer에서 직접 생성
+            try:
+                from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+                application_logging_service = ApplicationLoggingService()
+            except Exception:
+                application_logging_service = None
+
+        # View 생성 (QWidget) - parent 파라미터 및 로깅 서비스 전달
+        settings_view = SettingsScreen(
+            settings_service=settings_service,
+            logging_service=application_logging_service,
+            parent=parent
+        )
 
         # Presenter 생성 (View와 연결)
         settings_presenter = SettingsPresenter(
@@ -216,8 +230,10 @@ class MVPContainer:
         self._presenters.clear()
         self._views.clear()
 
+
 # 전역 MVP 컨테이너 인스턴스 (필요 시 사용)
 _global_mvp_container: Optional[MVPContainer] = None
+
 
 def get_mvp_container() -> Optional[MVPContainer]:
     """전역 MVP Container 조회
@@ -227,6 +243,7 @@ def get_mvp_container() -> Optional[MVPContainer]:
     """
     return _global_mvp_container
 
+
 def set_mvp_container(container: MVPContainer) -> None:
     """전역 MVP Container 설정
 
@@ -235,6 +252,7 @@ def set_mvp_container(container: MVPContainer) -> None:
     """
     global _global_mvp_container
     _global_mvp_container = container
+
 
 def initialize_mvp_system(application_container: ApplicationServiceContainer) -> MVPContainer:
     """MVP 시스템 초기화
