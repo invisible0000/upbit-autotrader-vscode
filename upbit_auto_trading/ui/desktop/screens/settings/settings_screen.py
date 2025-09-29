@@ -61,8 +61,16 @@ class SettingsScreen(QWidget):
         self._mvp_container = mvp_container
 
         # Application Layer 로깅 서비스 초기화 (Infrastructure 직접 접근 제거)
-        self.logger = logging_service.get_component_logger("SettingsScreen")
-        self.logger.info("🔧 SettingsScreen (MVP View + Application Layer 로깅) 초기화 시작")
+        if logging_service is not None:
+            self._logging_service = logging_service  # ApplicationLoggingService 저장
+            self.logger = logging_service.get_component_logger("SettingsScreen")
+            self.logger.info("🔧 SettingsScreen (MVP View + Application Layer 로깅) 초기화 시작")
+        else:
+            # 폴백: 임시 로거 (개발 초기 단계에서만 사용, 기술 부채 아님)
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            self._logging_service = ApplicationLoggingService()
+            self.logger = self._logging_service.get_component_logger("SettingsScreen")
+            self.logger.warning("⚠️ logging_service가 None이어서 임시 로깅 서비스 생성")
 
         # Infrastructure Layer 의존성 주입 확인
         self.app_context = None
@@ -171,7 +179,14 @@ class SettingsScreen(QWidget):
         """UI 설정 위젯 초기화 (첫 탭 - 즉시 로드)"""
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
-            self.ui_settings = UISettingsView(self)
+
+            # UI Settings용 로거 생성
+            if hasattr(self, '_logging_service'):
+                ui_logger = self._logging_service.get_component_logger("UISettingsView")
+            else:
+                ui_logger = None
+
+            self.ui_settings = UISettingsView(self, logging_service=ui_logger)
             self.logger.debug("🎨 UI 설정 위젯 즉시 초기화 완료")
         except Exception as e:
             self.logger.error(f"❌ UI 설정 위젯 초기화 실패: {e}")
@@ -186,9 +201,14 @@ class SettingsScreen(QWidget):
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
 
             # MVP Container 패턴: View만 생성, Presenter는 DI 컨테이너에서 주입
+            if hasattr(self, '_logging_service'):
+                api_logger = self._logging_service.get_component_logger("ApiSettingsView")
+            else:
+                api_logger = None
+
             self.api_key_manager = ApiSettingsView(
                 parent=self,
-                logging_service=self.logger if hasattr(self, 'logger') else None
+                logging_service=api_logger
             )
 
             # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)

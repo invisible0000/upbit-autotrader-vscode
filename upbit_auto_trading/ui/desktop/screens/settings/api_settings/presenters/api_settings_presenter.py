@@ -44,7 +44,8 @@ class ApiSettingsPresenter:
         self.view = view
 
         # Application Layer 로깅 서비스 사용 (Infrastructure 직접 접근 제거)
-        self.logger = logging_service.get_component_logger("ApiSettingsPresenter")
+        # logging_service는 이미 ApplicationLoggingService.get_component_logger()로 생성된 로거
+        self.logger = logging_service
 
         # ApiKeyService 의존성 주입
         self.api_key_service = api_key_service

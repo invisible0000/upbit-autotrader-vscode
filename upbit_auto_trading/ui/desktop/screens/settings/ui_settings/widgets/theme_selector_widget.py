@@ -32,7 +32,13 @@ class ThemeSelectorWidget(QWidget):
         self.setObjectName("widget-theme-selector")
 
         # 로깅 설정
-        self.logger = create_component_logger("ThemeSelectorWidget")
+        # Application Layer 로깅 서비스 사용 (임시 폴백)
+        try:
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            fallback_service = ApplicationLoggingService()
+            self.logger = fallback_service.get_component_logger("ThemeSelectorWidget")
+        except Exception:
+            self.logger = None
         self.logger.info("🎨 테마 선택 위젯 초기화 시작")
 
         # 내부 상태

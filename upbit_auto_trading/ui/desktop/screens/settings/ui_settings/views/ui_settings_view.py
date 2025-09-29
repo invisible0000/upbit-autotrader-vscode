@@ -26,18 +26,29 @@ class UISettingsView(QWidget):
     apply_requested = pyqtSignal()  # 설정 적용 요청
     reset_requested = pyqtSignal()  # 기본값 복원 요청
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화
 
         Args:
             parent: 부모 위젯
+            logging_service: Application Layer 로깅 서비스
         """
         super().__init__(parent)
         self.setObjectName("widget-ui-settings-view")
 
-        # 로깅 설정
-        self.logger = create_component_logger("UISettingsView")
-        self.logger.info("🎨 UI 설정 View 초기화 시작")
+        # Application Layer 로깅 서비스 초기화
+        if logging_service is not None:
+            self.logger = logging_service
+            self.logger.info("🎨 UI 설정 View 초기화 시작")
+        else:
+            # 폴백: 임시 로거
+            try:
+                from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+                fallback_service = ApplicationLoggingService()
+                self.logger = fallback_service.get_component_logger("UISettingsView")
+                self.logger.info("🎨 UI 설정 View 초기화 시작 (폴백 로거)")
+            except Exception:
+                self.logger = None
 
         # Presenter 참조
         self._presenter = None
@@ -55,7 +66,8 @@ class UISettingsView(QWidget):
         # UI 설정
         self._setup_ui()
 
-        self.logger.info("✅ UI 설정 View 초기화 완료")
+        if self.logger:
+            self.logger.info("✅ UI 설정 View 초기화 완료")
 
     def _setup_ui(self):
         """UI 설정"""

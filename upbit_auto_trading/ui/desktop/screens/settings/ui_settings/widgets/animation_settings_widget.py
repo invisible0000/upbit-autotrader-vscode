@@ -29,7 +29,13 @@ class AnimationSettingsWidget(QWidget):
         self.setObjectName("widget-animation-settings")
 
         # 로깅 설정
-        self.logger = create_component_logger("AnimationSettingsWidget")
+        # Application Layer 로깅 서비스 사용 (임시 폴백)
+        try:
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            fallback_service = ApplicationLoggingService()
+            self.logger = fallback_service.get_component_logger("AnimationSettingsWidget")
+        except Exception:
+            self.logger = None
         self.logger.info("🎭 애니메이션 설정 위젯 초기화 시작")
 
         # 내부 상태

@@ -38,18 +38,31 @@ class ApiSettingsView(QWidget):
 
         # Application Layer 로깅 서비스 사용 (Infrastructure 직접 접근 제거)
         if logging_service:
-            self.logger = logging_service.get_component_logger("ApiSettingsView")
+            # logging_service는 이미 ApplicationLoggingService.get_component_logger()로 생성된 개별 로거
+            self.logger = logging_service
         else:
-            # 폴백: None 체크 후 사용하도록 변경
-            self.logger = None
+            # 폴백: 임시 로거 생성
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            fallback_service = ApplicationLoggingService()
+            self.logger = fallback_service.get_component_logger("ApiSettingsView")
 
         # Presenter는 외부에서 주입받도록 설계 (MVP 패턴)
         self.presenter = None
 
-        # 위젯들 생성
-        self.credentials_widget = ApiCredentialsWidget(self)
-        self.connection_widget = ApiConnectionWidget(self)
-        self.permissions_widget = ApiPermissionsWidget(self)
+        # 위젯들 생성 (로깅 서비스 전달)
+        if self.logger:
+            # 각 위젯별로 별도의 로거 생성
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            service = ApplicationLoggingService()
+            credentials_logger = service.get_component_logger("ApiCredentialsWidget")
+            connection_logger = service.get_component_logger("ApiConnectionWidget")
+            permissions_logger = service.get_component_logger("ApiPermissionsWidget")
+        else:
+            credentials_logger = connection_logger = permissions_logger = None
+
+        self.credentials_widget = ApiCredentialsWidget(self, logging_service=credentials_logger)
+        self.connection_widget = ApiConnectionWidget(self, logging_service=connection_logger)
+        self.permissions_widget = ApiPermissionsWidget(self, logging_service=permissions_logger)
 
         self._setup_ui()
         self._connect_signals()

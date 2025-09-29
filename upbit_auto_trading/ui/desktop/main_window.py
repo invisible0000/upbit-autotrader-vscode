@@ -404,8 +404,27 @@ class MainWindow(QMainWindow):
 
     def _prepare_screen_dependencies(self):
         """화면 의존성 준비 (@inject 패턴 사용으로 mvp_container 제거됨)"""
+        # Application Logging Service 준비 (Phase 6 기능 테스트를 위해 추가)
+        try:
+            from upbit_auto_trading.infrastructure.dependency_injection.container import get_global_container
+            container = get_global_container()
+            application_logging_service = container.application_logging_service()
+        except Exception:
+            # 폴백: 직접 생성
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            application_logging_service = ApplicationLoggingService()
+
+        # MVP Container 준비
+        try:
+            from upbit_auto_trading.presentation.mvp_container import get_mvp_container
+            mvp_container = get_mvp_container()
+        except Exception:
+            mvp_container = None
+
         return {
             'settings_service': self.settings_service,
+            'application_logging_service': application_logging_service,
+            'mvp_container': mvp_container,
             'parent': self,
             'backtest_callback': self._on_backtest_requested,
             'settings_changed_callback': self._on_settings_changed_from_screen,

@@ -24,9 +24,24 @@ class ApiPermissionsWidget(QWidget):
     # 시그널 정의
     permissions_changed = pyqtSignal(bool)  # trade_permission
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service: IPresentationLogger = None):
+        """API 권한 위젯 초기화
+
+        Args:
+            parent: 부모 위젯
+            logging_service: Application Layer 로깅 서비스
+        """
         super().__init__(parent)
         self.setObjectName("widget-api-permissions")
+
+        # Application Layer 로깅 서비스 초기화
+        if logging_service is not None:
+            self.logger = logging_service
+        else:
+            # 폴백: 임시 로거
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            fallback_service = ApplicationLoggingService()
+            self.logger = fallback_service.get_component_logger("ApiPermissionsWidget")
 
         # Application Layer 로깅 서비스 사용 (폴백: None)
         self.logger = None

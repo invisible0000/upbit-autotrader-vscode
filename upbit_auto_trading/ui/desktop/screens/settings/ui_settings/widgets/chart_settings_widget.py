@@ -30,7 +30,13 @@ class ChartSettingsWidget(QWidget):
         self.setObjectName("widget-chart-settings")
 
         # 로깅 설정
-        self.logger = create_component_logger("ChartSettingsWidget")
+        # Application Layer 로깅 서비스 사용 (임시 폴백)
+        try:
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            fallback_service = ApplicationLoggingService()
+            self.logger = fallback_service.get_component_logger("ChartSettingsWidget")
+        except Exception:
+            self.logger = None
         self.logger.info("📊 차트 설정 위젯 초기화 시작")
 
         # 내부 상태

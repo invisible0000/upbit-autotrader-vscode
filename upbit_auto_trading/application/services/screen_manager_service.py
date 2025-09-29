@@ -193,9 +193,19 @@ class ScreenManagerService(IScreenManagerService):
             # MVP 패턴 적용 (TASK-13: Settings MVP 구현)
             if mvp_container:
                 try:
+                    # Application Logging Service 가져오기
+                    application_logging_service = dependencies.get('application_logging_service')
+                    if not application_logging_service:
+                        # 폴백: Application Logging Service 직접 생성
+                        from upbit_auto_trading.application.services.logging_application_service import (
+                            ApplicationLoggingService
+                        )
+                        application_logging_service = ApplicationLoggingService()
+
                     # MVP Container를 통해 Settings Presenter와 View 생성
                     settings_view, settings_presenter = mvp_container.create_settings_mvp(
                         settings_service=settings_service,
+                        application_logging_service=application_logging_service,
                         parent=parent
                     )
                     screen = settings_view  # View가 실제 QWidget
@@ -207,15 +217,32 @@ class ScreenManagerService(IScreenManagerService):
 
                 except Exception as e:
                     self._logger.error(f"❌ Settings MVP 생성 실패: {e}")
-                    # 폴백: 기존 방식
+                    # 폴백: 기존 방식 (logging_service 전달 포함)
                     from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                    screen = SettingsScreen(settings_service=settings_service, parent=parent)
-                    self._logger.warning("⚠️ Settings 기존 방식으로 폴백")
+                    screen = SettingsScreen(
+                        settings_service=settings_service,
+                        logging_service=application_logging_service,
+                        parent=parent
+                    )
+                    self._logger.warning("⚠️ Settings 기존 방식으로 폴백 (logging_service 포함)")
             else:
-                # MVP Container가 없으면 기존 방식
+                # MVP Container가 없으면 기존 방식 (logging_service 포함)
+                try:
+                    from upbit_auto_trading.application.services.logging_application_service import (
+                        ApplicationLoggingService
+                    )
+                    application_logging_service = ApplicationLoggingService()
+                except Exception:
+                    application_logging_service = None
+                    self._logger.warning("⚠️ ApplicationLoggingService 생성 실패 - None으로 설정")
+
                 from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                screen = SettingsScreen(settings_service=settings_service, parent=parent)
-                self._logger.info("SettingsScreen에 SettingsService 주입 완료 (기존 방식)")
+                screen = SettingsScreen(
+                    settings_service=settings_service,
+                    logging_service=application_logging_service,
+                    parent=parent
+                )
+                self._logger.info("SettingsScreen에 SettingsService + LoggingService 주입 완료 (기존 방식)")
 
             # 시그널 연결
             self._connect_settings_signals(screen, dependencies)
