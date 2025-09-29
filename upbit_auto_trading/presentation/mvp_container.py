@@ -174,15 +174,18 @@ class MVPContainer:
             logger.error(f"❌ Strategy Maker MVP 생성 실패: {e}")
             raise RuntimeError(f"Strategy Maker MVP 생성 중 오류 발생: {e}") from e
 
-    def create_settings_mvp(self, settings_service=None, application_logging_service=None, parent=None):
+    def create_settings_mvp(self, settings_service=None, application_logging_service=None,
+                            parent=None, api_key_service=None, settings_factory=None):
         """설정 MVP 조합 생성
 
         Presenter와 View를 연결한 완전한 Settings MVP 구조를 반환합니다.
 
         Args:
-            settings_service: 외부에서 주입된 SettingsService (옵션)
-            application_logging_service: Application Layer 로깅 서비스 (옵션)
-            parent: 부모 위젯 (DI Container 접근을 위해 필요)
+            settings_service: 외부에서 주입된 SettingsService
+            application_logging_service: Application Layer 로깅 서비스
+            parent: 부모 위젯
+            api_key_service: API 키 관리 서비스
+            settings_factory: Settings View Factory
 
         Returns:
             tuple: (view, presenter) 튜플 - view가 MainWindow에서 사용될 QWidget
@@ -190,30 +193,27 @@ class MVPContainer:
         from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
         from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
 
-        # Settings Service 사용 (외부에서 주입받거나 직접 생성)
+        # 필수 의존성만 확인 (api_key_service는 선택적)
         if settings_service is None:
-            # 폴백: Infrastructure Layer에서 직접 생성
-            try:
-                from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
-                from upbit_auto_trading.infrastructure.config.loaders.config_loader import ConfigLoader
-                config_loader = ConfigLoader()
-                settings_service = SettingsService(config_loader)
-            except Exception:
-                settings_service = None
-
-        # Application Logging Service 사용 (Infrastructure 직접 접근 위반 해결)
+            raise ValueError("SettingsService가 주입되지 않았습니다")
         if application_logging_service is None:
-            # 폴백: Application Layer에서 직접 생성
-            try:
-                from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
-                application_logging_service = ApplicationLoggingService()
-            except Exception:
-                application_logging_service = None
+            raise ValueError("ApplicationLoggingService가 주입되지 않았습니다")
+        if settings_factory is None:
+            raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-        # View 생성 (QWidget) - parent 파라미터 및 로깅 서비스 전달
+        # api_key_service는 선택적 - None이어도 기본 기능은 동작
+        if api_key_service is None:
+            application_logging_service.get_component_logger("MVPContainer").warning(
+                "⚠️ ApiKeyService가 없습니다. API 키 관련 기능이 비활성화됩니다."
+            )
+
+        # View 생성 (모든 필요한 의존성과 함께)
         settings_view = SettingsScreen(
             settings_service=settings_service,
             logging_service=application_logging_service,
+            api_key_service=api_key_service,
+            settings_factory=settings_factory,
+            mvp_container=self,  # MVP Container도 전달
             parent=parent
         )
 

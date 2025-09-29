@@ -18,14 +18,33 @@ class NotificationSettingsPresenter(QObject):
     settings_updated = pyqtSignal(dict)
     settings_changed = pyqtSignal()
 
-    def __init__(self, logging_service=None):
-        """초기화"""
+    def __init__(self, view, notification_service, logging_service):
+        """초기화 - Factory 호환 (명시적 의존성 주입)
+
+        Args:
+            view: Notification 설정 View 인스턴스
+            notification_service: 알림 서비스 인스턴스
+            logging_service: 로깅 서비스 인스턴스
+        """
         super().__init__()
+
+        # 로깅 서비스 검증 및 설정
         if logging_service:
             self.logger = logging_service.get_component_logger("NotificationSettingsPresenter")
         else:
             raise ValueError("NotificationSettingsPresenter에 logging_service가 주입되지 않았습니다")
-        self.logger.info("🎛️ NotificationSettingsPresenter 초기화")
+
+        # 서비스 의존성 설정
+        self.notification_service = notification_service
+        self.view = view
+
+        # 의존성 검증
+        if self.notification_service is None:
+            self.logger.warning("⚠️ NotificationService가 None으로 전달됨")
+        else:
+            self.logger.info(f"✅ NotificationService 의존성 주입 성공: {type(self.notification_service).__name__}")
+
+        self.logger.info("🎛️ NotificationSettingsPresenter 초기화 완료")
 
         # 기본 설정 값 (Domain Model)
         self._settings = {

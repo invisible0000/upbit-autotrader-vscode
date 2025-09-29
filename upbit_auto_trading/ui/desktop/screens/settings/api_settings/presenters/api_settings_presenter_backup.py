@@ -18,8 +18,10 @@ Phase 2 마이그레이션으로 생성됨:
 import gc
 from typing import TYPE_CHECKING, Tuple, Dict, Any
 
+from dependency_injector.wiring import Provide, inject
+
 # Application Layer - Infrastructure 의존성 격리 (Phase 3 수정)
-# Factory 패턴으로 명시적 의존성 주입 (Phase 1-2 완성)
+# DI 컨테이너는 @inject 패턴으로 주입받도록 변경
 
 if TYPE_CHECKING:
     from upbit_auto_trading.ui.desktop.screens.settings.api_settings.views.api_settings_view import ApiSettingsView
@@ -32,11 +34,12 @@ class ApiSettingsPresenter:
     비즈니스 로직을 담당하며 View와 Domain Service 사이의 중계자 역할을 합니다.
     """
 
+    @inject
     def __init__(
         self,
         view: "ApiSettingsView",
-        api_key_service,  # Factory에서 명시적으로 주입 (ApiKeyService 타입)
-        logging_service   # Factory에서 명시적으로 주입 (Logger 타입)
+        api_key_service=Provide["api_key_service"],
+        logging_service=Provide["application_logging_service"]
     ):
         self.view = view
 

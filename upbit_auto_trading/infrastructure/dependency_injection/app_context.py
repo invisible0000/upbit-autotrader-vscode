@@ -69,6 +69,15 @@ class ApplicationContext:
 
             # 3. 등록 상태 검증
             if validate_container_registration(self._container):
+                # 4. 전역 ApplicationContainer 설정 (Factory에서 접근 가능하도록)
+                from upbit_auto_trading.application.container import set_application_container
+                from upbit_auto_trading.application.container import ApplicationServiceContainer
+
+                # ApplicationContainer → ApplicationServiceContainer 어댑터
+                service_container = ApplicationServiceContainer(self._container)
+                set_application_container(service_container)
+                logger.info("✅ 전역 ApplicationServiceContainer 설정 완료")
+
                 self._is_initialized = True
                 logger.info("✅ ApplicationContext 초기화 완료")
             else:

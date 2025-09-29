@@ -18,8 +18,8 @@ from ..widgets.notification_methods_widget import NotificationMethodsWidget
 from ..widgets.notification_frequency_widget import NotificationFrequencyWidget
 from ..widgets.quiet_hours_widget import QuietHoursWidget
 
-# Presenter
-from ..presenters.notification_settings_presenter import NotificationSettingsPresenter
+# Presenter는 Factory에서 주입됨
+
 
 class NotificationSettingsView(QWidget):
     """알림 설정 View - MVP 패턴 Presentation Layer"""
@@ -40,19 +40,31 @@ class NotificationSettingsView(QWidget):
 
         self.logger.info("🔔 NotificationSettingsView 초기화 시작")
 
-        # Presenter 생성 (MVP 패턴)
-        self.presenter = NotificationSettingsPresenter(logging_service=logging_service)
+        # Presenter는 Factory에서 설정됨
+        self.presenter = None
 
         # 위젯 초기화
         self._init_widgets()
         self._setup_ui()
-        self._connect_signals()
-
-        # 초기 데이터 로드
-        self.presenter.load_settings()
 
         self._report_to_infrastructure()
         self.logger.info("✅ NotificationSettingsView 초기화 완료")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Notification 설정 Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
+
+        # 시그널 연결
+        self._connect_signals()
+
+        # 초기 데이터 로드
+        if self.presenter:
+            self.presenter.load_settings()
 
     def _report_to_infrastructure(self):
         """Infrastructure Layer 상태 보고 (레거시 briefing 시스템 제거됨)"""

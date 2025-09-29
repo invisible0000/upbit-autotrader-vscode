@@ -9,6 +9,7 @@
 ## 🎯 **DDD 레이어별 책임과 데이터 설계 (1-30줄)**
 
 ### **4계층 데이터 흐름 설계**
+
 ```yaml
 Presentation Layer (UI):
 ├── 책임: 사용자 입력/출력, 화면 상태 관리
@@ -32,6 +33,7 @@ Infrastructure Layer (외부 연동):
 ```
 
 ### **매매시스템 특화 데이터 설계**
+
 ```sql
 -- 1. 트리거 빌더 데이터 (Infrastructure)
 CREATE TABLE trigger_definitions (
@@ -63,11 +65,15 @@ CREATE TABLE position_strategy_assignments (
     position_state TEXT DEFAULT 'entry_waiting', -- 포지션 상태
     assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(strategy_id) REFERENCES strategy_compositions(strategy_id)
+);
+```
+
 ---
 
 ## 🔧 **변수 확장성 및 유연한 구조 설계 (31-70줄)**
 
 ### **매매 변수 동적 확장 시스템**
+
 ```python
 # Domain Layer: 변수 정의 엔티티 (순수 비즈니스 로직)
 @dataclass(frozen=True)
@@ -167,6 +173,7 @@ class SQLiteTradingVariableRepository(TradingVariableRepository):
 ```
 
 ### **전략 구성 유연성 확보**
+
 ```python
 # Domain Layer: 전략 조합 규칙
 class StrategyCompositionRules:
@@ -218,12 +225,14 @@ class DynamicStrategyExecutionService:
 
         # 4. 신호 충돌 해결
         final_signal = self._resolve_signal_conflicts(signals, strategy_config['conflict_resolution'])
+```
 
 ---
 
 ## 🧪 **DDD 레이어별 유닛테스트 전략 (71-120줄)**
 
 ### **레이어별 테스트 범위와 전략**
+
 ```python
 # Domain Layer 테스트: 순수 비즈니스 로직 검증
 class TestTradingVariableDefinition:
@@ -419,6 +428,7 @@ class TestTriggerBuilderWidget:
 ```
 
 ### **통합 테스트 시나리오**
+
 ```python
 class TestEndToEndTradingFlow:
     """전체 매매 흐름 통합 테스트"""
@@ -448,11 +458,14 @@ class TestEndToEndTradingFlow:
         signals = await signal_repository.get_signals_for_position(position.id)
         assert len(signals) == 1
         assert signals[0].signal_type == SignalType.ENTRY
+```
+
 ---
 
 ## 📊 **데이터 저장 효율성 및 성능 최적화 (121-150줄)**
 
 ### **저장 구조 효율성 검증**
+
 ```yaml
 트리거 빌더 저장 최적화:
 ✅ 변수 설정 JSON: 중복 제거, 압축 저장
@@ -471,6 +484,7 @@ class TestEndToEndTradingFlow:
 ```
 
 ### **확장성 검증 체크리스트**
+
 ```python
 class ExtensibilityValidator:
     """시스템 확장성 검증"""
@@ -506,6 +520,7 @@ class ExtensibilityValidator:
 ```
 
 ### **성능 벤치마크 기준**
+
 ```yaml
 레이어별 성능 목표:
 Domain Layer:

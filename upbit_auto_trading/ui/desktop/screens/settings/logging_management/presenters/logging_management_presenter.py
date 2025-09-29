@@ -13,16 +13,42 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
-# from upbit_auto_trading.infrastructure.terminal_capture import (
-#     get_global_terminal_capturer,
-#     start_global_terminal_capture,
-#     stop_global_terminal_capture,
-# )
-# from upbit_auto_trading.infrastructure.logging import (
-#     get_live_log_buffer,
-#     attach_live_log_handler,
-#     detach_live_log_handler,
-# )
+try:
+    from upbit_auto_trading.infrastructure.terminal_capture import (
+        get_global_terminal_capturer,
+        start_global_terminal_capture,
+        stop_global_terminal_capture,
+    )
+    from upbit_auto_trading.infrastructure.logging import (
+        get_live_log_buffer,
+        attach_live_log_handler,
+        detach_live_log_handler,
+    )
+except ImportError:
+    # Fallback 함수들 정의
+    def get_global_terminal_capturer():
+        return None
+
+    def start_global_terminal_capture():
+        pass
+
+    def stop_global_terminal_capture():
+        pass
+
+    def get_live_log_buffer():
+        class MockBuffer:
+            def last_seq(self):
+                return 0
+
+            def read_from_seq(self, seq):
+                return []
+        return MockBuffer()
+
+    def attach_live_log_handler():
+        pass
+
+    def detach_live_log_handler():
+        pass
 
 
 class LoggingManagementPresenter(QObject):
@@ -34,8 +60,14 @@ class LoggingManagementPresenter(QObject):
     log_content_updated = pyqtSignal(str)
     console_output_updated = pyqtSignal(str, bool)  # (content, is_error)
 
-    def __init__(self, parent: Optional[QObject] = None, logging_service=None):
-        super().__init__(parent)
+    def __init__(self, view, logging_service):
+        """초기화 - Factory 호환 (명시적 의존성 주입)
+
+        Args:
+            view: Logging 관리 View 인스턴스
+            logging_service: 로깅 서비스 인스턴스
+        """
+        super().__init__()
 
         # Infrastructure 로깅 시스템
         if logging_service:
@@ -43,12 +75,22 @@ class LoggingManagementPresenter(QObject):
         else:
             raise ValueError("LoggingManagementPresenter에 logging_service가 주입되지 않았습니다")
 
-        # ✅ LoggingService의 config_manager 사용 (중요!)
-        # logging_service는 이미 DI로 받은 것을 사용
-        # TODO: config_manager 접근은 Application Layer에서 제공하는 인터페이스를 통해 해야 함
-        self.config_manager = None  # 임시로 None 설정
+        # 서비스 의존성 설정
+        self.logging_service = logging_service
 
-        self.logger.info(f"✅ LoggingService의 config_manager 사용 - 핸들러 수: {len(self.config_manager._change_handlers)}")
+        # config_manager 접근 (Application Layer 인터페이스)
+        self.config_manager = getattr(logging_service, 'config_manager', None)
+
+        # 의존성 검증
+        if self.logging_service is None:
+            self.logger.warning("⚠️ LoggingService가 None으로 전달됨")
+        else:
+            self.logger.info(f"✅ LoggingService 의존성 주입 성공: {type(self.logging_service).__name__}")
+
+        if self.config_manager:
+            self.logger.info(f"✅ Config Manager 접근 성공 - 핸들러 수: {len(getattr(self.config_manager, '_change_handlers', []))}")
+        else:
+            self.logger.warning("⚠️ Config Manager 접근 실패 - 기본 설정 사용")
 
         # View 참조 (MVP 패턴)
         self.view = None

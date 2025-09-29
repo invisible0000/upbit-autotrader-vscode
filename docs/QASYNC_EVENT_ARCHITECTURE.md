@@ -176,7 +176,7 @@ graph TB
 
     subgraph "Presentation Layer"
         M[MainWindow] --> L
-        N[@asyncSlot Methods] --> K
+        N["@asyncSlot Methods"] --> K
         O[UI Components] --> N
     end
 

@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Any
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
-# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정) # get_path_service
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정) - Factory 패턴 적용
 from upbit_auto_trading.application.services.database_health_service import DatabaseHealthService
 from upbit_auto_trading.ui.desktop.screens.settings.dtos.database_tab_dto import (
     DatabaseInfoDto, DatabaseStatusDto
@@ -62,35 +62,54 @@ class DatabaseSettingsPresenter:
 
     def _get_all_database_paths(self):
         """모든 데이터베이스 경로를 반환하는 헬퍼 메서드"""
-        return {
-            'settings': self.path_service.get_database_path('settings'),
-            'strategies': self.path_service.get_database_path('strategies'),
-            'market_data': self.path_service.get_database_path('market_data')
-        }
+        if hasattr(self.database_service, 'get_database_path'):
+            return {
+                'settings': self.database_service.get_database_path('settings'),
+                'strategies': self.database_service.get_database_path('strategies'),
+                'market_data': self.database_service.get_database_path('market_data')
+            }
+        else:
+            # Fallback: 기본 경로 사용
+            return {
+                'settings': 'd:/projects/upbit-autotrader-vscode/data/settings.sqlite3',
+                'strategies': 'd:/projects/upbit-autotrader-vscode/data/strategies.sqlite3',
+                'market_data': 'd:/projects/upbit-autotrader-vscode/data/market_data.sqlite3'
+            }
     """데이터베이스 설정 통합 프레젠터
 
     MVP 패턴의 Presenter 역할을 담당합니다.
     모든 데이터베이스 교체 작업을 통합 Use Case로 처리합니다.
     """
 
-    def __init__(self, view: "IDatabaseTabView", logging_service=None):
+    def __init__(self, view: "IDatabaseTabView", database_service, logging_service):
+        """초기화 - Factory 호환 (명시적 의존성 주입)
+
+        Args:
+            view: Database 설정 View 인스턴스
+            database_service: 데이터베이스 서비스 인스턴스
+            logging_service: 로깅 서비스 인스턴스
+        """
         self.view = view
 
-        # DI 패턴으로 로깅 서비스 주입
+        # 로깅 서비스 검증 및 설정
         if logging_service:
             self.logger = logging_service.get_component_logger("DatabaseSettingsPresenter")
         else:
             raise ValueError("DatabaseSettingsPresenter에 logging_service가 주입되지 않았습니다")
 
-        # Factory 패턴으로 Path Service 사용
-        self.path_service = get_path_service()
+        # 서비스 의존성 설정
+        self.database_service = database_service
         self.health_service = DatabaseHealthService()  # Application Service 추가
-        # self.unified_config = UnifiedConfigService()  # 현재 사용하지 않음
 
         # 통합 Use Case는 필요할 때 지연 로딩 (Private 변수)
         self._replacement_use_case = None
-        # self._profile_management_use_case = None  # 향후 구현
         self._dto_classes_loaded = False
+
+        # 의존성 검증
+        if self.database_service is None:
+            self.logger.warning("⚠️ DatabaseService가 None으로 전달됨")
+        else:
+            self.logger.info(f"✅ DatabaseService 의존성 주입 성공: {type(self.database_service).__name__}")
 
         self.logger.info("✅ 데이터베이스 설정 통합 프레젠터 초기화 완료")
 

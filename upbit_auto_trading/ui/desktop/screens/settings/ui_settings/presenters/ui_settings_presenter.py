@@ -19,11 +19,13 @@ class UISettingsPresenter(QObject):
     theme_changed = pyqtSignal(str)  # 테마 변경 알림
     settings_applied = pyqtSignal()  # 설정 적용 완료 알림
 
-    def __init__(self, settings_service=None, logging_service=None):
-        """초기화
+    def __init__(self, view, settings_service, logging_service):
+        """초기화 - Factory 호환 (명시적 의존성 주입)
 
         Args:
+            view: UI 설정 View 인스턴스
             settings_service: 설정 서비스 인스턴스
+            logging_service: 로깅 서비스 인스턴스
         """
         super().__init__()
 

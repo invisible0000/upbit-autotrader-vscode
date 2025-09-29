@@ -158,6 +158,42 @@ class ApplicationContainer(containers.DeclarativeContainer):
         lambda: logger.debug("WebsocketApplicationService Provider - 향후 구현 예정")
     )
 
+    # Repository Container Factory for ApplicationServiceContainer
+    def create_repository_container(container_instance):
+        """Repository Container 생성 (ApplicationServiceContainer용)"""
+        class RepositoryContainer:
+            def __init__(self, container):
+                self._container = container
+
+            def get_strategy_repository(self):
+                return self._container.strategy_repository()
+
+            def get_trigger_repository(self):
+                return self._container.trigger_repository()
+
+            def get_settings_repository(self):
+                return self._container.settings_repository()
+
+            def get_compatibility_service(self):
+                return self._container.strategy_compatibility_service()
+
+            def get_api_key_service(self):
+                return self._container.api_key_service()
+
+        return RepositoryContainer(container_instance)
+
+    # Repository Container - self 참조 방식으로 순환 참조 해결
+    repository_container = providers.Factory(
+        create_repository_container,
+        container_instance=providers.Self
+    )
+
+    # Application Service Container
+    application_service_container = providers.Factory(
+        "upbit_auto_trading.application.container.ApplicationServiceContainer",
+        repository_container=repository_container
+    )
+
     # =============================================================================
     # UI Layer Providers - Presentation Layer 서비스
     # =============================================================================
@@ -189,7 +225,8 @@ class ApplicationContainer(containers.DeclarativeContainer):
 
     # Application Services - MVP 패턴으로 Presenter에 위임
     screen_manager_service = providers.Factory(
-        "upbit_auto_trading.application.services.screen_manager_service.ScreenManagerService"
+        "upbit_auto_trading.application.services.screen_manager_service.ScreenManagerService",
+        application_container=application_service_container
     )
 
     window_state_service = providers.Factory(

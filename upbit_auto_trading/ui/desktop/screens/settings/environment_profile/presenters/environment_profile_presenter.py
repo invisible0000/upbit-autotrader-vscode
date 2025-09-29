@@ -28,7 +28,6 @@ from upbit_auto_trading.application.services.profile_validation_service import P
 from ..dialogs.profile_metadata import ProfileMetadata
 
 
-
 class EnvironmentProfilePresenter(QObject):
     """
     DDD 기반 환경 프로파일 관리 MVP Presenter
@@ -65,22 +64,41 @@ class EnvironmentProfilePresenter(QObject):
     warning_occurred = pyqtSignal(str)              # 경고 발생
     status_updated = pyqtSignal(str)                # 상태 메시지 업데이트
 
-    def __init__(self, view=None):
-        """EnvironmentProfilePresenter 초기화"""
+    def __init__(self, view, profile_service, logging_service):
+        """초기화 - Factory 호환 (명시적 의존성 주입)
+
+        Args:
+            view: Environment Profile View 인스턴스
+            profile_service: 프로파일 관리 서비스 인스턴스
+            logging_service: 로깅 서비스 인스턴스
+        """
         super().__init__()
+
+        # 로깅 서비스 검증 및 설정
+        if logging_service:
+            self.logger = logging_service.get_component_logger("EnvironmentProfilePresenter")
+        else:
+            raise ValueError("EnvironmentProfilePresenter에 logging_service가 주입되지 않았습니다")
+
+        # 서비스 의존성 설정
         self._view = view
+        self.profile_service = profile_service
         self._current_profile = ""
         self._edit_mode = False
         self._has_unsaved_changes = False
-        self._is_initialized = False  # 지연 로딩을 위한 플래그
 
-        # Application Services (지연 초기화)
+        # Application Services (팩토리에서 주입받은 서비스 기반)
         self._metadata_service = None
         self._edit_session_service = None
         self._validation_service = None
 
-        self.logger.info("🎭 EnvironmentProfilePresenter 초기화 완료 (DDD 리팩토링 버전)")
-        self.logger.debug("🔄 지연 로딩 모드 - 실제 사용시 서비스 초기화")
+        # 의존성 검증
+        if self.profile_service is None:
+            self.logger.warning("⚠️ ProfileService가 None으로 전달됨")
+        else:
+            self.logger.info(f"✅ ProfileService 의존성 주입 성공: {type(self.profile_service).__name__}")
+
+        self.logger.info("🎭 EnvironmentProfilePresenter 초기화 완료 (Factory 패턴)")
 
     def _ensure_services_initialized(self):
         """서비스가 초기화되지 않았다면 초기화 (지연 로딩)"""
@@ -309,14 +327,14 @@ class EnvironmentProfilePresenter(QObject):
             self._ensure_services_initialized()
 
             # 1단계: 기존 프로파일 편집 시작
-            if target_profile and target_profile != "":
-                temp_file_path = self._edit_session_service.start_edit_existing_profile(target_profile)
+            if profile_name and profile_name != "":
+                temp_file_path = self._edit_session_service.start_edit_existing_profile(profile_name)
             else:
                 # 새 프로파일 생성
                 temp_file_path = self._edit_session_service.start_edit_new_profile()
 
             if not temp_file_path:
-                error_msg = f"편집 세션 시작 실패: {target_profile}"
+                error_msg = f"편집 세션 시작 실패: {profile_name}"
                 self.logger.error(f"❌ {error_msg}")
                 self.error_occurred.emit(error_msg)
                 return False

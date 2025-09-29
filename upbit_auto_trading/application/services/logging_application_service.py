@@ -64,6 +64,13 @@ class PresentationLoggerAdapter:
         """심각한 에러 레벨 로그 출력"""
         self._logger.critical(f"[{self._component_name}] {message}", *args, **kwargs)
 
+    def get_component_logger(self, component_name: str) -> 'PresentationLoggerAdapter':
+        """하위 컴포넌트용 로거 생성 (Factory 패턴에서 필요)"""
+        # Infrastructure 로거 재사용하여 새로운 어댑터 생성
+        from upbit_auto_trading.infrastructure.logging import create_component_logger
+        infrastructure_logger = create_component_logger(component_name)
+        return PresentationLoggerAdapter(infrastructure_logger, component_name)
+
 
 class ApplicationLoggingService:
     """

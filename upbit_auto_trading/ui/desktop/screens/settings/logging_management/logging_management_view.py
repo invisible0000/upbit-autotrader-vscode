@@ -20,7 +20,6 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from .widgets.logging_settings_widget import LoggingSettingsWidget
 from .widgets.log_viewer_widget import LogViewerWidget
 from .widgets.console_viewer_widget import ConsoleViewerWidget
-from .presenters.logging_management_presenter import LoggingManagementPresenter
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
@@ -45,15 +44,25 @@ class LoggingManagementView(QWidget):
 
         self.logger.info("🎛️ 로깅 관리 뷰 초기화 시작")
 
-        # MVP 패턴: Presenter 생성 및 연결
-        self.presenter = LoggingManagementPresenter(logging_service=logging_service)
-        self.presenter.set_view(self)
+        # Presenter는 Factory에서 설정됨
+        self.presenter = None
 
         self._setup_ui()
         self._connect_signals()
-        self._connect_presenter_signals()
 
         self.logger.info("✅ 로깅 관리 뷰 초기화 완료 - 3-위젯 아키텍처")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Logging 관리 Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
+
+        # Presenter 시그널 연결
+        self._connect_presenter_signals()
 
     def _setup_ui(self):
         """3-위젯 아키텍처 UI 레이아웃 구성"""

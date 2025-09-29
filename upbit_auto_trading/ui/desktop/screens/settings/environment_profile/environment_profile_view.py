@@ -22,7 +22,7 @@ from pathlib import Path
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from .widgets.profile_selector_section import ProfileSelectorSection
 from .widgets.yaml_editor_section import YamlEditorSection
-from .presenters.environment_profile_presenter import EnvironmentProfilePresenter
+# Presenter는 Factory에서 주입됨
 
 class EnvironmentProfileView(QWidget):
     """
@@ -57,15 +57,26 @@ class EnvironmentProfileView(QWidget):
         self.yaml_editor: Optional[YamlEditorSection] = None
         self.main_splitter: Optional[QSplitter] = None
 
-        # MVP Presenter 초기화
-        self._presenter: Optional[EnvironmentProfilePresenter] = None
+        # MVP Presenter는 Factory에서 설정됨
+        self.presenter = None
 
-        # 🔥 지연 로딩 제거 - 직접 초기화
+        # 기본 UI 설정
         self._setup_ui()
         self._connect_signals()
-        self._setup_presenter()
 
-        self.self.self.logger.info("✅ EnvironmentProfileView 초기화 완료 - 직접 초기화")
+        self.logger.info("✅ EnvironmentProfileView 초기화 완료 - Factory 패턴")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Environment Profile Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
+
+        # Presenter 시그널 연결
+        self._connect_presenter_signals()
 
     def _setup_ui(self):
         """UI 레이아웃 설정 - QSplitter 기반 1:2 비율 강제"""
@@ -532,22 +543,6 @@ class EnvironmentProfileView(QWidget):
             self.profile_selector.set_active_profile(profile_name)
 
     # === MVP Presenter 관련 메서드 ===
-
-    def _setup_presenter(self):
-        """MVP Presenter 설정"""
-        self.self.logger.debug("🔧 MVP Presenter 설정 시작")
-
-        try:
-            # Presenter 생성 및 View 연결
-            self.presenter = EnvironmentProfilePresenter(self)
-
-            # Presenter 시그널 연결
-            self._connect_presenter_signals()
-
-            self.self.logger.debug("✅ MVP Presenter 설정 완료")
-
-        except Exception as e:
-            self.self.logger.error(f"❌ MVP Presenter 설정 실패: {e}")
 
     def _connect_presenter_signals(self):
         """Presenter 시그널 연결"""

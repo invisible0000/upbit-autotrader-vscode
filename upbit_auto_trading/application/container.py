@@ -5,7 +5,11 @@ Application Service들의 의존성을 관리하고 인스턴스를 제공합니
 Singleton 패턴으로 구현하여 하나의 서비스 인스턴스만 존재하도록 보장합니다.
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
+    from upbit_auto_trading.application.factories.settings_view_factory import SettingsViewFactory
 
 from upbit_auto_trading.application.services.strategy_application_service import StrategyApplicationService
 from upbit_auto_trading.application.services.trigger_application_service import TriggerApplicationService
@@ -28,6 +32,7 @@ from upbit_auto_trading.application.services.settings_application_services impor
     create_settings_validation_service,
     create_settings_application_service
 )
+
 
 class ApplicationServiceContainer:
     """Application Service들의 의존성 주입 컨테이너
@@ -171,6 +176,23 @@ class ApplicationServiceContainer:
             )
         return self._services["settings_application_service"]
 
+    def get_api_key_service(self) -> 'ApiKeyService':
+        """API Key Service 조회
+
+        Infrastructure DI Container에서 ApiKeyService를 가져옵니다.
+
+        Returns:
+            ApiKeyService: API 키 관리 서비스
+        """
+        if "api_key_service" not in self._services:
+            # Infrastructure DI Container에서 ApiKeyService 가져오기
+            from upbit_auto_trading.infrastructure.dependency_injection.container import get_global_container
+
+            infrastructure_container = get_global_container()
+            self._services["api_key_service"] = infrastructure_container.api_key_service()
+
+        return self._services["api_key_service"]
+
     def get_settings_view_factory(self) -> 'SettingsViewFactory':
         """Settings View Factory 조회
 
@@ -182,22 +204,12 @@ class ApplicationServiceContainer:
                 create_settings_view_factory
             )
 
-            # API 키 서비스는 필요한 경우에만 주입 (선택적)
-            api_key_service = None
-            try:
-                # Repository Container에서 API 키 서비스 조회 시도
-                if hasattr(self._repo_container, 'get_api_key_service'):
-                    api_key_service = self._repo_container.get_api_key_service()
-            except Exception:
-                # API 키 서비스 없어도 Factory는 동작 가능
-                pass
-
             self._services["settings_view_factory"] = create_settings_view_factory(
                 settings_app_service=self.get_settings_application_service(),
                 logging_service=self.get_logging_service(),
                 lifecycle_service=self.get_component_lifecycle_service(),
                 validation_service=self.get_settings_validation_service(),
-                api_key_service=api_key_service
+                api_key_service=self.get_api_key_service()
             )
         return self._services["settings_view_factory"]
 
@@ -226,8 +238,10 @@ class ApplicationServiceContainer:
         """
         self._services.clear()
 
+
 # 전역 컨테이너 인스턴스 (필요 시 사용)
 _global_container: Optional[ApplicationServiceContainer] = None
+
 
 def get_application_container() -> Optional[ApplicationServiceContainer]:
     """전역 Application Service Container 조회
@@ -236,6 +250,7 @@ def get_application_container() -> Optional[ApplicationServiceContainer]:
         ApplicationServiceContainer: 전역 컨테이너 (없으면 None)
     """
     return _global_container
+
 
 def set_application_container(container: ApplicationServiceContainer) -> None:
     """전역 Application Service Container 설정

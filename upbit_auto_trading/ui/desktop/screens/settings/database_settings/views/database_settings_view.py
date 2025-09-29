@@ -14,11 +14,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 
 # Application Layer - Infrastructure 의존성 격리
-from ..presenters.database_settings_presenter import DatabaseSettingsPresenter
 from ..widgets.database_status_widget import DatabaseStatusWidget
 from ..widgets.database_backup_widget import DatabaseBackupWidget
 from ..widgets.database_path_selector import DatabasePathSelector
 from ..widgets.database_task_progress_widget import DatabaseTaskProgressWidget
+
 
 class DatabaseSettingsView(QWidget):
     """
@@ -44,22 +44,32 @@ class DatabaseSettingsView(QWidget):
 
         self.logger.info("📊 데이터베이스 설정 화면 (MVP) 초기화 시작")
 
-        # UI 설정 (Presenter 생성 전에)
+        # UI 설정
         self._setup_ui()
 
-        # Presenter 초기화
-        self.presenter = DatabaseSettingsPresenter(self, logging_service=logging_service)
+        # Presenter는 Factory에서 설정됨
+        self.presenter = None
+
+        self.logger.info("✅ 데이터베이스 설정 화면 (MVP) 초기화 완료")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Database 설정 Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
 
         # 시그널 연결
         self._connect_signals()
 
         # 초기 데이터 로드 (Presenter를 통해)
-        self.presenter.load_database_info()
+        if self.presenter:
+            self.presenter.load_database_info()
 
         # 백업 목록도 초기 로드
         self._on_refresh_backups()
-
-        self.logger.info("✅ 데이터베이스 설정 화면 (MVP) 초기화 완료")
 
     def _setup_ui(self):
         """UI 구성 - 2x2 그리드 레이아웃 (좌3:1우 비율)"""
