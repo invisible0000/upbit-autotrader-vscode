@@ -20,12 +20,12 @@ from typing import TYPE_CHECKING, Tuple, Dict, Any
 
 from dependency_injector.wiring import Provide, inject
 
-# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
-from upbit_auto_trading.infrastructure.dependency_injection.container import ApplicationContainer
+# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정)
+# DI 컨테이너는 @inject 패턴으로 주입받도록 변경
 
 if TYPE_CHECKING:
     from upbit_auto_trading.ui.desktop.screens.settings.api_settings.views.api_settings_view import ApiSettingsView
-    from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
+    # Infrastructure 서비스는 DI 컨테이너를 통해 주입받음
 
 class ApiSettingsPresenter:
     """
@@ -38,10 +38,13 @@ class ApiSettingsPresenter:
     def __init__(
         self,
         view: "ApiSettingsView",
-        api_key_service: "ApiKeyService" = Provide[ApplicationContainer.api_key_service]
+        api_key_service=Provide["api_key_service"],
+        logging_service=Provide["application_logging_service"]
     ):
         self.view = view
-        self.logger = create_component_logger("ApiSettingsPresenter")
+
+        # Application Layer 로깅 서비스 사용 (Infrastructure 직접 접근 제거)
+        self.logger = logging_service.get_component_logger("ApiSettingsPresenter")
 
         # ApiKeyService 의존성 주입
         self.api_key_service = api_key_service

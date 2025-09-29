@@ -17,7 +17,7 @@ from typing import Dict, Any
 from ..logging_management_view import LoggingManagementView
 
 # 새로운 설정 파일 관리자 사용
-from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
+# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정)
 
 
 class LoggingConfigPresenter:

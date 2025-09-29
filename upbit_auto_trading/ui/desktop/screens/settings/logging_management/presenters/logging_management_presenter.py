@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정), get_logging_service
-from upbit_auto_trading.infrastructure.logging.terminal.terminal_capturer import (
+# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정) # (
     get_global_terminal_capturer,
     start_global_terminal_capture,
     stop_global_terminal_capture,
 )
-from upbit_auto_trading.infrastructure.logging.live.ui_live_log_handler import (
+# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정) # (
     get_live_log_buffer,
     attach_live_log_handler,
     detach_live_log_handler,

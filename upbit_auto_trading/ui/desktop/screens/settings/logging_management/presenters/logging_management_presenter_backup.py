@@ -21,7 +21,7 @@ from PyQt6.QtCore import QObject, QTimer, QFileSystemWatcher
 from PyQt6.QtWidgets import QMessageBox
 
 # Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
-from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
+# Application Layer - Infrastructure 의존성 격리 (Phase 3 수정)
 
 
 class LoggingManagementPresenter(QObject):
