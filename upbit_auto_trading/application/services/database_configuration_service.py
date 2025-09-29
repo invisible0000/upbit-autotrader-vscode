@@ -29,7 +29,7 @@ from upbit_auto_trading.application.use_cases.database_configuration.database_st
     DatabaseStatusQueryUseCase
 )
 
-class DatabaseConfigurationAppService:
+class DatabaseConfigurationService:
     """데이터베이스 설정 애플리케이션 서비스"""
 
     def __init__(
@@ -43,7 +43,7 @@ class DatabaseConfigurationAppService:
         self._backup_management = backup_management_use_case
         self._validation = validation_use_case
         self._status_query = status_query_use_case
-        self._logger = create_component_logger("DatabaseConfigurationAppService")
+        self._logger = create_component_logger("DatabaseConfigurationService")
 
     # ========================================
     # 프로필 관리 메서드들
