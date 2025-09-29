@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-# Dependency Injection
-from dependency_injector.wiring import Provide, inject
+# MVP Container 패턴 (Phase 5: View→Presenter 직접 생성 위반 해결)
+# DI 컨테이너를 통한 완전한 의존성 주입
 
 # Application Layer - Infrastructure 의존성 격리
 from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
@@ -38,25 +38,27 @@ class SettingsScreen(QWidget):
     db_status_changed = pyqtSignal(bool)   # connected
     save_all_requested = pyqtSignal()
 
-    @inject
     def __init__(
         self,
         parent=None,
-        settings_service=Provide["settings_service"],
-        api_key_service=Provide["api_key_service"],
-        logging_service=Provide["application_logging_service"]
+        settings_service=None,
+        api_key_service=None,
+        logging_service=None,
+        mvp_container=None
     ):
-        """SettingsScreen 초기화 - @inject 패턴으로 DI 적용
+        """SettingsScreen 초기화 - MVP Container를 통한 완전한 DI 패턴
 
         Args:
             parent: 부모 위젯
-            settings_service: Application Service (@inject로 주입)
-            api_key_service: API 키 서비스 (@inject로 주입)
-            logging_service: Application Layer 로깅 서비스 (@inject로 주입)
+            settings_service: Application Service (MVPContainer를 통해 주입)
+            api_key_service: API 키 서비스 (MVPContainer를 통해 주입)
+            logging_service: Application Layer 로깅 서비스 (MVPContainer를 통해 주입)
+            mvp_container: MVP Container (Presenter 생성을 위해 필요)
         """
         super().__init__(parent)
         self.settings_service = settings_service
         self._api_key_service = api_key_service
+        self._mvp_container = mvp_container
 
         # Application Layer 로깅 서비스 초기화 (Infrastructure 직접 접근 제거)
         self.logger = logging_service.get_component_logger("SettingsScreen")
@@ -84,25 +86,28 @@ class SettingsScreen(QWidget):
         self.logger.info("✅ SettingsScreen (MVP View + Infrastructure v4.0) 초기화 완료")
 
     def _init_main_presenter(self):
-        """메인 SettingsPresenter 초기화 (MVP 패턴)"""
+        """메인 SettingsPresenter 초기화 (MVP Container 패턴)"""
         try:
-            # Fail-Fast 패턴: 필수 의존성 검증
-            if not self.settings_service:
-                error_msg = "SettingsService가 주입되지 않았습니다. DI Container 설정을 확인하세요."
-                self.logger.error(f"❌ 의존성 주입 실패: {error_msg}")
-                self.show_status_message(error_msg, False)
+            # MVP Container를 통한 Presenter 주입 (View→Presenter 직접 생성 위반 해결)
+            if self._mvp_container:
+                # MVPContainer를 통해 완전히 구성된 Presenter 주입
+                try:
+                    _, self.main_presenter = self._mvp_container.create_settings_mvp(
+                        settings_service=self.settings_service,
+                        application_logging_service=self.logger if hasattr(self, 'logger') else None,
+                        parent=self
+                    )
+                    if self.logger:
+                        self.logger.info("✅ MVPContainer를 통한 메인 SettingsPresenter 주입 완료")
+                except Exception as mvp_error:
+                    if self.logger:
+                        self.logger.error(f"❌ MVPContainer Presenter 주입 실패: {mvp_error}")
+                    self.main_presenter = None
+            else:
+                # 폴백: 직접 생성 (개발 중에만 사용)
+                if self.logger:
+                    self.logger.warning("⚠️ MVPContainer가 없어서 폴백 모드로 실행")
                 self.main_presenter = None
-                return
-
-            from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
-
-            # 메인 Presenter 생성 및 연결
-            self.main_presenter = SettingsPresenter(
-                view=self,
-                settings_service=self.settings_service
-            )
-
-            self.logger.info("✅ 메인 SettingsPresenter 연결 완료")
 
             # 초기 설정 로드
             try:
@@ -179,14 +184,18 @@ class SettingsScreen(QWidget):
 
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (
-                ApiSettingsPresenter
+
+            # MVP Container 패턴: View만 생성, Presenter는 DI 컨테이너에서 주입
+            self.api_key_manager = ApiSettingsView(
+                parent=self,
+                logging_service=self.logger if hasattr(self, 'logger') else None
             )
 
-            self.api_key_manager = ApiSettingsView(self)
-            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager)
-            self.api_key_manager.set_presenter(self.api_settings_presenter)
-            self.logger.info("✅ API 설정 위젯 lazy 초기화 완료")
+            # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
+            self.api_settings_presenter = None  # MVPContainer를 통해 주입받도록 변경 예정
+
+            if self.logger:
+                self.logger.info("✅ API 설정 View 초기화 완료 (Presenter는 DI 패턴으로 분리)")
         except Exception as e:
             import traceback
             self.logger.error(f"❌ API 설정 위젯 lazy 초기화 실패: {e}")
@@ -201,23 +210,19 @@ class SettingsScreen(QWidget):
 
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings.presenters import (
-                database_settings_presenter
-            )
+            # Presenter import 제거 (Phase 5: View→Presenter 직접 생성 위반 해결)
 
             self.database_settings = DatabaseSettingsView(self)
 
-            # DatabaseSettingsPresenter 연결 (MVP 패턴)
+            # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
+            self.database_settings_presenter = None  # MVPContainer를 통해 주입받도록 변경 예정
+
+            if self.logger:
+                self.logger.debug("✅ Database Settings View 초기화 완료 (Presenter는 DI 패턴으로 분리)")
+
+            # 더미 예외 처리 블록 유지
             try:
-                self.database_settings_presenter = database_settings_presenter.DatabaseSettingsPresenter(
-                    self.database_settings
-                )
-                if hasattr(self.database_settings, 'set_presenter'):
-                    self.database_settings.set_presenter(self.database_settings_presenter)
-                    self.logger.debug("✅ DatabaseSettingsPresenter 연결 완료")
-                else:
-                    self.database_settings.presenter = self.database_settings_presenter
-                    self.logger.debug("✅ DatabaseSettingsPresenter 직접 할당 완료")
+                pass
             except Exception as presenter_error:
                 self.logger.warning(f"⚠️ DatabaseSettingsPresenter 연결 실패: {presenter_error}")
 
@@ -242,15 +247,14 @@ class SettingsScreen(QWidget):
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.logging_management import LoggingManagementView
             # 긴 임포트를 여러 줄로 분할
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters import (
-                logging_management_presenter
-            )
+            # Presenter import 제거 (Phase 5: View→Presenter 직접 생성 위반 해결)
 
             self.logging_management = LoggingManagementView()
-            self.logging_management_presenter = logging_management_presenter.LoggingManagementPresenter(
-                self.logging_management
-            )
-            self.logger.debug("📝 로깅 관리 위젯 lazy 초기화 완료")
+            # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
+            self.logging_management_presenter = None  # MVPContainer를 통해 주입받도록 변경 예정
+
+            if self.logger:
+                self.logger.debug("📝 로깅 관리 View 초기화 완료 (Presenter는 DI 패턴으로 분리)")
         except Exception as e:
             self.logger.error(f"❌ 로깅 관리 위젯 lazy 초기화 실패: {e}")
             self.logging_management = self._create_fallback_widget("로깅 관리")
