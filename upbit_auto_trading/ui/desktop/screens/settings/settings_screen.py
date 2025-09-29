@@ -176,13 +176,8 @@ class SettingsScreen(QWidget):
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
 
-            # UI Settings용 로거 생성
-            if hasattr(self, '_logging_service'):
-                ui_logger = self._logging_service.get_component_logger("UISettingsView")
-            else:
-                ui_logger = None
-
-            self.ui_settings = UISettingsView(self, logging_service=ui_logger)
+            # ApplicationLoggingService 자체를 전달 (get_component_logger 호출하지 않음)
+            self.ui_settings = UISettingsView(self, logging_service=self._logging_service)
             self.logger.debug("🎨 UI 설정 위젯 즉시 초기화 완료")
         except Exception as e:
             self.logger.error(f"❌ UI 설정 위젯 초기화 실패: {e}")
@@ -197,14 +192,10 @@ class SettingsScreen(QWidget):
             from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
 
             # MVP Container 패턴: View만 생성, Presenter는 DI 컨테이너에서 주입
-            if hasattr(self, '_logging_service'):
-                api_logger = self._logging_service.get_component_logger("ApiSettingsView")
-            else:
-                api_logger = None
-
+            # ApplicationLoggingService 자체를 전달 (get_component_logger 호출하지 않음)
             self.api_key_manager = ApiSettingsView(
                 parent=self,
-                logging_service=api_logger
+                logging_service=self._logging_service
             )
 
             # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
@@ -228,7 +219,10 @@ class SettingsScreen(QWidget):
             from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
             # Presenter import 제거 (Phase 5: View→Presenter 직접 생성 위반 해결)
 
-            self.database_settings = DatabaseSettingsView(self)
+            self.database_settings = DatabaseSettingsView(
+                parent=self,
+                logging_service=self._logging_service
+            )
 
             # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
             self.database_settings_presenter = None  # MVPContainer를 통해 주입받도록 변경 예정
@@ -265,7 +259,10 @@ class SettingsScreen(QWidget):
             # 긴 임포트를 여러 줄로 분할
             # Presenter import 제거 (Phase 5: View→Presenter 직접 생성 위반 해결)
 
-            self.logging_management = LoggingManagementView()
+            self.logging_management = LoggingManagementView(
+                parent=self,
+                logging_service=self._logging_service
+            )
             # Presenter는 더 이상 직접 생성하지 않음 (Phase 5: View→Presenter 직접 생성 위반 해결)
             self.logging_management_presenter = None  # MVPContainer를 통해 주입받도록 변경 예정
 
@@ -282,7 +279,10 @@ class SettingsScreen(QWidget):
 
         try:
             from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
-            self.notification_settings = NotificationSettingsView(self)
+            self.notification_settings = NotificationSettingsView(
+                parent=self,
+                logging_service=self._logging_service
+            )
             self.logger.debug("🔔 알림 설정 위젯 lazy 초기화 완료")
         except Exception as e:
             self.logger.error(f"❌ 알림 설정 위젯 lazy 초기화 실패: {e}")

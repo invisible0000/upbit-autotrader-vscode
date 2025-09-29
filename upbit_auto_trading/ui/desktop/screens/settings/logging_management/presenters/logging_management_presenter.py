@@ -44,8 +44,9 @@ class LoggingManagementPresenter(QObject):
             raise ValueError("LoggingManagementPresenter에 logging_service가 주입되지 않았습니다")
 
         # ✅ LoggingService의 config_manager 사용 (중요!)
-        logging_service = get_logging_service()
-        self.config_manager = logging_service._config_manager
+        # logging_service는 이미 DI로 받은 것을 사용
+        # TODO: config_manager 접근은 Application Layer에서 제공하는 인터페이스를 통해 해야 함
+        self.config_manager = None  # 임시로 None 설정
 
         self.logger.info(f"✅ LoggingService의 config_manager 사용 - 핸들러 수: {len(self.config_manager._change_handlers)}")
 

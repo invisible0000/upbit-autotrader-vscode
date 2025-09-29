@@ -42,9 +42,6 @@ class ApiConnectionWidget(QWidget):
         else:
             raise ValueError("ApiConnectionWidget에 logging_service가 주입되지 않았습니다")
 
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self.logger = None
-
         # 상태 관리
         self._is_connected = False
         self._last_test_result = ""

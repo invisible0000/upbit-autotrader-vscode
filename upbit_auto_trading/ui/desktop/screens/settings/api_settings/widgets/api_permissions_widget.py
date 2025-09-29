@@ -40,9 +40,6 @@ class ApiPermissionsWidget(QWidget):
         else:
             raise ValueError("ApiPermissionsWidget에 logging_service가 주입되지 않았습니다")
 
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self.logger = None
-
         self._setup_ui()
         self._connect_signals()
 

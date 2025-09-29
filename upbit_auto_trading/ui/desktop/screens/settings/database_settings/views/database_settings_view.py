@@ -32,20 +32,23 @@ class DatabaseSettingsView(QWidget):
     settings_changed = pyqtSignal()
     db_status_changed = pyqtSignal(bool)  # 연결 상태 변화
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-settings")
 
-        # 로깅 초기화
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self.logger = None
+        # 로깅 초기화 - DI 패턴
+        if logging_service:
+            self.logger = logging_service.get_component_logger("DatabaseSettingsView")
+        else:
+            raise ValueError("DatabaseSettingsView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("📊 데이터베이스 설정 화면 (MVP) 초기화 시작")
 
         # UI 설정 (Presenter 생성 전에)
         self._setup_ui()
 
         # Presenter 초기화
-        self.presenter = DatabaseSettingsPresenter(self)
+        self.presenter = DatabaseSettingsPresenter(self, logging_service=logging_service)
 
         # 시그널 연결
         self._connect_signals()

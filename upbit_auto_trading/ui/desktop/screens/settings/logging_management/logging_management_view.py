@@ -46,7 +46,7 @@ class LoggingManagementView(QWidget):
         self.logger.info("🎛️ 로깅 관리 뷰 초기화 시작")
 
         # MVP 패턴: Presenter 생성 및 연결
-        self.presenter = LoggingManagementPresenter()
+        self.presenter = LoggingManagementPresenter(logging_service=logging_service)
         self.presenter.set_view(self)
 
         self._setup_ui()

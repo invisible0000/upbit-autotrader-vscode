@@ -133,26 +133,62 @@
   - [x] UI Settings: 이미 완료
   - [x] Database Settings: 1건 (완료)
 
-### Phase 4.1: 실제 UI 통합 문제 해결 (신규 발견) 🔄 진행 중
+### Phase 4.1: 실제 UI 통합 문제 해결 (신규 발견) ✅ 부분 완료
 
-- [ ] **주요 터미널 에러 해결**
-  - [ ] `'PresentationLoggerAdapter' object has no attribute 'get_component_logger'`
+- [x] **주요 터미널 에러 해결** (부분 완료)
+  - [x] `'PresentationLoggerAdapter' object has no attribute 'get_component_logger'`
     - **원인**: ApiSettingsView에서 logging_service.get_component_logger() 호출 시 오류
-    - **해결**: PresentationLoggerAdapter에 get_component_logger 메서드 추가 또는 ApplicationLoggingService 직접 주입
-  - [ ] `'NoneType' object has no attribute 'info'`
-    - **원인**: Database Settings에서 logger가 None이 되는 상황
-    - **해결**: Database Settings 컴포넌트에 올바른 logging_service 주입
-  - [ ] `unexpected indent (logging_management_presenter.py, line 17)`
-    - **원인**: PowerShell 일괄 변환 시 인덴트 문제 발생
-    - **해결**: logging_management_presenter.py 파일 구문 오류 수동 수정
-  - [ ] `NotificationSettingsView에 logging_service가 주입되지 않았습니다`
-    - **원인**: Settings Screen의 lazy loading에서 올바른 logging_service 주입 실패
-    - **해결**: SettingsScreen._initialize_* 메서드에서 logging_service 주입 로직 수정
+    - **해결**: ✅ ApplicationLoggingService 직접 주입으로 해결
+  - [x] **API Settings 완전 동작**: ApiCredentialsWidget, ApiConnectionWidget, ApiPermissionsWidget 모두 정상 로드
+  - [x] **UI Settings 완전 동작**: 모든 하위 위젯 정상 동작 유지
+  - [ ] `'NoneType' object has no attribute 'info'` (Database Settings)
+  - [ ] `'NoneType' object has no attribute 'error'` (Database Settings Presenter)
+  - [ ] `'NoneType' object has no attribute '_change_handlers'` (Logging Management)
+  - [ ] `AlertTypesWidget에 logging_service가 주입되지 않았습니다` (Notification Settings)
 
-- [ ] **Settings Screen과 DI 컴포넌트 간 통합 문제**
-  - [ ] Settings Screen의 _initialize_api_settings,_initialize_notification_settings 등 메서드 수정
-  - [ ] 기존 lazy loading 로직에 logging_service 매개변수 전달 추가
-  - [ ] Factory 패턴 완전 적용으로 일관된 컴포넌트 생성 구조 구축
+- [x] **Settings Screen과 DI 컴포넌트 간 통합 문제** (핵심 해결)
+  - [x] Settings Screen의 _initialize_api_settings 메서드 수정 완료
+  - [x] lazy loading 로직에 ApplicationLoggingService 직접 전달 구현
+  - [x] API Settings 완전 통합 달성
+
+### Phase 4.2: 잔여 Critical Errors 해결 (새로 발견) 🔄 진행 필요
+
+- [ ] **DatabaseSettingsPresenter NoneType 'error' 문제**
+
+  ```
+  ERROR | upbit.SettingsScreen | ❌ 데이터베이스 설정 위젯 lazy 초기화 실패: 'NoneType' object has no attribute 'error'
+  ```
+
+  - **원인**: DatabaseSettingsPresenter에서 logger가 None인 상태에서 error() 호출
+  - **해결**: DatabaseSettingsPresenter의 logging_service 주입 및 logger 초기화 점검
+
+- [ ] **LoggingManagementPresenter config_manager 문제**
+
+  ```
+  ERROR | upbit.SettingsScreen | ❌ 로깅 관리 위젯 lazy 초기화 실패: 'NoneType' object has no attribute '_change_handlers'
+  ```
+
+  - **원인**: config_manager가 None으로 설정된 상태에서_change_handlers 접근
+  - **해결**: config_manager 접근 방식 수정 또는 임시 구현 개선
+
+- [ ] **NotificationSettings AlertTypesWidget DI 실패**
+
+  ```
+  ERROR | upbit.SettingsScreen | ❌ 알림 설정 위젯 lazy 초기화 실패: AlertTypesWidget에 logging_service가 주입되지 않았습니다
+  ```
+
+  - **원인**: NotificationSettingsView에서 AlertTypesWidget으로 logging_service 전파 실패
+  - **해결**: AlertTypesWidget 생성 시 logging_service 매개변수 전달 추가
+
+- [ ] **Architecture Warnings 해결**
+
+  ```
+  WARNING | upbit.SettingsScreen | ⚠️ MVPContainer가 없어서 폴백 모드로 실행
+  WARNING | upbit.SettingsScreen | ⚠️ ApiKeyService가 주입되지 않았습니다
+  ```
+
+  - **해결**: ScreenManagerService에서 SettingsScreen 생성 시 ApiKeyService 주입
+  - **해결**: MVPContainer 통합 또는 Settings Presenter 구현
 
 ### Phase 5: MVPContainer 통합 및 최종 검증 (2시간)
 
@@ -189,8 +225,9 @@
 - [x] **Infrastructure 직접 접근 완전 제거**: 28건 모든 위반 해결 ✅
 - [x] **폴백 패턴 완전 제거**: ApplicationLoggingService 직접 생성 0건 ✅
 - [x] **DI 패턴 완전 적용**: 모든 컴포넌트가 logging_service 의존성 주입 ✅
-- [ ] **실제 UI 통합 완료**: Settings Screen과 DI 컴포넌트 간 완전 통합 🔄
-- [ ] **기능 무결성 보장**: 기존 모든 기능이 정상 동작 🔄
+- [x] **핵심 UI 통합 완료**: API Settings와 UI Settings 완전 동작 ✅
+- [ ] **잔여 UI 통합 완료**: Database/Logging/Notification Settings 오류 해결 🔄
+- [ ] **기능 무결성 보장**: 모든 설정 탭이 ERROR 없이 동작 🔄
 
 ### 성공 지표
 
@@ -198,7 +235,8 @@
 - [x] Settings Screen 핵심 아키텍처 완성 (Factory + DI + ApplicationServices) ✅
 - [x] 새로운 설정 컴포넌트 추가 시 아키텍처 원칙 자동 준수 ✅
 - [x] 단위 테스트 작성 시 완전한 Mock 주입 가능 (DI 구조 완성) ✅
-- [ ] **python run_desktop_ui.py에서 모든 설정 탭 오류 없이 동작** 🔄
+- [x] **API Settings와 UI Settings 완전 동작** ✅
+- [ ] **모든 설정 탭에서 ERROR 0건, WARNING 최소화** 🔄
 
 ## 🛠️ 구체적 구현 방법론
 

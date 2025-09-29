@@ -18,7 +18,7 @@ class NotificationSettingsPresenter(QObject):
     settings_updated = pyqtSignal(dict)
     settings_changed = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, logging_service=None):
         """초기화"""
         super().__init__()
         if logging_service:

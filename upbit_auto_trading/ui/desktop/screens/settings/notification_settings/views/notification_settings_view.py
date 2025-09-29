@@ -41,7 +41,7 @@ class NotificationSettingsView(QWidget):
         self.logger.info("🔔 NotificationSettingsView 초기화 시작")
 
         # Presenter 생성 (MVP 패턴)
-        self.presenter = NotificationSettingsPresenter()
+        self.presenter = NotificationSettingsPresenter(logging_service=logging_service)
 
         # 위젯 초기화
         self._init_widgets()
