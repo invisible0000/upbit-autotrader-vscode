@@ -21,8 +21,8 @@ from PyQt6.QtCore import Qt, pyqtSignal
 # Dependency Injection
 from dependency_injector.wiring import Provide, inject
 
-# Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
+from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
 
 class SettingsScreen(QWidget):
     """Settings Screen - MVP 패턴 View 구현
@@ -43,7 +43,8 @@ class SettingsScreen(QWidget):
         self,
         parent=None,
         settings_service=Provide["settings_service"],
-        api_key_service=Provide["api_key_service"]
+        api_key_service=Provide["api_key_service"],
+        logging_service=Provide["application_logging_service"]
     ):
         """SettingsScreen 초기화 - @inject 패턴으로 DI 적용
 
@@ -51,14 +52,15 @@ class SettingsScreen(QWidget):
             parent: 부모 위젯
             settings_service: Application Service (@inject로 주입)
             api_key_service: API 키 서비스 (@inject로 주입)
+            logging_service: Application Layer 로깅 서비스 (@inject로 주입)
         """
         super().__init__(parent)
         self.settings_service = settings_service
         self._api_key_service = api_key_service
 
-        # Infrastructure Layer Enhanced Logging v4.0 초기화
-        self.logger = create_component_logger("SettingsScreen")
-        self.logger.info("🔧 SettingsScreen (MVP View + Infrastructure v4.0) 초기화 시작")
+        # Application Layer 로깅 서비스 초기화 (Infrastructure 직접 접근 제거)
+        self.logger = logging_service.get_component_logger("SettingsScreen")
+        self.logger.info("🔧 SettingsScreen (MVP View + Application Layer 로깅) 초기화 시작")
 
         # Infrastructure Layer 의존성 주입 확인
         self.app_context = None
