@@ -12,43 +12,40 @@ from PyQt6.QtWidgets import QWidget
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
+# Application Layer - Infrastructure 의존성 (정상 경로로 수정)
 try:
-    from upbit_auto_trading.infrastructure.terminal_capture import (
+    from upbit_auto_trading.infrastructure.logging.terminal.terminal_capturer import (
         get_global_terminal_capturer,
         start_global_terminal_capture,
         stop_global_terminal_capture,
     )
-    from upbit_auto_trading.infrastructure.logging import (
+    from upbit_auto_trading.infrastructure.logging.live.ui_live_log_handler import (
         get_live_log_buffer,
         attach_live_log_handler,
         detach_live_log_handler,
     )
-except ImportError:
-    # Fallback 함수들 정의
+except ImportError as e:
+    # Infrastructure 의존성 로드 실패 - 시스템 무결성 검증 필요
+    print(f"❌ CRITICAL: LoggingManagement Infrastructure 의존성 로드 실패: {e}")
+
+    # Golden Rules: 에러 숨김 금지 - Fail Fast
     def get_global_terminal_capturer():
-        return None
+        raise RuntimeError("Terminal Capturer Infrastructure 누락 - 시스템 초기화 오류")
 
     def start_global_terminal_capture():
-        pass
+        raise RuntimeError("Terminal Capture 시작 실패 - Infrastructure 누락")
 
     def stop_global_terminal_capture():
-        pass
+        raise RuntimeError("Terminal Capture 중지 실패 - Infrastructure 누락")
 
     def get_live_log_buffer():
-        class MockBuffer:
-            def last_seq(self):
-                return 0
-
-            def read_from_seq(self, seq):
-                return []
-        return MockBuffer()
+        raise RuntimeError("Live Log Buffer Infrastructure 누락 - 시스템 초기화 오류")
 
     def attach_live_log_handler():
-        pass
+        raise RuntimeError("Live Log Handler 연결 실패 - Infrastructure 누락")
 
     def detach_live_log_handler():
-        pass
+        raise RuntimeError("Live Log Handler 해제 실패 - Infrastructure 누락")
 
 
 class LoggingManagementPresenter(QObject):
@@ -60,26 +57,27 @@ class LoggingManagementPresenter(QObject):
     log_content_updated = pyqtSignal(str)
     console_output_updated = pyqtSignal(str, bool)  # (content, is_error)
 
-    def __init__(self, view, logging_service):
+    def __init__(self, view, logging_service, config_manager=None):
         """초기화 - Factory 호환 (명시적 의존성 주입)
 
         Args:
             view: Logging 관리 View 인스턴스
             logging_service: 로깅 서비스 인스턴스
+            config_manager: 로깅 설정 관리자 (LoggingConfigManager)
         """
         super().__init__()
 
         # Infrastructure 로깅 시스템
         if logging_service:
-            self.logger = logging_service.get_component_logger("LoggingManagementPresenter")
+            self.logger = logging_service
         else:
             raise ValueError("LoggingManagementPresenter에 logging_service가 주입되지 않았습니다")
 
         # 서비스 의존성 설정
         self.logging_service = logging_service
 
-        # config_manager 접근 (Application Layer 인터페이스)
-        self.config_manager = getattr(logging_service, 'config_manager', None)
+        # config_manager 직접 주입받음 (DDD 계층 준수)
+        self.config_manager = config_manager
 
         # 의존성 검증
         if self.logging_service is None:

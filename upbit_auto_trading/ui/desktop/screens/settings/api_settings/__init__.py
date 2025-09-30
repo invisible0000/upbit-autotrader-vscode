@@ -8,6 +8,5 @@ Phase 2 마이그레이션 완료:
 """
 
 from .views.api_settings_view import ApiSettingsView
-from .presenters.api_settings_presenter import ApiSettingsPresenter
 
-__all__ = ['ApiSettingsView', 'ApiSettingsPresenter']
+__all__ = ['ApiSettingsView']

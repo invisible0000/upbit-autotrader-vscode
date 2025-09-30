@@ -358,9 +358,6 @@ class LoggingSettingsComponentFactory(BaseComponentFactory):
         app_logging_service = self._get_service(
             container.get_logging_service, "Logging"
         )
-        logging_config_service = self._get_service(
-            container.get_logging_config_service, "LoggingConfig"
-        )
         self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
 
         # 2. View 생성 (실패 시 즉시 에러)
@@ -389,8 +386,7 @@ class LoggingSettingsComponentFactory(BaseComponentFactory):
             presenter_logger = app_logging_service.get_component_logger("LoggingManagementPresenter")
             presenter = LoggingManagementPresenter(
                 view=view,
-                logging_service=presenter_logger,
-                config_manager=logging_config_service
+                logging_service=presenter_logger
             )
 
             # 4. MVP 패턴 연결 (실패 시 즉시 에러)

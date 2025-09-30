@@ -261,38 +261,105 @@
 
 ### Phase 4: MVP 구조 정리 (Option C - 단계적 접근)
 
-#### 4.1 API Settings Presenter 이동 (우선 진행)
+#### 4.1 API Settings Presenter 이동 (완료)
 
-- [ ] `presentation/presenters/settings/` 폴더 생성
-- [ ] `ui/desktop/screens/settings/api_settings/presenters/api_settings_presenter.py` → `presentation/presenters/settings/` 이동
-- [ ] Factory에서 import 경로 수정
-- [ ] UI 폴더에서 presenters 폴더 제거
+- [x] `presentation/presenters/settings/` 폴더 생성
+- [x] `ui/desktop/screens/settings/api_settings/presenters/api_settings_presenter.py` → `presentation/presenters/settings/` 이동
+- [x] Factory에서 import 경로 수정
+- [x] UI 폴더에서 presenters 폴더 제거
+
+**📊 4.1 완료 결과:**
+
+**MVP 구조 정리:**
+
+- ✅ **올바른 위치**: `presentation/presenters/settings/api_settings_presenter.py` 생성 완료
+- ✅ **Legacy 정리**: 원본 파일들을 `legacy/mvp_restructure_20250930/`로 이동
+  - `api_settings_presenter_original.py`
+  - `api_settings_presenter_backup.py`
+  - `presenters_init_py_original.py`
+- ✅ **폴더 구조 정리**: UI 폴더에서 불필요한 presenters 폴더 완전 제거
+
+**Import 경로 수정:**
+
+- ✅ **Factory 수정**: `settings_view_factory.py`에서 새 경로 사용
+- ✅ **DI Container 수정**: `container.py`의 wiring 경로 업데이트
+- ✅ **View 수정**: `api_settings_view.py`에서 절대 경로로 변경
+- ✅ **Examples 수정**: `auto_generated_component_data.py` 경로 업데이트
+- ✅ **Init 정리**: 순환 참조 방지를 위한 import 제거
+
+**설정 화면 진입 성공:**
+
+- 🎯 **구문 오류 해결**: `unexpected character after line continuation character` 완전 해결
+- 🎯 **MVP 패턴 준수**: Presenter가 올바른 계층 위치로 이동
+- 🎯 **UI 정상 동작**: 설정 화면 진입 및 탭 전환 가능
+- 🎯 **DDD 준수**: Presentation → Application → Infrastructure 계층 규칙 준수
 
 #### 4.2 개별 ComponentFactory 수정
 
-- [ ] ApiSettingsComponentFactory ApplicationServiceContainer 접근으로 변경
-- [ ] `get_api_key_service()` 메서드 사용
-- [ ] 이동된 Presenter와 MVP 패턴 조립 확인
+- [x] ApiSettingsComponentFactory ApplicationServiceContainer 접근으로 변경
+  - ✅ 표준 `_get_application_container()` 메서드 사용 중 (이미 올바름)
+  - ✅ ApplicationContext 상태 검증 자동화 적용
+  - ✅ Golden Rules 준수: Fail Fast 패턴으로 에러 숨김 없이 명확한 실패
+- [x] `get_api_key_service()` 메서드 사용
+  - ✅ `container.get_api_key_service()` 정상 호출 확인
+  - ✅ `container.get_logging_service()` 정상 호출 확인
+  - ✅ ApplicationServiceContainer 메서드 정상 접근
+- [x] 이동된 Presenter와 MVP 패턴 조립 확인
+  - ✅ `from presentation.presenters.settings.api_settings_presenter` 정상 import
+  - ✅ View ↔ Presenter MVP 패턴 완전 연결
+  - ✅ UI 테스트 통과: API 키 탭 정상 접근 및 표시
 
 #### 4.3 나머지 ComponentFactory 수정 준비
 
-- [ ] DatabaseSettingsComponentFactory 분석
-- [ ] UiSettingsComponentFactory 분석
-- [ ] 공통 패턴 식별 및 템플릿화
+- [x] DatabaseSettingsComponentFactory 분석
+  - ✅ 표준 ApplicationServiceContainer 접근 패턴 사용 중 (이미 올바름)
+  - ✅ `container.get_database_service()`, `container.get_logging_service()` 정상 호출
+  - ✅ MVP 패턴 완전 조립: Database 설정 컴포넌트 완전 조립 완료
+  - ✅ UI 테스트 통과: 데이터베이스 탭 정상 접근 및 3-DB 상태 표시
+- [x] UiSettingsComponentFactory 분석
+  - ✅ 표준 ApplicationServiceContainer 접근 패턴 사용 중 (이미 올바름)
+  - ✅ `container.get_settings_service()`, `container.get_logging_service()` 정상 호출
+  - ✅ MVP 패턴 완전 조립: UI 설정 컴포넌트 완전 조립 완료
+  - ✅ UI 테스트 통과: UI 설정 탭 정상 접근 및 테마/창 설정 표시
+- [x] 공통 패턴 식별 및 템플릿화
+  - ✅ 모든 ComponentFactory가 동일한 표준 패턴 사용 확인
+  - ✅ Container 접근 → 서비스 로드 → View 생성 → Presenter 생성 → MVP 연결 → 초기화 템플릿 완료
+  - ✅ LoggingSettingsComponentFactory, NotificationSettingsComponentFactory도 동일 패턴 확인
+  - ✅ Golden Rules 준수: 모든 Factory에서 Fail Fast 패턴과 에러 숨김 없는 명확한 실패 처리
 
 ### Phase 5: 테스트 및 검증
 
 #### 5.1 개별 Factory 테스트
 
-- [ ] API Settings Factory 단독 테스트
-- [ ] 올바른 서비스 주입 확인
-- [ ] MVP 연결 상태 검증
+- [x] API Settings Factory 단독 테스트
+  - ✅ ApiSettingsComponentFactory 정상 동작: 생성자 주입 서비스 사용
+  - ✅ Container 접근: `_get_application_container()` 표준 메서드 동작
+  - ✅ 서비스 로드: `get_api_key_service()`, `get_logging_service()` 정상 호출
+- [x] 올바른 서비스 주입 확인
+  - ✅ ApiKeyService 의존성 주입 성공: "ApiKeyService 의존성 주입 성공"
+  - ✅ ApplicationLoggingService 정상 주입: 컴포넌트별 로거 생성 확인
+  - ✅ ComponentLifecycleService 정상 동작: 컴포넌트 등록 완료
+- [x] MVP 연결 상태 검증
+  - ✅ View 생성: ApiSettingsView 초기화 완료
+  - ✅ Presenter 생성: ApiSettingsPresenter 초기화 완료
+  - ✅ MVP 패턴 조립: "API 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)"
+  - ✅ UI 표시: API 키 탭 정상 접근 및 화면 렌더링
 
 #### 5.2 통합 테스트
 
-- [ ] `python run_desktop_ui.py` 실행
-- [ ] 설정 화면 접근 테스트
-- [ ] 오류 메시지 확인 및 해결
+- [x] `python run_desktop_ui.py` 실행
+  - ✅ UI 시스템 정상 시작: MainWindow, NavigationBar, StatusBar 완전 초기화
+  - ✅ ApplicationContext 정상 초기화: DI 시스템 완전 가동
+  - ✅ WebSocket 시스템 정상 동작: Public 연결 성공, Rate Limiter 정상
+- [x] 설정 화면 접근 테스트
+  - ✅ 설정 화면 지연 로딩: ScreenManagerService를 통한 MVP Container 생성
+  - ✅ 탭 전환 정상: API 키 탭 lazy loading 및 Factory 자동 생성
+  - ✅ 모든 하위 컴포넌트 정상: UI 설정, API 설정, Database 설정 완전 조립
+- [x] 오류 메시지 확인 및 해결
+  - ✅ Container 접근 오류 해결: ApplicationServiceContainer 메서드명 불일치 문제 완전 해결
+  - ✅ MVP 패턴 조립 성공: Presenter 위치 이동 및 import 경로 정상화 완료
+  - ✅ DDD 계층 준수 확인: Domain 순수성 유지, Infrastructure 로깅 사용
+  - ⚠️ 남은 경고: API 키 미설정 (정상 - 초기 상태), 암호화 키 없음 (정상 - 설정 전)
 
 ---
 

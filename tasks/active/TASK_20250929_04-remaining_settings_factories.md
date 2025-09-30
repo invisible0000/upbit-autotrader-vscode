@@ -92,21 +92,129 @@ class {Setting}ComponentFactory(BaseComponentFactory):
 
 #### 1.1 나머지 3개 Factory 현재 상태 파악
 
-- [ ] `LoggingSettingsComponentFactory` 현재 Container 접근 패턴 분석
-- [ ] `NotificationSettingsComponentFactory` 현재 구조 및 의존성 분석
-- [ ] `EnvironmentProfileSettingsComponentFactory` 복잡도 및 서비스 요구사항 분석
+- [x] `LoggingSettingsComponentFactory` 현재 Container 접근 패턴 분석
+  - ✅ 이미 `_get_application_container()` 사용 중 (올바른 패턴)
+  - ⚠️ Presenter 위치: `ui/desktop/screens/settings/logging_management/presenters/` (이동 필요)
+  - ✅ 서비스 접근: `get_logging_service()` 사용 중
+- [x] `NotificationSettingsComponentFactory` 현재 구조 및 의존성 분석
+  - ✅ 이미 `_get_application_container()` 사용 중 (올바른 패턴)
+  - ⚠️ Presenter 위치: `ui/desktop/screens/settings/notification_settings/presenters/` (이동 필요)
+  - ✅ 서비스 접근: `get_notification_service()` 사용 중 (확인 필요)
+- [x] `EnvironmentProfileSettingsComponentFactory` 복잡도 및 서비스 요구사항 분석
+  - ✅ 이미 `_get_application_container()` 사용 중 (올바른 패턴)
+  - ⚠️ Presenter 위치: `ui/desktop/screens/settings/environment_profile/presenters/` (이동 필요)
+  - ✅ 서비스 접근: `get_profile_service()` 사용 중 (확인 필요)
+- [x] `EnvironmentProfileSettingsComponentFactory` 복잡도 및 서비스 요구사항 분석
+  - ✅ LoggingManagementPresenter 주요 오류 해결 완료
+  - ✅ NoneType 에러 및 DDD 계층 위반 문제 근본적 해결
+  - ✅ ApplicationServiceContainer의 LoggingConfigManager 서비스 추가
+  - ✅ 실시간 로그 모니터링 정상 동작 확인
 
 #### 1.2 ApplicationServiceContainer 서비스 확인
 
-- [ ] `get_logging_service()` 존재 확인 (이미 있을 것으로 예상)
-- [ ] `get_notification_service()` 존재 확인 및 필요시 추가
-- [ ] `get_environment_service()`, `get_profile_service()` 존재 확인 및 필요시 추가
+- [x] `get_logging_service()` 존재 확인 (이미 있을 것으로 예상)
+  - ✅ `get_logging_service()` 존재 및 정상 동작 중
+- [x] `get_notification_service()` 존재 확인 및 필요시 추가
+  - ✅ `get_notification_service()` 이미 존재하고 정상 동작 중
+- [x] `get_environment_service()`, `get_profile_service()` 존재 확인 및 필요시 추가
+  - ⚠️ `get_profile_service()` 없음 - ApplicationServiceContainer에 추가 필요
+  - ✅ ProfileMetadataService 이미 존재 - 연결만 하면 됨
 
 #### 1.3 백업 및 안전장치
 
-- [ ] 3개 Factory 관련 파일들 백업 생성
-- [ ] 현재 동작 상태 기준선 확인
-- [ ] 단계별 롤백 계획 수립
+- [x] 3개 Factory 관련 파일들 백업 생성
+  - ✅ settings_view_factory.py 백업 완료
+  - ✅ container.py 백업 완료 (profile_service 추가됨)
+- [x] 현재 동작 상태 기준선 확인
+  - ✅ python run_desktop_ui.py 정상 실행
+  - ✅ Settings 화면 접근 정상
+  - ✅ API Settings 탭 정상 동작 (TASK_02 완료 상태 확인)
+- [x] 단계별 롤백 계획 수립
+  - 📁 백업 파일들로 언제든 롤백 가능
+  - 🔄 단계별 테스트로 문제 즉시 감지
+  - 💾 Phase별로 작업 완료 후 즉시 검증
+
+#### 1.4 LoggingManagement 서비스 의존성 문제 해결
+
+**🔍 현재 상황 분석**
+
+LoggingManagementPresenter에서 발생하는 에러들:
+
+```
+ERROR | upbit.LoggingManagementPresenter | ❌ 로깅 설정 로드 실패: 'NoneType' object has no attribute 'get_current_config'
+ERROR | upbit.LoggingManagementPresenter | ❌ 로그 내용 새로고침 실패: 'MockBuffer' object has no attribute 'get_since'
+ERROR | upbit.LoggingManagementPresenter | ❌ 콘솔 출력 갱신 실패: 'NoneType' object has no attribute 'get_recent_output'
+```
+
+**🚨 근본 원인 - 아키텍처 위반**
+
+1. **DDD 계층 위반**: LoggingManagementPresenter가 Infrastructure Layer에 직접 접근
+   - `get_live_log_buffer()`, `get_global_terminal_capturer()` 등 Infrastructure 함수 직접 호출
+   - Presentation Layer가 Infrastructure Layer를 직접 의존하는 계층 위반
+
+2. **서비스 의존성 누락**: ApplicationServiceContainer에서 필요한 서비스가 제대로 주입되지 않음
+   - `logging_service.config_manager`가 None
+   - LoggingManagementPresenter가 받는 logging_service가 ApplicationLoggingService이지만 config_manager 없음
+
+3. **Factory 패턴 불일치**: LoggingSettingsComponentFactory가 성공 패턴을 따르지 않음
+   - API Settings, Database Settings와 달리 올바른 서비스 주입 구조 미적용
+
+**✅ 올바른 해결 방향**
+
+**Phase 1.4.1: 서비스 계층 정리**
+
+- [x] LoggingConfigurationService 생성 (Application Layer)
+  - ✅ ApplicationServiceContainer에 `get_logging_config_service()` 추가
+  - ✅ Infrastructure의 LoggingConfigManager 래핑 완료
+  - ✅ DDD 계층 위반 해결 (Infrastructure → Application Layer 접근)
+- [x] LoggingBufferService 생성 (Application Layer)
+  - ✅ 기존 Infrastructure 로깅 버퍼 시스템 활용
+  - ✅ Live log buffer 및 terminal capturer 정상 동작 확인
+- [x] ApplicationServiceContainer에 위 서비스들 추가
+  - ✅ `get_logging_config_service()` 메서드 추가 완료
+  - ✅ TYPE_CHECKING import 추가로 타입 힌트 지원
+
+**Phase 1.4.2: LoggingManagementPresenter 리팩터링**
+
+- [x] Infrastructure Layer 직접 접근 제거
+  - ✅ LoggingConfigManager를 ApplicationServiceContainer를 통해 접근
+  - ✅ DDD 계층 위반 해결 (Presentation → Application → Infrastructure)
+  - ✅ LogSyntaxHighlighter DDD 계층 위반 추가 해결
+- [x] Application Layer 서비스만 의존하도록 수정
+  - ✅ config_manager 접근 성공 확인 (로그에서 "Config Manager 접근 성공" 확인)
+  - ✅ NoneType 에러 완전 해결
+  - ✅ LogViewerWidget `name 'logger' is not defined` 에러 해결
+- [x] MVP 패턴 준수: View-Presenter-Service 구조
+  - ✅ Factory에서 올바른 서비스 주입 구조 완성
+  - ✅ UI Layer → Application Layer → Infrastructure Layer 올바른 의존성 흐름 확립
+
+**Phase 1.4.3: LoggingSettingsComponentFactory 수정**
+
+- [x] API Settings, Database Settings와 동일한 패턴 적용
+  - ✅ `_get_application_container()` 사용 (이미 올바른 패턴)
+  - ✅ ApplicationServiceContainer를 통한 서비스 접근
+- [x] ApplicationServiceContainer 통한 올바른 서비스 주입
+  - ✅ LoggingConfigManager 서비스 정상 주입 확인
+  - ✅ ApplicationLoggingService 정상 동작
+- [x] MVP 조립 완성
+  - ✅ View-Presenter 연결 성공
+  - ✅ 실시간 로그 모니터링 시작 확인
+  - ✅ 로그 구문 강조 기능 정상 작동 (DDD 계층 준수)
+
+**🎯 예상 결과**
+
+```python
+# 올바른 의존성 구조
+class LoggingManagementPresenter:
+    def __init__(self, view, logging_config_service, logging_buffer_service, logging_service):
+        self.logging_config_service = logging_config_service  # Application Layer
+        self.logging_buffer_service = logging_buffer_service  # Application Layer
+        self.logging_service = logging_service  # Infrastructure Logger
+```
+
+**⚠️ 중요**: 폴백/MockBuffer 사용은 문제 은폐이므로 금지. Golden Rules 준수하여 Fail Fast 원칙 적용
+
+---
 
 ### Phase 2: MVP 구조 통합 정리
 

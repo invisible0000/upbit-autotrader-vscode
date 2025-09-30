@@ -80,10 +80,13 @@ class DatabaseManager:
                 yield conn
         except Exception as e:
             self._logger.error(f"데이터베이스 작업 실패 {db_name}: {e}")
+            self._logger.warning(f"🔄 트랜잭션 롤백 중: {db_name}")
             conn.rollback()
             raise
         else:
+            self._logger.debug(f"✅ 트랜잭션 커밋 중: {db_name}")
             conn.commit()
+            self._logger.debug(f"💾 트랜잭션 커밋 완료: {db_name}")
 
     def execute_query(self, db_name: str, query: str, params: tuple = ()) -> List[sqlite3.Row]:
         """SELECT 쿼리 실행"""

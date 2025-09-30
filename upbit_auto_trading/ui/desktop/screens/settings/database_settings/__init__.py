@@ -16,9 +16,7 @@ Architecture:
 """
 
 from .views.database_settings_view import DatabaseSettingsView
-from .presenters.database_settings_presenter import DatabaseSettingsPresenter
 
 __all__ = [
-    'DatabaseSettingsView',
-    'DatabaseSettingsPresenter'
+    'DatabaseSettingsView'
 ]

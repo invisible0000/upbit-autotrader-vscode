@@ -312,7 +312,7 @@ def wire_container_modules(container: ApplicationContainer) -> None:
 
             # Settings Screen - Phase 2-3 완료된 컴포넌트들
             "upbit_auto_trading.ui.desktop.screens.settings.settings_screen",
-            "upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter",
+            "upbit_auto_trading.presentation.presenters.settings.api_settings_presenter",
 
             # Application Layer
             # "upbit_auto_trading.application.services",

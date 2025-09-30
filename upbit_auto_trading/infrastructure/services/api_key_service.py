@@ -147,11 +147,16 @@ class ApiKeyService(IApiKeyService):
             with open(encryption_key_path, "wb") as key_file:
                 key_file.write(key)
 
+            # 🔧 FIX: DB에도 저장 (핵심 수정 사항!)
+            if not self._save_encryption_key_to_db(key):
+                self.logger.error("❌ DB에 암호화 키 저장 실패 - API 키 저장이 제대로 작동하지 않을 수 있습니다")
+                raise RuntimeError("암호화 키 DB 저장 실패")
+
             # 메모리에 로드
             self.encryption_key = key
             self.fernet = Fernet(self.encryption_key)
 
-            self.logger.info("✅ 새로운 암호화 키가 생성되고 로드되었습니다.")
+            self.logger.info("✅ 새로운 암호화 키가 파일과 DB에 생성되고 로드되었습니다.")
 
         except Exception as e:
             self.logger.error(f"새 암호화 키 생성 중 오류: {e}")
@@ -480,9 +485,25 @@ class ApiKeyService(IApiKeyService):
             raise ValueError("암호화 키 데이터가 올바르지 않습니다")
 
         try:
+            self.logger.info(f"🔧 암호화 키 DB 저장 시작 (Repository): 키 크기 {len(key_data)} bytes")
+
             success = self.secure_keys_repo.save_key("encryption", key_data)
+
             if success:
                 self.logger.info("✅ 암호화 키 DB 저장 완료 (Repository)")
+
+                # 즉시 재로드하여 검증
+                try:
+                    verify_key = self.secure_keys_repo.load_key("encryption")
+                    if verify_key == key_data:
+                        self.logger.info("🔐 저장 후 재로드 검증 성공: 키가 정확히 저장됨")
+                    else:
+                        self.logger.error(f"❌ 저장 후 재로드 검증 실패: 키 불일치 (저장: {len(key_data)}bytes, 로드: {len(verify_key) if verify_key else 0}bytes)")
+                except Exception as verify_e:
+                    self.logger.error(f"❌ 저장 후 검증 중 오류: {verify_e}")
+            else:
+                self.logger.error("❌ Repository save_key() 반환값이 False")
+
             return success
 
         except Exception as e:
@@ -775,15 +796,24 @@ class ApiKeyService(IApiKeyService):
             new_encryption_key = base64.urlsafe_b64encode(raw_key)  # URL-safe Base64 인코딩
 
             # DB에 암호화 키 저장
-            if not self._save_encryption_key_to_db(new_encryption_key):
+            self.logger.info(f"🔑 DB 저장 시작: 새 암호화 키 ({len(new_encryption_key)} bytes)")
+            db_save_result = self._save_encryption_key_to_db(new_encryption_key)
+            self.logger.info(f"🔑 DB 저장 결과: {db_save_result}")
+
+            if not db_save_result:
+                self.logger.error("❌ _save_encryption_key_to_db() 반환값이 False")
                 return False, "암호화 키 DB 저장에 실패했습니다."
 
             # 메모리에 새 키 로드
+            self.logger.info("🧠 메모리에 새 암호화 키 로드 중...")
             self.encryption_key = new_encryption_key
             self.fernet = Fernet(self.encryption_key)
+            self.logger.info("✅ 메모리 로드 완료")
 
             # API 키 저장 (기존 save_api_keys 로직 활용)
+            self.logger.info("💾 API 자격증명 파일 저장 시작...")
             save_success = self.save_api_keys(access_key, secret_key)
+            self.logger.info(f"💾 API 자격증명 저장 결과: {save_success}")
 
             if save_success:
                 return True, "새로운 API 키가 저장되었습니다."

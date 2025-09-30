@@ -57,7 +57,7 @@ REAL_COMPONENT_TREE_DATA = {
             "🔧 Portfolio Performance Panel": "upbit_auto_trading.ui.desktop.screens.portfolio_configuration.components.portfolio_performance_panel",
             "⚙️ Portfolio Configuration Screen": "upbit_auto_trading.ui.desktop.screens.portfolio_configuration.portfolio_configuration_screen",
             "🌐 Api Key Manager Secure Legacy": "upbit_auto_trading.ui.desktop.screens.settings.api_settings.api_key_manager_secure_legacy",
-            "⚙️ Api Settings Presenter": "upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter",
+            "⚙️ Api Settings Presenter": "upbit_auto_trading.presentation.presenters.settings.api_settings_presenter",
             "⚙️ Api Settings View": "upbit_auto_trading.ui.desktop.screens.settings.api_settings.views.api_settings_view",
             "🌐 Api Connection Widget": "upbit_auto_trading.ui.desktop.screens.settings.api_settings.widgets.api_connection_widget",
             "🌐 Api Credentials Widget": "upbit_auto_trading.ui.desktop.screens.settings.api_settings.widgets.api_credentials_widget",

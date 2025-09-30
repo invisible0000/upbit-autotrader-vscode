@@ -72,14 +72,57 @@ class SqliteSecureKeysRepository(SecureKeysRepository):
             with self._db.get_connection('settings') as conn:
                 cursor = conn.cursor()
 
+                # 저장 전 상태 확인
+                cursor.execute("""
+                    SELECT id, LENGTH(key_value), updated_at FROM secure_keys
+                    WHERE key_type = ?
+                """, (key_type,))
+                before_result = cursor.fetchone()
+                before_info = f"ID:{before_result[0]}, Size:{before_result[1]}bytes, Updated:{before_result[2]}" if before_result else "없음"
+                self._logger.debug(f"🔍 저장 전 상태 ({key_type}): {before_info}")
+
                 # INSERT OR REPLACE로 안전한 키 저장/교체
                 cursor.execute("""
                     INSERT OR REPLACE INTO secure_keys (key_type, key_value)
                     VALUES (?, ?)
                 """, (key_type, key_data))
 
-                self._logger.info(f"✅ 보안 키 저장 완료: {key_type}")
-                return True
+                affected_rows = cursor.rowcount
+                self._logger.debug(f"📝 SQL 실행 완료 ({key_type}): 영향받은 행 수 = {affected_rows}")
+
+                # 명시적 커밋 (DatabaseConnectionService가 자동 커밋하지 않음)
+                conn.commit()
+                self._logger.debug(f"✅ 트랜잭션 커밋 완료 ({key_type})")
+
+                # 저장 후 즉시 검증
+                cursor.execute("""
+                    SELECT id, LENGTH(key_value), updated_at FROM secure_keys
+                    WHERE key_type = ?
+                """, (key_type,))
+                after_result = cursor.fetchone()
+
+                if after_result:
+                    after_info = f"ID:{after_result[0]}, Size:{after_result[1]}bytes, Updated:{after_result[2]}"
+                    self._logger.info(f"✅ 보안 키 저장 완료 ({key_type}): {after_info}")
+
+                    # 키 크기 검증
+                    expected_size = len(key_data)
+                    actual_size = after_result[1]
+                    if actual_size == expected_size:
+                        self._logger.debug(f"🔐 키 크기 검증 성공 ({key_type}): {actual_size} bytes")
+                    else:
+                        self._logger.warning(f"⚠️ 키 크기 불일치 ({key_type}): 예상 {expected_size}bytes, 실제 {actual_size}bytes")
+
+                    # 시간 변경 확인
+                    if before_result and before_result[2] != after_result[2]:
+                        self._logger.info(f"🕐 updated_at 시간 갱신됨 ({key_type}): {before_result[2]} → {after_result[2]}")
+                    elif not before_result:
+                        self._logger.info(f"🆕 새 키 생성됨 ({key_type}): {after_result[2]}")
+
+                    return True
+                else:
+                    self._logger.error(f"❌ 저장 후 검증 실패 ({key_type}): 키를 찾을 수 없음")
+                    return False
 
         except Exception as e:
             self._logger.error(f"❌ 보안 키 저장 실패 ({key_type}): {e}")
@@ -142,6 +185,10 @@ class SqliteSecureKeysRepository(SecureKeysRepository):
                 """, (key_type,))
 
                 deleted_count = cursor.rowcount
+
+                # 명시적 커밋 (DatabaseConnectionService가 자동 커밋하지 않음)
+                conn.commit()
+                self._logger.debug(f"✅ 삭제 트랜잭션 커밋 완료 ({key_type})")
 
                 if deleted_count > 0:
                     self._logger.info(f"✅ 보안 키 삭제 완료: {key_type} ({deleted_count}개)")
@@ -299,6 +346,10 @@ class SqliteSecureKeysRepository(SecureKeysRepository):
 
                 cursor.execute("DELETE FROM secure_keys")
                 deleted_count = cursor.rowcount
+
+                # 명시적 커밋 (DatabaseConnectionService가 자동 커밋하지 않음)
+                conn.commit()
+                self._logger.debug("✅ 전체 삭제 트랜잭션 커밋 완료")
 
                 self._logger.warning(f"⚠️ 모든 보안 키 삭제 완료: {deleted_count}개")
                 return deleted_count

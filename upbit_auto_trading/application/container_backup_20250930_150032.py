@@ -9,7 +9,6 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
-    from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
     from upbit_auto_trading.application.factories.settings_view_factory import SettingsViewFactory
     from upbit_auto_trading.infrastructure.services.database_connection_service import DatabaseConnectionService
     from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
@@ -240,20 +239,6 @@ class ApplicationServiceContainer:
             from upbit_auto_trading.application.services.profile_metadata_service import ProfileMetadataService
             self._services["profile_service"] = ProfileMetadataService()
         return self._services["profile_service"]
-
-    def get_logging_config_service(self) -> 'LoggingConfigManager':
-        """Logging Configuration Service 조회
-
-        Infrastructure Layer의 LoggingConfigManager를 래핑하여
-        Application Layer에서 안전하게 사용할 수 있도록 합니다.
-
-        Returns:
-            LoggingConfigManager: 로깅 설정 관리 서비스
-        """
-        if "logging_config_service" not in self._services:
-            from upbit_auto_trading.infrastructure.logging.config.logging_config_manager import LoggingConfigManager
-            self._services["logging_config_service"] = LoggingConfigManager()
-        return self._services["logging_config_service"]
 
     def get_settings_view_factory(self) -> 'SettingsViewFactory':
         """Settings View Factory 조회

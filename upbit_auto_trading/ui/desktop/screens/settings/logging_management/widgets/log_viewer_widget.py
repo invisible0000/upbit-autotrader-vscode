@@ -148,7 +148,11 @@ class LogViewerWidget(QWidget):
     def _setup_syntax_highlighter(self):
         """로그 구문 강조기 설정"""
         try:
-            self.syntax_highlighter = LogSyntaxHighlighter(self.log_text_edit.document())
+            # DDD 계층 준수: Application Layer를 통한 로깅 서비스 전달
+            self.syntax_highlighter = LogSyntaxHighlighter(
+                self.log_text_edit.document(),
+                logging_service=self.logger
+            )
             self.logger.debug("✅ 로그 구문 강조기 설정 완료")
         except Exception as e:
             self.logger.error(f"❌ 로그 구문 강조기 설정 실패: {e}")

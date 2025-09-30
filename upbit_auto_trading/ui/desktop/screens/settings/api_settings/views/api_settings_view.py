@@ -62,7 +62,7 @@ class ApiSettingsView(QWidget):
 
     def set_presenter(self, presenter):
         """Presenter 설정 (MVP 패턴)"""
-        from ..presenters.api_settings_presenter import ApiSettingsPresenter
+        from upbit_auto_trading.presentation.presenters.settings.api_settings_presenter import ApiSettingsPresenter
         if not isinstance(presenter, ApiSettingsPresenter):
             raise TypeError("ApiSettingsPresenter 타입이어야 합니다")
 
