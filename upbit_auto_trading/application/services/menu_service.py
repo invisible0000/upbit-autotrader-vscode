@@ -130,19 +130,16 @@ class MenuService(IMenuService):
 
             # 창 크기 초기화 액션
             reset_size_action = QAction("창 크기 초기화", window)
-            window_state_service = dependencies.get('window_state_service')
-            if window_state_service:
-                reset_size_action.triggered.connect(
-                    lambda: window_state_service.reset_window_size(window)
-                )
+            reset_window_size_callback = dependencies.get('reset_window_size_callback')
+            if reset_window_size_callback:
+                reset_size_action.triggered.connect(reset_window_size_callback)
             view_menu.addAction(reset_size_action)
 
             # 창 크기 초기화 (중간) 액션
             reset_size_medium_action = QAction("창 크기 초기화(중간)", window)
-            if window_state_service:
-                reset_size_medium_action.triggered.connect(
-                    lambda: window_state_service.reset_window_size_medium(window)
-                )
+            reset_window_size_medium_callback = dependencies.get('reset_window_size_medium_callback')
+            if reset_window_size_medium_callback:
+                reset_size_medium_action.triggered.connect(reset_window_size_medium_callback)
             view_menu.addAction(reset_size_medium_action)
 
             self._logger.debug("보기 메뉴 설정 완료")

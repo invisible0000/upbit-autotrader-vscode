@@ -169,13 +169,14 @@ class SettingsScreen(QWidget):
         self.logger.info("✅ 하위 설정 위젯들 lazy loading 초기화 완료 (첫 탭만 로드)")
 
     def _initialize_ui_settings(self):
-        """UI 설정 위젯 초기화 (첫 탭 - 즉시 로드)"""
+        """UI 설정 위젯 초기화 (첫 탭 - Factory 패턴 적용)"""
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
+            # Factory 패턴 사용 필수 (다른 탭들과 일관성 확보)
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-            # ApplicationLoggingService 자체를 전달 (get_component_logger 호출하지 않음)
-            self.ui_settings = UISettingsView(self, logging_service=self._logging_service)
-            self.logger.debug("🎨 UI 설정 위젯 즉시 초기화 완료")
+            self.ui_settings = self._settings_factory.create_ui_settings_component(parent=self)
+            self.logger.info("✅ UI 설정 컴포넌트 Factory로 생성 완료")
         except Exception as e:
             self.logger.error(f"❌ UI 설정 위젯 초기화 실패: {e}")
             self.ui_settings = self._create_fallback_widget("UI 설정")

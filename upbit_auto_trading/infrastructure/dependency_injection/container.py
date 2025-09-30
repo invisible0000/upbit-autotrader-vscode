@@ -239,7 +239,7 @@ class ApplicationContainer(containers.DeclarativeContainer):
 
     # MainWindowPresenter - MVP 패턴 적용 (모든 필요한 서비스 주입)
     main_window_presenter = providers.Factory(
-        "upbit_auto_trading.ui.desktop.presenters.main_window_presenter.MainWindowPresenter",
+        "upbit_auto_trading.presentation.presenters.main_window_presenter.MainWindowPresenter",
         services=providers.Dict(
             theme_service=theme_service,
             database_health_service=providers.Factory(

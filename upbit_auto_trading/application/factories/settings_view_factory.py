@@ -313,14 +313,15 @@ class UiSettingsComponentFactory(BaseComponentFactory):
                 logging_service=component_logger
             )
         except Exception as e:
+            import traceback
             error_msg = f"❌ UISettingsView 생성 실패: {e}"
             self._logger.error(error_msg)
+            self._logger.error(f"상세 스택 트레이스:\n{traceback.format_exc()}")
             raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings.presenters import ui_settings_presenter
-            UISettingsPresenter = ui_settings_presenter.UISettingsPresenter
+            from upbit_auto_trading.presentation.presenters.settings.ui_settings_presenter import UISettingsPresenter
 
             presenter_logger = app_logging_service.get_component_logger("UISettingsPresenter")
             presenter = UISettingsPresenter(
@@ -381,10 +382,9 @@ class LoggingSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters import (
-                logging_management_presenter
+            from upbit_auto_trading.presentation.presenters.settings.logging_management_presenter import (
+                LoggingManagementPresenter
             )
-            LoggingManagementPresenter = logging_management_presenter.LoggingManagementPresenter
 
             presenter_logger = app_logging_service.get_component_logger("LoggingManagementPresenter")
             presenter = LoggingManagementPresenter(
@@ -444,10 +444,9 @@ class NotificationSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings.presenters import (
-                notification_settings_presenter
+            from upbit_auto_trading.presentation.presenters.settings.notification_settings_presenter import (
+                NotificationSettingsPresenter
             )
-            NotificationSettingsPresenter = notification_settings_presenter.NotificationSettingsPresenter
 
             presenter_logger = app_logging_service.get_component_logger("NotificationSettingsPresenter")
             presenter = NotificationSettingsPresenter(
@@ -507,10 +506,9 @@ class EnvironmentProfileComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.environment_profile.presenters import (
-                environment_profile_presenter
+            from upbit_auto_trading.presentation.presenters.settings.environment_profile_presenter import (
+                EnvironmentProfilePresenter
             )
-            EnvironmentProfilePresenter = environment_profile_presenter.EnvironmentProfilePresenter
 
             presenter_logger = app_logging_service.get_component_logger("EnvironmentProfilePresenter")
             presenter = EnvironmentProfilePresenter(

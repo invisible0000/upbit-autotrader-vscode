@@ -5,7 +5,7 @@ UI 설정 모듈
 """
 
 from .views import UISettingsView
-from .presenters import UISettingsPresenter
+# Presenter는 presentation/presenters/settings/로 이동됨
 from .widgets import (
     ThemeSelectorWidget, WindowSettingsWidget,
     AnimationSettingsWidget, ChartSettingsWidget
@@ -13,7 +13,6 @@ from .widgets import (
 
 __all__ = [
     'UISettingsView',
-    'UISettingsPresenter',
     'ThemeSelectorWidget',
     'WindowSettingsWidget',
     'AnimationSettingsWidget',

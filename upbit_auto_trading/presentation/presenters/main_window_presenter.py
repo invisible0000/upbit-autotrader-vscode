@@ -276,3 +276,45 @@ class MainWindowPresenter(QObject):
         except Exception as e:
             self.logger.error(f"❌ 메뉴 설정 실패: {e}")
             return False
+
+    def handle_theme_toggle(self, theme_service, style_manager, nav_bar):
+        """테마 토글 처리 - MenuService를 통한 테마 전환"""
+        try:
+            if self.menu_service:
+                self.menu_service.toggle_theme(theme_service, style_manager, nav_bar)
+                self.logger.info("✅ 테마 토글 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ MenuService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 테마 토글 실패: {e}")
+            return False
+
+    def handle_reset_window_size(self, window):
+        """창 크기 초기화 처리 - WindowStateService를 통한 창 크기 초기화"""
+        try:
+            if self.window_state_service:
+                self.window_state_service.reset_window_size(window)
+                self.logger.info("✅ 창 크기 초기화 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ WindowStateService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 창 크기 초기화 실패: {e}")
+            return False
+
+    def handle_reset_window_size_medium(self, window):
+        """창 크기 초기화(중간) 처리 - WindowStateService를 통한 중간 크기 초기화"""
+        try:
+            if self.window_state_service:
+                self.window_state_service.reset_window_size_medium(window)
+                self.logger.info("✅ 창 크기 초기화(중간) 완료")
+                return True
+            else:
+                self.logger.warning("⚠️ WindowStateService를 사용할 수 없음")
+                return False
+        except Exception as e:
+            self.logger.error(f"❌ 창 크기 초기화(중간) 실패: {e}")
+            return False

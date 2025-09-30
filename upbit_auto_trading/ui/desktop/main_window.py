@@ -437,6 +437,8 @@ class MainWindow(QMainWindow):
         return {
             'change_screen_callback': self._change_screen,
             'toggle_theme_callback': self._toggle_theme_via_service,
+            'reset_window_size_callback': self._reset_window_size_via_presenter,
+            'reset_window_size_medium_callback': self._reset_window_size_medium_via_presenter,
             'theme_service': self.theme_service,
             'style_manager': self.style_manager,
             'nav_bar': self.nav_bar
@@ -511,12 +513,29 @@ class MainWindow(QMainWindow):
             self._log_error(f"❌ 에러 메시지 표시 실패: {e}")
 
     def _toggle_theme_via_service(self):
-        """MenuService를 통한 테마 전환"""
-        self.menu_service.toggle_theme(
-            self.theme_service,
-            self.style_manager,
-            self.nav_bar
-        )
+        """MenuService를 통한 테마 전환 - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_theme_toggle(
+                self.theme_service,
+                self.style_manager,
+                self.nav_bar
+            )
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
+
+    def _reset_window_size_via_presenter(self):
+        """창크기 초기화 - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_reset_window_size(self)
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
+
+    def _reset_window_size_medium_via_presenter(self):
+        """창크기 초기화(중간) - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_reset_window_size_medium(self)
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
 
     def _load_screen_lazy(self, screen_name):
         """지연 로딩으로 화면 생성 - 간단한 플레이스홀더로 대체"""
