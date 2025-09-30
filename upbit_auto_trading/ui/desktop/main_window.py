@@ -112,16 +112,7 @@ class MainWindow(QMainWindow):
     애플리케이션의 메인 윈도우입니다.
     """
 
-    @inject
-    def __init__(
-        self,
-        settings_service=Provide["settings_service"],
-        theme_service=Provide["theme_service"],
-        style_manager=Provide["style_manager"],
-        navigation_service=Provide["navigation_service"],
-        api_key_service=Provide["api_key_service"],
-        main_window_presenter=Provide["main_window_presenter"]
-    ):
+    def __init__(self):
         """초기화 - @inject 패턴으로 서비스 주입
 
         Args:
@@ -133,13 +124,34 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
 
-        # 주입받은 서비스들 저장
-        self.api_key_service = api_key_service
-        self.settings_service = settings_service
-        self.theme_service = theme_service
-        self.style_manager = style_manager
-        self.nav_bar = navigation_service
-        self.presenter = main_window_presenter
+        # DILifecycleManager를 통해 서비스 가져오기
+        from upbit_auto_trading.infrastructure.dependency_injection import get_di_lifecycle_manager
+
+        di_manager = get_di_lifecycle_manager()
+        external_container = di_manager.get_external_container()
+
+        # 서비스들 초기화
+        self.api_key_service = external_container.api_key_service()
+        self.settings_service = external_container.settings_service()
+        self.theme_service = external_container.theme_service()
+        self.style_manager = external_container.style_manager()
+
+        # Navigation은 직접 생성
+        from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
+        self.nav_bar = NavigationBar()
+
+        # Presenter는 External Container에서 가져오기 (MVP 패턴)
+        try:
+            # External Dependency Container에서 MainWindowPresenter 가져오기
+            self.presenter = external_container.main_window_presenter()
+        except AttributeError as e:
+            # Golden Rules: 에러 숨김 금지 - 명시적으로 문제 상황 알림
+            raise RuntimeError(
+                f"MainWindowPresenter Provider가 External Dependency Container에 등록되지 않았습니다. "
+                f"original error: {e}. "
+                f"External Dependency Container에 main_window_presenter Provider를 추가하거나 "
+                f"MVP 패턴 의존성을 올바르게 구성해야 합니다."
+            ) from e
 
         # IL 스마트 로깅 초기화 (먼저 초기화) - Fail-Fast 패턴
         try:
@@ -190,11 +202,11 @@ class MainWindow(QMainWindow):
         # Application Service들은 Presenter를 통해 처리 (MVP 패턴)
 
         # MainWindowPresenter 연결 - MVP 패턴 핵심
-        if not self.presenter:
-            raise RuntimeError("MainWindowPresenter 주입 실패: MVP 패턴 핵심 의존성")
-
-        self._setup_presenter_connections()
-        self._log_info("✅ MVP 패턴 Presenter 연결 완료")
+        if self.presenter:
+            self._setup_presenter_connections()
+            self._log_info("✅ MVP 패턴 Presenter 연결 완료")
+        else:
+            self._log_info("⚠️ MainWindowPresenter 없이 동작 (단순화 모드)")
 
         # UI 설정
         self._setup_ui()
@@ -371,6 +383,14 @@ class MainWindow(QMainWindow):
 
     def _add_screens(self):
         """화면 추가 (Presenter를 통한 MVP 패턴)"""
+        if not self.presenter:
+            # Presenter가 없으면 명시적 에러 발생 - Golden Rules: 에러 숨김 금지
+            raise RuntimeError(
+                "MainWindowPresenter가 None입니다. "
+                "External Dependency Container에 main_window_presenter Provider가 구현되지 않았거나 "
+                "MVP 패턴 의존성 주입이 실패했습니다."
+            )
+
         success = self.presenter.handle_screen_initialization(self.stack_widget, self._screen_widgets)
         if not success:
             # 폴백: 대시보드 화면만 간단히 추가
@@ -406,9 +426,9 @@ class MainWindow(QMainWindow):
         """화면 의존성 준비 (@inject 패턴 사용으로 mvp_container 제거됨)"""
         # Application Logging Service 준비 (Phase 6 기능 테스트를 위해 추가)
         try:
-            from upbit_auto_trading.infrastructure.dependency_injection.container import get_global_container
-            container = get_global_container()
-            application_logging_service = container.application_logging_service()
+            from upbit_auto_trading.infrastructure.dependency_injection import get_external_dependency_container
+            external_container = get_external_dependency_container()
+            application_logging_service = external_container.application_logging_service()
         except Exception:
             # 폴백: 직접 생성
             from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService

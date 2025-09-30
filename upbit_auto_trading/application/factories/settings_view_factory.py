@@ -56,27 +56,26 @@ class BaseComponentFactory(ABC):
         self._validation_service = validation_service
         self._logger = logging_service.get_component_logger(f"{self.__class__.__name__}")
 
-    def _ensure_application_context(self):
-        """ApplicationContext 초기화 상태 확인 - Golden Rules: 에러 숨김 금지"""
-        from upbit_auto_trading.infrastructure.dependency_injection.app_context import get_application_context
+    def _ensure_di_lifecycle_manager(self):
+        """DILifecycleManager 초기화 상태 확인 - Golden Rules: 에러 숨김 금지"""
+        from upbit_auto_trading.infrastructure.dependency_injection import get_di_lifecycle_manager
 
-        context = get_application_context()
-        if not context:
-            raise RuntimeError("ApplicationContext가 None - 시스템 초기화 실패")
+        di_manager = get_di_lifecycle_manager()
+        if not di_manager:
+            raise RuntimeError("DILifecycleManager가 None - 시스템 초기화 실패")
 
-        if not hasattr(context, 'is_initialized') or not context.is_initialized:
-            raise RuntimeError("ApplicationContext가 초기화되지 않음 - DI 시스템 실패")
+        if not hasattr(di_manager, 'is_initialized') or not di_manager.is_initialized:
+            raise RuntimeError("DILifecycleManager가 초기화되지 않음 - DI 시스템 실패")
 
-        return context
+        return di_manager
 
     def _get_application_container(self):
         """표준 ApplicationServiceContainer 접근 - Golden Rules: 에러 숨김 금지"""
-        # 1. ApplicationContext 상태 확인 (필수)
-        self._ensure_application_context()
+        # 1. DILifecycleManager 상태 확인 (필수)
+        di_manager = self._ensure_di_lifecycle_manager()
 
         # 2. ApplicationServiceContainer 가져오기 (필수)
-        from upbit_auto_trading.application.container import get_application_container
-        container = get_application_container()
+        container = di_manager.get_application_container()
 
         if container is None:
             error_msg = "❌ ApplicationServiceContainer가 None - DI 시스템 초기화 실패"

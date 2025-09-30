@@ -35,16 +35,17 @@ except ImportError as e:
     print(f"⚠️ MainWindow를 임포트할 수 없습니다: {e}")
     MAIN_WINDOW_AVAILABLE = False
 
-# 기존 ApplicationContext 임포트 (호환성 유지)
+# DILifecycleManager 임포트 (새 구조)
 try:
-    from upbit_auto_trading.infrastructure.dependency_injection.app_context import (
-        ApplicationContext,
-        ApplicationContextError
+    from upbit_auto_trading.infrastructure.dependency_injection import (
+        DILifecycleManager,
+        DILifecycleManagerError,
+        get_di_lifecycle_manager
     )
-    APP_CONTEXT_AVAILABLE = True
+    DI_MANAGER_AVAILABLE = True
 except ImportError as e:
-    print(f"⚠️ ApplicationContext를 임포트할 수 없습니다: {e}")
-    APP_CONTEXT_AVAILABLE = False
+    print(f"⚠️ DILifecycleManager를 임포트할 수 없습니다: {e}")
+    DI_MANAGER_AVAILABLE = False
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -105,7 +106,7 @@ class QAsyncApplication:
         self.qapp: Optional[QApplication] = None
         self.kernel: Optional[AppKernel] = None
         self.main_window: Optional[MainWindow] = None
-        self.app_context: Optional[ApplicationContext] = None
+        self.di_manager = None
         self._shutdown_requested = False
         self._shutdown_event = None
 
@@ -136,14 +137,13 @@ class QAsyncApplication:
             self.kernel = AppKernel.bootstrap(self.qapp, kernel_config)
             logger.info("✅ AppKernel 부트스트랩 완료")
 
-            # 3. 기존 ApplicationContext 초기화 (호환성)
-            if APP_CONTEXT_AVAILABLE:
+            # 3. DILifecycleManager 초기화 (새 구조)
+            if DI_MANAGER_AVAILABLE:
                 try:
-                    self.app_context = ApplicationContext()
-                    self.app_context.initialize()
-                    logger.info("✅ ApplicationContext 초기화 완료 (호환성 레이어)")
+                    self.di_manager = get_di_lifecycle_manager()
+                    logger.info("✅ DILifecycleManager 초기화 완료 (새 DI 구조)")
                 except Exception as e:
-                    logger.warning(f"⚠️ ApplicationContext 초기화 실패: {e}")
+                    logger.warning(f"⚠️ DILifecycleManager 초기화 실패: {e}")
                     # AppKernel만으로도 동작 가능하므로 계속 진행
 
             # 4. 메인 윈도우 생성
@@ -152,7 +152,7 @@ class QAsyncApplication:
                     # AppKernel 컨텍스트에서 MainWindow 생성
                     ensure_main_loop(where="MainWindow 생성", component="MainApp")
 
-                    if self.app_context:
+                    if self.di_manager:
                         # @inject 패턴 사용 - MainWindow 직접 인스턴스화 (순환 import 방지)
                         self.main_window = MainWindow()
                     else:
@@ -282,17 +282,15 @@ class QAsyncApplication:
                 except Exception as e:
                     logger.error(f"❌ MainWindow 정리 실패: {e}")
 
-            # 2. ApplicationContext 정리 (호환성)
-            if self.app_context:
+            # 2. DILifecycleManager 정리 (새 구조)
+            if self.di_manager:
                 try:
-                    if hasattr(self.app_context, 'shutdown'):
-                        self.app_context.shutdown()
-                    if hasattr(self.app_context, 'dispose'):
-                        self.app_context.dispose()
-                    self.app_context = None
-                    logger.info("✅ ApplicationContext 정리 완료")
+                    if hasattr(self.di_manager, 'shutdown'):
+                        self.di_manager.shutdown()
+                    self.di_manager = None
+                    logger.info("✅ DILifecycleManager 정리 완료")
                 except Exception as e:
-                    logger.error(f"❌ ApplicationContext 정리 실패: {e}")
+                    logger.error(f"❌ DILifecycleManager 정리 실패: {e}")
 
             # 3. AppKernel 종료 (자동으로 모든 리소스 정리됨)
             if self.kernel:

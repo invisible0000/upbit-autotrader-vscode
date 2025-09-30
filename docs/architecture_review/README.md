@@ -174,9 +174,18 @@ cd docs\architecture_review\mvp_pattern_review\settings_screen
 
 ## 🔗 관련 문서
 
+### 🆕 최신 아키텍처 분석 보고서
+
+- **[컨테이너 아키텍처 전면 분석 (2025.09.30)](CONTAINER_ARCHITECTURE_ANALYSIS_20250930.md)** - 전체 DI Container 구조 분석 및 개선 방안
+
+### 📋 기존 검토 가이드
+
 - [MVP 아키텍처 검토 방법론 가이드](MVP_ARCHITECTURE_REVIEW_GUIDE.md) - 검토 방법론 및 기준
 - [MVP 패턴 검토 가이드](mvp_pattern_review/README.md) - 상세 검토 가이드라인
 - [개선 로드맵](improvement_tracking/improvement_roadmap.md) - 6개월 개선 계획
+
+### 🏗️ 아키텍처 가이드
+
 - [DDD 아키텍처 패턴 가이드](../DDD_아키텍처_패턴_가이드.md)
 - [의존성 주입 아키텍처](../DEPENDENCY_INJECTION_ARCHITECTURE.md)
 - [복잡한 시스템 테스트 가이드](../COMPLEX_SYSTEM_TESTING_GUIDE.md)
