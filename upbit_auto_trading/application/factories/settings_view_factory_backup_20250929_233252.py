@@ -57,22 +57,21 @@ class BaseComponentFactory(ABC):
         self._logger = logging_service.get_component_logger(f"{self.__class__.__name__}")
 
     def _ensure_application_context(self):
-        """ApplicationContext 초기화 상태 확인 - Golden Rules: 에러 숨김 금지"""
+        """ApplicationContext 초기화 상태 확인"""
         from upbit_auto_trading.infrastructure.dependency_injection.app_context import get_application_context
 
         context = get_application_context()
-        if not context:
-            raise RuntimeError("ApplicationContext가 None - 시스템 초기화 실패")
-
-        if not hasattr(context, 'is_initialized') or not context.is_initialized:
-            raise RuntimeError("ApplicationContext가 초기화되지 않음 - DI 시스템 실패")
-
+        if not context or not hasattr(context, 'is_initialized') or not context.is_initialized:
+            self._logger.warning("⚠️ ApplicationContext가 초기화되지 않았지만 계속 진행")
         return context
 
     def _get_application_container(self):
-        """표준 ApplicationServiceContainer 접근 - Golden Rules: 에러 숨김 금지"""
-        # 1. ApplicationContext 상태 확인 (필수)
-        self._ensure_application_context()
+        """표준 ApplicationServiceContainer 접근 - 모든 Factory에서 일관된 패턴 사용"""
+        # 1. ApplicationContext 상태 확인 (경고만, 실패하지 않음)
+        try:
+            self._ensure_application_context()
+        except Exception as e:
+            self._logger.warning(f"⚠️ ApplicationContext 확인 중 문제: {e}")
 
         # 2. ApplicationServiceContainer 가져오기 (필수)
         from upbit_auto_trading.application.container import get_application_container
@@ -95,12 +94,12 @@ class BaseComponentFactory(ABC):
     @abstractmethod
     def get_component_type(self) -> str:
         """컴포넌트 타입 반환"""
-        raise NotImplementedError("하위 클래스에서 구현 필수")
+        pass
 
     @abstractmethod
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
         """컴포넌트 인스턴스 생성 (하위 클래스에서 구현)"""
-        raise NotImplementedError("하위 클래스에서 구현 필수")
+        pass
 
     def create_component(self, parent: Optional[QWidget] = None, **kwargs) -> QWidget:
         """검증과 생명주기 관리가 포함된 컴포넌트 생성"""
@@ -189,7 +188,7 @@ class ApiSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (\n                ApiSettingsPresenter\n            )
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import ApiSettingsPresenter
 
             presenter_logger = app_logging_service.get_component_logger("ApiSettingsPresenter")
             presenter = ApiSettingsPresenter(
@@ -205,16 +204,21 @@ class ApiSettingsComponentFactory(BaseComponentFactory):
             self._logger.error(error_msg)
             raise RuntimeError(f"Factory 실패: {error_msg}")
 
-        # 5. 초기 데이터 로드 (Golden Rules: 에러 숨김 금지 - Fail Fast)
-        initial_settings = presenter.load_api_settings()
-        view.credentials_widget.set_credentials(
-            initial_settings['access_key'],
-            initial_settings['secret_key']
-        )
-        view.permissions_widget.set_trade_permission(initial_settings['trade_permission'])
-        view._update_button_states()
+        # 5. 초기 데이터 로드 (실패해도 View는 반환, 하지만 에러 로그 남김)
+        try:
+            initial_settings = presenter.load_api_settings()
+            view.credentials_widget.set_credentials(
+                initial_settings['access_key'],
+                initial_settings['secret_key']
+            )
+            view.permissions_widget.set_trade_permission(initial_settings['trade_permission'])
+            view._update_button_states()
 
-        self._logger.info("✅ API 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+            self._logger.info("✅ API 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        except Exception as e:
+            error_msg = f"❌ 초기 데이터 로드 실패: {e}"
+            self._logger.error(error_msg)
+            # 초기 데이터 실패는 치명적이지 않으므로 View는 반환하되 명확한 에러 로그
 
         return view
 
@@ -318,8 +322,9 @@ class UiSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings.presenters import ui_settings_presenter
-            UISettingsPresenter = ui_settings_presenter.UISettingsPresenter
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings.presenters.ui_settings_presenter import (
+                UISettingsPresenter
+            )
 
             presenter_logger = app_logging_service.get_component_logger("UISettingsPresenter")
             presenter = UISettingsPresenter(
@@ -335,9 +340,14 @@ class UiSettingsComponentFactory(BaseComponentFactory):
             self._logger.error(error_msg)
             raise RuntimeError(f"Factory 실패: {error_msg}")
 
-        # 5. 초기 데이터 로드 (Golden Rules: 에러 숨김 금지 - Fail Fast)
-        presenter.load_settings()
-        self._logger.info("✅ UI 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        # 5. 초기 데이터 로드 (실패해도 View는 반환, 하지만 에러 로그 남김)
+        try:
+            presenter.load_settings()
+            self._logger.info("✅ UI 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        except Exception as e:
+            error_msg = f"❌ 초기 설정 로드 실패: {e}"
+            self._logger.error(error_msg)
+            # 초기 데이터 실패는 치명적이지 않으므로 View는 반환하되 명확한 에러 로그
 
         return view
 

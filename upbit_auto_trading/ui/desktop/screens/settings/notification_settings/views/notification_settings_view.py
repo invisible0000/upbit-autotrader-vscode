@@ -71,11 +71,21 @@ class NotificationSettingsView(QWidget):
         self.logger.debug("알림 설정 View 상태 보고 완료")
 
     def _init_widgets(self):
-        """위젯 초기화"""
-        self.alert_types_widget = AlertTypesWidget()
-        self.notification_methods_widget = NotificationMethodsWidget()
-        self.notification_frequency_widget = NotificationFrequencyWidget()
-        self.quiet_hours_widget = QuietHoursWidget()
+        """위젯 초기화 (모든 위젯에 logging_service 주입)"""
+        # 각 위젯별로 고유한 logger 생성하여 주입
+        alert_logger = (self.logger.get_component_logger("AlertTypesWidget")
+                       if hasattr(self.logger, 'get_component_logger') else self.logger)
+        methods_logger = (self.logger.get_component_logger("NotificationMethodsWidget")
+                         if hasattr(self.logger, 'get_component_logger') else self.logger)
+        frequency_logger = (self.logger.get_component_logger("NotificationFrequencyWidget")
+                           if hasattr(self.logger, 'get_component_logger') else self.logger)
+        quiet_hours_logger = (self.logger.get_component_logger("QuietHoursWidget")
+                             if hasattr(self.logger, 'get_component_logger') else self.logger)
+
+        self.alert_types_widget = AlertTypesWidget(logging_service=alert_logger)
+        self.notification_methods_widget = NotificationMethodsWidget(logging_service=methods_logger)
+        self.notification_frequency_widget = NotificationFrequencyWidget(logging_service=frequency_logger)
+        self.quiet_hours_widget = QuietHoursWidget(logging_service=quiet_hours_logger)
 
         self.logger.debug("🎛️ 알림 설정 위젯들 초기화 완료")
 

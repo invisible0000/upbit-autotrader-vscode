@@ -10,8 +10,6 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from upbit_auto_trading.infrastructure.services.api_key_service import ApiKeyService
     from upbit_auto_trading.application.factories.settings_view_factory import SettingsViewFactory
-    from upbit_auto_trading.infrastructure.services.database_connection_service import DatabaseConnectionService
-    from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
 
 from upbit_auto_trading.application.services.strategy_application_service import StrategyApplicationService
 from upbit_auto_trading.application.services.trigger_application_service import TriggerApplicationService
@@ -194,40 +192,6 @@ class ApplicationServiceContainer:
             self._services["api_key_service"] = infrastructure_container.api_key_service()
 
         return self._services["api_key_service"]
-
-    def get_database_service(self) -> 'DatabaseConnectionService':
-        """Database Service 조회
-
-        Infrastructure DI Container에서 DatabaseConnectionService를 가져옵니다.
-
-        Returns:
-            DatabaseConnectionService: 데이터베이스 연결 관리 서비스
-        """
-        if "database_service" not in self._services:
-            # Infrastructure DI Container에서 DatabaseConnectionService 가져오기
-            from upbit_auto_trading.infrastructure.dependency_injection.container import get_global_container
-
-            infrastructure_container = get_global_container()
-            self._services["database_service"] = infrastructure_container.database_manager()
-
-        return self._services["database_service"]
-
-    def get_settings_service(self) -> 'SettingsService':
-        """Settings Service 조회
-
-        Infrastructure DI Container에서 SettingsService를 가져옵니다.
-
-        Returns:
-            SettingsService: 설정 관리 서비스
-        """
-        if "settings_service" not in self._services:
-            # Infrastructure DI Container에서 SettingsService 가져오기
-            from upbit_auto_trading.infrastructure.dependency_injection.container import get_global_container
-
-            infrastructure_container = get_global_container()
-            self._services["settings_service"] = infrastructure_container.settings_service()
-
-        return self._services["settings_service"]
 
     def get_settings_view_factory(self) -> 'SettingsViewFactory':
         """Settings View Factory 조회

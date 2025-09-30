@@ -34,11 +34,17 @@ class DatabaseStatusWidget(QWidget):
     # 재연결 요청 시그널
     refresh_requested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-status")
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self._logger = None
+
+        # Application Layer 로깅 서비스 사용 (DI 패턴)
+        if logging_service:
+            self._logger = logging_service.get_component_logger("DatabaseStatusWidget")
+        else:
+            # 폴백: 기본 로거 생성 (오류 방지)
+            from upbit_auto_trading.infrastructure.logging import create_component_logger
+            self._logger = create_component_logger("DatabaseStatusWidget")
 
         self._database_labels = {}
         self._status_data = {}

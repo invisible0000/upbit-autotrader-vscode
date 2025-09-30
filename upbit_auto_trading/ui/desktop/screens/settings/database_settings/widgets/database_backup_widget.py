@@ -37,11 +37,17 @@ class DatabaseBackupWidget(QWidget):
     refresh_backups_requested = pyqtSignal()
     description_updated = pyqtSignal(str, str)  # backup_id, new_description
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-backup")
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self._logger = None
+
+        # Application Layer 로깅 서비스 사용 (DI 패턴)
+        if logging_service:
+            self._logger = logging_service.get_component_logger("DatabaseBackupWidget")
+        else:
+            # 폴백: 기본 로거 생성 (오류 방지)
+            from upbit_auto_trading.infrastructure.logging import create_component_logger
+            self._logger = create_component_logger("DatabaseBackupWidget")
 
         self._backup_data: List[Dict[str, Any]] = []
         self._selected_backup_id: Optional[str] = None

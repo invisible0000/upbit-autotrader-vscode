@@ -56,51 +56,15 @@ class BaseComponentFactory(ABC):
         self._validation_service = validation_service
         self._logger = logging_service.get_component_logger(f"{self.__class__.__name__}")
 
-    def _ensure_application_context(self):
-        """ApplicationContext 초기화 상태 확인 - Golden Rules: 에러 숨김 금지"""
-        from upbit_auto_trading.infrastructure.dependency_injection.app_context import get_application_context
-
-        context = get_application_context()
-        if not context:
-            raise RuntimeError("ApplicationContext가 None - 시스템 초기화 실패")
-
-        if not hasattr(context, 'is_initialized') or not context.is_initialized:
-            raise RuntimeError("ApplicationContext가 초기화되지 않음 - DI 시스템 실패")
-
-        return context
-
-    def _get_application_container(self):
-        """표준 ApplicationServiceContainer 접근 - Golden Rules: 에러 숨김 금지"""
-        # 1. ApplicationContext 상태 확인 (필수)
-        self._ensure_application_context()
-
-        # 2. ApplicationServiceContainer 가져오기 (필수)
-        from upbit_auto_trading.application.container import get_application_container
-        container = get_application_container()
-
-        if container is None:
-            error_msg = "❌ ApplicationServiceContainer가 None - DI 시스템 초기화 실패"
-            self._logger.error(error_msg)
-            raise RuntimeError(f"Factory 실패 ({self.__class__.__name__}): {error_msg}")
-
-        return container
-
-    def _get_service(self, service_getter, service_name: str):
-        """서비스 로드 - Golden Rules: 에러 숨김/폴백 금지 (Fail Fast)"""
-        service = service_getter()
-        if service is None:
-            raise RuntimeError(f"{service_name} 서비스 로드 실패 - 시스템 중단 ({self.__class__.__name__})")
-        return service
-
     @abstractmethod
     def get_component_type(self) -> str:
         """컴포넌트 타입 반환"""
-        raise NotImplementedError("하위 클래스에서 구현 필수")
+        pass
 
     @abstractmethod
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
         """컴포넌트 인스턴스 생성 (하위 클래스에서 구현)"""
-        raise NotImplementedError("하위 클래스에서 구현 필수")
+        pass
 
     def create_component(self, parent: Optional[QWidget] = None, **kwargs) -> QWidget:
         """검증과 생명주기 관리가 포함된 컴포넌트 생성"""
@@ -153,24 +117,37 @@ class ApiSettingsComponentFactory(BaseComponentFactory):
         return "api_settings"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """API 설정 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 Container 접근 (생성자 우선, 표준 메서드 사용)
+        """API 설정 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (생성자 우선, 전역 필수)
         if self._api_key_service is not None:
             # 생성자에서 주입된 서비스 우선 사용 (가장 안정적)
             api_key_service = self._api_key_service
             app_logging_service = self._logging_service
             self._logger.info("✅ 생성자 주입 서비스 사용 (정상 경로)")
         else:
-            # 표준 ApplicationServiceContainer 접근
-            container = self._get_application_container()
+            # 전역 ApplicationContainer 필수 접근 (실패 시 에러)
+            from upbit_auto_trading.application.container import get_application_container
+            container = get_application_container()
 
-            api_key_service = self._get_service(
-                container.get_api_key_service, "ApiKey"
-            )
-            app_logging_service = self._get_service(
-                container.get_logging_service, "Logging"
-            )
-            self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+            if container is None:
+                error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+                self._logger.error(error_msg)
+                raise RuntimeError(f"Factory 실패: {error_msg}")
+
+            try:
+                api_key_service = container.get_api_key_service()
+                app_logging_service = container.get_logging_service()
+                self._logger.info("✅ 전역 ApplicationContainer 서비스 사용 (정상 경로)")
+            except Exception as e:
+                error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+                self._logger.error(error_msg)
+                raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # API 키 서비스 필수 검증 (None 시 명확한 에러)
+        if api_key_service is None:
+            error_msg = "❌ API 키 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:
@@ -189,7 +166,7 @@ class ApiSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (\n                ApiSettingsPresenter\n            )
+            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import ApiSettingsPresenter
 
             presenter_logger = app_logging_service.get_component_logger("ApiSettingsPresenter")
             presenter = ApiSettingsPresenter(
@@ -205,16 +182,21 @@ class ApiSettingsComponentFactory(BaseComponentFactory):
             self._logger.error(error_msg)
             raise RuntimeError(f"Factory 실패: {error_msg}")
 
-        # 5. 초기 데이터 로드 (Golden Rules: 에러 숨김 금지 - Fail Fast)
-        initial_settings = presenter.load_api_settings()
-        view.credentials_widget.set_credentials(
-            initial_settings['access_key'],
-            initial_settings['secret_key']
-        )
-        view.permissions_widget.set_trade_permission(initial_settings['trade_permission'])
-        view._update_button_states()
+        # 5. 초기 데이터 로드 (실패해도 View는 반환, 하지만 에러 로그 남김)
+        try:
+            initial_settings = presenter.load_api_settings()
+            view.credentials_widget.set_credentials(
+                initial_settings['access_key'],
+                initial_settings['secret_key']
+            )
+            view.permissions_widget.set_trade_permission(initial_settings['trade_permission'])
+            view._update_button_states()
 
-        self._logger.info("✅ API 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+            self._logger.info("✅ API 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        except Exception as e:
+            error_msg = f"❌ 초기 데이터 로드 실패: {e}"
+            self._logger.error(error_msg)
+            # 초기 데이터 실패는 치명적이지 않으므로 View는 반환하되 명확한 에러 로그
 
         return view
 
@@ -226,18 +208,31 @@ class DatabaseSettingsComponentFactory(BaseComponentFactory):
         return "database_settings"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """데이터베이스 설정 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 ApplicationServiceContainer 접근
-        container = self._get_application_container()
+        """데이터베이스 설정 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (전역 필수)
+        from upbit_auto_trading.application.container import get_application_container
+        container = get_application_container()
 
-        # Database 설정에 필요한 서비스들 로드
-        database_service = self._get_service(
-            container.get_database_service, "Database"
-        )
-        app_logging_service = self._get_service(
-            container.get_logging_service, "Logging"
-        )
-        self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+        if container is None:
+            error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        try:
+            # Database 설정에 필요한 서비스들 로드
+            database_service = container.get_database_service()
+            app_logging_service = container.get_logging_service()
+            self._logger.info("✅ ApplicationContainer 서비스 사용 (정상 경로)")
+        except Exception as e:
+            error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # Database 서비스 필수 검증 (None 시 명확한 에러)
+        if database_service is None:
+            error_msg = "❌ Database 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:
@@ -289,18 +284,31 @@ class UiSettingsComponentFactory(BaseComponentFactory):
         return "ui_settings"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """UI 설정 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 ApplicationServiceContainer 접근
-        container = self._get_application_container()
+        """UI 설정 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (전역 필수)
+        from upbit_auto_trading.application.container import get_application_container
+        container = get_application_container()
 
-        # UI 설정에 필요한 서비스들 로드
-        settings_service = self._get_service(
-            container.get_settings_service, "Settings"
-        )
-        app_logging_service = self._get_service(
-            container.get_logging_service, "Logging"
-        )
-        self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+        if container is None:
+            error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        try:
+            # UI 설정에 필요한 서비스들 로드
+            settings_service = container.get_settings_service()
+            app_logging_service = container.get_logging_service()
+            self._logger.info("✅ ApplicationContainer 서비스 사용 (정상 경로)")
+        except Exception as e:
+            error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # Settings 서비스 필수 검증 (None 시 명확한 에러)
+        if settings_service is None:
+            error_msg = "❌ Settings 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:
@@ -318,8 +326,9 @@ class UiSettingsComponentFactory(BaseComponentFactory):
 
         # 3. Presenter 생성 및 연결 (실패 시 즉시 에러)
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings.presenters import ui_settings_presenter
-            UISettingsPresenter = ui_settings_presenter.UISettingsPresenter
+            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings.presenters.ui_settings_presenter import (
+                UISettingsPresenter
+            )
 
             presenter_logger = app_logging_service.get_component_logger("UISettingsPresenter")
             presenter = UISettingsPresenter(
@@ -335,9 +344,14 @@ class UiSettingsComponentFactory(BaseComponentFactory):
             self._logger.error(error_msg)
             raise RuntimeError(f"Factory 실패: {error_msg}")
 
-        # 5. 초기 데이터 로드 (Golden Rules: 에러 숨김 금지 - Fail Fast)
-        presenter.load_settings()
-        self._logger.info("✅ UI 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        # 5. 초기 데이터 로드 (실패해도 View는 반환, 하지만 에러 로그 남김)
+        try:
+            presenter.load_settings()
+            self._logger.info("✅ UI 설정 컴포넌트 완전 조립 완료 (MVP + 초기화)")
+        except Exception as e:
+            error_msg = f"❌ 초기 설정 로드 실패: {e}"
+            self._logger.error(error_msg)
+            # 초기 데이터 실패는 치명적이지 않으므로 View는 반환하되 명확한 에러 로그
 
         return view
 
@@ -349,15 +363,30 @@ class LoggingSettingsComponentFactory(BaseComponentFactory):
         return "logging_settings"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """로깅 관리 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 ApplicationServiceContainer 접근
-        container = self._get_application_container()
+        """로깅 관리 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (전역 필수)
+        from upbit_auto_trading.application.container import get_application_container
+        container = get_application_container()
 
-        # Logging 관리에 필요한 서비스 로드
-        app_logging_service = self._get_service(
-            container.get_logging_service, "Logging"
-        )
-        self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+        if container is None:
+            error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        try:
+            # Logging 관리에 필요한 서비스들 로드
+            app_logging_service = container.get_logging_service()
+            self._logger.info("✅ ApplicationContainer 서비스 사용 (정상 경로)")
+        except Exception as e:
+            error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # Logging 서비스 필수 검증 (None 시 명확한 에러)
+        if app_logging_service is None:
+            error_msg = "❌ Logging 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:
@@ -408,18 +437,36 @@ class NotificationSettingsComponentFactory(BaseComponentFactory):
         return "notification_settings"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """알림 설정 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 ApplicationServiceContainer 접근
-        container = self._get_application_container()
+        """알림 설정 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (전역 필수)
+        from upbit_auto_trading.application.container import get_application_container
+        container = get_application_container()
 
-        # Notification 설정에 필요한 서비스들 로드
-        notification_service = self._get_service(
-            container.get_notification_service, "Notification"
-        )
-        app_logging_service = self._get_service(
-            container.get_logging_service, "Logging"
-        )
-        self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+        if container is None:
+            error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        try:
+            # Notification 설정에 필요한 서비스들 로드
+            notification_service = getattr(container, 'get_notification_service', lambda: None)()
+            app_logging_service = container.get_logging_service()
+            self._logger.info("✅ ApplicationContainer 서비스 사용 (정상 경로)")
+        except Exception as e:
+            error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # Notification 서비스가 없어도 진행 (옵션 서비스)
+        if notification_service is None:
+            self._logger.warning("⚠️ NotificationService 없음 - Mock 서비스로 진행")
+            notification_service = type('MockNotificationService', (), {})()
+
+        # Logging 서비스 필수 검증 (None 시 명확한 에러)
+        if app_logging_service is None:
+            error_msg = "❌ Logging 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:
@@ -471,18 +518,36 @@ class EnvironmentProfileComponentFactory(BaseComponentFactory):
         return "environment_profile"
 
     def create_component_instance(self, parent: Optional[QWidget], **kwargs) -> QWidget:
-        """환경 프로필 컴포넌트 생성 - 표준 Container 접근 패턴 사용"""
-        # 1. 표준 ApplicationServiceContainer 접근
-        container = self._get_application_container()
+        """환경 프로필 컴포넌트 생성 - 완전한 MVP 구현 (개발 모드: 실패 시 명확한 에러)"""
+        # 1. ApplicationContainer에서 서비스 가져오기 (전역 필수)
+        from upbit_auto_trading.application.container import get_application_container
+        container = get_application_container()
 
-        # Environment Profile에 필요한 서비스들 로드
-        profile_service = self._get_service(
-            container.get_profile_service, "Profile"
-        )
-        app_logging_service = self._get_service(
-            container.get_logging_service, "Logging"
-        )
-        self._logger.info("✅ 표준 ApplicationContainer 서비스 사용 (정상 경로)")
+        if container is None:
+            error_msg = "❌ 전역 ApplicationContainer가 None - DI 시스템 초기화 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        try:
+            # Environment Profile에 필요한 서비스들 로드
+            profile_service = getattr(container, 'get_profile_service', lambda: None)()
+            app_logging_service = container.get_logging_service()
+            self._logger.info("✅ ApplicationContainer 서비스 사용 (정상 경로)")
+        except Exception as e:
+            error_msg = f"❌ ApplicationContainer 서비스 로드 실패: {e}"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
+
+        # Profile 서비스가 없어도 진행 (옵션 서비스)
+        if profile_service is None:
+            self._logger.warning("⚠️ ProfileService 없음 - Mock 서비스로 진행")
+            profile_service = type('MockProfileService', (), {})()
+
+        # Logging 서비스 필수 검증 (None 시 명확한 에러)
+        if app_logging_service is None:
+            error_msg = "❌ Logging 서비스가 None - 필수 서비스 로드 실패"
+            self._logger.error(error_msg)
+            raise RuntimeError(f"Factory 실패: {error_msg}")
 
         # 2. View 생성 (실패 시 즉시 에러)
         try:

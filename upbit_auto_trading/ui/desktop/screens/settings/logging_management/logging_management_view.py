@@ -74,8 +74,10 @@ class LoggingManagementView(QWidget):
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setChildrenCollapsible(False)  # 위젯 완전 숨김 방지
 
-        # 좌측: 로깅 설정 위젯
-        self.logging_settings_widget = LoggingSettingsWidget()
+        # 좌측: 로깅 설정 위젯 (logging_service 주입)
+        settings_widget_logger = (self.logger.get_component_logger("LoggingSettingsWidget")
+                                 if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.logging_settings_widget = LoggingSettingsWidget(logging_service=settings_widget_logger)
         self.logging_settings_widget.setMinimumWidth(280)  # 최소 폭 보장
         # 최대 폭 제한 제거하여 윈도우 크기에 비례하도록 함
 
@@ -83,12 +85,16 @@ class LoggingManagementView(QWidget):
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
         self.right_splitter.setChildrenCollapsible(False)
 
-        # 우측 상단: 로그 뷰어 위젯
-        self.log_viewer_widget = LogViewerWidget()
+        # 우측 상단: 로그 뷰어 위젯 (logging_service 주입)
+        log_viewer_logger = (self.logger.get_component_logger("LogViewerWidget")
+                            if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.log_viewer_widget = LogViewerWidget(logging_service=log_viewer_logger)
         self.log_viewer_widget.setMinimumHeight(200)  # 최소 높이 보장
 
-        # 우측 하단: 콘솔 뷰어 위젯
-        self.console_viewer_widget = ConsoleViewerWidget()
+        # 우측 하단: 콘솔 뷰어 위젯 (logging_service 주입)
+        console_viewer_logger = (self.logger.get_component_logger("ConsoleViewerWidget")
+                               if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.console_viewer_widget = ConsoleViewerWidget(logging_service=console_viewer_logger)
         self.console_viewer_widget.setMinimumHeight(150)  # 최소 높이 보장
 
         # 우측 스플리터에 위젯 추가 (상단:하단 = 2:1)

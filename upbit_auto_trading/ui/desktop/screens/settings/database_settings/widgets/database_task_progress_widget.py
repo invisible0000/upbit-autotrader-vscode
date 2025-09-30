@@ -24,13 +24,17 @@ class DatabaseTaskProgressWidget(QWidget):
     # 작업 완료 시그널
     task_completed = pyqtSignal(bool)  # success
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-task-progress")
 
-        # 로깅 초기화
-        # Application Layer 로깅 서비스 사용 (폴백: None)
-        self.logger = None
+        # 로깅 초기화 (DI 패턴)
+        if logging_service:
+            self.logger = logging_service.get_component_logger("DatabaseTaskProgressWidget")
+        else:
+            # 폴백: 기본 로거 생성 (오류 방지)
+            from upbit_auto_trading.infrastructure.logging import create_component_logger
+            self.logger = create_component_logger("DatabaseTaskProgressWidget")
 
         # 내부 상태
         self._current_task = ""

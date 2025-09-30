@@ -135,8 +135,10 @@ class DatabaseSettingsView(QWidget):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # 상태 위젯 - 내부 라벨 중복 제거됨
-        self.status_widget = DatabaseStatusWidget(self)
+        # 상태 위젯 - logging_service 주입하여 생성
+        status_logger = (self.logger.get_component_logger("DatabaseStatusWidget")
+                        if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.status_widget = DatabaseStatusWidget(self, logging_service=status_logger)
         self.status_widget.status_clicked.connect(self._on_status_clicked)
         layout.addWidget(self.status_widget)
 
@@ -149,8 +151,10 @@ class DatabaseSettingsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(6)
 
-        # 백업 관리 위젯 - 내부 라벨 중복 제거됨
-        self.backup_widget = DatabaseBackupWidget(self)
+        # 백업 관리 위젯 - logging_service 주입하여 생성
+        backup_logger = (self.logger.get_component_logger("DatabaseBackupWidget")
+                        if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.backup_widget = DatabaseBackupWidget(self, logging_service=backup_logger)
         self.backup_widget.create_backup_requested.connect(self._on_backup_requested)
         self.backup_widget.restore_backup_requested.connect(self._on_restore_requested)
         self.backup_widget.delete_backup_requested.connect(self._on_delete_backup_requested)
@@ -177,9 +181,11 @@ class DatabaseSettingsView(QWidget):
         grid_layout.addWidget(group, row, col)
 
     def _create_progress_section_grid(self, grid_layout, row, col):
-        """작업 진행 상황 (우측 하단) - 새로운 전용 위젯 사용"""
-        # 새로운 작업 진행 상황 위젯 생성
-        self.progress_widget = DatabaseTaskProgressWidget()
+        """작업 진행 상황 (우측 하단) - logging_service 주입하여 생성"""
+        # 새로운 작업 진행 상황 위젯 생성 (logging_service 주입)
+        progress_logger = (self.logger.get_component_logger("DatabaseTaskProgressWidget")
+                          if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.progress_widget = DatabaseTaskProgressWidget(logging_service=progress_logger)
 
         # 그리드에 추가
         grid_layout.addWidget(self.progress_widget, row, col)
