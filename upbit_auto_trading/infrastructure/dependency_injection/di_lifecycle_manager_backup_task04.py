@@ -7,7 +7,6 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from upbit_auto_trading.application.application_service_container import ApplicationServiceContainer
-    from upbit_auto_trading.presentation.presentation_container import PresentationContainer
 
 from upbit_auto_trading.infrastructure.dependency_injection.external_dependency_container import (
     ExternalDependencyContainer,
@@ -46,35 +45,39 @@ class DILifecycleManager:
         """
         self._external_container: Optional[ExternalDependencyContainer] = external_container
         self._application_container: Optional['ApplicationServiceContainer'] = None
-        self._presentation_container: Optional['PresentationContainer'] = None
         self._is_initialized = False
         logger.debug("DILifecycleManager 생성 - DI 컨테이너 생명주기 관리 모드")
 
     def initialize(self) -> None:
         """
-        3-Container DI 시스템 초기화
+        DI 시스템 초기화
 
-        확장된 3-Container 초기화 프로세스:
-        1. External Dependency Container 준비 (Infrastructure Layer)
-        2. Application Service Container 생성 (Business Logic Layer)
-        3. Presentation Container 생성 (UI Layer)
-        4. Container 간 의존성 주입 설정
-        5. 통합 Wiring 설정
-        6. 전체 시스템 검증 완료
+        단순화된 초기화 프로세스:
+        1. External Dependency Container 준비
+        2. Wiring 설정
+        3. Application Service Container 생성
+        4. 검증 완료
         """
         if self._is_initialized:
             logger.debug("DILifecycleManager가 이미 초기화되었습니다")
             return
 
         try:
-            # 1. External Dependency Container 준비 (Infrastructure Layer)
+            # 1. External Dependency Container 준비
             if self._external_container is None:
                 self._external_container = create_external_dependency_container()
-                logger.info("🏗️ ExternalDependencyContainer 생성 완료 (Infrastructure Layer)")
+                logger.info("🏗️ 새 ExternalDependencyContainer 생성 완료")
             else:
-                logger.info("🏗️ 기존 ExternalDependencyContainer 사용 (Infrastructure Layer)")
+                logger.info("🏗️ 기존 ExternalDependencyContainer 사용")
 
-            # 2. Application Service Container 생성 (Business Logic Layer)
+            # 2. Wiring 설정
+            wire_external_dependency_modules(self._external_container)
+
+            # 3. 등록 상태 검증
+            if not validate_external_dependency_container(self._external_container):
+                raise RuntimeError("External Dependency Container 등록 검증 실패")
+
+            # 4. Application Service Container 생성
             repository_container = self._external_container.repository_container()
 
             from upbit_auto_trading.application.application_service_container import ApplicationServiceContainer
@@ -82,27 +85,10 @@ class DILifecycleManager:
 
             self._application_container = ApplicationServiceContainer(repository_container)
             set_application_container(self._application_container)
-            logger.info("✅ ApplicationServiceContainer 생성 완료 (Business Logic Layer)")
-
-            # 3. Presentation Container 생성 (UI Layer)
-            from upbit_auto_trading.presentation.presentation_container import create_presentation_container
-
-            self._presentation_container = create_presentation_container(
-                external_container=self._external_container,
-                application_container=self._application_container
-            )
-            logger.info("✅ PresentationContainer 생성 완료 (UI Layer)")
-
-            # 4. Container 간 의존성 주입 검증
-            if not validate_external_dependency_container(self._external_container):
-                raise RuntimeError("External Dependency Container 등록 검증 실패")
-
-            # 5. 통합 Wiring 설정
-            wire_external_dependency_modules(self._external_container)
-            self._wire_presentation_modules()
+            logger.info("✅ ApplicationServiceContainer 연동 완료")
 
             self._is_initialized = True
-            logger.info("🎉 3-Container DI 시스템 초기화 완료 - 모든 계층 활성화")
+            logger.info("✅ DILifecycleManager 초기화 완료 - DI 시스템 활성화")
 
         except Exception as e:
             logger.error(f"❌ DILifecycleManager 초기화 실패: {e}")
@@ -136,20 +122,6 @@ class DILifecycleManager:
         if not self._is_initialized or not self._application_container:
             raise RuntimeError("DILifecycleManager가 초기화되지 않았습니다")
         return self._application_container
-
-    def get_presentation_container(self) -> 'PresentationContainer':
-        """
-        Presentation Container 조회
-
-        Returns:
-            PresentationContainer: 현재 관리 중인 프레젠테이션 컨테이너
-
-        Raises:
-            RuntimeError: 초기화되지 않은 경우
-        """
-        if not self._is_initialized or not self._presentation_container:
-            raise RuntimeError("DILifecycleManager가 초기화되지 않았습니다")
-        return self._presentation_container
 
     @property
     def is_initialized(self) -> bool:
@@ -205,38 +177,9 @@ class DILifecycleManager:
         except Exception as e:
             logger.error(f"❌ DILifecycleManager 종료 중 오류: {e}")
 
-    def _wire_presentation_modules(self) -> None:
-        """
-        Presentation Container Wiring 설정
-
-        UI Layer 모듈들의 @inject 데코레이터 활성화
-        """
-        if not self._presentation_container:
-            raise RuntimeError("PresentationContainer가 초기화되지 않았습니다")
-
-        try:
-            # Presentation Layer 모듈들 Wiring
-            presentation_modules = [
-                'upbit_auto_trading.presentation.presenters',
-                'upbit_auto_trading.ui.desktop.views',
-                'upbit_auto_trading.ui.desktop.common.widgets'
-            ]
-
-            self._presentation_container.wire(modules=presentation_modules)
-            logger.info("✅ Presentation Container Wiring 설정 완료")
-
-        except Exception as e:
-            logger.warning(f"⚠️ Presentation Container Wiring 설정 중 오류: {e}")
-
     def _cleanup(self) -> None:
-        """내부 리소스 정리 (3-Container 시스템)"""
+        """내부 리소스 정리"""
         try:
-            # Presentation Container 정리
-            if self._presentation_container:
-                self._presentation_container.unwire()
-                self._presentation_container = None
-                logger.debug("🧹 PresentationContainer 정리 완료")
-
             # Application Service Container 정리
             if self._application_container:
                 self._application_container.clear_cache()
@@ -246,7 +189,7 @@ class DILifecycleManager:
             # External Dependency Container 정리 (dependency-injector가 자동 처리)
             self._external_container = None
             self._is_initialized = False
-            logger.debug("🧹 3-Container DI 시스템 리소스 정리 완료")
+            logger.debug("🧹 DI 시스템 리소스 정리 완료")
 
         except Exception as e:
             logger.warning(f"⚠️ 리소스 정리 중 오류: {e}")
@@ -272,25 +215,6 @@ class DILifecycleManager:
         except Exception as e:
             logger.error(f"❌ 서비스 조회 실패 ({service_name}): {e}")
             raise
-
-    def get_main_window_presenter(self):
-        """
-        MainWindow Presenter 조회 (run_desktop_ui.py에서 사용)
-
-        Returns:
-            MainWindowPresenter: MVP 패턴의 MainWindow Presenter 인스턴스
-
-        Raises:
-            RuntimeError: 3-Container 시스템이 초기화되지 않은 경우
-        """
-        if not self._is_initialized or not self._presentation_container:
-            raise RuntimeError("3-Container DI 시스템이 초기화되지 않았습니다")
-
-        try:
-            return self._presentation_container.main_window_presenter()
-        except Exception as e:
-            logger.error(f"❌ MainWindow Presenter 조회 실패: {e}")
-            raise RuntimeError(f"MainWindow Presenter 조회 실패: {e}") from e
 
     def resolve(self, service_type):
         """

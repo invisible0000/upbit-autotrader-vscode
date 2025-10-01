@@ -5,12 +5,9 @@ MVP 패턴의 Presenter들과 View들의 의존성을 관리하고
 Application Service Container와 연동하여 완전한 MVP 구조를 제공합니다.
 """
 
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any
 
-from upbit_auto_trading.application.application_service_container import ApplicationServiceContainer
-
-if TYPE_CHECKING:
-    from upbit_auto_trading.presentation.presentation_container import PresentationContainer
+from upbit_auto_trading.application.container import ApplicationServiceContainer
 from upbit_auto_trading.presentation.presenters import (
     StrategyMakerPresenter,
     TriggerBuilderPresenter,
@@ -21,10 +18,7 @@ from upbit_auto_trading.presentation.presenters import (
 # Smart Logging v3.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
-logger = create_component_logger("MVPContainer")
-
 # TODO: LiveTradingPresenter 구현 후 추가
-
 
 class MVPContainer:
     """MVP 패턴 구성 요소들의 의존성 주입 컨테이너
@@ -33,46 +27,15 @@ class MVPContainer:
     Application Service Container와 연동하여 완전한 MVP 구조를 제공합니다.
     """
 
-    def __init__(
-        self,
-        application_container: ApplicationServiceContainer,
-        presentation_container: Optional['PresentationContainer'] = None
-    ):
-        """MVP 컨테이너 초기화 (3-Container 시스템 지원)
+    def __init__(self, application_container: ApplicationServiceContainer):
+        """MVP 컨테이너 초기화
 
         Args:
-            application_container: Application Service 컨테이너 (Business Logic Layer)
-            presentation_container: Presentation 컨테이너 (UI Layer, 선택적)
+            application_container: Application Service 컨테이너
         """
         self._app_container = application_container
-        self._presentation_container = presentation_container
         self._presenters: Dict[str, Any] = {}
         self._views: Dict[str, Any] = {}
-
-    def get_application_container(self) -> ApplicationServiceContainer:
-        """Application Service Container 접근
-
-        Returns:
-            ApplicationServiceContainer: Business Logic Layer 컨테이너
-        """
-        return self._app_container
-
-    def get_presentation_container(self) -> Optional['PresentationContainer']:
-        """Presentation Container 접근
-
-        Returns:
-            Optional[PresentationContainer]: UI Layer 컨테이너 (있는 경우)
-        """
-        return self._presentation_container
-
-    def set_presentation_container(self, presentation_container: 'PresentationContainer') -> None:
-        """Presentation Container 설정 (나중에 주입 가능)
-
-        Args:
-            presentation_container: UI Layer 컨테이너
-        """
-        self._presentation_container = presentation_container
-        logger.info("✅ MVP Container에 Presentation Container 연동 완료")
 
     def create_strategy_maker_presenter(self) -> StrategyMakerPresenter:
         """전략 메이커 Presenter 생성
@@ -173,6 +136,8 @@ class MVPContainer:
         """
         from upbit_auto_trading.presentation.views.strategy_maker_view import StrategyMakerView
         from upbit_auto_trading.presentation.presenters.strategy_maker_presenter import StrategyMakerPresenter
+
+        logger = create_component_logger("MVPContainer")
 
         try:
             # Strategy Service 확보
