@@ -84,17 +84,17 @@ class PresentationContainer(containers.DeclarativeContainer):
     main_window_presenter = providers.Factory(
         "upbit_auto_trading.presentation.presenters.main_window_presenter.MainWindowPresenter",
         services=providers.Dict(
-            # Infrastructure Services (ExternalDependencyContainer에서)
-            theme_service=external_container.provided.theme_service,
-            api_key_service=external_container.provided.api_key_service,
+            # Infrastructure Services - 정확한 dependency-injector 패턴
+            theme_service=external_container.provided.theme_service.provider,
+            api_key_service=external_container.provided.api_key_service.provider,
 
-            # UI Infrastructure (현재 Container에서)
+            # UI Infrastructure - 실제 인스턴스 생성
             navigation_bar=navigation_service,
             database_health_service=providers.Factory(
                 "upbit_auto_trading.application.services.database_health_service.DatabaseHealthService"
             ),
 
-            # Application UI Services (현재 Container에서 - 백업본 순서와 동일)
+            # Application UI Services - 실제 인스턴스 주입
             screen_manager_service=screen_manager_service,
             window_state_service=window_state_service,
             menu_service=menu_service

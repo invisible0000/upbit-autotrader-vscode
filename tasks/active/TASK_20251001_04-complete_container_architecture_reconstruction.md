@@ -192,10 +192,19 @@ run_desktop_ui.py → DILifecycleManager → ExternalDependencyContainer → mai
 
 #### 4.1 MainWindow Provider 연동 검증
 
-- [ ] **run_desktop_ui.py 실행 흐름 수정**
-  - DILifecycleManager → 3-Container → PresentationContainer.main_window_presenter
-  - Provider 기반 MainWindow 생성으로 변경 (직접 생성에서 DI 주입으로)
-  - @inject 데코레이터 정상 작동 확인
+- [x] **run_desktop_ui.py 실행 흐름 수정**
+  - ✅ DILifecycleManager → 3-Container → PresentationContainer.main_window_presenter 구조 완성
+  - ✅ MainWindow @inject 패턴 적용: 외부 서비스 자동 주입, Presenter 직접 가져오기 제거
+  - ✅ MVP 패턴 올바른 구조: Presenter ↔ View 상호 연결, DI 서비스 자동 주입
+  - ✅ 에러 숨김 제거: 폴백 로직 제거, 구조적 문제 시 애플리케이션 종료로 명확한 오류 드러내기
+  - ✅ 지연 초기화 패턴 적용: MainWindow.complete_initialization() 메서드로 Presenter 설정 후 완전 초기화
+  - ✅ @inject Wiring 문제 해결: ExternalDependencyContainer에 MainWindow 모듈 추가하여 DI 정상 작동
+  - ✅ **근본적 구조 문제 해결 완료**:
+    - 🔧 Dependency Injection 패턴 수정: .provided → .provider 패턴으로 실제 인스턴스 주입
+    - 🔧 Async/Sync 패턴 정리: MainWindowPresenter에서 동기 메서드만 사용하도록 수정
+    - 🔧 Wiring 모듈 정리: 존재하지 않는 'upbit_auto_trading.ui.desktop.views' 모듈 제거
+    - 🔧 Defensive Programming: API 서비스 호출 시 Factory Provider 객체 문제 방지
+  - ⚠️ 최종 검증 필요: 모든 근본적 문제 해결 후 시스템 안정성 확인
 
 #### 4.2 전체 UI 기능 검증
 

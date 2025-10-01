@@ -252,6 +252,9 @@ def wire_external_dependency_modules(container: ExternalDependencyContainer) -> 
 
             # UI Infrastructure (Theme, Style Manager)
             "upbit_auto_trading.ui.desktop.common.styles",
+
+            # UI Layer - MainWindow @inject 패턴 지원
+            "upbit_auto_trading.ui.desktop.main_window",
         ]
 
         # @inject 데코레이터 활성화를 위한 wiring

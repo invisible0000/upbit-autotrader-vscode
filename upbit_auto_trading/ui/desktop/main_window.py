@@ -112,46 +112,37 @@ class MainWindow(QMainWindow):
     애플리케이션의 메인 윈도우입니다.
     """
 
-    def __init__(self):
-        """초기화 - @inject 패턴으로 서비스 주입
+    @inject
+    def __init__(
+        self,
+        api_key_service=Provide["api_key_service"],
+        settings_service=Provide["settings_service"],
+        theme_service=Provide["theme_service"],
+        style_manager=Provide["style_manager"]
+    ):
+        """
+        MainWindow 초기화 - 3-Container MVP 패턴
 
         Args:
-            settings_service: 설정 서비스
-            theme_service: 테마 서비스
-            style_manager: 스타일 매니저
-            navigation_service: 네비게이션 서비스
-            api_key_service: API 키 서비스
+            api_key_service: API 키 서비스 (ExternalDependencyContainer)
+            settings_service: 설정 서비스 (ExternalDependencyContainer)
+            theme_service: 테마 서비스 (ExternalDependencyContainer)
+            style_manager: 스타일 매니저 (ExternalDependencyContainer)
         """
         super().__init__()
 
-        # DILifecycleManager를 통해 서비스 가져오기
-        from upbit_auto_trading.infrastructure.dependency_injection import get_di_lifecycle_manager
+        # DI로 주입받은 서비스들
+        self.api_key_service = api_key_service
+        self.settings_service = settings_service
+        self.theme_service = theme_service
+        self.style_manager = style_manager
 
-        di_manager = get_di_lifecycle_manager()
-        external_container = di_manager.get_external_container()
-
-        # 서비스들 초기화
-        self.api_key_service = external_container.api_key_service()
-        self.settings_service = external_container.settings_service()
-        self.theme_service = external_container.theme_service()
-        self.style_manager = external_container.style_manager()
-
-        # Navigation은 직접 생성
+        # Navigation Bar는 직접 생성 (UI Infrastructure)
         from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
         self.nav_bar = NavigationBar()
 
-        # Presenter는 External Container에서 가져오기 (MVP 패턴)
-        try:
-            # External Dependency Container에서 MainWindowPresenter 가져오기
-            self.presenter = external_container.main_window_presenter()
-        except AttributeError as e:
-            # Golden Rules: 에러 숨김 금지 - 명시적으로 문제 상황 알림
-            raise RuntimeError(
-                f"MainWindowPresenter Provider가 External Dependency Container에 등록되지 않았습니다. "
-                f"original error: {e}. "
-                f"External Dependency Container에 main_window_presenter Provider를 추가하거나 "
-                f"MVP 패턴 의존성을 올바르게 구성해야 합니다."
-            ) from e
+        # Presenter는 외부에서 설정됨 (MVP 패턴)
+        self.presenter = None  # run_desktop_ui.py에서 설정
 
         # IL 스마트 로깅 초기화 (먼저 초기화) - Fail-Fast 패턴
         try:
@@ -290,12 +281,14 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self._log_info("✅ StatusBar 기본 설정 완료")
 
-        # 메뉴 바 설정 (Presenter를 통한 MVP 패턴)
-        menu_dependencies = self._get_menu_dependencies()
-        self.presenter.handle_menu_setup(self, menu_dependencies)
-
-        # 저장된 창 상태 로드 (Presenter를 통한 MVP 패턴)
-        self.presenter.handle_window_state_load(self, self.settings_service)
+        # 메뉴바와 창 상태는 지연 초기화 (complete_initialization에서 처리)
+        if self.presenter:
+            menu_dependencies = self._get_menu_dependencies()
+            self.presenter.handle_menu_setup(self, menu_dependencies)
+            self.presenter.handle_window_state_load(self, self.settings_service)
+            self.logger.info("✅ Presenter 기반 초기화 완료")
+        else:
+            self.logger.info("⏳ Presenter 미설정 - 지연 초기화 대기 중")
 
     def _initialize_websocket_async(self):
         """WebSocket v6 Application Service 비동기 초기화 - QAsync TaskManager 사용"""
@@ -382,14 +375,11 @@ class MainWindow(QMainWindow):
     # Legacy 메뉴 바 설정 메서드가 제거되었습니다. MenuService에서 처리됩니다.
 
     def _add_screens(self):
-        """화면 추가 (Presenter를 통한 MVP 패턴)"""
+        """화면 추가 - 지연 초기화 패턴 (Presenter 설정 후 호출)"""
+        # Presenter가 없으면 지연 초기화 대기
         if not self.presenter:
-            # Presenter가 없으면 명시적 에러 발생 - Golden Rules: 에러 숨김 금지
-            raise RuntimeError(
-                "MainWindowPresenter가 None입니다. "
-                "External Dependency Container에 main_window_presenter Provider가 구현되지 않았거나 "
-                "MVP 패턴 의존성 주입이 실패했습니다."
-            )
+            self.logger.info("⏳ Presenter 미설정 상태 - 지연 초기화 대기 중")
+            return  # 지연 초기화: complete_initialization에서 처리
 
         success = self.presenter.handle_screen_initialization(self.stack_widget, self._screen_widgets)
         if not success:
@@ -666,6 +656,35 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_error(f"백테스팅 화면 전환 실패: {e}")
             traceback.print_exc()
+
+    def complete_initialization(self):
+        """Presenter 설정 후 완전 초기화 (지연 초기화 패턴)"""
+        if not self.presenter:
+            raise RuntimeError(
+                "complete_initialization 호출 전에 Presenter를 설정해야 합니다. "
+                "MVP 패턴 의존성 주입이 올바르게 구성되지 않았습니다."
+            )
+
+        self.logger.info("🚀 MainWindow 완전 초기화 시작 (Presenter 기반)")
+
+        # 화면 초기화 (Presenter 필수)
+        if hasattr(self, 'stack_widget') and hasattr(self, '_screen_widgets'):
+            self._add_screens()
+
+        # 메뉴바 완전 설정 (Presenter 기반)
+        menu_dependencies = self._get_menu_dependencies()
+        success = self.presenter.handle_menu_setup(self, menu_dependencies)
+        if not success:
+            self.logger.warning("⚠️ MenuService를 통한 메뉴바 설정 실패 - 기본 메뉴 사용")
+            self._create_fallback_menu()
+
+        # 창 상태 로드
+        self.presenter.handle_window_state_load(self, self.settings_service)
+
+        # 초기화 후 설정 처리 (API 연결 테스트, DB 건강 검사 등)
+        self.presenter.handle_post_initialization_setup()
+
+        self.logger.info("✅ MainWindow 완전 초기화 완료 (MVP 패턴)")
 
     # ======================================================================
     # Legacy 메서드들이 제거되었습니다.

@@ -88,12 +88,14 @@ graph TB
 #### Clean Architecture + DDD 융합
 
 **핵심 원칙**:
+
 1. **의존성 방향**: Presentation → Application → Domain ← Infrastructure
 2. **Domain 순수성**: Domain Layer는 외부 의존성 없음 (순수 비즈니스 규칙)
 3. **계층별 격리**: 각 Container가 담당 계층만 관리하여 책임 분리
 4. **통합 생명주기**: DILifecycleManager가 3-Container를 중앙 관리
 
 **3-Container 분리 이유**:
+
 - **ExternalDependencyContainer**: DB, API, 로깅 등 외부 시스템 통합 (Infrastructure)
 - **ApplicationServiceContainer**: 비즈니스 로직 조합 및 Use Case 실행 (Application)
 - **PresentationContainer**: UI 서비스 및 MVP Presenter 관리 (Presentation)
@@ -114,19 +116,19 @@ graph TB
 ```mermaid
 graph LR
     DLM[DILifecycleManager]
-    
+
     DLM -->|초기화 1| EDC[ExternalDependencyContainer<br/>Infrastructure Layer]
     DLM -->|초기화 2| ASC[ApplicationServiceContainer<br/>Business Logic Layer]
     DLM -->|초기화 3| PC[PresentationContainer<br/>UI Layer]
-    
+
     ASC -->|의존| EDC
     PC -->|의존| EDC
     PC -->|의존| ASC
-    
+
     EDC -->|제공| INFRA[DB, API, Logging, Config]
     ASC -->|제공| BIZ[Strategy, Trigger, Backtest]
     PC -->|제공| UI[MainWindow, Navigation, Theme]
-    
+
     style DLM fill:#fce4ec
     style EDC fill:#e8f5e9
     style ASC fill:#fff3e0
@@ -144,6 +146,7 @@ graph LR
 #### 담당 영역
 
 **외부 시스템 통합 전담**:
+
 - Database Connections (3-DB 분리: settings.sqlite3, strategies.sqlite3, market_data.sqlite3)
 - API Clients (Upbit Public/Private API)
 - Logging Systems (Component Logger)
@@ -212,7 +215,7 @@ class ExternalDependencyContainer(containers.DeclarativeContainer):
 ```python
 class RepositoryContainer:
     """Application Layer에서 Repository 접근을 위한 Adapter"""
-    
+
     def __init__(self, container):
         self._container = container
 
@@ -235,6 +238,7 @@ class RepositoryContainer:
 #### 담당 영역
 
 **비즈니스 로직 조합 및 Use Case 실행**:
+
 - Strategy Management (전략 생성, 수정, 검증)
 - Trigger Management (트리거 조건 구성)
 - Backtest Execution (백테스팅 실행 및 결과 분석)
@@ -312,6 +316,7 @@ class ApplicationServiceContainer:
 #### 담당 영역
 
 **UI Layer 서비스 및 MVP Presenter 관리**:
+
 - MainWindow Presenter (MVP 패턴 핵심)
 - Application UI Services (Screen, Window, Menu)
 - UI Infrastructure (Navigation, StatusBar)
@@ -391,6 +396,7 @@ class PresentationContainer(containers.DeclarativeContainer):
 ### 🎯 역할 및 책임
 
 **3-Container 생명주기 중앙 관리**:
+
 - 3-Container 초기화 순서 제어
 - Container 간 의존성 주입 설정
 - Wiring 통합 관리
@@ -407,28 +413,28 @@ sequenceDiagram
     participant PC as PresentationContainer
 
     Main->>DLM: initialize()
-    
+
     Note over DLM: 1️⃣ Infrastructure Layer
     DLM->>EDC: create_external_dependency_container()
     EDC->>EDC: config.from_yaml("config.yaml")
     EDC-->>DLM: ExternalDependencyContainer
-    
+
     Note over DLM: 2️⃣ Business Logic Layer
     DLM->>EDC: repository_container()
     EDC-->>DLM: RepositoryContainer
     DLM->>ASC: ApplicationServiceContainer(repo_container)
     ASC-->>DLM: ApplicationServiceContainer
-    
+
     Note over DLM: 3️⃣ UI Layer
     DLM->>PC: create_presentation_container(EDC, ASC)
     PC->>PC: external_container.override(EDC)
     PC->>PC: application_container.override(ASC)
     PC-->>DLM: PresentationContainer
-    
+
     Note over DLM: 4️⃣ Wiring 설정
     DLM->>EDC: wire_external_dependency_modules()
     DLM->>PC: wire_presentation_modules()
-    
+
     DLM-->>Main: ✅ 3-Container 초기화 완료
 ```
 
@@ -482,9 +488,9 @@ graph TB
     PC_MWP -->|services Dict| EDC_THEME
     PC_MWP -->|services Dict| EDC_API
     PC_SM -->|의존| ASC_SS
-    
+
     ASC_SS -->|Repository Container| EDC_DB
-    ASC_API -->|get_external_dependency_container()| EDC_API
+    ASC_API -->|"get_external_dependency_container()"| EDC_API
 
     style PC_MWP fill:#e1f5fe
     style ASC_SS fill:#fff3e0
@@ -691,16 +697,16 @@ def test_3_container_initialization():
     """3-Container 시스템 초기화 검증"""
     # Given
     di_manager = DILifecycleManager()
-    
+
     # When
     di_manager.initialize()
-    
+
     # Then
     assert di_manager.is_initialized
     assert di_manager.get_external_container() is not None
     assert di_manager.get_application_container() is not None
     assert di_manager.get_presentation_container() is not None
-    
+
     # Cleanup
     di_manager.shutdown()
 ```
@@ -712,22 +718,22 @@ def test_provider_access():
     """3-Container Provider 접근 검증"""
     di_manager = DILifecycleManager()
     di_manager.initialize()
-    
+
     # External Dependency Container
     external_container = di_manager.get_external_container()
     theme_service = external_container.theme_service()
     assert theme_service is not None
-    
+
     # Application Service Container
     app_container = di_manager.get_application_container()
     strategy_service = app_container.get_strategy_service()
     assert strategy_service is not None
-    
+
     # Presentation Container
     presentation_container = di_manager.get_presentation_container()
     main_window_presenter = presentation_container.main_window_presenter()
     assert main_window_presenter is not None
-    
+
     di_manager.shutdown()
 ```
 
@@ -738,21 +744,21 @@ def test_mvp_container_integration():
     """MVP Container와 3-Container 연동 검증"""
     di_manager = DILifecycleManager()
     di_manager.initialize()
-    
+
     app_container = di_manager.get_application_container()
     presentation_container = di_manager.get_presentation_container()
-    
+
     # MVP Container 생성
     from upbit_auto_trading.presentation.mvp_container import MVPContainer
     mvp_container = MVPContainer(
         application_container=app_container,
         presentation_container=presentation_container
     )
-    
+
     # Presenter 생성 테스트
     presenter_factory = mvp_container.create_strategy_maker_presenter()
     assert presenter_factory is not None
-    
+
     di_manager.shutdown()
 ```
 
@@ -825,7 +831,7 @@ def create_repository_container(container_instance):
     class RepositoryContainer:
         def get_new_repository(self):
             return self._container.new_repository()
-    
+
     return RepositoryContainer(container_instance)
 ```
 
@@ -980,15 +986,15 @@ from upbit_auto_trading.infrastructure.dependency_injection.di_lifecycle_manager
 with DILifecycleManager() as di_manager:
     # 2. MainWindowPresenter 조회
     main_window_presenter = di_manager.get_main_window_presenter()
-    
+
     # 3. 개별 Container 접근 (필요 시)
     external_container = di_manager.get_external_container()
     app_container = di_manager.get_application_container()
-    
+
     # 4. Service 접근
     theme_service = external_container.theme_service()
     strategy_service = app_container.get_strategy_service()
-    
+
     # 5. 자동 정리 (with 종료 시)
 ```
 

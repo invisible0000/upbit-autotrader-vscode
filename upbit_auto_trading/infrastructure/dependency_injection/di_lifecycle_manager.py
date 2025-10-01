@@ -215,11 +215,11 @@ class DILifecycleManager:
             raise RuntimeError("PresentationContainer가 초기화되지 않았습니다")
 
         try:
-            # Presentation Layer 모듈들 Wiring
+            # Presentation Layer 모듈들 Wiring - 실제 존재하는 모듈만
             presentation_modules = [
                 'upbit_auto_trading.presentation.presenters',
-                'upbit_auto_trading.ui.desktop.views',
-                'upbit_auto_trading.ui.desktop.common.widgets'
+                'upbit_auto_trading.ui.desktop.common.widgets',
+                # 'upbit_auto_trading.ui.desktop.views' 모듈은 존재하지 않으므로 제외
             ]
 
             self._presentation_container.wire(modules=presentation_modules)
