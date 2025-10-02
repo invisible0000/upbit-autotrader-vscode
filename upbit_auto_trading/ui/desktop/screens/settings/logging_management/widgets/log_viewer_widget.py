@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QTextCursor, QTextDocument
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from .log_syntax_highlighter import LogSyntaxHighlighter
 
 
@@ -29,12 +29,15 @@ class LogViewerWidget(QWidget):
     save_logs = pyqtSignal()                    # 로그 저장
     auto_scroll_changed = pyqtSignal(bool)      # 자동 스크롤 토글
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("log-viewer-widget")
         # 로깅
-        self.logger = create_component_logger("LogViewerWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LogViewerWidget")
+        else:
+            raise ValueError("LogViewerWidget에 logging_service가 주입되지 않았습니다")
         self.logger.info("📄 로그 뷰어 위젯 초기화 시작")
 
         # 내부 상태
@@ -145,7 +148,11 @@ class LogViewerWidget(QWidget):
     def _setup_syntax_highlighter(self):
         """로그 구문 강조기 설정"""
         try:
-            self.syntax_highlighter = LogSyntaxHighlighter(self.log_text_edit.document())
+            # DDD 계층 준수: Application Layer를 통한 로깅 서비스 전달
+            self.syntax_highlighter = LogSyntaxHighlighter(
+                self.log_text_edit.document(),
+                logging_service=self.logger
+            )
             self.logger.debug("✅ 로그 구문 강조기 설정 완료")
         except Exception as e:
             self.logger.error(f"❌ 로그 구문 강조기 설정 실패: {e}")

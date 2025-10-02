@@ -174,9 +174,55 @@ cd docs\architecture_review\mvp_pattern_review\settings_screen
 
 ## 🔗 관련 문서
 
+### 🔥 **NEW**: 초기화 시퀀스 리팩터링 (2025.10.02)
+
+**목적**: `run_desktop_ui.py`부터 체계적으로 정리하여 기술 부채 조기 관리
+
+#### 📘 핵심 문서 (권장 읽기 순서)
+
+1. **[의도 분석 요약](INTENT_ANALYSIS_SUMMARY.md)** ⭐ 시작점
+   - 리팩터링 배경 및 동기
+   - 3가지 핵심 논점 (초기화 순서, 책임 소재, 싱글톤 패턴)
+   - 현재 구조의 추정 문제점
+   - 소요 시간: 15분
+
+2. **[퀵 스타트 가이드](INITIALIZATION_REFACTORING_QUICK_START.md)** ⚡ 실행
+   - 즉시 실행 가능한 3가지 액션
+   - Phase별 체크리스트
+   - 테스트 전략 및 트러블슈팅
+   - 소요 시간: 20분 + 실습
+
+3. **[상세 리팩터링 계획](INITIALIZATION_SEQUENCE_REFACTORING_PLAN.md)** 📋 설계
+   - 이상적인 목표 아키텍처 (코드 예시)
+   - 5단계 실행 계획 (Task 단위)
+   - 성공 기준 및 리스크 관리
+   - 소요 시간: 40분
+
+#### 🎯 빠른 시작
+
+```powershell
+# 1. 현재 초기화 순서 검증
+$env:UPBIT_LOG_SCOPE = "verbose"
+python run_desktop_ui.py
+
+# 2. DI 컨테이너 상태 파악
+Get-ChildItem upbit_auto_trading/infrastructure/dependency_injection -Recurse
+```
+
+---
+
+### 🆕 최신 아키텍처 분석 보고서
+
+- **[컨테이너 아키텍처 전면 분석 (2025.09.30)](CONTAINER_ARCHITECTURE_ANALYSIS_20250930.md)** - 전체 DI Container 구조 분석 및 개선 방안
+
+### 📋 기존 검토 가이드
+
 - [MVP 아키텍처 검토 방법론 가이드](MVP_ARCHITECTURE_REVIEW_GUIDE.md) - 검토 방법론 및 기준
 - [MVP 패턴 검토 가이드](mvp_pattern_review/README.md) - 상세 검토 가이드라인
 - [개선 로드맵](improvement_tracking/improvement_roadmap.md) - 6개월 개선 계획
+
+### 🏗️ 아키텍처 가이드
+
 - [DDD 아키텍처 패턴 가이드](../DDD_아키텍처_패턴_가이드.md)
 - [의존성 주입 아키텍처](../DEPENDENCY_INJECTION_ARCHITECTURE.md)
 - [복잡한 시스템 테스트 가이드](../COMPLEX_SYSTEM_TESTING_GUIDE.md)

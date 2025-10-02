@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QCheckBox, QGroupBox, QFormLayout
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class WindowSettingsWidget(QWidget):
     """창 설정 위젯"""
@@ -20,17 +20,23 @@ class WindowSettingsWidget(QWidget):
     # 시그널
     settings_changed = pyqtSignal()  # 설정 변경 시그널
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화
 
         Args:
             parent: 부모 위젯
+            logging_service: 로깅 서비스 (DI)
         """
         super().__init__(parent)
         self.setObjectName("widget-window-settings")
 
-        # 로깅 설정
-        self.logger = create_component_logger("WindowSettingsWidget")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("WindowSettingsWidget")
+        else:
+            # DI 실패 시 명확한 오류 처리
+            raise ValueError("WindowSettingsWidget에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("🪟 창 설정 위젯 초기화 시작")
 
         # 내부 상태

@@ -20,10 +20,10 @@ from PyQt6.QtGui import (
     QFont, QColor
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from upbit_auto_trading.ui.desktop.common.theme_notifier import ThemeNotifier
 
-logger = create_component_logger("LogSyntaxHighlighter")
+
 
 
 class LogSyntaxHighlighter(QSyntaxHighlighter):
@@ -34,8 +34,11 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
     [TIMESTAMP] [LEVEL] [COMPONENT] MESSAGE
     """
 
-    def __init__(self, parent: Optional[QTextDocument] = None):
+    def __init__(self, parent: Optional[QTextDocument] = None, logging_service=None):
         super().__init__(parent)
+
+        # 로깅 서비스 (선택적 - DDD 계층 준수)
+        self.logger = logging_service
 
         # 테마 변경 알림 시스템 연결
         self.theme_notifier = ThemeNotifier()
@@ -50,7 +53,8 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
         # 강조 규칙 설정
         self._setup_highlighting_rules()
 
-        logger.debug("로그 구문 강조기 초기화 완료")
+        if self.logger:
+            self.logger.debug("로그 구문 강조기 초기화 완료")
 
     def _init_formats(self) -> None:
         """문자 포맷 객체들 초기화"""
@@ -134,7 +138,8 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
             self.bracket_format.setForeground(QColor("#666666"))      # 회색
             self.path_format.setForeground(QColor("#8B008B"))         # 다크 마젠타
 
-        logger.debug(f"로그 하이라이터 테마 색상 업데이트 완료 (다크: {is_dark})")
+        if self.logger:
+            self.logger.debug(f"로그 하이라이터 테마 색상 업데이트 완료 (다크: {is_dark})")
 
     def _setup_highlighting_rules(self) -> None:
         """로그 구문 강조 규칙 설정"""
@@ -263,9 +268,10 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
                 fmt = self.info_format
             self.highlighting_rules.append((pattern, fmt))
 
-        logger.debug(
-            f"로그 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙"
-        )
+        if self.logger:
+            self.logger.debug(
+                f"로그 구문 강조 규칙 설정 완료: {len(self.highlighting_rules)}개 규칙"
+            )
 
     def highlightBlock(self, text: Optional[str]) -> None:
         """
@@ -310,7 +316,8 @@ class LogSyntaxHighlighter(QSyntaxHighlighter):
         Args:
             is_dark: 다크 테마 여부
         """
-        logger.info(f"로그 하이라이터 테마 변경 감지: {'다크' if is_dark else '라이트'} 테마")
+        if self.logger:
+            self.logger.info(f"로그 하이라이터 테마 변경 감지: {'다크' if is_dark else '라이트'} 테마")
         self._update_colors_for_theme()
         self.rehighlight()  # 전체 문서 다시 강조
 

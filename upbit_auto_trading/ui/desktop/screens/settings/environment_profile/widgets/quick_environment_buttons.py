@@ -19,9 +19,9 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
-logger = create_component_logger("QuickEnvironmentButtons")
+
 
 class QuickEnvironmentButtons(QWidget):
     """
@@ -38,7 +38,7 @@ class QuickEnvironmentButtons(QWidget):
         super().__init__(parent)
         self.setObjectName("QuickEnvironmentButtons")
 
-        logger.info("🔘 퀵 환경 버튼 위젯 초기화 시작")
+        self.logger.info("🔘 퀵 환경 버튼 위젯 초기화 시작")
 
         # 상태 관리
         self._current_environment = ""
@@ -70,7 +70,7 @@ class QuickEnvironmentButtons(QWidget):
         self._setup_ui()
         self._create_environment_buttons()
 
-        logger.info("✅ 퀵 환경 버튼 위젯 초기화 완료")
+        self.logger.info("✅ 퀵 환경 버튼 위젯 초기화 완료")
 
     def _setup_ui(self) -> None:
         """UI 기본 구조 설정"""
@@ -201,7 +201,7 @@ class QuickEnvironmentButtons(QWidget):
 
     def _on_environment_selected(self, env_key: str) -> None:
         """환경 선택 이벤트 처리 - 일시적 액션으로 변경"""
-        logger.info(f"🔘 퀵 환경 액션 실행: {env_key}")
+        self.logger.info(f"🔘 퀵 환경 액션 실행: {env_key}")
 
         # 🔥 UX 개선: 버튼 일시적 강조 효과
         button = self._environment_buttons.get(env_key)
@@ -234,7 +234,7 @@ class QuickEnvironmentButtons(QWidget):
             new_config = self._environment_config[env_key]
             self._apply_button_style(new_button, new_config, is_active=True)
 
-        logger.debug(f"활성 환경 변경: {old_environment} → {env_key}")
+        self.logger.debug(f"활성 환경 변경: {old_environment} → {env_key}")
 
     def set_active_environment(self, env_key: str) -> None:
         """
@@ -245,9 +245,9 @@ class QuickEnvironmentButtons(QWidget):
         """
         if env_key in self._environment_config:
             self._update_active_environment(env_key)
-            logger.info(f"외부에서 활성 환경 설정: {env_key}")
+            self.logger.info(f"외부에서 활성 환경 설정: {env_key}")
         else:
-            logger.warning(f"알 수 없는 환경 키: {env_key}")
+            self.logger.warning(f"알 수 없는 환경 키: {env_key}")
 
     def get_active_environment(self) -> str:
         """현재 활성 환경 반환"""
@@ -267,7 +267,7 @@ class QuickEnvironmentButtons(QWidget):
                 # 비활성화된 환경이 현재 활성 환경이면 초기화
                 self._current_environment = ""
 
-            logger.debug(f"환경 버튼 상태 변경: {env_key} → {'활성' if enabled else '비활성'}")
+            self.logger.debug(f"환경 버튼 상태 변경: {env_key} → {'활성' if enabled else '비활성'}")
 
     def get_button_info(self) -> Dict[str, Any]:
         """버튼 위젯 정보 반환 (디버깅용)"""

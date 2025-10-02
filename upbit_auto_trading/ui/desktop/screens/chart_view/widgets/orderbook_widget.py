@@ -18,7 +18,7 @@ from PyQt6.QtGui import QFont, QColor
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.infrastructure.events.bus.in_memory_event_bus import InMemoryEventBus
-from upbit_auto_trading.ui.desktop.screens.chart_view.presenters.orderbook_presenter import OrderbookPresenter
+from upbit_auto_trading.presentation.presenters.chart_view.orderbook_presenter import OrderbookPresenter
 from upbit_auto_trading.infrastructure.formatters.orderbook_formatter import OrderbookFormatter
 
 

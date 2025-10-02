@@ -6,22 +6,19 @@
 
 ```
 architecture_patterns/
-├── logging/                    # 로깅 시스템 패턴
-│   ├── domain_events_logging.md
-│   ├── infrastructure_logging.md
-│   └── logging_migration_guide.md
+├── import_safety/              # Import 안전성 패턴 🆕
+│   ├── LAZY_LOADING_IMPORT_CHAIN_SAFETY.md
+│   └── README.md
+├── factory_pattern/            # Factory 패턴
+│   └── MVP_FACTORY_*.md
 ├── domain_design/              # Domain 설계 패턴
-│   ├── domain_purity_guide.md
-│   ├── repository_patterns.md
-│   └── value_objects_guide.md
-├── infrastructure/             # Infrastructure 패턴
-│   ├── dependency_injection.md
-│   ├── caching_strategies.md
-│   └── external_integrations.md
-└── ui_patterns/               # UI 아키텍처 패턴
-    ├── mvp_implementation.md
-    ├── reactive_ui_patterns.md
-    └── theme_management.md
+│   └── repository_pattern_implementation.md
+├── logging/                    # 로깅 시스템 패턴
+│   └── (기존 로깅 관련 파일들)
+└── (기타 패턴 파일들)
+    ├── MVP_ASSEMBLY_GUIDE.md
+    ├── SERVICE_DEPENDENCY_INJECTION_GUIDE.md
+    └── GUIDE_DDD레이어별설계패턴.md
 ```
 
 ## 🎯 문서화 원칙

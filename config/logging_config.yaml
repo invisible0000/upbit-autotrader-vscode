@@ -1,5 +1,5 @@
 logging:
-  level: DEBUG
+  level: INFO
   console_output: 'true'
   scope: debug_all
   component_focus: ''
@@ -15,4 +15,4 @@ logging:
 runtime:
   watch_config_file: true
   notify_on_change: true
-  last_modified: '2025-08-13T19:59:43.242468'
+  last_modified: '2025-09-30T20:19:16.312364'

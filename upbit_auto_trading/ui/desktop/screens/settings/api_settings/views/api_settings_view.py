@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QMessageBox)
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
+from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
 from ..widgets.api_credentials_widget import ApiCredentialsWidget
 from ..widgets.api_connection_widget import ApiConnectionWidget
 from ..widgets.api_permissions_widget import ApiPermissionsWidget
@@ -31,35 +32,43 @@ class ApiSettingsView(QWidget):
     settings_changed = pyqtSignal()
     api_status_changed = pyqtSignal(bool)
 
-    def __init__(self, parent=None, api_key_service=None):
+    def __init__(self, parent=None, api_key_service=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-api-settings-view")
 
-        self.logger = create_component_logger("ApiSettingsView")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiSettingsView")
+        else:
+            raise ValueError("ApiSettingsView에 logging_service가 주입되지 않았습니다")
 
         # Presenter는 외부에서 주입받도록 설계 (MVP 패턴)
         self.presenter = None
 
-        # 위젯들 생성
-        self.credentials_widget = ApiCredentialsWidget(self)
-        self.connection_widget = ApiConnectionWidget(self)
-        self.permissions_widget = ApiPermissionsWidget(self)
+        # 위젯들 생성 (로깅 서비스 전달)
+        # DI 패턴: 동일한 logging_service를 모든 위젯에 전달
+
+        self.credentials_widget = ApiCredentialsWidget(self, logging_service=logging_service)
+        self.connection_widget = ApiConnectionWidget(self, logging_service=logging_service)
+        self.permissions_widget = ApiPermissionsWidget(self, logging_service=logging_service)
 
         self._setup_ui()
         self._connect_signals()
 
-        self.logger.info("✅ API 설정 뷰 초기화 완료")
+        if self.logger:
+            self.logger.info("✅ API 설정 뷰 초기화 완료")
 
         # Presenter 초기화는 외부에서 set_presenter() 호출로 처리
 
     def set_presenter(self, presenter):
         """Presenter 설정 (MVP 패턴)"""
-        from ..presenters.api_settings_presenter import ApiSettingsPresenter
+        from upbit_auto_trading.presentation.presenters.settings.api_settings_presenter import ApiSettingsPresenter
         if not isinstance(presenter, ApiSettingsPresenter):
             raise TypeError("ApiSettingsPresenter 타입이어야 합니다")
 
         self.presenter = presenter
-        self.logger.info("✅ API 설정 Presenter 연결 완료")
+        if self.logger:
+            self.logger.info("✅ API 설정 Presenter 연결 완료")
 
         # 초기 설정 로드
         self._load_initial_settings()
@@ -128,7 +137,8 @@ class ApiSettingsView(QWidget):
 
             # 📌 저장된 키가 있으면 자동으로 연결 상태 확인
             if settings.get('has_saved_keys', False):
-                self.logger.info("💡 저장된 API 키 발견 - 자동 연결 상태 확인 시작")
+                if self.logger:
+                    self.logger.info("💡 저장된 API 키 발견 - 자동 연결 상태 확인 시작")
                 try:
                     # 조용한 모드로 연결 테스트 수행
                     test_success, test_message = self.presenter.test_api_connection(silent=True)
@@ -137,24 +147,29 @@ class ApiSettingsView(QWidget):
                     if test_success:
                         # 로그용으로 줄바꿈 문자 제거
                         log_message = test_message.replace('\n', ' ').replace('  ', ' ')
-                        self.logger.info(f"✅ 초기 연결 상태 확인 성공: {log_message}")
+                        if self.logger:
+                            self.logger.info(f"✅ 초기 연결 상태 확인 성공: {log_message}")
                     else:
                         # 로그용으로 줄바꿈 문자 제거
                         log_message = test_message.replace('\n', ' ').replace('  ', ' ')
-                        self.logger.warning(f"⚠️ 초기 연결 상태 확인 실패: {log_message}")
+                        if self.logger:
+                            self.logger.warning(f"⚠️ 초기 연결 상태 확인 실패: {log_message}")
 
                 except Exception as e:
-                    self.logger.warning(f"⚠️ 초기 연결 상태 확인 중 오류: {e}")
+                    if self.logger:
+                        self.logger.warning(f"⚠️ 초기 연결 상태 확인 중 오류: {e}")
                     # 연결 테스트 실패해도 설정 로드는 계속 진행
                     self.connection_widget.update_connection_status(False, "연결 상태를 확인할 수 없습니다")
             else:
                 # 저장된 키가 없으면 미연결 상태로 표시
                 self.connection_widget.clear_status()
 
-            self.logger.debug("초기 설정 로드 완료")
+            if self.logger:
+                self.logger.debug("초기 설정 로드 완료")
 
         except Exception as e:
-            self.logger.error(f"초기 설정 로드 실패: {e}")
+            if self.logger:
+                self.logger.error(f"초기 설정 로드 실패: {e}")
             self.show_error_message("설정 로드 오류", f"설정을 불러오는 중 오류가 발생했습니다: {str(e)}")
 
     def _on_input_changed(self, field_name: str, value: str):
@@ -225,7 +240,8 @@ class ApiSettingsView(QWidget):
                     self.show_error_message("저장 실패", message)
 
         except Exception as e:
-            self.logger.error(f"저장 중 오류: {e}")
+            if self.logger:
+                self.logger.error(f"저장 중 오류: {e}")
             self.show_error_message("저장 오류", f"저장 중 오류가 발생했습니다: {str(e)}")
 
     def _on_delete_clicked(self):
@@ -258,7 +274,8 @@ class ApiSettingsView(QWidget):
                     self.show_error_message("삭제 실패", message)
 
         except Exception as e:
-            self.logger.error(f"삭제 중 오류: {e}")
+            if self.logger:
+                self.logger.error(f"삭제 중 오류: {e}")
             self.show_error_message("삭제 오류", f"삭제 중 오류가 발생했습니다: {str(e)}")
 
     def _update_button_states(self):
@@ -278,7 +295,8 @@ class ApiSettingsView(QWidget):
             self.connection_widget.set_test_button_tooltip(self.presenter.get_test_button_tooltip())
 
         except Exception as e:
-            self.logger.warning(f"버튼 상태 업데이트 실패: {e}")
+            if self.logger:
+                self.logger.warning(f"버튼 상태 업데이트 실패: {e}")
 
     def show_info_message(self, title: str, message: str):
         """정보 메시지 표시"""

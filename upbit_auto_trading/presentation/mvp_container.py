@@ -5,9 +5,12 @@ MVP 패턴의 Presenter들과 View들의 의존성을 관리하고
 Application Service Container와 연동하여 완전한 MVP 구조를 제공합니다.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from upbit_auto_trading.application.container import ApplicationServiceContainer
+from upbit_auto_trading.application.application_service_container import ApplicationServiceContainer
+
+if TYPE_CHECKING:
+    from upbit_auto_trading.presentation.presentation_container import PresentationContainer
 from upbit_auto_trading.presentation.presenters import (
     StrategyMakerPresenter,
     TriggerBuilderPresenter,
@@ -18,7 +21,10 @@ from upbit_auto_trading.presentation.presenters import (
 # Smart Logging v3.0
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 
+logger = create_component_logger("MVPContainer")
+
 # TODO: LiveTradingPresenter 구현 후 추가
+
 
 class MVPContainer:
     """MVP 패턴 구성 요소들의 의존성 주입 컨테이너
@@ -27,15 +33,46 @@ class MVPContainer:
     Application Service Container와 연동하여 완전한 MVP 구조를 제공합니다.
     """
 
-    def __init__(self, application_container: ApplicationServiceContainer):
-        """MVP 컨테이너 초기화
+    def __init__(
+        self,
+        application_container: ApplicationServiceContainer,
+        presentation_container: Optional['PresentationContainer'] = None
+    ):
+        """MVP 컨테이너 초기화 (3-Container 시스템 지원)
 
         Args:
-            application_container: Application Service 컨테이너
+            application_container: Application Service 컨테이너 (Business Logic Layer)
+            presentation_container: Presentation 컨테이너 (UI Layer, 선택적)
         """
         self._app_container = application_container
+        self._presentation_container = presentation_container
         self._presenters: Dict[str, Any] = {}
         self._views: Dict[str, Any] = {}
+
+    def get_application_container(self) -> ApplicationServiceContainer:
+        """Application Service Container 접근
+
+        Returns:
+            ApplicationServiceContainer: Business Logic Layer 컨테이너
+        """
+        return self._app_container
+
+    def get_presentation_container(self) -> Optional['PresentationContainer']:
+        """Presentation Container 접근
+
+        Returns:
+            Optional[PresentationContainer]: UI Layer 컨테이너 (있는 경우)
+        """
+        return self._presentation_container
+
+    def set_presentation_container(self, presentation_container: 'PresentationContainer') -> None:
+        """Presentation Container 설정 (나중에 주입 가능)
+
+        Args:
+            presentation_container: UI Layer 컨테이너
+        """
+        self._presentation_container = presentation_container
+        logger.info("✅ MVP Container에 Presentation Container 연동 완료")
 
     def create_strategy_maker_presenter(self) -> StrategyMakerPresenter:
         """전략 메이커 Presenter 생성
@@ -137,8 +174,6 @@ class MVPContainer:
         from upbit_auto_trading.presentation.views.strategy_maker_view import StrategyMakerView
         from upbit_auto_trading.presentation.presenters.strategy_maker_presenter import StrategyMakerPresenter
 
-        logger = create_component_logger("MVPContainer")
-
         try:
             # Strategy Service 확보
             strategy_service = self._app_container.get_strategy_service()
@@ -174,14 +209,18 @@ class MVPContainer:
             logger.error(f"❌ Strategy Maker MVP 생성 실패: {e}")
             raise RuntimeError(f"Strategy Maker MVP 생성 중 오류 발생: {e}") from e
 
-    def create_settings_mvp(self, settings_service=None, parent=None):
+    def create_settings_mvp(self, settings_service=None, application_logging_service=None,
+                            parent=None, api_key_service=None, settings_factory=None):
         """설정 MVP 조합 생성
 
         Presenter와 View를 연결한 완전한 Settings MVP 구조를 반환합니다.
 
         Args:
-            settings_service: 외부에서 주입된 SettingsService (옵션)
-            parent: 부모 위젯 (DI Container 접근을 위해 필요)
+            settings_service: 외부에서 주입된 SettingsService
+            application_logging_service: Application Layer 로깅 서비스
+            parent: 부모 위젯
+            api_key_service: API 키 관리 서비스
+            settings_factory: Settings View Factory
 
         Returns:
             tuple: (view, presenter) 튜플 - view가 MainWindow에서 사용될 QWidget
@@ -189,19 +228,29 @@ class MVPContainer:
         from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
         from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
 
-        # Settings Service 사용 (외부에서 주입받거나 직접 생성)
+        # 필수 의존성만 확인 (api_key_service는 선택적)
         if settings_service is None:
-            # 폴백: Infrastructure Layer에서 직접 생성
-            try:
-                from upbit_auto_trading.infrastructure.services.settings_service import SettingsService
-                from upbit_auto_trading.infrastructure.config.config_loader import ConfigLoader
-                config_loader = ConfigLoader()
-                settings_service = SettingsService(config_loader)
-            except Exception:
-                settings_service = None
+            raise ValueError("SettingsService가 주입되지 않았습니다")
+        if application_logging_service is None:
+            raise ValueError("ApplicationLoggingService가 주입되지 않았습니다")
+        if settings_factory is None:
+            raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-        # View 생성 (QWidget) - parent 파라미터 전달
-        settings_view = SettingsScreen(settings_service=settings_service, parent=parent)
+        # api_key_service는 선택적 - None이어도 기본 기능은 동작
+        if api_key_service is None:
+            application_logging_service.get_component_logger("MVPContainer").warning(
+                "⚠️ ApiKeyService가 없습니다. API 키 관련 기능이 비활성화됩니다."
+            )
+
+        # View 생성 (모든 필요한 의존성과 함께)
+        settings_view = SettingsScreen(
+            settings_service=settings_service,
+            logging_service=application_logging_service,
+            api_key_service=api_key_service,
+            settings_factory=settings_factory,
+            mvp_container=self,  # MVP Container도 전달
+            parent=parent
+        )
 
         # Presenter 생성 (View와 연결)
         settings_presenter = SettingsPresenter(
@@ -216,8 +265,10 @@ class MVPContainer:
         self._presenters.clear()
         self._views.clear()
 
+
 # 전역 MVP 컨테이너 인스턴스 (필요 시 사용)
 _global_mvp_container: Optional[MVPContainer] = None
+
 
 def get_mvp_container() -> Optional[MVPContainer]:
     """전역 MVP Container 조회
@@ -227,6 +278,7 @@ def get_mvp_container() -> Optional[MVPContainer]:
     """
     return _global_mvp_container
 
+
 def set_mvp_container(container: MVPContainer) -> None:
     """전역 MVP Container 설정
 
@@ -235,6 +287,7 @@ def set_mvp_container(container: MVPContainer) -> None:
     """
     global _global_mvp_container
     _global_mvp_container = container
+
 
 def initialize_mvp_system(application_container: ApplicationServiceContainer) -> MVPContainer:
     """MVP 시스템 초기화

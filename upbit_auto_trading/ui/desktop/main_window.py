@@ -115,31 +115,34 @@ class MainWindow(QMainWindow):
     @inject
     def __init__(
         self,
+        api_key_service=Provide["api_key_service"],
         settings_service=Provide["settings_service"],
         theme_service=Provide["theme_service"],
-        style_manager=Provide["style_manager"],
-        navigation_service=Provide["navigation_service"],
-        api_key_service=Provide["api_key_service"],
-        main_window_presenter=Provide["main_window_presenter"]
+        style_manager=Provide["style_manager"]
     ):
-        """초기화 - @inject 패턴으로 서비스 주입
+        """
+        MainWindow 초기화 - 3-Container MVP 패턴
 
         Args:
-            settings_service: 설정 서비스
-            theme_service: 테마 서비스
-            style_manager: 스타일 매니저
-            navigation_service: 네비게이션 서비스
-            api_key_service: API 키 서비스
+            api_key_service: API 키 서비스 (ExternalDependencyContainer)
+            settings_service: 설정 서비스 (ExternalDependencyContainer)
+            theme_service: 테마 서비스 (ExternalDependencyContainer)
+            style_manager: 스타일 매니저 (ExternalDependencyContainer)
         """
         super().__init__()
 
-        # 주입받은 서비스들 저장
+        # DI로 주입받은 서비스들
         self.api_key_service = api_key_service
         self.settings_service = settings_service
         self.theme_service = theme_service
         self.style_manager = style_manager
-        self.nav_bar = navigation_service
-        self.presenter = main_window_presenter
+
+        # Navigation Bar는 직접 생성 (UI Infrastructure)
+        from upbit_auto_trading.ui.desktop.common.widgets.navigation_bar import NavigationBar
+        self.nav_bar = NavigationBar()
+
+        # Presenter는 외부에서 설정됨 (MVP 패턴)
+        self.presenter = None  # run_desktop_ui.py에서 설정
 
         # IL 스마트 로깅 초기화 (먼저 초기화) - Fail-Fast 패턴
         try:
@@ -190,11 +193,11 @@ class MainWindow(QMainWindow):
         # Application Service들은 Presenter를 통해 처리 (MVP 패턴)
 
         # MainWindowPresenter 연결 - MVP 패턴 핵심
-        if not self.presenter:
-            raise RuntimeError("MainWindowPresenter 주입 실패: MVP 패턴 핵심 의존성")
-
-        self._setup_presenter_connections()
-        self._log_info("✅ MVP 패턴 Presenter 연결 완료")
+        if self.presenter:
+            self._setup_presenter_connections()
+            self._log_info("✅ MVP 패턴 Presenter 연결 완료")
+        else:
+            self._log_info("⚠️ MainWindowPresenter 없이 동작 (단순화 모드)")
 
         # UI 설정
         self._setup_ui()
@@ -278,12 +281,14 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         self._log_info("✅ StatusBar 기본 설정 완료")
 
-        # 메뉴 바 설정 (Presenter를 통한 MVP 패턴)
-        menu_dependencies = self._get_menu_dependencies()
-        self.presenter.handle_menu_setup(self, menu_dependencies)
-
-        # 저장된 창 상태 로드 (Presenter를 통한 MVP 패턴)
-        self.presenter.handle_window_state_load(self, self.settings_service)
+        # 메뉴바와 창 상태는 지연 초기화 (complete_initialization에서 처리)
+        if self.presenter:
+            menu_dependencies = self._get_menu_dependencies()
+            self.presenter.handle_menu_setup(self, menu_dependencies)
+            self.presenter.handle_window_state_load(self, self.settings_service)
+            self.logger.info("✅ Presenter 기반 초기화 완료")
+        else:
+            self.logger.info("⏳ Presenter 미설정 - 지연 초기화 대기 중")
 
     def _initialize_websocket_async(self):
         """WebSocket v6 Application Service 비동기 초기화 - QAsync TaskManager 사용"""
@@ -370,7 +375,12 @@ class MainWindow(QMainWindow):
     # Legacy 메뉴 바 설정 메서드가 제거되었습니다. MenuService에서 처리됩니다.
 
     def _add_screens(self):
-        """화면 추가 (Presenter를 통한 MVP 패턴)"""
+        """화면 추가 - 지연 초기화 패턴 (Presenter 설정 후 호출)"""
+        # Presenter가 없으면 지연 초기화 대기
+        if not self.presenter:
+            self.logger.info("⏳ Presenter 미설정 상태 - 지연 초기화 대기 중")
+            return  # 지연 초기화: complete_initialization에서 처리
+
         success = self.presenter.handle_screen_initialization(self.stack_widget, self._screen_widgets)
         if not success:
             # 폴백: 대시보드 화면만 간단히 추가
@@ -404,8 +414,27 @@ class MainWindow(QMainWindow):
 
     def _prepare_screen_dependencies(self):
         """화면 의존성 준비 (@inject 패턴 사용으로 mvp_container 제거됨)"""
+        # Application Logging Service 준비 (Phase 6 기능 테스트를 위해 추가)
+        try:
+            from upbit_auto_trading.infrastructure.dependency_injection import get_external_dependency_container
+            external_container = get_external_dependency_container()
+            application_logging_service = external_container.application_logging_service()
+        except Exception:
+            # 폴백: 직접 생성
+            from upbit_auto_trading.application.services.logging_application_service import ApplicationLoggingService
+            application_logging_service = ApplicationLoggingService()
+
+        # MVP Container 준비
+        try:
+            from upbit_auto_trading.presentation.mvp_container import get_mvp_container
+            mvp_container = get_mvp_container()
+        except Exception:
+            mvp_container = None
+
         return {
             'settings_service': self.settings_service,
+            'application_logging_service': application_logging_service,
+            'mvp_container': mvp_container,
             'parent': self,
             'backtest_callback': self._on_backtest_requested,
             'settings_changed_callback': self._on_settings_changed_from_screen,
@@ -418,6 +447,8 @@ class MainWindow(QMainWindow):
         return {
             'change_screen_callback': self._change_screen,
             'toggle_theme_callback': self._toggle_theme_via_service,
+            'reset_window_size_callback': self._reset_window_size_via_presenter,
+            'reset_window_size_medium_callback': self._reset_window_size_medium_via_presenter,
             'theme_service': self.theme_service,
             'style_manager': self.style_manager,
             'nav_bar': self.nav_bar
@@ -492,12 +523,29 @@ class MainWindow(QMainWindow):
             self._log_error(f"❌ 에러 메시지 표시 실패: {e}")
 
     def _toggle_theme_via_service(self):
-        """MenuService를 통한 테마 전환"""
-        self.menu_service.toggle_theme(
-            self.theme_service,
-            self.style_manager,
-            self.nav_bar
-        )
+        """MenuService를 통한 테마 전환 - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_theme_toggle(
+                self.theme_service,
+                self.style_manager,
+                self.nav_bar
+            )
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
+
+    def _reset_window_size_via_presenter(self):
+        """창크기 초기화 - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_reset_window_size(self)
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
+
+    def _reset_window_size_medium_via_presenter(self):
+        """창크기 초기화(중간) - MVP 패턴으로 Presenter를 통해 처리"""
+        if hasattr(self, 'presenter') and self.presenter:
+            self.presenter.handle_reset_window_size_medium(self)
+        else:
+            self._log_error("MainWindowPresenter가 초기화되지 않음")
 
     def _load_screen_lazy(self, screen_name):
         """지연 로딩으로 화면 생성 - 간단한 플레이스홀더로 대체"""
@@ -608,6 +656,35 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_error(f"백테스팅 화면 전환 실패: {e}")
             traceback.print_exc()
+
+    def complete_initialization(self):
+        """Presenter 설정 후 완전 초기화 (지연 초기화 패턴)"""
+        if not self.presenter:
+            raise RuntimeError(
+                "complete_initialization 호출 전에 Presenter를 설정해야 합니다. "
+                "MVP 패턴 의존성 주입이 올바르게 구성되지 않았습니다."
+            )
+
+        self.logger.info("🚀 MainWindow 완전 초기화 시작 (Presenter 기반)")
+
+        # 화면 초기화 (Presenter 필수)
+        if hasattr(self, 'stack_widget') and hasattr(self, '_screen_widgets'):
+            self._add_screens()
+
+        # 메뉴바 완전 설정 (Presenter 기반)
+        menu_dependencies = self._get_menu_dependencies()
+        success = self.presenter.handle_menu_setup(self, menu_dependencies)
+        if not success:
+            self.logger.warning("⚠️ MenuService를 통한 메뉴바 설정 실패 - 기본 메뉴 사용")
+            self._create_fallback_menu()
+
+        # 창 상태 로드
+        self.presenter.handle_window_state_load(self, self.settings_service)
+
+        # 초기화 후 설정 처리 (API 연결 테스트, DB 건강 검사 등)
+        self.presenter.handle_post_initialization_setup()
+
+        self.logger.info("✅ MainWindow 완전 초기화 완료 (MVP 패턴)")
 
     # ======================================================================
     # Legacy 메서드들이 제거되었습니다.

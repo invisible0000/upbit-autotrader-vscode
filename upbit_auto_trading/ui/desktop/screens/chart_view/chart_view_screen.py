@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 
 from upbit_auto_trading.infrastructure.logging import create_component_logger
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.dynamic_splitter import DynamicSplitter
-from upbit_auto_trading.ui.desktop.screens.chart_view.presenters.window_lifecycle_presenter import WindowLifecyclePresenter
+from upbit_auto_trading.presentation.presenters.chart_view.window_lifecycle_presenter import WindowLifecyclePresenter
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.coin_list_widget import CoinListWidget
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.orderbook_widget import OrderbookWidget
 from upbit_auto_trading.ui.desktop.screens.chart_view.widgets.finplot_candlestick_widget import FinplotCandlestickWidget

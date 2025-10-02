@@ -32,13 +32,21 @@ except ImportError:
     BacktestApplicationService = None
 
 try:
-    from .container import ApplicationServiceContainer
+    from .application_service_container import (
+        ApplicationServiceContainer,
+        get_application_container,
+        set_application_container
+    )
 except ImportError:
     ApplicationServiceContainer = None
+    get_application_container = None
+    set_application_container = None
 
 __all__ = [
     'StrategyApplicationService',
     'TriggerApplicationService',
     'BacktestApplicationService',
-    'ApplicationServiceContainer'
+    'ApplicationServiceContainer',
+    'get_application_container',
+    'set_application_container'
 ]

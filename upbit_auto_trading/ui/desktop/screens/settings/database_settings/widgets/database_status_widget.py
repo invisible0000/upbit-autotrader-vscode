@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
 
 class DatabaseStatusWidget(QWidget):
     """
@@ -34,10 +34,17 @@ class DatabaseStatusWidget(QWidget):
     # 재연결 요청 시그널
     refresh_requested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-status")
-        self._logger = create_component_logger("DatabaseStatusWidget")
+
+        # Application Layer 로깅 서비스 사용 (DI 패턴)
+        if logging_service:
+            self._logger = logging_service.get_component_logger("DatabaseStatusWidget")
+        else:
+            # 폴백: 기본 로거 생성 (오류 방지)
+            from upbit_auto_trading.infrastructure.logging import create_component_logger
+            self._logger = create_component_logger("DatabaseStatusWidget")
 
         self._database_labels = {}
         self._status_data = {}
@@ -225,7 +232,8 @@ class DatabaseProgressWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("widget-database-progress")
-        self._logger = create_component_logger("DatabaseProgressWidget")
+        # Application Layer 로깅 서비스 사용 (폴백: None)
+        self._logger = None
 
         self._setup_ui()
         self.setVisible(False)  # 기본적으로 숨김

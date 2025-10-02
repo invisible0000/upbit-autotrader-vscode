@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QPushButton, QDialogButtonBox
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 try:
     from .component_data_scanner import ComponentDataScanner, get_real_component_data, get_real_component_data_hierarchical
@@ -29,11 +29,14 @@ class ComponentSelectorDialog(QDialog):
 
     component_selected = pyqtSignal(str, str)  # (display_name, module_path)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
 
         # 로깅
-        self.logger = create_component_logger("ComponentSelectorDialog")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ComponentSelectorDialog")
+        else:
+            raise ValueError("ComponentSelectorDialog에 logging_service가 주입되지 않았습니다")
 
         # 다이얼로그 설정
         self.setWindowTitle("🧩 컴포넌트 선택기")

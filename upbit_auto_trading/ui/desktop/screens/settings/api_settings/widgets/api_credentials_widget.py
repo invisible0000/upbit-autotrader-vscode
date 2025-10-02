@@ -13,7 +13,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLineEdit,
                              QCheckBox, QGroupBox)
 from PyQt6.QtCore import pyqtSignal, Qt
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
+from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
 
 class ApiCredentialsWidget(QWidget):
     """
@@ -27,11 +28,21 @@ class ApiCredentialsWidget(QWidget):
     credentials_changed = pyqtSignal(str, str)  # access_key, secret_key
     input_changed = pyqtSignal(str, str)  # field_name, value
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service: IPresentationLogger = None):
+        """API 자격증명 위젯 초기화
+
+        Args:
+            parent: 부모 위젯
+            logging_service: Application Layer 로깅 서비스
+        """
         super().__init__(parent)
         self.setObjectName("widget-api-credentials")
 
-        self.logger = create_component_logger("ApiCredentialsWidget")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiCredentialsWidget")
+        else:
+            raise ValueError("ApiCredentialsWidget에 logging_service가 주입되지 않았습니다")
 
         # 상태 관리
         self._is_editing_mode = False

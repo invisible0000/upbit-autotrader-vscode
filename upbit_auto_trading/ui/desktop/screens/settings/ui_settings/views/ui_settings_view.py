@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 )
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from ..widgets import (
     ThemeSelectorWidget, WindowSettingsWidget,
     AnimationSettingsWidget, ChartSettingsWidget
@@ -26,18 +26,25 @@ class UISettingsView(QWidget):
     apply_requested = pyqtSignal()  # 설정 적용 요청
     reset_requested = pyqtSignal()  # 기본값 복원 요청
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화
 
         Args:
             parent: 부모 위젯
+            logging_service: Application Layer 로깅 서비스
         """
         super().__init__(parent)
         self.setObjectName("widget-ui-settings-view")
 
-        # 로깅 설정
-        self.logger = create_component_logger("UISettingsView")
+        # Application Layer 로깅 서비스 초기화 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("UISettingsView")
+        else:
+            # DI 실패 시 명확한 오류 처리
+            raise ValueError("UISettingsView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("🎨 UI 설정 View 초기화 시작")
+        self._logging_service = logging_service  # 하위 위젯들에 전달용 저장
 
         # Presenter 참조
         self._presenter = None
@@ -55,7 +62,8 @@ class UISettingsView(QWidget):
         # UI 설정
         self._setup_ui()
 
-        self.logger.info("✅ UI 설정 View 초기화 완료")
+        if self.logger:
+            self.logger.info("✅ UI 설정 View 초기화 완료")
 
     def _setup_ui(self):
         """UI 설정"""
@@ -64,10 +72,11 @@ class UISettingsView(QWidget):
         main_layout.setSpacing(15)
 
         # 각 설정 위젯들 생성
-        self.theme_widget = ThemeSelectorWidget()
-        self.window_widget = WindowSettingsWidget()
-        self.animation_widget = AnimationSettingsWidget()
-        self.chart_widget = ChartSettingsWidget()
+        # DI 패턴으로 하위 위젯들 생성 - logging_service 전달
+        self.theme_widget = ThemeSelectorWidget(logging_service=self._logging_service)
+        self.window_widget = WindowSettingsWidget(logging_service=self._logging_service)
+        self.animation_widget = AnimationSettingsWidget(logging_service=self._logging_service)
+        self.chart_widget = ChartSettingsWidget(logging_service=self._logging_service)
 
         # 위젯들을 레이아웃에 추가
         main_layout.addWidget(self.theme_widget)

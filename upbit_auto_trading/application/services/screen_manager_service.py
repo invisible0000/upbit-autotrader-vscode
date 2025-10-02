@@ -33,8 +33,9 @@ class IScreenManagerService(ABC):
 class ScreenManagerService(IScreenManagerService):
     """화면 관리 서비스 구현"""
 
-    def __init__(self):
+    def __init__(self, application_container=None):
         self._logger = create_component_logger("ScreenManagerService")
+        self._application_container = application_container
         self._screen_mapping = {
             "dashboard": "대시보드",
             "chart_view": "차트 뷰",
@@ -184,47 +185,69 @@ class ScreenManagerService(IScreenManagerService):
             return None
 
     def _load_settings_screen(self, dependencies: Dict[str, Any]) -> Optional[QWidget]:
-        """설정 화면 로딩 (MVP 패턴 적용)"""
+        """설정 화면 로딩 (ApplicationContainer 기반 DI 적용)"""
         try:
-            mvp_container = dependencies.get('mvp_container')
-            settings_service = dependencies.get('settings_service')
             parent = dependencies.get('parent')
 
-            # MVP 패턴 적용 (TASK-13: Settings MVP 구현)
-            if mvp_container:
+            if self._application_container:
+                # ApplicationContainer를 통해 모든 서비스와 Factory 가져오기
                 try:
-                    # MVP Container를 통해 Settings Presenter와 View 생성
+                    # MVP Container 생성 및 구성
+                    mvp_container = self._create_mvp_container()
+
+                    # ApplicationContainer에서 필요한 서비스들 가져오기
+                    settings_service = self._application_container.get_settings_application_service()
+                    logging_service = self._application_container.get_logging_service()
+
+                    # ApplicationContainer에서 추가 서비스들 가져오기
+                    api_key_service = self._application_container.get_api_key_service()
+                    settings_factory = self._application_container.get_settings_view_factory()
+
+                    # MVP Container를 통해 Settings Presenter와 View 생성 (모든 의존성 전달)
                     settings_view, settings_presenter = mvp_container.create_settings_mvp(
                         settings_service=settings_service,
-                        parent=parent
+                        application_logging_service=logging_service,
+                        parent=parent,
+                        api_key_service=api_key_service,
+                        settings_factory=settings_factory
                     )
                     screen = settings_view  # View가 실제 QWidget
 
                     # Presenter 초기 설정 로드
                     settings_presenter.load_initial_settings()
 
-                    self._logger.info("✅ Settings MVP 패턴 생성 완료")
+                    self._logger.info("✅ Settings ApplicationContainer 기반 MVP 생성 완료")
+                    return screen
 
                 except Exception as e:
-                    self._logger.error(f"❌ Settings MVP 생성 실패: {e}")
-                    # 폴백: 기존 방식
-                    from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                    screen = SettingsScreen(settings_service=settings_service, parent=parent)
-                    self._logger.warning("⚠️ Settings 기존 방식으로 폴백")
-            else:
-                # MVP Container가 없으면 기존 방식
-                from upbit_auto_trading.ui.desktop.screens.settings.settings_screen import SettingsScreen
-                screen = SettingsScreen(settings_service=settings_service, parent=parent)
-                self._logger.info("SettingsScreen에 SettingsService 주입 완료 (기존 방식)")
+                    self._logger.error(f"❌ ApplicationContainer 기반 Settings 생성 실패: {e}")
+                    # 폴백으로 직접 생성
+                    pass
 
-            # 시그널 연결
+            # ApplicationContainer가 없으면 명확한 오류 발생
+            raise ValueError("ApplicationContainer가 주입되지 않아 Settings 화면을 생성할 수 없습니다")            # 시그널 연결
             self._connect_settings_signals(screen, dependencies)
 
             return screen
 
         except Exception as e:
-            self._logger.error(f"설정 화면 로딩 실패: {e}")
+            self._logger.error(f"설정 화면 로딩 완전 실패: {e}")
             return None
+
+    def _create_mvp_container(self):
+        """MVP Container 생성"""
+        try:
+            from upbit_auto_trading.presentation.mvp_container import MVPContainer
+
+            # ApplicationServiceContainer를 그대로 전달 (MVP Container 생성자 시그니처에 맞춤)
+            mvp_container = MVPContainer(application_container=self._application_container)
+
+            self._logger.info("✅ MVP Container 생성 완료")
+            return mvp_container
+
+        except Exception as e:
+            self._logger.error(f"❌ MVP Container 생성 실패: {e}")
+            raise
 
     def _connect_settings_signals(self, screen: QWidget, dependencies: Dict[str, Any]) -> None:
         """설정 화면 시그널 연결"""

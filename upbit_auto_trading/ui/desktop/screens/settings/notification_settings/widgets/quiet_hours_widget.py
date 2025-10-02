@@ -15,19 +15,22 @@ from PyQt6.QtWidgets import (
 )
 
 # Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 class QuietHoursWidget(QWidget):
     """방해 금지 시간 설정 위젯"""
 
     settings_changed = pyqtSignal(dict)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-quiet-hours")
 
-        self.logger = create_component_logger("QuietHoursWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("QuietHoursWidget")
+        else:
+            raise ValueError("QuietHoursWidget에 logging_service가 주입되지 않았습니다")
         self.logger.debug("🔇 QuietHoursWidget 초기화")
 
         self._setup_ui()

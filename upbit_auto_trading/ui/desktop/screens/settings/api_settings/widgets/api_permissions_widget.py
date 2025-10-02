@@ -11,7 +11,8 @@ Phase 2 마이그레이션으로 생성됨:
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QCheckBox, QGroupBox)
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
+from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
 
 class ApiPermissionsWidget(QWidget):
     """
@@ -23,11 +24,21 @@ class ApiPermissionsWidget(QWidget):
     # 시그널 정의
     permissions_changed = pyqtSignal(bool)  # trade_permission
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service: IPresentationLogger = None):
+        """API 권한 위젯 초기화
+
+        Args:
+            parent: 부모 위젯
+            logging_service: Application Layer 로깅 서비스
+        """
         super().__init__(parent)
         self.setObjectName("widget-api-permissions")
 
-        self.logger = create_component_logger("ApiPermissionsWidget")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ApiPermissionsWidget")
+        else:
+            raise ValueError("ApiPermissionsWidget에 logging_service가 주입되지 않았습니다")
 
         self._setup_ui()
         self._connect_signals()

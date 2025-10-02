@@ -1,0 +1,16 @@
+{
+    "architecture": {
+        "forbidden_import": 100,
+        "print_usage": 15
+    },
+    "db": {
+        "missing_in_db": 70,
+        "drift": 45,
+        "extra_in_db": 10
+    },
+    "docs": {
+        "authoritative_expired": 55,
+        "authoritative_missing_owner": 30,
+        "missing_front_matter": 25
+    }
+}

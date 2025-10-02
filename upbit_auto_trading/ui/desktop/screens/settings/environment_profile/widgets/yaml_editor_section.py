@@ -19,9 +19,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal, QTimer, QObject, Qt, QRect
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QTextDocument, QPainter, QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
-logger = create_component_logger("YamlEditorSection")
+
 
 class LineNumberArea(QWidget):
     """라인 넘버 표시 위젯"""
@@ -42,8 +42,8 @@ class CodeEditorWithLineNumbers(QPlainTextEdit):
     def __init__(self):
         super().__init__()
 
-        logger.warning("🚫 YAML 편집기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
-        logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        self.logger.warning("🚫 YAML 편집기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
+        self.logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         self.line_number_area = LineNumberArea(self)
 
@@ -310,7 +310,7 @@ class YamlEditorSection(QWidget):
         self._setup_ui()
         self._connect_signals()
 
-        logger.info("🚀 고성능 YAML 편집기 초기화 완료")
+        self.logger.info("🚀 고성능 YAML 편집기 초기화 완료")
 
     def _setup_ui(self):
         """UI 구성 요소 설정"""
@@ -476,7 +476,7 @@ class YamlEditorSection(QWidget):
         self.font_size_label.setText(str(self._font_size))
         # 현재 편집기 스타일 다시 적용
         self._apply_editor_style()
-        logger.debug(f"📏 폰트 크기 변경: {self._font_size}pt")
+        self.logger.debug(f"📏 폰트 크기 변경: {self._font_size}pt")
 
     def _connect_signals(self):
         """시그널 연결 - Qt 모범 사례 적용"""
@@ -504,16 +504,16 @@ class YamlEditorSection(QWidget):
     def _on_content_processed(self, content: str):
         """디바운싱된 컨텐츠 처리"""
         if content != self._original_content:
-            logger.debug(f"📝 내용 변경됨 ({len(content)} 문자)")
+            self.logger.debug(f"📝 내용 변경됨 ({len(content)} 문자)")
             self.content_changed.emit(content)
 
     def _on_validation_completed(self, success: bool, message: str, line_no: int):
         """YAML 검증 완료"""
         if success:
-            logger.debug("✅ YAML 검증 성공")
+            self.logger.debug("✅ YAML 검증 성공")
             self.validation_success.emit()
         else:
-            logger.warning(f"❌ YAML 검증 실패: {message} (line {line_no})")
+            self.logger.warning(f"❌ YAML 검증 실패: {message} (line {line_no})")
             self.validation_error.emit(message, line_no)
 
     def _on_edit_mode_requested(self):
@@ -534,11 +534,11 @@ class YamlEditorSection(QWidget):
     def _on_save_requested(self):
         """저장 요청"""
         if not self._current_filename:
-            logger.warning("저장할 파일명이 없습니다")
+            self.logger.warning("저장할 파일명이 없습니다")
             return
 
         current_content = self.text_editor.toPlainText()
-        logger.info(f"💾 저장 요청: {self._current_filename}")
+        self.logger.info(f"💾 저장 요청: {self._current_filename}")
         self.save_requested.emit(current_content, self._current_filename)
 
     def set_content(self, content: str, filename: str = ""):
@@ -561,7 +561,7 @@ class YamlEditorSection(QWidget):
                 self.title_label.setText("YAML 편집기")
 
             self._update_ui_state()
-            logger.info(f"📄 컨텐츠 로드 완료: {filename} ({len(content)} 문자)")
+            self.logger.info(f"📄 컨텐츠 로드 완료: {filename} ({len(content)} 문자)")
 
         finally:
             self._programmatic_change = False
@@ -581,7 +581,7 @@ class YamlEditorSection(QWidget):
         self._update_ui_state()
 
         mode_name = "편집" if enabled else "읽기"
-        logger.info(f"🎯 {mode_name} 모드 활성화 (구문 강조 유지)")
+        self.logger.info(f"🎯 {mode_name} 모드 활성화 (구문 강조 유지)")
 
     def _apply_editor_style(self) -> None:
         """편집기 스타일 적용 - 폰트 크기와 모드에 따른 일관된 스타일"""
@@ -690,7 +690,7 @@ class YamlEditorSection(QWidget):
             content: YAML 내용
         """
         self.set_content(content, filename)
-        logger.info(f"📄 파일 로드 완료: {filename} ({len(content)} 문자)")
+        self.logger.info(f"📄 파일 로드 완료: {filename} ({len(content)} 문자)")
 
     def set_current_profile(self, profile_name: str):
         """
@@ -699,4 +699,4 @@ class YamlEditorSection(QWidget):
         """
         built_in_profiles = ["development", "production", "testing"]
         self.set_built_in_profile(profile_name in built_in_profiles)
-        logger.debug(f"🔒 프로파일 설정: {profile_name} (빌트인: {profile_name in built_in_profiles})")
+        self.logger.debug(f"🔒 프로파일 설정: {profile_name} (빌트인: {profile_name in built_in_profiles})")

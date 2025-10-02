@@ -7,6 +7,7 @@
 ### 📂 **1. Core Management**
 
 #### `__init__(self, secure_keys_repository: SecureKeysRepository)`
+
 ```python
 def __init__(self, secure_keys_repository: SecureKeysRepository):
     """ApiKeyService Infrastructure Layer 초기화
@@ -25,6 +26,7 @@ def __init__(self, secure_keys_repository: SecureKeysRepository):
 ```
 
 #### `save_api_keys(self, access_key: str, secret_key: str, trade_permission: bool = False) -> bool`
+
 ```python
 def save_api_keys(self, access_key: str, secret_key: str, trade_permission: bool = False) -> bool:
     """API 키 암호화 저장 (기본 버전)
@@ -56,6 +58,7 @@ def save_api_keys(self, access_key: str, secret_key: str, trade_permission: bool
 ```
 
 #### `load_api_keys(self) -> Tuple[Optional[str], Optional[str], bool]`
+
 ```python
 def load_api_keys(self) -> Tuple[Optional[str], Optional[str], bool]:
     """API 키 복호화 로드
@@ -78,6 +81,7 @@ def load_api_keys(self) -> Tuple[Optional[str], Optional[str], bool]:
 ```
 
 #### `has_valid_keys(self) -> bool`
+
 ```python
 def has_valid_keys(self) -> bool:
     """유효한 API 키 존재 여부 확인
@@ -97,6 +101,7 @@ def has_valid_keys(self) -> bool:
 ```
 
 #### `get_secret_key_mask_length(self) -> int`
+
 ```python
 def get_secret_key_mask_length(self) -> int:
     """저장된 Secret Key의 마스킹 길이 반환
@@ -119,6 +124,7 @@ def get_secret_key_mask_length(self) -> int:
 ### 📂 **2. Enhanced Management (Task 1.3/1.4)**
 
 #### `delete_api_keys_smart(self, confirm_deletion_callback=None) -> str`
+
 ```python
 def delete_api_keys_smart(self, confirm_deletion_callback=None) -> str:
     """상황별 스마트 삭제 (Task 1.3)
@@ -151,6 +157,7 @@ def delete_api_keys_smart(self, confirm_deletion_callback=None) -> str:
 ```
 
 #### `save_api_keys_clean(self, access_key: str, secret_key: str, confirm_deletion_callback=None) -> tuple[bool, str]`
+
 ```python
 def save_api_keys_clean(self, access_key: str, secret_key: str, confirm_deletion_callback=None) -> tuple[bool, str]:
     """깔끔한 재생성: 기존 삭제 후 새로 저장 (Task 1.4)
@@ -189,6 +196,7 @@ def save_api_keys_clean(self, access_key: str, secret_key: str, confirm_deletion
 ### 📂 **3. TTL Caching System (Task 2.3)**
 
 #### `get_cached_api_instance(self) -> Optional[UpbitClient]`
+
 ```python
 def get_cached_api_instance(self) -> Optional[UpbitClient]:
     """TTL 기반 캐시된 API 인스턴스 반환
@@ -218,6 +226,7 @@ def get_cached_api_instance(self) -> Optional[UpbitClient]:
 ```
 
 #### `cache_api_instance(self) -> Optional[UpbitClient]`
+
 ```python
 def cache_api_instance(self) -> Optional[UpbitClient]:
     """현재 API 키로 새 인스턴스 생성 및 캐싱
@@ -252,6 +261,7 @@ def cache_api_instance(self) -> Optional[UpbitClient]:
 ```
 
 #### `get_or_create_api_instance(self) -> Optional[UpbitClient]`
+
 ```python
 def get_or_create_api_instance(self) -> Optional[UpbitClient]:
     """캐시 확인 → 있으면 반환, 없으면 생성 (권장 메서드)
@@ -282,6 +292,7 @@ def get_or_create_api_instance(self) -> Optional[UpbitClient]:
 ```
 
 #### `invalidate_api_cache(self) -> None`
+
 ```python
 def invalidate_api_cache(self) -> None:
     """API 캐시 수동 무효화
@@ -308,6 +319,7 @@ def invalidate_api_cache(self) -> None:
 ```
 
 #### `clear_cache(self) -> None`
+
 ```python
 def clear_cache(self) -> None:
     """캐시 완전 정리 (테스트/디버깅용)
@@ -327,6 +339,7 @@ def clear_cache(self) -> None:
 ```
 
 #### `get_cache_status(self) -> dict`
+
 ```python
 def get_cache_status(self) -> dict:
     """캐시 상태 정보 반환 (디버깅/모니터링용)
@@ -360,6 +373,7 @@ def get_cache_status(self) -> dict:
 ## 🔒 Private Methods Summary
 
 ### **Database Operations (Repository Pattern)**
+
 ```python
 _save_encryption_key_to_db(self, key_data: bytes) -> bool
 _load_encryption_key_from_db(self) -> Optional[bytes]
@@ -368,6 +382,7 @@ _encryption_key_exists_in_db(self) -> bool
 ```
 
 ### **Smart Deletion Support (Task 1.3)**
+
 ```python
 _get_deletion_message(self) -> tuple[str, str]
 _get_save_confirmation_message(self) -> tuple[str, str]
@@ -378,16 +393,19 @@ _has_any_existing_credentials(self) -> bool
 ```
 
 ### **Clean Save Support (Task 1.4)**
+
 ```python
 _create_and_save_new_credentials(self, access_key: str, secret_key: str) -> tuple[bool, str]
 ```
 
 ### **Cache Validation (Task 2.3)**
+
 ```python
 _is_cache_valid(self) -> bool
 ```
 
 ### **Legacy Support**
+
 ```python
 _try_load_existing_encryption_key(self)     # 스텁
 _create_new_encryption_key(self)            # 스텁
@@ -399,6 +417,7 @@ _setup_encryption_key(self)                 # 파일 기반
 ## 🚨 Exception Hierarchy
 
 ### **Custom Exceptions**
+
 ```python
 # Infrastructure Layer Exceptions
 class ApiKeyError(Exception): pass
@@ -412,6 +431,7 @@ class ValidationError(Exception): pass
 ```
 
 ### **Standard Exceptions**
+
 ```python
 ValueError          # 빈 키, 잘못된 입력
 FileNotFoundError   # 자격증명 파일 없음
@@ -424,6 +444,7 @@ CryptographyError   # 복호화 실패
 ## 🔧 Type Hints Reference
 
 ### **Imports**
+
 ```python
 from typing import Optional, Tuple, Dict, Any, Callable
 from upbit_auto_trading.infrastructure.external_apis.upbit import UpbitClient
@@ -431,6 +452,7 @@ from upbit_auto_trading.infrastructure.repositories.secure_keys_repository impor
 ```
 
 ### **Callback Types**
+
 ```python
 ConfirmationCallback = Callable[[str, str], bool]
 # 매개변수: (message: str, details: str)
@@ -438,6 +460,7 @@ ConfirmationCallback = Callable[[str, str], bool]
 ```
 
 ### **Return Types**
+
 ```python
 ApiKeyTuple = Tuple[Optional[str], Optional[str], bool]
 SaveResult = tuple[bool, str]
@@ -449,12 +472,14 @@ CacheStatus = Dict[str, Any]
 ## 📋 Method Dependencies
 
 ### **External Dependencies**
+
 - `upbit_auto_trading.infrastructure.external_apis.upbit.UpbitClient`
 - `upbit_auto_trading.infrastructure.repositories.secure_keys_repository.SecureKeysRepository`
 - `upbit_auto_trading.infrastructure.logging.create_component_logger`
 - `cryptography.fernet.Fernet`
 
 ### **Internal Dependencies**
+
 ```
 Public Methods → Private Methods:
 ├── save_api_keys_clean() → _execute_deletion(), _create_and_save_new_credentials()

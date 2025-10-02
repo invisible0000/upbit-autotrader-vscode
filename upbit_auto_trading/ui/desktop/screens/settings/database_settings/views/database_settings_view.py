@@ -13,12 +13,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import pyqtSignal
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
-from ..presenters.database_settings_presenter import DatabaseSettingsPresenter
+# Application Layer - Infrastructure 의존성 격리
 from ..widgets.database_status_widget import DatabaseStatusWidget
 from ..widgets.database_backup_widget import DatabaseBackupWidget
 from ..widgets.database_path_selector import DatabasePathSelector
 from ..widgets.database_task_progress_widget import DatabaseTaskProgressWidget
+
 
 class DatabaseSettingsView(QWidget):
     """
@@ -32,30 +32,44 @@ class DatabaseSettingsView(QWidget):
     settings_changed = pyqtSignal()
     db_status_changed = pyqtSignal(bool)  # 연결 상태 변화
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("widget-database-settings")
 
-        # 로깅 초기화
-        self.logger = create_component_logger("DatabaseSettingsView")
+        # 로깅 초기화 - DI 패턴
+        if logging_service:
+            self.logger = logging_service.get_component_logger("DatabaseSettingsView")
+        else:
+            raise ValueError("DatabaseSettingsView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("📊 데이터베이스 설정 화면 (MVP) 초기화 시작")
 
-        # UI 설정 (Presenter 생성 전에)
+        # UI 설정
         self._setup_ui()
 
-        # Presenter 초기화
-        self.presenter = DatabaseSettingsPresenter(self)
+        # Presenter는 Factory에서 설정됨
+        self.presenter = None
+
+        self.logger.info("✅ 데이터베이스 설정 화면 (MVP) 초기화 완료")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Database 설정 Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
 
         # 시그널 연결
         self._connect_signals()
 
         # 초기 데이터 로드 (Presenter를 통해)
-        self.presenter.load_database_info()
+        if self.presenter:
+            self.presenter.load_database_info()
 
         # 백업 목록도 초기 로드
         self._on_refresh_backups()
-
-        self.logger.info("✅ 데이터베이스 설정 화면 (MVP) 초기화 완료")
 
     def _setup_ui(self):
         """UI 구성 - 2x2 그리드 레이아웃 (좌3:1우 비율)"""
@@ -121,8 +135,10 @@ class DatabaseSettingsView(QWidget):
         layout = QVBoxLayout(group)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        # 상태 위젯 - 내부 라벨 중복 제거됨
-        self.status_widget = DatabaseStatusWidget(self)
+        # 상태 위젯 - logging_service 주입하여 생성
+        status_logger = (self.logger.get_component_logger("DatabaseStatusWidget")
+                        if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.status_widget = DatabaseStatusWidget(self, logging_service=status_logger)
         self.status_widget.status_clicked.connect(self._on_status_clicked)
         layout.addWidget(self.status_widget)
 
@@ -135,8 +151,10 @@ class DatabaseSettingsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(6)
 
-        # 백업 관리 위젯 - 내부 라벨 중복 제거됨
-        self.backup_widget = DatabaseBackupWidget(self)
+        # 백업 관리 위젯 - logging_service 주입하여 생성
+        backup_logger = (self.logger.get_component_logger("DatabaseBackupWidget")
+                        if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.backup_widget = DatabaseBackupWidget(self, logging_service=backup_logger)
         self.backup_widget.create_backup_requested.connect(self._on_backup_requested)
         self.backup_widget.restore_backup_requested.connect(self._on_restore_requested)
         self.backup_widget.delete_backup_requested.connect(self._on_delete_backup_requested)
@@ -163,9 +181,11 @@ class DatabaseSettingsView(QWidget):
         grid_layout.addWidget(group, row, col)
 
     def _create_progress_section_grid(self, grid_layout, row, col):
-        """작업 진행 상황 (우측 하단) - 새로운 전용 위젯 사용"""
-        # 새로운 작업 진행 상황 위젯 생성
-        self.progress_widget = DatabaseTaskProgressWidget()
+        """작업 진행 상황 (우측 하단) - logging_service 주입하여 생성"""
+        # 새로운 작업 진행 상황 위젯 생성 (logging_service 주입)
+        progress_logger = (self.logger.get_component_logger("DatabaseTaskProgressWidget")
+                          if hasattr(self.logger, 'get_component_logger') else self.logger)
+        self.progress_widget = DatabaseTaskProgressWidget(logging_service=progress_logger)
 
         # 그리드에 추가
         grid_layout.addWidget(self.progress_widget, row, col)

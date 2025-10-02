@@ -10,7 +10,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 
 # Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 # Widgets
 from ..widgets.alert_types_widget import AlertTypesWidget
@@ -18,8 +18,8 @@ from ..widgets.notification_methods_widget import NotificationMethodsWidget
 from ..widgets.notification_frequency_widget import NotificationFrequencyWidget
 from ..widgets.quiet_hours_widget import QuietHoursWidget
 
-# Presenter
-from ..presenters.notification_settings_presenter import NotificationSettingsPresenter
+# Presenter는 Factory에서 주입됨
+
 
 class NotificationSettingsView(QWidget):
     """알림 설정 View - MVP 패턴 Presentation Layer"""
@@ -27,39 +27,65 @@ class NotificationSettingsView(QWidget):
     # 외부 시그널
     settings_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("widget-notification-settings")
 
-        # Infrastructure Layer Enhanced Logging v4.0
-        self.logger = create_component_logger("NotificationSettingsView")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("NotificationSettingsView")
+        else:
+            raise ValueError("NotificationSettingsView에 logging_service가 주입되지 않았습니다")
+
         self.logger.info("🔔 NotificationSettingsView 초기화 시작")
 
-        # Presenter 생성 (MVP 패턴)
-        self.presenter = NotificationSettingsPresenter()
+        # Presenter는 Factory에서 설정됨
+        self.presenter = None
 
         # 위젯 초기화
         self._init_widgets()
         self._setup_ui()
-        self._connect_signals()
-
-        # 초기 데이터 로드
-        self.presenter.load_settings()
 
         self._report_to_infrastructure()
         self.logger.info("✅ NotificationSettingsView 초기화 완료")
+
+    def set_presenter(self, presenter):
+        """Presenter 설정 및 연결
+
+        Args:
+            presenter: Notification 설정 Presenter 인스턴스
+        """
+        self.presenter = presenter
+        self.logger.info("🔗 Presenter 연결됨")
+
+        # 시그널 연결
+        self._connect_signals()
+
+        # 초기 데이터 로드
+        if self.presenter:
+            self.presenter.load_settings()
 
     def _report_to_infrastructure(self):
         """Infrastructure Layer 상태 보고 (레거시 briefing 시스템 제거됨)"""
         self.logger.debug("알림 설정 View 상태 보고 완료")
 
     def _init_widgets(self):
-        """위젯 초기화"""
-        self.alert_types_widget = AlertTypesWidget()
-        self.notification_methods_widget = NotificationMethodsWidget()
-        self.notification_frequency_widget = NotificationFrequencyWidget()
-        self.quiet_hours_widget = QuietHoursWidget()
+        """위젯 초기화 (모든 위젯에 logging_service 주입)"""
+        # 각 위젯별로 고유한 logger 생성하여 주입
+        alert_logger = (self.logger.get_component_logger("AlertTypesWidget")
+                       if hasattr(self.logger, 'get_component_logger') else self.logger)
+        methods_logger = (self.logger.get_component_logger("NotificationMethodsWidget")
+                         if hasattr(self.logger, 'get_component_logger') else self.logger)
+        frequency_logger = (self.logger.get_component_logger("NotificationFrequencyWidget")
+                           if hasattr(self.logger, 'get_component_logger') else self.logger)
+        quiet_hours_logger = (self.logger.get_component_logger("QuietHoursWidget")
+                             if hasattr(self.logger, 'get_component_logger') else self.logger)
+
+        self.alert_types_widget = AlertTypesWidget(logging_service=alert_logger)
+        self.notification_methods_widget = NotificationMethodsWidget(logging_service=methods_logger)
+        self.notification_frequency_widget = NotificationFrequencyWidget(logging_service=frequency_logger)
+        self.quiet_hours_widget = QuietHoursWidget(logging_service=quiet_hours_logger)
 
         self.logger.debug("🎛️ 알림 설정 위젯들 초기화 완료")
 

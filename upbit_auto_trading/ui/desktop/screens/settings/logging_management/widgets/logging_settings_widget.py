@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 
 # 컴포넌트 선택 다이얼로그 (안전한 import)
 try:
@@ -47,13 +47,16 @@ class LoggingSettingsWidget(QWidget):
     settings_changed_signal = pyqtSignal(bool)  # 변경사항 있음/없음
     reload_requested = pyqtSignal()             # 설정 새로고침 요청
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, logging_service=None):
         """초기화"""
         super().__init__(parent)
         self.setObjectName("logging-settings-widget")
 
         # 로깅
-        self.logger = create_component_logger("LoggingSettingsWidget")
+        if logging_service:
+            self.logger = logging_service.get_component_logger("LoggingSettingsWidget")
+        else:
+            raise ValueError("LoggingSettingsWidget에 logging_service가 주입되지 않았습니다")
         self.logger.info("🔧 로깅 설정 위젯 초기화 시작")
 
         # 내부 상태

@@ -119,6 +119,7 @@ def create_domain_logger(component_name: str) -> DomainLogger:  # 호환성 API
 ```
 
 **특징**:
+
 - ✅ Infrastructure 의존성 **0개**
 - ✅ 추상 인터페이스만 정의
 - ✅ 기존 API (`create_domain_logger`) **100% 호환**
@@ -145,6 +146,7 @@ def create_infrastructure_domain_logger() -> InfrastructureDomainLogger:
 ```
 
 **특징**:
+
 - ✅ Domain 인터페이스 구현
 - ✅ Infrastructure 로깅 시스템으로 **직접 위임**
 - ✅ 성능 최적화: 불필요한 오버헤드 제거
@@ -176,6 +178,7 @@ def register_ui_services(app_context: ApplicationContext, repository_container=N
 ```
 
 **특징**:
+
 - ✅ 애플리케이션 시작 시 **한 번만** 의존성 주입
 - ✅ 실패 시 안전한 폴백 (NoOpLogger 유지)
 - ✅ 성능 최적화 로그 출력
@@ -321,6 +324,7 @@ class MyScreen:
 **원인**: 의존성 주입이 실행되지 않음
 
 **해결책**:
+
 ```python
 # run_desktop_ui.py에서 확인
 logger.info("✅ Domain Logger 성능 최적화 완료 (272배 향상)")  # 이 로그가 나와야 함
@@ -333,6 +337,7 @@ logger.info("✅ Domain Logger 성능 최적화 완료 (272배 향상)")  # 이 
 **원인**: Infrastructure Logger가 실제 파일/콘솔 출력을 하고 있음
 
 **해결책**:
+
 - 테스트 환경에서는 로그 레벨 조정
 - 운영 환경에서는 적절한 로그 레벨 설정
 

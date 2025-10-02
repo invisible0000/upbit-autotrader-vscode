@@ -21,10 +21,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QFont
 
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리 (Phase 2 수정)
 from .quick_environment_buttons import QuickEnvironmentButtons
-
-logger = create_component_logger("ProfileSelectorSection")
 
 class ProfileSelectorSection(QWidget):
     """
@@ -41,13 +39,19 @@ class ProfileSelectorSection(QWidget):
     custom_save_requested = pyqtSignal()                  # 커스텀 저장 요청
     profile_delete_requested = pyqtSignal(str)            # 프로파일 삭제 요청
 
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, parent: Optional[QWidget] = None, logging_service=None):
         super().__init__(parent)
         self.setObjectName("ProfileSelectorSection")
 
-        logger.warning("🚫 프로파일 선택기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
-        logger.info("📂 프로파일 선택기 섹션 초기화 시작 - UI만 보존, 기능 비활성화")
-        logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
+        # 로깅 설정 - DI 패턴 적용
+        if logging_service:
+            self.logger = logging_service.get_component_logger("ProfileSelectorSection")
+        else:
+            raise ValueError("ProfileSelectorSection에 logging_service가 주입되지 않았습니다")
+
+        self.self.self.logger.warning("🚫 프로파일 선택기 기능이 정지되었습니다 (통합 설정 관리 가이드)")
+        self.self.self.logger.info("📂 프로파일 선택기 섹션 초기화 시작 - UI만 보존, 기능 비활성화")
+        self.self.self.logger.info("ℹ️ 이 기능은 config/ 기반으로 재구현될 예정입니다")
 
         # 상태 관리
         self._current_profile = ""
@@ -58,7 +62,7 @@ class ProfileSelectorSection(QWidget):
         self._setup_ui()
         self._connect_signals()
 
-        logger.info("✅ 프로파일 선택기 섹션 초기화 완료")
+        self.self.logger.info("✅ 프로파일 선택기 섹션 초기화 완료")
 
     def _setup_ui(self) -> None:
         """UI 구성요소 설정"""
@@ -246,7 +250,7 @@ class ProfileSelectorSection(QWidget):
 
     def _on_environment_selected(self, env_key: str) -> None:
         """퀵 환경 버튼 선택 이벤트 처리 - 일시적 액션으로 변경"""
-        logger.info(f"🔘 퀵 환경 액션: {env_key}")
+        self.self.logger.info(f"🔘 퀵 환경 액션: {env_key}")
 
         # 🔥 UX 개선: 퀵 환경 버튼은 "편의 기능"으로 위치 변경
         # 사용자 요청: "빠른 환경 전환의 버튼은 클릭을 떼면 그냥 원래 색으로 돌아가는게 좋고"
@@ -255,7 +259,7 @@ class ProfileSelectorSection(QWidget):
         # 해당 환경의 기본 프로파일 찾기
         default_profile = self._get_default_profile_for_environment(env_key)
         if default_profile:
-            logger.info(f"🎯 퀵 환경 '{env_key}' → 기본 프로파일 '{default_profile}' 선택")
+            self.self.logger.info(f"🎯 퀵 환경 '{env_key}' → 기본 프로파일 '{default_profile}' 선택")
 
             # 콤보박스에서 해당 프로파일 선택 (이것이 주요 UI 상태가 됨)
             self._select_profile_in_combo(default_profile)
@@ -263,7 +267,7 @@ class ProfileSelectorSection(QWidget):
             # 콤보박스 선택 변경으로 자동 처리되지만, 확실히 하기 위해 강제 트리거
             self.profile_selected.emit(default_profile)
         else:
-            logger.warning(f"⚠️ 환경 '{env_key}'에 대응하는 기본 프로파일이 없습니다")
+            self.self.logger.warning(f"⚠️ 환경 '{env_key}'에 대응하는 기본 프로파일이 없습니다")
 
         # 🔥 중요: 환경 전환 시그널은 참고용으로만 발송 (상태를 고정하지 않음)
         self.environment_quick_switch.emit(env_key)
@@ -271,16 +275,16 @@ class ProfileSelectorSection(QWidget):
     def _on_profile_combo_changed(self, profile_display_name: str) -> None:
         """프로파일 콤보박스 변경 이벤트 처리 - 핵심 로직 강화"""
         if not profile_display_name:
-            logger.debug("콤보박스 선택값이 비어있음 - 처리 스킵")
+            self.self.logger.debug("콤보박스 선택값이 비어있음 - 처리 스킵")
             return
 
         # 표시명에서 실제 프로파일명 추출
         profile_name = self._extract_profile_name_from_display(profile_display_name)
 
-        logger.info(f"🔄 콤보박스 프로파일 변경: '{profile_display_name}' → '{profile_name}'")
+        self.self.logger.info(f"🔄 콤보박스 프로파일 변경: '{profile_display_name}' → '{profile_name}'")
 
         # 🔥 수정: 동일 프로파일이라도 강제 로드 처리 (UI 동기화 보장)
-        logger.info(f"💫 프로파일 선택 강제 처리: {profile_name}")
+        self.self.logger.info(f"💫 프로파일 선택 강제 처리: {profile_name}")
 
         # 🔥 1단계: 상태 업데이트
         self._current_profile = profile_name
@@ -289,31 +293,31 @@ class ProfileSelectorSection(QWidget):
         self._update_profile_preview(profile_name)
 
         # 🔥 3단계: 실제 YAML 내용 로드를 위한 시그널 발송 (항상 발송)
-        logger.info(f"🚀 profile_selected 시그널 발송: {profile_name}")
+        self.self.logger.info(f"🚀 profile_selected 시그널 발송: {profile_name}")
         self.profile_selected.emit(profile_name)
 
-        logger.info(f"✅ 프로파일 선택 처리 완료: {profile_name}")
+        self.self.logger.info(f"✅ 프로파일 선택 처리 완료: {profile_name}")
 
     def _on_apply_button_clicked(self) -> None:
         """프로파일 적용 버튼 클릭 이벤트"""
         if self._current_profile:
-            logger.info(f"프로파일 적용 요청: {self._current_profile}")
+            self.self.logger.info(f"프로파일 적용 요청: {self._current_profile}")
             self.profile_apply_requested.emit(self._current_profile)
 
     def _on_save_custom_button_clicked(self) -> None:
         """커스텀 저장 버튼 클릭 이벤트"""
-        logger.info("커스텀 프로파일 저장 요청")
+        self.self.logger.info("커스텀 프로파일 저장 요청")
         self.custom_save_requested.emit()
 
     def _on_delete_button_clicked(self) -> None:
         """삭제 버튼 클릭 이벤트"""
         if self._current_profile:
-            logger.info(f"프로파일 삭제 요청: {self._current_profile}")
+            self.self.logger.info(f"프로파일 삭제 요청: {self._current_profile}")
             self.profile_delete_requested.emit(self._current_profile)
 
     def _on_refresh_button_clicked(self) -> None:
         """새로 고침 버튼 클릭 이벤트"""
-        logger.info("프로파일 목록 새로 고침 요청")
+        self.self.logger.info("프로파일 목록 새로 고침 요청")
         self.refresh_profiles()
 
     def load_profiles(self, profiles_data: Dict[str, Dict[str, Any]]) -> None:
@@ -323,7 +327,7 @@ class ProfileSelectorSection(QWidget):
         Args:
             profiles_data: 프로파일명 -> 프로파일 정보 딕셔너리
         """
-        logger.info(f"프로파일 데이터 로드 중: {len(profiles_data)}개")
+        self.self.logger.info(f"프로파일 데이터 로드 중: {len(profiles_data)}개")
 
         self._profiles_data = profiles_data
         self._update_profile_combo()
@@ -336,7 +340,7 @@ class ProfileSelectorSection(QWidget):
             display_name = self._get_profile_display_name(profile_name, profile_data)
             self.profile_combo.addItem(display_name)
 
-        logger.debug(f"프로파일 콤보박스 업데이트 완료: {self.profile_combo.count()}개 항목")
+        self.self.logger.debug(f"프로파일 콤보박스 업데이트 완료: {self.profile_combo.count()}개 항목")
 
     def _get_profile_display_name(self, profile_name: str, profile_data: Dict[str, Any]) -> str:
         """프로파일 표시명 생성"""
@@ -397,18 +401,18 @@ class ProfileSelectorSection(QWidget):
 
     def _update_profile_preview(self, profile_name: str) -> None:
         """프로파일 미리보기 정보 업데이트"""
-        logger.info(f"🎯 프로파일 미리보기 업데이트 시작: {profile_name}")
+        self.self.logger.info(f"🎯 프로파일 미리보기 업데이트 시작: {profile_name}")
 
         if profile_name not in self._profiles_data:
-            logger.warning(f"❌ 프로파일 '{profile_name}' 데이터가 없음. 사용 가능한 프로파일: {list(self._profiles_data.keys())}")
+            self.self.logger.warning(f"❌ 프로파일 '{profile_name}' 데이터가 없음. 사용 가능한 프로파일: {list(self._profiles_data.keys())}")
             self._clear_profile_preview()
             return
 
         profile_data = self._profiles_data[profile_name]
         metadata = profile_data.get('metadata', {})
 
-        logger.debug(f"📊 프로파일 데이터: {profile_data}")
-        logger.debug(f"📋 메타데이터: {metadata}")
+        self.self.logger.debug(f"📊 프로파일 데이터: {profile_data}")
+        self.self.logger.debug(f"📋 메타데이터: {metadata}")
 
         # 프로파일 이름 표시
         if hasattr(metadata, 'name'):
@@ -416,7 +420,7 @@ class ProfileSelectorSection(QWidget):
         else:
             display_name = metadata.get('name', profile_name)
         self.profile_name_label.setText(f"📄 {display_name}")
-        logger.debug(f"✅ 프로파일명 설정: {display_name}")
+        self.self.logger.debug(f"✅ 프로파일명 설정: {display_name}")
 
         # 설명 표시
         if hasattr(metadata, 'description'):
@@ -424,7 +428,7 @@ class ProfileSelectorSection(QWidget):
         else:
             description = metadata.get('description', '설명이 없습니다.')
         self.profile_description_label.setText(description)
-        logger.debug(f"✅ 설명 설정: {description}")
+        self.self.logger.debug(f"✅ 설명 설정: {description}")
 
         # 태그 표시
         if hasattr(metadata, 'tags'):
@@ -434,10 +438,10 @@ class ProfileSelectorSection(QWidget):
         if tags:
             tags_text = ', '.join([f"#{tag}" for tag in tags])
             self.profile_tags_label.setText(f"태그: {tags_text}")
-            logger.debug(f"✅ 태그 설정: {tags_text}")
+            self.self.logger.debug(f"✅ 태그 설정: {tags_text}")
         else:
             self.profile_tags_label.setText("태그: 없음")
-            logger.debug("✅ 태그 없음으로 설정")
+            self.self.logger.debug("✅ 태그 없음으로 설정")
 
         # 생성 정보 표시
         if hasattr(metadata, 'created_at'):
@@ -459,16 +463,16 @@ class ProfileSelectorSection(QWidget):
 
         if created_at and created_from:
             self.profile_info_label.setText(f"생성: {created_at} (기반: {created_from})")
-            logger.debug(f"✅ 생성정보 설정: {created_at} (기반: {created_from})")
+            self.self.logger.debug(f"✅ 생성정보 설정: {created_at} (기반: {created_from})")
         elif created_at:
             self.profile_info_label.setText(f"생성: {created_at}")
-            logger.debug(f"✅ 생성일자만 설정: {created_at}")
+            self.self.logger.debug(f"✅ 생성일자만 설정: {created_at}")
         else:
             self.profile_info_label.setText("생성 정보: 없음")
-            logger.debug("✅ 생성정보 없음으로 설정")        # YAML 미리보기
+            self.self.logger.debug("✅ 생성정보 없음으로 설정")        # YAML 미리보기
         yaml_content = profile_data.get('content', '')
 
-        logger.info(f"🎯 프로파일 미리보기 업데이트 완료: {profile_name}")
+        self.self.logger.info(f"🎯 프로파일 미리보기 업데이트 완료: {profile_name}")
         if yaml_content:
             # 처음 5줄만 표시
             preview_lines = yaml_content.split('\n')[:5]
@@ -516,7 +520,7 @@ class ProfileSelectorSection(QWidget):
         if profile_name in self._profiles_data:
             self._select_profile_in_combo(profile_name)
             self._current_profile = profile_name
-            logger.info(f"외부에서 활성 프로파일 설정: {profile_name}")
+            self.self.logger.info(f"외부에서 활성 프로파일 설정: {profile_name}")
 
     def set_active_environment(self, env_key: str) -> None:
         """외부에서 활성 환경 설정"""
@@ -525,7 +529,7 @@ class ProfileSelectorSection(QWidget):
 
     def refresh_profiles(self) -> None:
         """프로파일 목록 새로 고침 (외부에서 데이터 다시 로드 필요)"""
-        logger.info("프로파일 목록 새로 고침 시작")
+        self.self.logger.info("프로파일 목록 새로 고침 시작")
         # 실제 새로 고침은 상위 컴포넌트에서 처리
         # 여기서는 현재 상태만 초기화
 

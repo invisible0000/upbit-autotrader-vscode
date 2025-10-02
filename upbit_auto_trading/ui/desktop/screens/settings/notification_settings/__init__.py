@@ -5,9 +5,8 @@
 """
 
 from .views.notification_settings_view import NotificationSettingsView
-from .presenters.notification_settings_presenter import NotificationSettingsPresenter
+# Presenter는 presentation/presenters/settings/로 이동됨
 
 __all__ = [
-    'NotificationSettingsView',
-    'NotificationSettingsPresenter'
+    'NotificationSettingsView'
 ]

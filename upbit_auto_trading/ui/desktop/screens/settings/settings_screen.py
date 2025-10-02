@@ -18,11 +18,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
-# Dependency Injection
-from dependency_injector.wiring import Provide, inject
+# MVP Container 패턴 (Phase 5: View→Presenter 직접 생성 위반 해결)
+# DI 컨테이너를 통한 완전한 의존성 주입
 
-# Infrastructure Layer Enhanced Logging v4.0
-from upbit_auto_trading.infrastructure.logging import create_component_logger
+# Application Layer - Infrastructure 의존성 격리
+from upbit_auto_trading.application.services.logging_application_service import IPresentationLogger
 
 class SettingsScreen(QWidget):
     """Settings Screen - MVP 패턴 View 구현
@@ -38,27 +38,38 @@ class SettingsScreen(QWidget):
     db_status_changed = pyqtSignal(bool)   # connected
     save_all_requested = pyqtSignal()
 
-    @inject
     def __init__(
         self,
         parent=None,
-        settings_service=Provide["settings_service"],
-        api_key_service=Provide["api_key_service"]
+        settings_service=None,
+        api_key_service=None,
+        logging_service=None,
+        mvp_container=None,
+        settings_factory=None
     ):
-        """SettingsScreen 초기화 - @inject 패턴으로 DI 적용
+        """SettingsScreen 초기화 - MVP Container를 통한 완전한 DI 패턴
 
         Args:
             parent: 부모 위젯
-            settings_service: Application Service (@inject로 주입)
-            api_key_service: API 키 서비스 (@inject로 주입)
+            settings_service: Application Service (MVPContainer를 통해 주입)
+            api_key_service: API 키 서비스 (MVPContainer를 통해 주입)
+            logging_service: Application Layer 로깅 서비스 (MVPContainer를 통해 주입)
+            mvp_container: MVP Container (Presenter 생성을 위해 필요)
+            settings_factory: Settings View Factory (컴포넌트 생성용)
         """
         super().__init__(parent)
         self.settings_service = settings_service
         self._api_key_service = api_key_service
+        self._mvp_container = mvp_container
+        self._settings_factory = settings_factory
 
-        # Infrastructure Layer Enhanced Logging v4.0 초기화
-        self.logger = create_component_logger("SettingsScreen")
-        self.logger.info("🔧 SettingsScreen (MVP View + Infrastructure v4.0) 초기화 시작")
+        # 로깅 서비스 - DI 패턴 적용
+        if logging_service:
+            self._logging_service = logging_service  # ApplicationLoggingService 저장
+            self.logger = logging_service.get_component_logger("SettingsScreen")
+            self.logger.info("🔧 SettingsScreen (MVP View + Application Layer 로깅) 초기화 시작")
+        else:
+            raise ValueError("SettingsScreen에 logging_service가 주입되지 않았습니다")
 
         # Infrastructure Layer 의존성 주입 확인
         self.app_context = None
@@ -82,33 +93,30 @@ class SettingsScreen(QWidget):
         self.logger.info("✅ SettingsScreen (MVP View + Infrastructure v4.0) 초기화 완료")
 
     def _init_main_presenter(self):
-        """메인 SettingsPresenter 초기화 (MVP 패턴)"""
+        """메인 SettingsPresenter 직접 생성 (순환 참조 방지)"""
         try:
-            # Fail-Fast 패턴: 필수 의존성 검증
-            if not self.settings_service:
-                error_msg = "SettingsService가 주입되지 않았습니다. DI Container 설정을 확인하세요."
-                self.logger.error(f"❌ 의존성 주입 실패: {error_msg}")
-                self.show_status_message(error_msg, False)
+            # 순환 참조 방지: MVP Container 사용하지 않고 Presenter 직접 생성
+            if self.settings_service:
+                from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
+
+                self.main_presenter = SettingsPresenter(
+                    view=self,  # ISettingsView 인터페이스로 전달
+                    settings_service=self.settings_service
+                )
+                if self.logger:
+                    self.logger.info("✅ 메인 SettingsPresenter 직접 생성 완료")
+
+                # 초기 설정 로드
+                try:
+                    self.main_presenter.load_initial_settings()
+                except Exception as load_error:
+                    error_msg = f"초기 설정 로드 중 오류 발생: {str(load_error)}"
+                    self.logger.warning(f"⚠️ {error_msg}")
+                    self.show_status_message(error_msg, False)
+            else:
                 self.main_presenter = None
-                return
-
-            from upbit_auto_trading.presentation.presenters.settings_presenter import SettingsPresenter
-
-            # 메인 Presenter 생성 및 연결
-            self.main_presenter = SettingsPresenter(
-                view=self,
-                settings_service=self.settings_service
-            )
-
-            self.logger.info("✅ 메인 SettingsPresenter 연결 완료")
-
-            # 초기 설정 로드
-            try:
-                self.main_presenter.load_initial_settings()
-            except Exception as load_error:
-                error_msg = f"초기 설정 로드 중 오류 발생: {str(load_error)}"
-                self.logger.warning(f"⚠️ {error_msg}")
-                self.show_status_message(error_msg, False)
+                if self.logger:
+                    self.logger.warning("⚠️ SettingsService가 없어서 Presenter 생성 불가")
 
         except Exception as e:
             error_msg = f"메인 SettingsPresenter 초기화 실패: {str(e)}"
@@ -161,30 +169,34 @@ class SettingsScreen(QWidget):
         self.logger.info("✅ 하위 설정 위젯들 lazy loading 초기화 완료 (첫 탭만 로드)")
 
     def _initialize_ui_settings(self):
-        """UI 설정 위젯 초기화 (첫 탭 - 즉시 로드)"""
+        """UI 설정 위젯 초기화 (첫 탭 - Factory 패턴 적용)"""
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.ui_settings import UISettingsView
-            self.ui_settings = UISettingsView(self)
-            self.logger.debug("🎨 UI 설정 위젯 즉시 초기화 완료")
+            # Factory 패턴 사용 필수 (다른 탭들과 일관성 확보)
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
+
+            self.ui_settings = self._settings_factory.create_ui_settings_component(parent=self)
+            self.logger.info("✅ UI 설정 컴포넌트 Factory로 생성 완료")
         except Exception as e:
             self.logger.error(f"❌ UI 설정 위젯 초기화 실패: {e}")
             self.ui_settings = self._create_fallback_widget("UI 설정")
 
     def _initialize_api_settings(self):
-        """API 설정 위젯 lazy 초기화"""
+        """API 설정 위젯 lazy 초기화 - Factory 패턴 적용"""
         if self.api_key_manager is not None:
             return  # 이미 초기화됨
 
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.api_settings.presenters.api_settings_presenter import (
-                ApiSettingsPresenter
-            )
+            # Factory 패턴 사용 필수
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-            self.api_key_manager = ApiSettingsView(self)
-            self.api_settings_presenter = ApiSettingsPresenter(self.api_key_manager)
-            self.api_key_manager.set_presenter(self.api_settings_presenter)
-            self.logger.info("✅ API 설정 위젯 lazy 초기화 완료")
+            self.api_key_manager = self._settings_factory.create_api_settings_component(parent=self)
+            self.logger.info("✅ API 설정 컴포넌트 Factory로 생성 완료")
+
+            # Presenter는 더 이상 직접 생성하지 않음 (MVP Container 패턴)
+            self.api_settings_presenter = None
+
         except Exception as e:
             import traceback
             self.logger.error(f"❌ API 설정 위젯 lazy 초기화 실패: {e}")
@@ -193,31 +205,20 @@ class SettingsScreen(QWidget):
             self.logger.warning("⚠️ API 키 관리 폴백 위젯으로 대체")
 
     def _initialize_database_settings(self):
-        """데이터베이스 설정 위젯 lazy 초기화"""
+        """데이터베이스 설정 위젯 lazy 초기화 - Factory 패턴 적용"""
         if self.database_settings is not None:
             return  # 이미 초기화됨
 
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings import DatabaseSettingsView
-            from upbit_auto_trading.ui.desktop.screens.settings.database_settings.presenters import (
-                database_settings_presenter
-            )
+            # Factory 패턴 사용 필수
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-            self.database_settings = DatabaseSettingsView(self)
+            self.database_settings = self._settings_factory.create_database_settings_component(parent=self)
+            self.logger.info("✅ Database 설정 컴포넌트 Factory로 생성 완료")
 
-            # DatabaseSettingsPresenter 연결 (MVP 패턴)
-            try:
-                self.database_settings_presenter = database_settings_presenter.DatabaseSettingsPresenter(
-                    self.database_settings
-                )
-                if hasattr(self.database_settings, 'set_presenter'):
-                    self.database_settings.set_presenter(self.database_settings_presenter)
-                    self.logger.debug("✅ DatabaseSettingsPresenter 연결 완료")
-                else:
-                    self.database_settings.presenter = self.database_settings_presenter
-                    self.logger.debug("✅ DatabaseSettingsPresenter 직접 할당 완료")
-            except Exception as presenter_error:
-                self.logger.warning(f"⚠️ DatabaseSettingsPresenter 연결 실패: {presenter_error}")
+            # Presenter는 MVP Container 패턴으로 관리
+            self.database_settings_presenter = None
 
             self.logger.debug("💾 데이터베이스 설정 위젯 lazy 초기화 완료")
         except Exception as e:
@@ -233,34 +234,38 @@ class SettingsScreen(QWidget):
         self.environment_profile = self._create_disabled_profile_widget()
 
     def _initialize_logging_management(self):
-        """로깅 관리 위젯 lazy 초기화"""
+        """로깅 관리 위젯 lazy 초기화 - Factory 패턴 적용"""
         if self.logging_management is not None:
             return  # 이미 초기화됨
 
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management import LoggingManagementView
-            # 긴 임포트를 여러 줄로 분할
-            from upbit_auto_trading.ui.desktop.screens.settings.logging_management.presenters import (
-                logging_management_presenter
-            )
+            # Factory 패턴 사용 필수
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
 
-            self.logging_management = LoggingManagementView()
-            self.logging_management_presenter = logging_management_presenter.LoggingManagementPresenter(
-                self.logging_management
-            )
-            self.logger.debug("📝 로깅 관리 위젯 lazy 초기화 완료")
+            self.logging_management = self._settings_factory.create_logging_management_component(parent=self)
+            self.logger.info("✅ 로깅 관리 컴포넌트 Factory로 생성 완료")
+
+            # Presenter는 MVP Container 패턴으로 관리
+            self.logging_management_presenter = None
+
         except Exception as e:
             self.logger.error(f"❌ 로깅 관리 위젯 lazy 초기화 실패: {e}")
             self.logging_management = self._create_fallback_widget("로깅 관리")
 
     def _initialize_notification_settings(self):
-        """알림 설정 위젯 lazy 초기화"""
+        """알림 설정 위젯 lazy 초기화 - Factory 패턴 적용"""
         if self.notification_settings is not None:
             return  # 이미 초기화됨
 
         try:
-            from upbit_auto_trading.ui.desktop.screens.settings.notification_settings import NotificationSettingsView
-            self.notification_settings = NotificationSettingsView(self)
+            # Factory 패턴 사용 필수
+            if not self._settings_factory:
+                raise ValueError("SettingsViewFactory가 주입되지 않았습니다")
+
+            self.notification_settings = self._settings_factory.create_notification_settings_component(parent=self)
+            self.logger.info("✅ 알림 설정 컴포넌트 Factory로 생성 완룜")
+
             self.logger.debug("🔔 알림 설정 위젯 lazy 초기화 완료")
         except Exception as e:
             self.logger.error(f"❌ 알림 설정 위젯 lazy 초기화 실패: {e}")
@@ -418,7 +423,7 @@ config/ 폴더 기반으로 재구현될 예정입니다.
             # UI Settings의 시그널을 상위로 중계 (향후 구현 예정)
             self.logger.info("✅ UI Settings 시그널 연결 준비 완료 (직접 MVP 구조)")
 
-            # API Key Manager의 상태 변경 시그널을 상위로 중계
+            # API Key Manager의 상태 변경 시그널을 상위로 중계 (Lazy Loading 인식)
             if self.api_key_manager is not None:
                 try:
                     from upbit_auto_trading.ui.desktop.screens.settings.api_settings import ApiSettingsView
@@ -434,7 +439,9 @@ config/ 폴더 기반으로 재구현될 예정입니다.
                 except Exception as e:
                     self.logger.warning(f"⚠️ API 키 관리자 시그널 연결 실패: {e}")
             else:
-                self.logger.warning("⚠️ API 키 관리자가 초기화되지 않음")
+                # Lazy Loading 패턴: 탭 활성화 시 생성되므로 초기화 시점의 None은 정상
+                self.logger.debug("ℹ️ API 키 관리자 Lazy Loading 대기 중 (탭 활성화 시 자동 생성)")
+                # Note: 시그널 연결은 탭 활성화 후 _on_tab_changed()에서 처리됨
 
         except Exception as e:
             self.logger.error(f"❌ 하위 위젯 시그널 중계 연결 실패: {e}")

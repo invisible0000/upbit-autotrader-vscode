@@ -114,6 +114,7 @@ personal_strategies/
 # data_info/
 
 # 개인 백업 및 체크포인트
+legacy/
 backups/
 rollback_checkpoints/
 
